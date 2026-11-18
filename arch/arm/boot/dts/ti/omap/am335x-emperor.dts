@@ -1,0 +1,262 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * Device Tree Source for Kamstrup READy Concentrator 1M/2M/2C.
+ *
+ * Copyright (C) 2025 Kamstrup A/S
+ * Author: Bruno Thomsen <bruno.thomsen@gmail.com>
+ *         Lars Alex Pedersen <lapeddk@gmail.com>
+ */
+/dts-v1/;
+
+#include "am335x-emperor-common.dtsi"
+#include <dt-bindings/interrupt-controller/irq.h>
+
+/ {
+	model = "Kamstrup READy Concentrator 1M/2M/2C";
+	compatible = "kam,am335x-emperor", "ti,am33xx";
+};
+
+&gpio0 {
+	gpio-line-names =
+		"MDIO_DATA",
+		"MDIO_CLK",
+		"SPI0_CLK",
+		"SPI0_MOSI",
+		"SPI0_MISO",
+		"SPI0_CS0",
+		"POWER_FAILURE",
+		"SPI1_CLK",
+		"SYS_BOOT12",
+		"SYS_BOOT13",
+		"SYS_BOOT14",
+		"SYS_BOOT15",
+		"RADIO_TEMP_CRIT",
+		"RADIO_TEMP_ALERT",
+		"I2C1_SDA",
+		"I2C1_SCL",
+		"MII1_TXD3",
+		"MII1_TXD2",
+		"USB0_DRVVBUS",
+		"RADIO_GPIO4",
+		"RADIO_IRQ",
+		"MII1_TXD1",
+		"NC",
+		"NC",
+		"NC",
+		"NC",
+		"NC",
+		"NC",
+		"MII1_TXD0",
+		"PHY_IRQ",
+		"NC",
+		"NC";
+};
+
+&gpio1 {
+	gpio-line-names =
+		"MMC1_DAT0",
+		"MMC1_DAT1",
+		"MMC1_DAT2",
+		"MMC1_DAT3",
+		"MMC1_DAT4",
+		"MMC1_DAT5",
+		"MMC1_DAT6",
+		"MMC1_DAT7",
+		"UART4_RX",
+		"UART4_TX",
+		"UART0_RX",
+		"UART0_TX",
+		"NC",
+		"NC",
+		"NC",
+		"NC",
+		"NC",
+		"NC",
+		"NC",
+		"NC",
+		"NC",
+		"NC",
+		"NC",
+		"NC",
+		"NC",
+		"NC",
+		"NC",
+		"NC",
+		"TEST_MODE",
+		"NC",
+		"RADIO_GPIO5",
+		"MMC1_CMD";
+};
+
+&gpio3 {
+	gpio-line-names =
+		"MII1_COL",
+		"MII1_CRS_DV",
+		"MII1_RXERR",
+		"MII1_TXEN",
+		"MII1_RXDV",
+		"I2C0_SDA",
+		"I2C0_SCL",
+		"NC",
+		"NC",
+		"MII1_TXCLK",
+		"MII1_RXCLK",
+		"NC",
+		"NC",
+		"NC",
+		"RTC_IRQ",
+		"RTC_TAMPER",
+		"RADIO_INIT_B",
+		"RADIO_PRG_DONE",
+		"RADIO_POWER",
+		"RADIO_FLASH_MUX",
+		"RADIO_RESET",
+		"RADIO_FLASH_RESET",
+		"NC",
+		"NC",
+		"NC",
+		"NC",
+		"NC",
+		"NC",
+		"NC",
+		"NC",
+		"NC",
+		"NC";
+
+	eeprom-wp-hog {
+		gpio-hog;
+		gpios = <13 GPIO_ACTIVE_HIGH>;
+		output-low;
+	};
+};
+
+&am33xx_pinmux {
+	pinctrl-names = "default";
+	pinctrl-0 = <
+		&pinctrl_board_pins_default
+		&sdr_radio_pins_default>;
+
+	pinctrl_board_pins_default: board-default-pins {
+		pinctrl-single,pins = <
+			/* PHY irq */
+			AM33XX_PADCONF(AM335X_PIN_RMII1_REF_CLK, PIN_INPUT_PULLUP, MUX_MODE7) /* (H18) rmii1_refclk.gpio0[29] */
+			/* Production test */
+			AM33XX_PADCONF(AM335X_PIN_GPMC_BEN1, PIN_INPUT_PULLUP, MUX_MODE7) /* (U18) gpmc_be1n.gpio1[28] */
+			/* Temperature sensor: critical (T_CRIT) */
+			AM33XX_PADCONF(AM335X_PIN_UART1_CTSN, PIN_INPUT_PULLUP, MUX_MODE7) /* (D18) uart1_ctsn.gpio0[12] */
+			/* Temperature sensor: alert (ALERT) */
+			AM33XX_PADCONF(AM335X_PIN_UART1_RTSN, PIN_INPUT_PULLUP, MUX_MODE7) /* (D17) uart1_rtsn.gpio0[13] */
+			/* SYS_BOOT0 to SYS_BOOT15 */
+			AM33XX_PADCONF(AM335X_PIN_LCD_DATA0, PIN_INPUT, MUX_MODE7) /* (R1) lcd_data0.gpio2[6] */
+			AM33XX_PADCONF(AM335X_PIN_LCD_DATA1, PIN_INPUT, MUX_MODE7) /* (R2) lcd_data1.gpio2[7] */
+			AM33XX_PADCONF(AM335X_PIN_LCD_DATA2, PIN_INPUT, MUX_MODE7) /* (R3) lcd_data2.gpio2[8] */
+			AM33XX_PADCONF(AM335X_PIN_LCD_DATA3, PIN_INPUT, MUX_MODE7) /* (R4) lcd_data3.gpio2[9] */
+			AM33XX_PADCONF(AM335X_PIN_LCD_DATA4, PIN_INPUT, MUX_MODE7) /* (T1) lcd_data4.gpio2[10] */
+			AM33XX_PADCONF(AM335X_PIN_LCD_DATA5, PIN_INPUT, MUX_MODE7) /* (T2) lcd_data5.gpio2[11] */
+			AM33XX_PADCONF(AM335X_PIN_LCD_DATA6, PIN_INPUT, MUX_MODE7) /* (T3) lcd_data6.gpio2[12] */
+			AM33XX_PADCONF(AM335X_PIN_LCD_DATA7, PIN_INPUT, MUX_MODE7) /* (T4) lcd_data7.gpio2[13] */
+			AM33XX_PADCONF(AM335X_PIN_LCD_DATA8, PIN_INPUT, MUX_MODE7) /* (U1) lcd_data8.gpio2[14] */
+			AM33XX_PADCONF(AM335X_PIN_LCD_DATA9, PIN_INPUT, MUX_MODE7) /* (U2) lcd_data9.gpio2[15] */
+			AM33XX_PADCONF(AM335X_PIN_LCD_DATA10, PIN_INPUT, MUX_MODE7) /* (U3) lcd_data10.gpio2[16] */
+			AM33XX_PADCONF(AM335X_PIN_LCD_DATA11, PIN_INPUT, MUX_MODE7) /* (U4) lcd_data11.gpio2[17] */
+			AM33XX_PADCONF(AM335X_PIN_LCD_DATA12, PIN_INPUT, MUX_MODE7) /* (V2) lcd_data12.gpio0[8] */
+			AM33XX_PADCONF(AM335X_PIN_LCD_DATA13, PIN_INPUT, MUX_MODE7) /* (V3) lcd_data13.gpio0[9] */
+			AM33XX_PADCONF(AM335X_PIN_LCD_DATA14, PIN_INPUT, MUX_MODE7) /* (V4) lcd_data14.gpio0[10] */
+			AM33XX_PADCONF(AM335X_PIN_LCD_DATA15, PIN_INPUT, MUX_MODE7) /* (T5) lcd_data15.gpio0[11] */
+			/* Unused GPIO pins */
+			AM33XX_PADCONF(AM335X_PIN_GPMC_AD8, PIN_INPUT_PULLDOWN, MUX_MODE7) /* (U10) gpmc_ad8.gpio0[22] */
+			AM33XX_PADCONF(AM335X_PIN_GPMC_AD9, PIN_INPUT_PULLDOWN, MUX_MODE7) /* (T10) gpmc_ad9.gpio0[23] */
+			AM33XX_PADCONF(AM335X_PIN_GPMC_AD10, PIN_INPUT_PULLDOWN, MUX_MODE7) /* (T11) gpmc_ad10.gpio0[26] */
+			AM33XX_PADCONF(AM335X_PIN_GPMC_AD11, PIN_INPUT_PULLDOWN, MUX_MODE7) /* (U12) gpmc_ad11.gpio0[27] */
+			AM33XX_PADCONF(AM335X_PIN_GPMC_WAIT0, PIN_INPUT_PULLDOWN, MUX_MODE7) /* (T17) gpmc_wait0.gpio0[30] */
+			AM33XX_PADCONF(AM335X_PIN_GPMC_WPN, PIN_INPUT_PULLDOWN, MUX_MODE7) /* (U17) gpmc_wpn.gpio0[31] */
+			AM33XX_PADCONF(AM335X_PIN_GPMC_AD13, PIN_INPUT_PULLDOWN, MUX_MODE7) /* (R12) gpmc_ad13.gpio1[13] */
+			AM33XX_PADCONF(AM335X_PIN_GPMC_AD14, PIN_INPUT_PULLDOWN, MUX_MODE7) /* (V13) gpmc_ad14.gpio1[14] */
+			AM33XX_PADCONF(AM335X_PIN_GPMC_AD15, PIN_INPUT_PULLDOWN, MUX_MODE7) /* (U13) gpmc_ad15.gpio1[15] */
+			AM33XX_PADCONF(AM335X_PIN_GPMC_A0, PIN_INPUT_PULLDOWN, MUX_MODE7) /* (R13) gpmc_a0.gpio1[16] */
+			AM33XX_PADCONF(AM335X_PIN_GPMC_A1, PIN_INPUT_PULLDOWN, MUX_MODE7) /* (V14) gpmc_a1.gpio1[17] */
+			AM33XX_PADCONF(AM335X_PIN_GPMC_A2, PIN_INPUT_PULLDOWN, MUX_MODE7) /* (U14) gpmc_a2.gpio1[18] */
+			AM33XX_PADCONF(AM335X_PIN_GPMC_A3, PIN_INPUT_PULLDOWN, MUX_MODE7) /* (T14) gpmc_a3.gpio1[19] */
+			AM33XX_PADCONF(AM335X_PIN_GPMC_A4, PIN_INPUT_PULLDOWN, MUX_MODE7) /* (R14) gpmc_a4.gpio1[20] */
+			AM33XX_PADCONF(AM335X_PIN_GPMC_A5, PIN_INPUT_PULLDOWN, MUX_MODE7) /* (V15) gpmc_a5.gpio1[21] */
+			AM33XX_PADCONF(AM335X_PIN_GPMC_A6, PIN_INPUT_PULLDOWN, MUX_MODE7) /* (U15) gpmc_a6.gpio1[22] */
+			AM33XX_PADCONF(AM335X_PIN_GPMC_A7, PIN_INPUT_PULLDOWN, MUX_MODE7) /* (T15) gpmc_a7.gpio1[23] */
+			AM33XX_PADCONF(AM335X_PIN_GPMC_A8, PIN_INPUT_PULLDOWN, MUX_MODE7) /* (V16) gpmc_a8.gpio1[24] */
+			AM33XX_PADCONF(AM335X_PIN_GPMC_A9, PIN_INPUT_PULLDOWN, MUX_MODE7) /* (U16) gpmc_a9.gpio1[25] */
+			AM33XX_PADCONF(AM335X_PIN_GPMC_A10, PIN_INPUT_PULLDOWN, MUX_MODE7) /* (T16) gpmc_a10.gpio1[26] */
+			AM33XX_PADCONF(AM335X_PIN_GPMC_A11, PIN_INPUT_PULLDOWN, MUX_MODE7) /* (V17) gpmc_a11.gpio1[27] */
+			AM33XX_PADCONF(AM335X_PIN_GPMC_CSN0, PIN_INPUT_PULLDOWN, MUX_MODE7) /* (V6) gpmc_csn0.gpio1[29] */
+			AM33XX_PADCONF(AM335X_PIN_GPMC_CSN3, PIN_INPUT_PULLDOWN, MUX_MODE7) /* (T13) gpmc_csn3.gpio2[0] */
+			AM33XX_PADCONF(AM335X_PIN_GPMC_CLK, PIN_INPUT_PULLDOWN, MUX_MODE7) /* (V12) gpmc_clk.gpio2[1] */
+			AM33XX_PADCONF(AM335X_PIN_USB1_DRVVBUS, PIN_INPUT_PULLDOWN, MUX_MODE7) /* (F15) USB1_DRVVBUS.gpio3[13] */
+		>;
+	};
+};
+
+/*
+ * I2C bus on baseband board (55501738)
+ */
+&i2c0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2c0_pins_default>;
+	status = "okay";
+	clock-frequency = <400000>;
+
+	/*
+	 * Baseband board temperature sensor.
+	 * Local channel measures the board, remote channel the FPGA die.
+	 *
+	 * Alert pins are muxed as GPIO inputs but have no kernel consumer:
+	 * gpio0 pin 12: /T_CRIT
+	 * gpio0 pin 13: /ALERT
+	 */
+	temperature-sensor@4c {
+		compatible = "nxp,sa56004";
+		reg = <0x4c>;
+		vcc-supply = <&vcc_fixed>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		channel@0 {
+			reg = <0x0>;
+			label = "baseboard";
+		};
+
+		channel@1 {
+			reg = <0x1>;
+			label = "fpga";
+		};
+	};
+
+	rtc@51 {
+		compatible = "nxp,pcf2127";
+		reg = <0x51>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&rtc_pins_default>;
+		interrupt-parent = <&gpio3>;
+		interrupts = <14 IRQ_TYPE_LEVEL_LOW>;
+		reset-source;
+	};
+
+	eeprom@54 {
+		compatible = "atmel,24c512";
+		reg = <0x54>;
+		pagesize = <128>;
+	};
+};
+
+/*
+ * I2C bus on radio frontend board (55501946)
+ */
+&i2c1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2c1_pins_default>;
+	status = "okay";
+	clock-frequency = <400000>;
+
+	eeprom@50 {
+		reg = <0x50>;
+		compatible = "atmel,24c512";
+		pagesize = <128>;
+	};
+};

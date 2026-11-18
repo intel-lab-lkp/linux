@@ -1,0 +1,414 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * Device Tree Include file for Kamstrup emperor platforms.
+ *
+ * Copyright (C) 2025 Kamstrup A/S
+ * Author: Bruno Thomsen <bruno.thomsen@gmail.com>
+ *         Lars Alex Pedersen <lapeddk@gmail.com>
+ */
+
+#include "am33xx.dtsi"
+#include <dt-bindings/leds/common.h>
+
+/ {
+	memory@80000000 {
+		device_type = "memory";
+		reg = <0x80000000 0x10000000>; /* 256 MB */
+	};
+
+	chosen {
+		stdout-path = &uart0;
+	};
+
+	/*
+	 * Internal LEDs on baseband board (emperor 55501738, mini 55502242),
+	 * not part of the HMI.
+	 * emperor-mini extends this node with led-5 for HMI power control.
+	 */
+	leds: leds {
+		compatible = "gpio-leds";
+		pinctrl-names = "default";
+		pinctrl-0 = <&leds_pins_default>;
+
+		led-1 {
+			color = <LED_COLOR_ID_RED>;
+			function = LED_FUNCTION_STATUS;
+			gpios = <&gpio2 24 GPIO_ACTIVE_LOW>;
+			default-state = "off";
+		};
+
+		led-2 {
+			color = <LED_COLOR_ID_GREEN>;
+			function = LED_FUNCTION_STATUS;
+			function-enumerator = <1>;
+			gpios = <&gpio2 22 GPIO_ACTIVE_LOW>;
+			default-state = "off";
+		};
+
+		led-3 {
+			color = <LED_COLOR_ID_GREEN>;
+			function = LED_FUNCTION_STATUS;
+			function-enumerator = <2>;
+			gpios = <&gpio2 23 GPIO_ACTIVE_LOW>;
+			default-state = "off";
+		};
+
+		led-4 {
+			color = <LED_COLOR_ID_GREEN>;
+			function = LED_FUNCTION_HEARTBEAT;
+			gpios = <&gpio2 25 GPIO_ACTIVE_LOW>;
+			default-state = "on";
+			linux,default-trigger = "heartbeat";
+		};
+	};
+
+	vcc_fixed: regulator-vcc {
+		compatible = "regulator-fixed";
+		regulator-name = "vcc_fixed";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		regulator-boot-on;
+	};
+
+	vmmcsd_fixed: regulator-vmmcsd {
+		compatible = "regulator-fixed";
+		regulator-name = "vmmcsd_fixed";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+	};
+};
+
+/*
+ * Restrict 1.1 V operating point to increase SoC life-time
+ * by removing the following opp's:
+ * - OPP120-1
+ * - OPP120-2
+ * - OPP Turbo-1
+ * - OPP Turbo-2
+ * - OPP Nitro
+ *
+ * Note: This limits SoC operating point to maximum 600 MHz.
+ */
+&cpu0_opp_table {
+	/delete-node/ opp-120-600000000;
+	/delete-node/ opp-120-720000000;
+	/delete-node/ opp-720000000;
+	/delete-node/ opp-800000000;
+	/delete-node/ opp-1000000000;
+};
+
+&gpio2 {
+	gpio-line-names =
+		"NC",
+		"NC",
+		"RADIO_GPIO0",
+		"RADIO_GPIO1",
+		"RADIO_GPIO2",
+		"RADIO_GPIO3",
+		"SYS_BOOT0",
+		"SYS_BOOT1",
+		"SYS_BOOT2",
+		"SYS_BOOT3",
+		"SYS_BOOT4",
+		"SYS_BOOT5",
+		"SYS_BOOT6",
+		"SYS_BOOT7",
+		"SYS_BOOT8",
+		"SYS_BOOT9",
+		"SYS_BOOT10",
+		"SYS_BOOT11",
+		"MII1_RXD3",
+		"MII1_RXD2",
+		"MII1_RXD1",
+		"MII1_RXD0",
+		"LED2",
+		"LED3",
+		"LED1",
+		"LED4",
+		"MMC0_DAT3",
+		"MMC0_DAT2",
+		"MMC0_DAT1",
+		"MMC0_DAT0",
+		"MMC0_CLK0",
+		"MMC0_CMD";
+};
+
+&am33xx_pinmux {
+	rtc_pins_default: rtc-pins {
+		pinctrl-single,pins = <
+			/* RTC Interrupt */
+			AM33XX_PADCONF(AM335X_PIN_MCASP0_ACLKX, PIN_INPUT, MUX_MODE7) /* (A13) mcasp0_aclkx.gpio3[14] */
+			/* Tamper state */
+			AM33XX_PADCONF(AM335X_PIN_MCASP0_FSX, PIN_INPUT, MUX_MODE7) /* (B13) mcasp0_fsx.gpio3[15] */
+			/* Power failure */
+			AM33XX_PADCONF(AM335X_PIN_SPI0_CS1, PIN_INPUT, MUX_MODE7) /* (C15) spi0_cs1.gpio0[6] */
+		>;
+	};
+
+	mii1_pins_default: mii1-pins {
+		pinctrl-single,pins = <
+			AM33XX_PADCONF(AM335X_PIN_MII1_COL, PIN_INPUT, MUX_MODE0) /* (H16) gmii1_col.gmii1_col */
+			AM33XX_PADCONF(AM335X_PIN_MII1_CRS, PIN_INPUT, MUX_MODE0) /* (H17) gmii1_crs.gmii1_crs */
+			AM33XX_PADCONF(AM335X_PIN_MII1_RX_ER, PIN_INPUT, MUX_MODE0) /* (J15) gmii1_rxer.gmii1_rxer */
+			AM33XX_PADCONF(AM335X_PIN_MII1_TX_EN, PIN_OUTPUT, MUX_MODE0) /* (J16) gmii1_txen.gmii1_txen */
+			AM33XX_PADCONF(AM335X_PIN_MII1_RX_DV, PIN_INPUT, MUX_MODE0) /* (J17) gmii1_rxdv.gmii1_rxdv */
+			AM33XX_PADCONF(AM335X_PIN_MII1_TX_CLK, PIN_INPUT, MUX_MODE0) /* (K18) gmii1_txclk.gmii1_txclk */
+			AM33XX_PADCONF(AM335X_PIN_MII1_RX_CLK, PIN_INPUT, MUX_MODE0) /* (L18) gmii1_rxclk.gmii1_rxclk */
+			AM33XX_PADCONF(AM335X_PIN_MII1_TXD0, PIN_OUTPUT, MUX_MODE0) /* (K17) gmii1_txd0.gmii1_txd0 */
+			AM33XX_PADCONF(AM335X_PIN_MII1_TXD1, PIN_OUTPUT, MUX_MODE0) /* (K16) gmii1_txd1.gmii1_txd1 */
+			AM33XX_PADCONF(AM335X_PIN_MII1_TXD2, PIN_OUTPUT, MUX_MODE0) /* (K15) gmii1_txd2.gmii1_txd2 */
+			AM33XX_PADCONF(AM335X_PIN_MII1_TXD3, PIN_OUTPUT, MUX_MODE0) /* (J18) gmii1_txd3.gmii1_txd3 */
+			AM33XX_PADCONF(AM335X_PIN_MII1_RXD0, PIN_INPUT, MUX_MODE0) /* (M16) gmii1_rxd0.gmii1_rxd0 */
+			AM33XX_PADCONF(AM335X_PIN_MII1_RXD1, PIN_INPUT, MUX_MODE0) /* (L15) gmii1_rxd1.gmii1_rxd1 */
+			AM33XX_PADCONF(AM335X_PIN_MII1_RXD2, PIN_INPUT, MUX_MODE0) /* (L16) gmii1_rxd2.gmii1_rxd2 */
+			AM33XX_PADCONF(AM335X_PIN_MII1_RXD3, PIN_INPUT, MUX_MODE0) /* (L17) gmii1_rxd3.gmii1_rxd3 */
+		>;
+	};
+
+	mdio_pins_default: mdio-pins {
+		pinctrl-single,pins = <
+			AM33XX_PADCONF(AM335X_PIN_MDC, PIN_OUTPUT_PULLUP, MUX_MODE0) /* (M18) mdio_clk.mdio_clk */
+			AM33XX_PADCONF(AM335X_PIN_MDIO, PIN_INPUT_PULLUP, MUX_MODE0) /* (M17) mdio_data.mdio_data */
+		>;
+	};
+
+	i2c0_pins_default: i2c0-pins {
+		pinctrl-single,pins = <
+			AM33XX_PADCONF(AM335X_PIN_I2C0_SCL, PIN_INPUT, MUX_MODE0) /* (C16) I2C0_SCL.I2C0_SCL */
+			AM33XX_PADCONF(AM335X_PIN_I2C0_SDA, PIN_INPUT, MUX_MODE0) /* (C17) I2C0_SDA.I2C0_SDA */
+		>;
+	};
+
+	i2c1_pins_default: i2c1-pins {
+		pinctrl-single,pins = <
+			AM33XX_PADCONF(AM335X_PIN_UART1_TXD, PIN_INPUT, MUX_MODE3) /* (D15) uart1_txd.I2C1_SCL */
+			AM33XX_PADCONF(AM335X_PIN_UART1_RXD, PIN_INPUT, MUX_MODE3) /* (D16) uart1_rxd.I2C1_SDA */
+		>;
+	};
+
+	spi0_pins_default: spi0-pins {
+		pinctrl-single,pins = <
+			AM33XX_PADCONF(AM335X_PIN_SPI0_SCLK, PIN_INPUT, MUX_MODE0) /* (A17) spi0_sclk.spi0_sclk */
+			AM33XX_PADCONF(AM335X_PIN_SPI0_D0, PIN_INPUT_PULLUP, MUX_MODE0) /* (B17) spi0_d0.spi0_d0 */
+			AM33XX_PADCONF(AM335X_PIN_SPI0_D1, PIN_INPUT, MUX_MODE0) /* (B16) spi0_d1.spi0_d1 */
+			AM33XX_PADCONF(AM335X_PIN_SPI0_CS0, PIN_INPUT_PULLUP, MUX_MODE0) /* (A16) spi0_cs0.spi0_cs0 */
+		>;
+	};
+
+	uart0_pins_default: uart0-pins {
+		pinctrl-single,pins = <
+			AM33XX_PADCONF(AM335X_PIN_UART0_RXD, PIN_INPUT_PULLUP, MUX_MODE0) /* (E15) uart0_rxd.uart0_rxd */
+			AM33XX_PADCONF(AM335X_PIN_UART0_TXD, PIN_OUTPUT, MUX_MODE0) /* (E16) uart0_txd.uart0_txd */
+		>;
+	};
+
+	uart4_pins_default: uart4-pins {
+		pinctrl-single,pins = <
+			AM33XX_PADCONF(AM335X_PIN_UART0_CTSN, PIN_INPUT_PULLUP, MUX_MODE1) /* (E18) uart0_ctsn.uart4_rxd */
+			AM33XX_PADCONF(AM335X_PIN_UART0_RTSN, PIN_OUTPUT, MUX_MODE1) /* (E17) uart0_rtsn.uart4_txd */
+		>;
+	};
+
+	sdcard_pins_default: sdcard-pins {
+		pinctrl-single,pins = <
+			AM33XX_PADCONF(AM335X_PIN_MMC0_CLK, PIN_INPUT, MUX_MODE0) /* (G17) mmc0_clk.mmc0_clk */
+			AM33XX_PADCONF(AM335X_PIN_MMC0_CMD, PIN_INPUT, MUX_MODE0) /* (G18) mmc0_cmd.mmc0_cmd */
+			AM33XX_PADCONF(AM335X_PIN_MMC0_DAT0, PIN_INPUT, MUX_MODE0) /* (G16) mmc0_dat0.mmc0_dat0 */
+			AM33XX_PADCONF(AM335X_PIN_MMC0_DAT1, PIN_INPUT, MUX_MODE0) /* (G15) mmc0_dat1.mmc0_dat1 */
+			AM33XX_PADCONF(AM335X_PIN_MMC0_DAT2, PIN_INPUT, MUX_MODE0) /* (F18) mmc0_dat2.mmc0_dat2 */
+			AM33XX_PADCONF(AM335X_PIN_MMC0_DAT3, PIN_INPUT, MUX_MODE0) /* (F17) mmc0_dat3.mmc0_dat3 */
+		>;
+	};
+
+	emmc_pins_default: emmc-pins {
+		pinctrl-single,pins = <
+			AM33XX_PADCONF(AM335X_PIN_GPMC_CSN1, PIN_INPUT, MUX_MODE2) /* (U9) gpmc_csn1.mmc1_clk */
+			AM33XX_PADCONF(AM335X_PIN_GPMC_CSN2, PIN_INPUT, MUX_MODE2) /* (V9) gpmc_csn2.mmc1_cmd */
+			AM33XX_PADCONF(AM335X_PIN_GPMC_AD0, PIN_INPUT, MUX_MODE1) /* (U7) gpmc_ad0.mmc1_dat0 */
+			AM33XX_PADCONF(AM335X_PIN_GPMC_AD1, PIN_INPUT, MUX_MODE1) /* (V7) gpmc_ad1.mmc1_dat1 */
+			AM33XX_PADCONF(AM335X_PIN_GPMC_AD2, PIN_INPUT, MUX_MODE1) /* (R8) gpmc_ad2.mmc1_dat2 */
+			AM33XX_PADCONF(AM335X_PIN_GPMC_AD3, PIN_INPUT, MUX_MODE1) /* (T8) gpmc_ad3.mmc1_dat3 */
+			AM33XX_PADCONF(AM335X_PIN_GPMC_AD4, PIN_INPUT, MUX_MODE1) /* (U8) gpmc_ad4.mmc1_dat4 */
+			AM33XX_PADCONF(AM335X_PIN_GPMC_AD5, PIN_INPUT, MUX_MODE1) /* (V8) gpmc_ad5.mmc1_dat5 */
+			AM33XX_PADCONF(AM335X_PIN_GPMC_AD6, PIN_INPUT, MUX_MODE1) /* (R9) gpmc_ad6.mmc1_dat6 */
+			AM33XX_PADCONF(AM335X_PIN_GPMC_AD7, PIN_INPUT, MUX_MODE1) /* (T9) gpmc_ad7.mmc1_dat7 */
+		>;
+	};
+
+	leds_pins_default: leds-pins {
+		pinctrl-single,pins = <
+			AM33XX_PADCONF(AM335X_PIN_LCD_VSYNC, PIN_OUTPUT, MUX_MODE7) /* (U5) lcd_vsync.gpio2[22] */
+			AM33XX_PADCONF(AM335X_PIN_LCD_HSYNC, PIN_OUTPUT, MUX_MODE7) /* (R5) lcd_hsync.gpio2[23] */
+			AM33XX_PADCONF(AM335X_PIN_LCD_PCLK, PIN_OUTPUT, MUX_MODE7) /* (V5) lcd_pclk.gpio2[24] */
+			AM33XX_PADCONF(AM335X_PIN_LCD_AC_BIAS_EN, PIN_OUTPUT, MUX_MODE7) /* (R6) lcd_ac_bias_en.gpio2[25] */
+			/* led-5 on emperor-mini, NC on emperor */
+			AM33XX_PADCONF(AM335X_PIN_GPMC_AD12, PIN_INPUT_PULLDOWN, MUX_MODE7) /* (T12) gpmc_ad12.gpio1[12] */
+		>;
+	};
+
+	sdr_radio_pins_default: sdr-radio-pins {
+		pinctrl-single,pins = <
+			/* Radio irq */
+			AM33XX_PADCONF(AM335X_PIN_XDMA_EVENT_INTR1, PIN_INPUT_PULLUP, MUX_MODE7) /* (D14) xdma_event_intr1.gpio0[20] */
+			/* Radio init_b */
+			AM33XX_PADCONF(AM335X_PIN_MCASP0_AXR0, PIN_INPUT_PULLUP, MUX_MODE7) /* (D12) mcasp0_axr0.gpio3[16] */
+			/* Radio prog_done */
+			AM33XX_PADCONF(AM335X_PIN_MCASP0_AHCLKR, PIN_INPUT_PULLUP, MUX_MODE7) /* (C12) mcasp0_ahclkr.gpio3[17] */
+			/* Radio gpio0 to gpio5 */
+			AM33XX_PADCONF(AM335X_PIN_GPMC_ADVN_ALE, PIN_INPUT_PULLUP, MUX_MODE7) /* (R7) gpmc_advn_ale.gpio2[2] */
+			AM33XX_PADCONF(AM335X_PIN_GPMC_OEN_REN, PIN_INPUT_PULLUP, MUX_MODE7) /* (T7) gpmc_oen_ren.gpio2[3] */
+			AM33XX_PADCONF(AM335X_PIN_GPMC_WEN, PIN_INPUT_PULLUP, MUX_MODE7) /* (U6) gpmc_wen.gpio2[4] */
+			AM33XX_PADCONF(AM335X_PIN_GPMC_BEN0_CLE, PIN_INPUT_PULLUP, MUX_MODE7) /* (T6) gpmc_be0n_cle.gpio2[5] */
+			AM33XX_PADCONF(AM335X_PIN_ECAP0_IN_PWM0_OUT, PIN_INPUT_PULLUP, MUX_MODE7) /* (C18) eCAP0_in_PWM0_out.gpio0[7] */
+			AM33XX_PADCONF(AM335X_PIN_XDMA_EVENT_INTR0, PIN_INPUT_PULLUP, MUX_MODE7) /* (A15) xdma_event_intr0.gpio0[19] */
+			/* Radio power */
+			AM33XX_PADCONF(AM335X_PIN_MCASP0_ACLKR, PIN_OUTPUT, MUX_MODE7) /* (B12) mcasp0_aclkr.gpio3[18] */
+			/* Radio flash mux */
+			AM33XX_PADCONF(AM335X_PIN_MCASP0_FSR, PIN_OUTPUT, MUX_MODE7) /* (C13) mcasp0_fsr.gpio3[19] */
+			/* Radio reset */
+			AM33XX_PADCONF(AM335X_PIN_MCASP0_AXR1, PIN_OUTPUT, MUX_MODE7) /* (D13) mcasp0_axr1.gpio3[20] */
+			/* Radio flash reset */
+			AM33XX_PADCONF(AM335X_PIN_MCASP0_AHCLKX, PIN_OUTPUT, MUX_MODE7) /* (A14) mcasp0_ahclkx.gpio3[21] */
+		>;
+	};
+};
+
+/*
+ * SPI bus on radio frontend board.
+ */
+&spi0 {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&spi0_pins_default>;
+	ti,spi-num-cs = <1>;
+
+	flash@0 {
+		compatible = "jedec,spi-nor";
+		reg = <0>;
+		spi-tx-bus-width = <1>;
+		spi-rx-bus-width = <1>;
+		spi-max-frequency = <10000000>;
+
+		/* Radio flash is 32 MBytes in size.
+		 * 64 KB blocks of configurations are located in the
+		 * last part of the storage.
+		 */
+		partitions {
+			compatible = "fixed-partitions";
+			#address-cells = <1>;
+			#size-cells = <1>;
+			partition@0 {
+				reg = <0x0 0xfe0000>;
+				label = "radio-program";
+			};
+			partition@fe0000 {
+				reg = <0xfe0000 0x10000>;
+				label = "radio-config";
+			};
+			partition@ff0000 {
+				reg = <0xff0000 0x10000>;
+				label = "baseband-config";
+			};
+		};
+	};
+};
+
+&uart0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart0_pins_default>;
+	status = "okay";
+};
+
+/*
+ * SDR radio low-level error logging.
+ * Works even if primary USB communication has issues.
+ */
+&uart4 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart4_pins_default>;
+	status = "okay";
+};
+
+&usb {
+	status = "okay";
+};
+
+&usb_ctrl_mod {
+	status = "okay";
+};
+
+/*
+ * Host USB port 0 is used for SDR FPGA communication.
+ */
+&usb0_phy {
+	status = "okay";
+};
+
+&usb0 {
+	status = "okay";
+	dr_mode = "host";
+};
+
+&cppi41dma {
+	status = "okay";
+};
+
+&cpsw_emac0 {
+	phy-mode = "mii";
+	phy-handle = <&ethernetphy7>;
+};
+
+&mac {
+	pinctrl-names = "default";
+	pinctrl-0 = <&mii1_pins_default>;
+	status = "okay";
+	slaves = <1>;
+};
+
+&davinci_mdio {
+	pinctrl-names = "default";
+	pinctrl-0 = <&mdio_pins_default>;
+	status = "okay";
+
+	ethernetphy7: ethernet-phy@7 {
+		reg = <7>;
+		smsc,disable-energy-detect;
+	};
+};
+
+/* eMMC disk */
+&mmc1 {
+	status = "okay";
+	bus-width = <8>;
+	vmmc-supply = <&vmmcsd_fixed>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&emmc_pins_default>;
+
+	/*
+	 * am335x doesn't support DDR, so make sure the data signal is set
+	 * early in the clock cycle
+	 */
+	/delete-property/ ti,needs-special-hs-handling;
+};
+
+/* microSD card, used during manufacturing */
+&mmc2 {
+	status = "okay";
+	bus-width = <4>;
+	vmmc-supply = <&vmmcsd_fixed>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&sdcard_pins_default>;
+};
+
+&rtc {
+	ti,no-init;
+	status = "disabled";
+};
+
+&aes {
+	status = "okay";
+};
+
+&sham {
+	status = "okay";
+};

@@ -105,6 +105,8 @@ dtb-$(CONFIG_SOC_AM33XX) += \
 	am335x-bonegreen-hdmi-00a0.dtb \
 	am335x-chiliboard.dtb \
 	am335x-cm-t335.dtb \
+	am335x-emperor.dtb \
+	am335x-emperor-mini.dtb \
 	am335x-evm.dtb \
 	am335x-evmsk.dtb \
 	am335x-guardian.dtb \
