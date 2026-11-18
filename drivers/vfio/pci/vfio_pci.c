@@ -64,7 +64,7 @@ static unsigned int tph_policy;
 static int tph_policy_set(const char *val, const struct kernel_param *kp)
 {
 	return param_set_uint_minmax(val, kp, VFIO_PCI_TPH_POLICY_NO_ST,
-				     VFIO_PCI_TPH_POLICY_IV_ST);
+				     VFIO_PCI_TPH_POLICY_DS_ST);
 }
 static const struct kernel_param_ops tph_param_ops = {
 	.set = tph_policy_set,
@@ -74,7 +74,14 @@ module_param_cb(tph_policy, &tph_param_ops, &tph_policy, 0644);
 MODULE_PARM_DESC(tph_policy,
 	"Global TPH policy level (0=default No-ST):\n"
 	"0 = No-ST mode: ST programming unavailable\n"
-	"1 = Add IV-ST mode: ST programming supports NONE/CPU sources\n");
+	"1 = Add IV-ST mode: ST programming supports NONE/CPU sources\n"
+	"2 = Add DS-ST mode: RESOLVE returns ST for CPU sources;\n"
+	"                    ST programming supports NONE/CPU sources\n"
+	"    Note: In this 'Add DS-ST mode', device-specific ST tables are\n"
+	"          not preserved across PCI resets, userspace must re-establish\n"
+	"          ST state after reset. The kernel cannot validate these ST\n"
+	"          entries, so this mode is not recommended for general\n"
+	"          virtualization usecases.");
 
 static bool vfio_pci_dev_in_denylist(struct pci_dev *pdev)
 {
