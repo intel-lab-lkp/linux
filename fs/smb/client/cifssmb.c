@@ -3966,6 +3966,12 @@ setCifsAclRetry:
 	data_offset = param_offset + param_count;
 	byte_count = 3 /* pad */  + param_count;
 
+	/* The single request buffer must hold the ACL after data_offset. */
+	if (acllen > CIFSMaxBufSize + MAX_SMB2_HDR_SIZE - data_offset) {
+		cifs_buf_release(pSMB);
+		return -EINVAL;
+	}
+
 	pSMB->DataCount = cpu_to_le32(data_count);
 	pSMB->TotalDataCount = pSMB->DataCount;
 	pSMB->MaxParameterCount = cpu_to_le32(4);
