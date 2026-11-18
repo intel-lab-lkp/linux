@@ -78,8 +78,12 @@ impl BinderError {
 impl From<Error> for BinderError {
     #[track_caller]
     fn from(source: Error) -> Self {
+        let reply = match source {
+            ESRCH => BR_DEAD_REPLY,
+            _ => BR_FAILED_REPLY,
+        };
         Self {
-            reply: BR_FAILED_REPLY,
+            reply,
             source: Some(source),
             line: ErrorLocation::caller(),
         }
