@@ -42,8 +42,6 @@
 #define EXC3000_RESET_MS		10
 #define EXC3000_READY_MS		100
 
-static const struct i2c_device_id exc3000_id[];
-
 struct eeti_dev_info {
 	const char *name;
 	int max_xy;
@@ -338,12 +336,7 @@ static int exc3000_probe(struct i2c_client *client)
 		return -ENOMEM;
 
 	data->client = client;
-	data->info = device_get_match_data(&client->dev);
-	if (!data->info) {
-		enum eeti_dev_id eeti_dev_id =
-			i2c_match_id(exc3000_id, client)->driver_data;
-		data->info = &exc3000_info[eeti_dev_id];
-	}
+	data->info = i2c_get_match_data(client);
 	timer_setup(&data->timer, exc3000_timer, 0);
 	init_completion(&data->wait_event);
 	mutex_init(&data->query_lock);
@@ -432,10 +425,10 @@ static int exc3000_probe(struct i2c_client *client)
 }
 
 static const struct i2c_device_id exc3000_id[] = {
-	{ .name = "exc3000", .driver_data = EETI_EXC3000 },
-	{ .name = "exc80h60", .driver_data = EETI_EXC80H60 },
-	{ .name = "exc80h84", .driver_data = EETI_EXC80H84 },
-	{ .name = "exc81w32", .driver_data = EETI_EXC81W32 },
+	{ .name = "exc3000", .driver_data = (kernel_ulong_t)&exc3000_info[EETI_EXC3000] },
+	{ .name = "exc80h60", .driver_data = (kernel_ulong_t)&exc3000_info[EETI_EXC80H60] },
+	{ .name = "exc80h84", .driver_data = (kernel_ulong_t)&exc3000_info[EETI_EXC80H84] },
+	{ .name = "exc81w32", .driver_data = (kernel_ulong_t)&exc3000_info[EETI_EXC81W32] },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, exc3000_id);
