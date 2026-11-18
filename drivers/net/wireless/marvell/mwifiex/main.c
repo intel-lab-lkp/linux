@@ -1202,6 +1202,9 @@ EXPORT_SYMBOL_GPL(mwifiex_drv_info_dump);
 
 void mwifiex_prepare_fw_dump_info(struct mwifiex_adapter *adapter)
 {
+	static const char dump_start[] = "========Start dump ";
+	static const char dump_separator[] = "========\n";
+	static const char dump_end[] = "\n========End dump========\n";
 	u8 idx;
 	char *fw_dump_ptr;
 	u32 dump_len = 0;
@@ -1211,11 +1214,11 @@ void mwifiex_prepare_fw_dump_info(struct mwifiex_adapter *adapter)
 				&adapter->mem_type_mapping_tbl[idx];
 
 		if (entry->mem_ptr) {
-			dump_len += (strlen("========Start dump ") +
+			dump_len += ((sizeof(dump_start) - 1) +
 					strlen(entry->mem_name) +
-					strlen("========\n") +
+					(sizeof(dump_separator) - 1) +
 					(entry->mem_size + 1) +
-					strlen("\n========End dump========\n"));
+					(sizeof(dump_end) - 1));
 		}
 	}
 
@@ -1243,20 +1246,22 @@ void mwifiex_prepare_fw_dump_info(struct mwifiex_adapter *adapter)
 					&adapter->mem_type_mapping_tbl[idx];
 
 		if (entry->mem_ptr) {
-			strcpy(fw_dump_ptr, "========Start dump ");
-			fw_dump_ptr += strlen("========Start dump ");
+			size_t name_len = strlen(entry->mem_name);
 
-			strcpy(fw_dump_ptr, entry->mem_name);
-			fw_dump_ptr += strlen(entry->mem_name);
+			memcpy(fw_dump_ptr, dump_start, sizeof(dump_start));
+			fw_dump_ptr += sizeof(dump_start) - 1;
 
-			strcpy(fw_dump_ptr, "========\n");
-			fw_dump_ptr += strlen("========\n");
+			memcpy(fw_dump_ptr, entry->mem_name, name_len + 1);
+			fw_dump_ptr += name_len;
+
+			memcpy(fw_dump_ptr, dump_separator, sizeof(dump_separator));
+			fw_dump_ptr += sizeof(dump_separator) - 1;
 
 			memcpy(fw_dump_ptr, entry->mem_ptr, entry->mem_size);
 			fw_dump_ptr += entry->mem_size;
 
-			strcpy(fw_dump_ptr, "\n========End dump========\n");
-			fw_dump_ptr += strlen("\n========End dump========\n");
+			memcpy(fw_dump_ptr, dump_end, sizeof(dump_end));
+			fw_dump_ptr += sizeof(dump_end) - 1;
 		}
 	}
 
