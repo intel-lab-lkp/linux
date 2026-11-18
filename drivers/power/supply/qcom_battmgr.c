@@ -1285,7 +1285,8 @@ static void qcom_battmgr_sc8280xp_callback(struct qcom_battmgr *battmgr,
 	if (payload_len < sizeof(__le32)) {
 		dev_warn(battmgr->dev, "invalid payload length for %#x: %zd\n",
 			 opcode, len);
-		return;
+		battmgr->error = -ENODATA;
+		goto out_complete;
 	}
 
 	switch (opcode) {
@@ -1300,7 +1301,7 @@ static void qcom_battmgr_sc8280xp_callback(struct qcom_battmgr *battmgr,
 				 "invalid payload length for battery information request: %zd\n",
 				 payload_len);
 			battmgr->error = -ENODATA;
-			return;
+			goto out_complete;
 		}
 
 		battmgr->unit = le32_to_cpu(resp->info.power_unit);
@@ -1325,7 +1326,7 @@ static void qcom_battmgr_sc8280xp_callback(struct qcom_battmgr *battmgr,
 				 "invalid payload length for battery status request: %zd\n",
 				 payload_len);
 			battmgr->error = -ENODATA;
-			return;
+			goto out_complete;
 		}
 
 		battmgr->status.capacity = le32_to_cpu(resp->status.capacity) * 1000;
@@ -1388,6 +1389,7 @@ static void qcom_battmgr_sc8280xp_callback(struct qcom_battmgr *battmgr,
 		break;
 	}
 
+out_complete:
 	complete(&battmgr->ack);
 }
 
@@ -1403,7 +1405,8 @@ static void qcom_battmgr_sm8350_callback(struct qcom_battmgr *battmgr,
 	if (payload_len < sizeof(__le32)) {
 		dev_warn(battmgr->dev, "invalid payload length for %#x: %zd\n",
 			 opcode, len);
-		return;
+		battmgr->error = -ENODATA;
+		goto out_complete;
 	}
 
 	switch (opcode) {
@@ -1415,7 +1418,7 @@ static void qcom_battmgr_sm8350_callback(struct qcom_battmgr *battmgr,
 					 "invalid payload length for BATT_MODEL_NAME request: %zd\n",
 					 payload_len);
 				battmgr->error = -ENODATA;
-				return;
+				goto out_complete;
 			}
 		} else {
 			if (payload_len != sizeof(resp->intval)) {
@@ -1423,7 +1426,7 @@ static void qcom_battmgr_sm8350_callback(struct qcom_battmgr *battmgr,
 					 "invalid payload length for %#x request: %zd\n",
 					 property, payload_len);
 				battmgr->error = -ENODATA;
-				return;
+				goto out_complete;
 			}
 
 			battmgr->error = le32_to_cpu(resp->intval.result);
@@ -1514,7 +1517,7 @@ static void qcom_battmgr_sm8350_callback(struct qcom_battmgr *battmgr,
 				 "invalid payload length for %#x request: %zd\n",
 				 property, payload_len);
 			battmgr->error = -ENODATA;
-			return;
+			goto out_complete;
 		}
 
 		battmgr->error = le32_to_cpu(resp->intval.result);
@@ -1555,7 +1558,7 @@ static void qcom_battmgr_sm8350_callback(struct qcom_battmgr *battmgr,
 				 "invalid payload length for %#x request: %zd\n",
 				 property, payload_len);
 			battmgr->error = -ENODATA;
-			return;
+			goto out_complete;
 		}
 
 		battmgr->error = le32_to_cpu(resp->intval.result);
