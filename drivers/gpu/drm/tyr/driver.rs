@@ -29,7 +29,7 @@ use kernel::{
     regulator::Regulator,
     sizes::SZ_2M,
     sync::{
-        Arc,
+        aref::ARef,
         Mutex, //
     },
     time, //
@@ -71,7 +71,14 @@ pub(crate) struct TyrDrmRegistrationData<'drm> {
     pub(crate) pdev: &'drm platform::Device<Bound>,
 
     /// Firmware sections.
-    pub(crate) fw: Firmware<'drm>,
+    #[pin]
+    #[uses('mmu: invariant)]
+    pub(crate) fw: Firmware<'mmu>,
+
+    /// MMU shared by the firmware and its buffer objects.
+    #[pin]
+    #[uses('iomem: invariant)]
+    mmu: Mmu<'iomem>,
 
     #[pin]
     clks: Mutex<Clocks>,
@@ -80,7 +87,7 @@ pub(crate) struct TyrDrmRegistrationData<'drm> {
     regulators: Mutex<Regulators>,
 
     /// GPU MMIO register mapping.
-    pub(crate) iomem: Arc<IoMem<'drm>>,
+    pub(crate) iomem: IoMem<'drm>,
 
     /// GPU information read from hardware during probe.
     pub(crate) gpu_info: GpuInfo,
@@ -132,7 +139,7 @@ impl platform::Driver for TyrPlatformDriver {
 
             let request = pdev.io_request_by_index(0).ok_or(ENODEV)?;
 
-            let iomem = Arc::new(request.iomap_sized::<SZ_2M>()?, GFP_KERNEL)?;
+            let iomem = request.iomap_sized::<SZ_2M>()?;
 
             issue_soft_reset(pdev.as_ref(), &iomem)?;
             gpu::l2_power_on(pdev.as_ref(), &iomem)?;
@@ -149,18 +156,7 @@ impl platform::Driver for TyrPlatformDriver {
             unsafe { pdev.dma_set_mask_and_coherent(DmaMask::try_new(pa_bits)?)? };
 
             let unreg_dev = drm::UnregisteredDevice::<TyrDrmDriver>::new(pdev, Ok(()))?;
-
-            let mmu = Mmu::new(pdev.as_ref(), iomem.as_arc_borrow(), &gpu_info)?;
-
-            let firmware = Firmware::new(
-                pdev.as_ref(),
-                iomem.clone(),
-                &unreg_dev,
-                mmu.as_arc_borrow(),
-                &gpu_info,
-            )?;
-
-            firmware.boot()?;
+            let ddev = ARef::from(&*unreg_dev);
 
             Ok(try_pin_init!(TyrPlatformDriverData {
                 // SAFETY: `_reg` is stored in `TyrPlatformDriverData` and dropped when the
@@ -168,9 +164,13 @@ impl platform::Driver for TyrPlatformDriver {
                 _reg <- unsafe { drm::Registration::new(
                     pdev.as_ref(),
                     unreg_dev,
-                    pin_init!(TyrDrmRegistrationData {
+                    try_pin_init!(TyrDrmRegistrationData {
+                        iomem,
+                        gpu_info,
+                        mmu <- Mmu::new(pdev.as_ref(), iomem, gpu_info),
+                        fw <- Firmware::new(pdev.as_ref(), iomem, &ddev, mmu.get_ref(), gpu_info),
+                        _: { fw.boot()?; },
                         pdev,
-                        fw: firmware,
                         clks <- new_mutex!(Clocks {
                             core: core_clk,
                             stacks: stacks_clk,
@@ -180,8 +180,6 @@ impl platform::Driver for TyrPlatformDriver {
                             _mali: mali_regulator,
                             _sram: sram_regulator,
                         }),
-                        iomem,
-                        gpu_info,
                     }),
                 )},
                 _: { dev_dbg!(pdev, "Tyr initialized correctly.") },

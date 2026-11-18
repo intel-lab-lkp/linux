@@ -50,7 +50,6 @@ use kernel::{
     sync::{
         aref::ARef,
         Arc,
-        ArcBorrow,
         Mutex, //
     },
     uapi, //
@@ -316,80 +315,80 @@ pub(crate) struct GpuVmData<'drm> {
 ///
 /// Each VM can be mapped into a hardware address space slot.
 #[pin_data]
-pub(crate) struct Vm<'vm> {
+pub(crate) struct Vm<'vm, 'res> {
     /// Data referenced by an AS when the VM is active
-    as_data: Arc<VmAsData<'vm>>,
+    as_data: Arc<VmAsData<'res>>,
     /// MMU manager.
-    mmu: Arc<Mmu<'vm>>,
+    mmu: &'vm Mmu<'res>,
     /// Parent device used for DMA mapping and page-table operations.
-    dev: &'vm Device<Bound>,
+    dev: &'res Device<Bound>,
     /// DRM GPUVM core for managing virtual address space.
     #[pin]
-    gpuvm_unique: Mutex<UniqueRefGpuVm<GpuVmData<'vm>>>,
+    gpuvm_unique: Mutex<UniqueRefGpuVm<GpuVmData<'res>>>,
     /// Non-core part of the GPUVM. Can be used for stuff that doesn't modify the
     /// internal mapping tree, like GpuVm::obtain()
-    gpuvm: ARef<GpuVm<GpuVmData<'vm>>>,
+    gpuvm: ARef<GpuVm<GpuVmData<'res>>>,
     /// VA range for this VM.
     va_range: Range<u64>,
 }
 
-impl<'vm> Vm<'vm> {
+impl<'vm, 'res> Vm<'vm, 'res> {
     /// Creates a new GPU virtual address space.
     ///
     /// The VM is initialized with a page table configured according to the GPU's
     /// address translation capabilities and registered with the GPUVM framework.
-    pub(crate) fn new(
-        dev: &'vm Device<Bound>,
-        ddev: &TyrDrmDevice,
-        mmu: ArcBorrow<'_, Mmu<'vm>>,
-        gpu_info: &GpuInfo,
-    ) -> Result<Arc<Vm<'vm>>> {
-        let mmu_features = MMU_FEATURES::from_raw(gpu_info.mmu_features);
-        let va_bits = mmu_features.va_bits().get();
-        let pa_bits = mmu_features.pa_bits().get();
+    pub(crate) fn new<'a>(
+        dev: &'res Device<Bound>,
+        ddev: &'a TyrDrmDevice,
+        mmu: &'vm Mmu<'res>,
+        gpu_info: &'a GpuInfo,
+    ) -> impl PinInit<Self, Error> + 'a
+    where
+        'vm: 'a,
+    {
+        pin_init::pin_init_scope(move || {
+            let mmu_features = MMU_FEATURES::from_raw(gpu_info.mmu_features);
+            let va_bits = mmu_features.va_bits().get();
+            let pa_bits = mmu_features.pa_bits().get();
 
-        let range = 0..(1u64 << va_bits);
-        let reserve_range = 0..0u64;
+            let range = 0..(1u64 << va_bits);
+            let reserve_range = 0..0u64;
 
-        // dummy_obj is used to initialize the GPUVM tree.
-        let dummy_obj = gem::new_dummy_object(ddev).inspect_err(|e| {
-            dev_err!(dev, "Failed to create dummy GEM object: {:?}", e);
-        })?;
+            // dummy_obj is used to initialize the GPUVM tree.
+            let dummy_obj = gem::new_dummy_object(ddev).inspect_err(|e| {
+                dev_err!(dev, "Failed to create dummy GEM object: {:?}", e);
+            })?;
 
-        let gpuvm_unique = GpuVm::new::<Error, _>(
-            c"Tyr::GpuVm",
-            ddev,
-            &*dummy_obj,
-            range.clone(),
-            reserve_range,
-            GpuVmData::<'vm> {
-                _phantom: PhantomData::<&()>,
-            },
-        )
-        .inspect_err(|e| {
-            dev_err!(dev, "Failed to create GpuVm: {:?}", e);
-        })?;
-        let gpuvm = ARef::from(&*gpuvm_unique);
+            let gpuvm_unique = GpuVm::new::<Error, _>(
+                c"Tyr::GpuVm",
+                ddev,
+                &*dummy_obj,
+                range.clone(),
+                reserve_range,
+                GpuVmData::<'res> {
+                    _phantom: PhantomData::<&()>,
+                },
+            )
+            .inspect_err(|e| {
+                dev_err!(dev, "Failed to create GpuVm: {:?}", e);
+            })?;
+            let gpuvm = ARef::from(&*gpuvm_unique);
 
-        let as_data = Arc::pin_init(VmAsData::new(&mmu, dev, va_bits, pa_bits), GFP_KERNEL)?;
+            let as_data = Arc::pin_init(VmAsData::new(mmu, dev, va_bits, pa_bits), GFP_KERNEL)?;
 
-        let vm = Arc::pin_init(
-            pin_init!(Self{
+            Ok(try_pin_init!(Self {
                 as_data,
                 dev,
-                mmu: mmu.into(),
+                mmu,
                 gpuvm,
                 gpuvm_unique <- new_mutex!(gpuvm_unique),
                 va_range: range,
-            }),
-            GFP_KERNEL,
-        )?;
-
-        Ok(vm)
+            }))
+        })
     }
 
     /// Returns the parent device used by this VM for DMA mapping and page-table operations.
-    pub(crate) fn dev(&self) -> &'vm Device<Bound> {
+    pub(crate) fn dev(&self) -> &'res Device<Bound> {
         self.dev
     }
 
@@ -426,9 +425,9 @@ impl<'vm> Vm<'vm> {
     /// GPUVM framework and the hardware page table.
     fn exec_op<'a>(
         &self,
-        gpuvm_unique: &mut UniqueRefGpuVm<GpuVmData<'vm>>,
-        req: VmOpRequest<'vm>,
-        resources: &'a mut VmOpResources<'vm>,
+        gpuvm_unique: &mut UniqueRefGpuVm<GpuVmData<'res>>,
+        req: VmOpRequest<'res>,
+        resources: &'a mut VmOpResources<'res>,
     ) -> Result {
         let pt = &self.as_data.page_table;
 
@@ -437,7 +436,7 @@ impl<'vm> Vm<'vm> {
                 let mut pt_upd = PtUpdateContext::new(
                     self.dev,
                     pt,
-                    &self.mmu,
+                    self.mmu,
                     &self.as_data,
                     req.region,
                     PtOpType::Map(PtMapArgs {
@@ -459,7 +458,7 @@ impl<'vm> Vm<'vm> {
                 let mut pt_upd = PtUpdateContext::new(
                     self.dev,
                     pt,
-                    &self.mmu,
+                    self.mmu,
                     &self.as_data,
                     req.region,
                     PtOpType::Unmap,
@@ -524,9 +523,9 @@ impl<'vm> Vm<'vm> {
         };
         let mut resources = VmOpResources {
             preallocated_gpuvas: [
-                Some(GpuVaAlloc::<GpuVmData<'vm>>::new(GFP_KERNEL)?),
-                Some(GpuVaAlloc::<GpuVmData<'vm>>::new(GFP_KERNEL)?),
-                Some(GpuVaAlloc::<GpuVmData<'vm>>::new(GFP_KERNEL)?),
+                Some(GpuVaAlloc::<GpuVmData<'res>>::new(GFP_KERNEL)?),
+                Some(GpuVaAlloc::<GpuVmData<'res>>::new(GFP_KERNEL)?),
+                Some(GpuVaAlloc::<GpuVmData<'res>>::new(GFP_KERNEL)?),
             ],
         };
         let result = {
@@ -577,9 +576,9 @@ impl<'vm> Vm<'vm> {
                 [None, None, None]
             } else {
                 [
-                    Some(GpuVaAlloc::<GpuVmData<'vm>>::new(GFP_KERNEL)?),
-                    Some(GpuVaAlloc::<GpuVmData<'vm>>::new(GFP_KERNEL)?),
-                    Some(GpuVaAlloc::<GpuVmData<'vm>>::new(GFP_KERNEL)?),
+                    Some(GpuVaAlloc::<GpuVmData<'res>>::new(GFP_KERNEL)?),
+                    Some(GpuVaAlloc::<GpuVmData<'res>>::new(GFP_KERNEL)?),
+                    Some(GpuVaAlloc::<GpuVmData<'res>>::new(GFP_KERNEL)?),
                 ]
             },
         };

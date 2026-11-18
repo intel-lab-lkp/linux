@@ -12,10 +12,7 @@ use kernel::{
         shmem, //
     },
     prelude::*,
-    sync::{
-        aref::ARef,
-        Arc, //
-    }, //
+    sync::aref::ARef, //
 };
 
 use crate::{
@@ -82,16 +79,16 @@ pub(crate) enum KernelBoVaAlloc {
 /// a GEM object with automatic GPU virtual address (VA) space mapping and cleanup.
 ///
 /// When dropped, the buffer is automatically unmapped from the GPU VA space.
-pub(crate) struct KernelBo<'bo> {
+pub(crate) struct KernelBo<'bo, 'res> {
     /// The underlying GEM buffer object.
     bo: ARef<Bo>,
     /// The GPU VM this buffer is mapped into.
-    vm: Arc<Vm<'bo>>,
+    vm: &'bo Vm<'bo, 'res>,
     /// The GPU VA range occupied by this buffer.
     va_range: Range<u64>,
 }
 
-impl<'bo> KernelBo<'bo> {
+impl<'bo, 'res> KernelBo<'bo, 'res> {
     /// Creates a new kernel-owned buffer object and maps it into GPU VA space.
     ///
     /// This function allocates a new shmem-backed GEM object and immediately maps
@@ -99,7 +96,7 @@ impl<'bo> KernelBo<'bo> {
     /// cleaned up when the [`KernelBo`] is dropped.
     pub(crate) fn new(
         ddev: &TyrDrmDevice,
-        vm: Arc<Vm<'bo>>,
+        vm: &'bo Vm<'bo, 'res>,
         size: u64,
         va_alloc: KernelBoVaAlloc,
         flags: VmMapFlags,
@@ -138,7 +135,7 @@ impl<'bo> KernelBo<'bo> {
     }
 }
 
-impl Drop for KernelBo<'_> {
+impl Drop for KernelBo<'_, '_> {
     fn drop(&mut self) {
         let va = self.va_range.start;
         let size = self.va_range.end - self.va_range.start;

@@ -29,10 +29,6 @@ use kernel::{
     num::Bounded,
     prelude::*,
     str::CString,
-    sync::{
-        Arc,
-        ArcBorrow, //
-    },
     time, //
 };
 
@@ -131,7 +127,7 @@ impl SectionFlags {
 }
 
 /// A parsed section of the firmware binary.
-struct Section<'sec> {
+struct Section<'sec, 'res> {
     // Raw firmware section data for reset purposes
     #[expect(dead_code)]
     data: KVec<u8>,
@@ -139,34 +135,41 @@ struct Section<'sec> {
     // Keep the BO backing this firmware section so that both the
     // GPU mapping and CPU mapping remain valid until the Section is dropped.
     #[expect(dead_code)]
-    mem: gem::KernelBo<'sec>,
+    mem: gem::KernelBo<'sec, 'res>,
 }
 
 /// Loaded firmware with sections mapped into MCU VM.
-pub(crate) struct Firmware<'fw> {
+#[pin_data(PinnedDrop)]
+pub(crate) struct Firmware<'fw>
+where
+    exists<'res>: 'fw,
+{
     /// Iomem need to access registers.
-    iomem: Arc<IoMem<'fw>>,
-
-    /// MCU VM.
-    vm: Arc<Vm<'fw>>,
+    iomem: &'fw IoMem<'fw>,
 
     /// List of firmware sections.
-    #[expect(dead_code)]
-    sections: KVec<Section<'fw>>,
+    #[uses('res: invariant)]
+    sections: KVec<Section<'vm, 'res>>,
+
+    /// MCU VM.
+    #[pin]
+    #[uses('res: invariant)]
+    vm: Vm<'fw, 'res>,
 }
 
-impl<'fw> Drop for Firmware<'fw> {
-    fn drop(&mut self) {
+#[pinned_drop]
+impl PinnedDrop for Firmware<'_> {
+    fn drop(self: Pin<&mut Self>) {
         // Stop the MCU before releasing its firmware mappings and memory.
         let _ = self.stop();
 
         // AS slots retain a VM ref, we need to kill the circular ref manually.
-        self.vm.kill();
+        self.with_vm(|vm| vm.kill());
     }
 }
 
 impl<'fw> Firmware<'fw> {
-    fn init_section_mem(dev: &Device, mem: &mut KernelBo<'fw>, data: &KVec<u8>) -> Result {
+    fn init_section_mem(dev: &Device, mem: &mut KernelBo<'_, '_>, data: &KVec<u8>) -> Result {
         if data.is_empty() {
             return Ok(());
         }
@@ -212,62 +215,65 @@ impl<'fw> Firmware<'fw> {
     }
 
     /// Load firmware and map sections into MCU VM.
-    pub(crate) fn new(
-        dev: &'fw Device<Bound>,
-        iomem: Arc<IoMem<'fw>>,
-        ddev: &TyrDrmDevice,
-        mmu: ArcBorrow<'_, Mmu<'fw>>,
-        gpu_info: &GpuInfo,
-    ) -> Result<Firmware<'fw>> {
-        let vm = Vm::new(dev, ddev, mmu, gpu_info)?;
-        vm.activate()?;
+    pub(crate) fn new<'a, 'res>(
+        dev: &'res Device<Bound>,
+        iomem: &'fw IoMem<'fw>,
+        ddev: &'a TyrDrmDevice,
+        mmu: &'fw Mmu<'res>,
+        gpu_info: &'a GpuInfo,
+    ) -> impl PinInit<Self, Error> + use<'a, 'fw, 'res> {
+        try_pin_init!(Self {
+            iomem,
+            vm <- Vm::new(dev, ddev, mmu, gpu_info),
+            sections: {
+                let vm = vm.get_ref();
+                vm.activate()?;
 
-        let result = (|| {
-            let (fw, parsed_sections) = Self::load(dev, ddev, gpu_info)?;
-            let mut sections = KVec::new();
-            for parsed in parsed_sections {
-                let size = u64::from(parsed.va.end.checked_sub(parsed.va.start).ok_or(EINVAL)?);
+                let result: Result<_> = (|| {
+                    let (fw, parsed_sections) = Self::load(dev, ddev, gpu_info)?;
+                    let mut sections = KVec::new();
+                    for parsed in parsed_sections {
+                        let size =
+                            u64::from(parsed.va.end.checked_sub(parsed.va.start).ok_or(EINVAL)?);
 
-                let va = u64::from(parsed.va.start);
+                        let va = u64::from(parsed.va.start);
 
-                let mut mem = KernelBo::new(
-                    ddev,
-                    vm.clone(),
-                    size,
-                    KernelBoVaAlloc::Explicit(va),
-                    parsed.vm_map_flags,
-                )?;
+                        let mut mem = KernelBo::new(
+                            ddev,
+                            vm,
+                            size,
+                            KernelBoVaAlloc::Explicit(va),
+                            parsed.vm_map_flags,
+                        )?;
 
-                let section_start = parsed.data_range.start as usize;
-                let section_end = parsed.data_range.end as usize;
-                let mut data = KVec::new();
+                        let section_start = parsed.data_range.start as usize;
+                        let section_end = parsed.data_range.end as usize;
+                        let mut data = KVec::new();
 
-                // Ensure that the firmware slice is not out of bounds.
-                let fw_data = fw.data();
-                let bytes = fw_data.get(section_start..section_end).ok_or(EINVAL)?;
-                data.extend_from_slice(bytes, GFP_KERNEL)?;
+                        // Ensure that the firmware slice is not out of bounds.
+                        let fw_data = fw.data();
+                        let bytes = fw_data.get(section_start..section_end).ok_or(EINVAL)?;
+                        data.extend_from_slice(bytes, GFP_KERNEL)?;
 
-                Self::init_section_mem(dev, &mut mem, &data)?;
+                        Self::init_section_mem(dev, &mut mem, &data)?;
 
-                sections.push(Section { data, mem }, GFP_KERNEL)?;
-            }
+                        sections.push(Section { data, mem }, GFP_KERNEL)?;
+                    }
 
-            Ok(Firmware {
-                iomem,
-                vm: vm.clone(),
-                sections,
-            })
-        })();
+                    Ok(sections)
+                })();
 
-        if result.is_err() {
-            vm.kill();
-        }
+                if result.is_err() {
+                    vm.kill();
+                }
 
-        result
+                result?
+            },
+        })
     }
 
     pub(crate) fn boot(&self) -> Result {
-        let io = &self.iomem;
+        let io = self.iomem;
 
         // Discard any stale global interrupt.
         io.write_reg(JOB_IRQ_CLEAR::zeroed().with_glb(true));
@@ -284,7 +290,7 @@ impl<'fw> Firmware<'fw> {
         ) {
             let status = io.read(MCU_STATUS);
             dev_err!(
-                self.vm.dev(),
+                self.with_vm(|vm| vm.dev()),
                 "MCU failed to boot, status: {:?}",
                 status.value()
             );
@@ -297,7 +303,7 @@ impl<'fw> Firmware<'fw> {
     }
 
     fn stop(&self) -> Result {
-        let io = &self.iomem;
+        let io = self.iomem;
         io.write_reg(MCU_CONTROL::zeroed().with_req(McuControlMode::Disable));
 
         if let Err(e) = poll::read_poll_timeout(
@@ -308,7 +314,7 @@ impl<'fw> Firmware<'fw> {
         ) {
             let status = io.read(MCU_STATUS);
             dev_err!(
-                self.vm.dev(),
+                self.with_vm(|vm| vm.dev()),
                 "MCU failed to stop, status: {:?}",
                 status.value()
             );

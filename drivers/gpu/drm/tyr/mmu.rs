@@ -21,7 +21,6 @@ use kernel::{
     new_mutex,
     prelude::*,
     sync::{
-        Arc,
         ArcBorrow,
         Mutex, //
     }, //
@@ -57,26 +56,27 @@ impl<'mmu> Mmu<'mmu> {
     /// Create an MMU component for this device.
     pub(crate) fn new(
         dev: &'mmu Device<Bound>,
-        iomem: ArcBorrow<'_, IoMem<'mmu>>,
+        iomem: &'mmu IoMem<'mmu>,
         gpu_info: &GpuInfo,
-    ) -> Result<Arc<Mmu<'mmu>>> {
+    ) -> impl PinInit<Self, Error> + 'mmu {
         let present = AS_PRESENT::from_raw(gpu_info.as_present).present().get();
-        let slot_count = present.count_ones().try_into()?;
+        try_pin_init!(Self {
+            as_manager <- {
+                let slot_count = present.count_ones().try_into()?;
 
-        let address_space_manager = AddressSpaceManager::new(dev, iomem.into(), present)?;
-        let as_slot_manager =
-            SlotManager::new(address_space_manager, slot_count).inspect_err(|e| {
-                dev_err!(
-                    dev,
-                    "Failed to initialize MMU slot manager with {} slots: {:?}",
-                    slot_count,
-                    e
-                );
-            })?;
-        let mmu_init = try_pin_init!(Self{
-            as_manager <- new_mutex!(as_slot_manager),
-        });
-        Arc::pin_init(mmu_init, GFP_KERNEL)
+                let address_space_manager = AddressSpaceManager::new(dev, iomem, present)?;
+                let as_slot_manager =
+                    SlotManager::new(address_space_manager, slot_count).inspect_err(|e| {
+                        dev_err!(
+                            dev,
+                            "Failed to initialize MMU slot manager with {} slots: {:?}",
+                            slot_count,
+                            e
+                        );
+                    })?;
+                new_mutex!(as_slot_manager)
+            },
+        })
     }
 
     /// Assign a VM to an AS slot, provide a translation table,
