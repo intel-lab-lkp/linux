@@ -14,13 +14,9 @@
 #define ionic_set_ecn(tos)   (((tos) | 2u) & ~1u)
 #define ionic_clear_ecn(tos)  ((tos) & ~3u)
 
-static int ionic_validate_qdesc(struct ionic_qdesc *q)
+static int ionic_validate_qdesc_geom(struct ionic_qdesc *q)
 {
-	if (!q->addr || !q->size || !q->mask ||
-	    !q->depth_log2 || !q->stride_log2)
-		return -EINVAL;
-
-	if (q->addr & (PAGE_SIZE - 1))
+	if (!q->size || !q->mask || !q->depth_log2 || !q->stride_log2)
 		return -EINVAL;
 
 	if (q->mask != BIT(q->depth_log2) - 1)
@@ -30,6 +26,14 @@ static int ionic_validate_qdesc(struct ionic_qdesc *q)
 		return -EINVAL;
 
 	return 0;
+}
+
+static int ionic_validate_qdesc(struct ionic_qdesc *q)
+{
+	if (!q->addr || (q->addr & (PAGE_SIZE - 1)))
+		return -EINVAL;
+
+	return ionic_validate_qdesc_geom(q);
 }
 
 static u32 ionic_get_eqid(struct ionic_ibdev *dev, u32 comp_vector, u8 udma_idx)
@@ -2023,10 +2027,57 @@ static void ionic_qp_sq_destroy_cmb(struct ionic_ibdev *dev,
 	ionic_put_cmb(dev->lif_cfg.lif, qp->sq_cmb_pgid, qp->sq_cmb_order);
 }
 
+static int ionic_get_user_q_umem(struct ionic_ibdev *dev, struct ionic_qdesc *q,
+				 const struct uverbs_attr_bundle *attrs,
+				 u16 attr_id, struct ib_umem **umem_out)
+{
+	struct ib_uverbs_buffer_desc desc;
+	struct ib_umem *umem;
+	int rc;
+
+	if (attrs && uverbs_attr_is_valid(attrs, attr_id)) {
+		rc = uverbs_get_buffer_desc(attrs, attr_id, &desc);
+		if (rc)
+			return rc;
+
+		if (desc.length != q->size)
+			return -EINVAL;
+
+		if (desc.type == IB_UVERBS_BUFFER_TYPE_DMABUF) {
+			if (desc.addr & (PAGE_SIZE - 1))
+				return -EINVAL;
+
+			rc = ionic_validate_qdesc_geom(q);
+		} else if (desc.type == IB_UVERBS_BUFFER_TYPE_VA &&
+			   desc.addr == q->addr) {
+			rc = ionic_validate_qdesc(q);
+		} else {
+			rc = -EINVAL;
+		}
+		if (rc)
+			return rc;
+
+		umem = ib_umem_get_attr_or_va(&dev->ibdev, attrs, attr_id,
+					      q->addr, q->size, 0);
+	} else {
+		rc = ionic_validate_qdesc(q);
+		if (rc)
+			return rc;
+
+		umem = ib_umem_get_va(&dev->ibdev, q->addr, q->size, 0);
+	}
+	if (IS_ERR(umem))
+		return PTR_ERR(umem);
+
+	*umem_out = umem;
+	return 0;
+}
+
 static int ionic_qp_sq_init(struct ionic_ibdev *dev, struct ionic_ctx *ctx,
 			    struct ionic_qp *qp, struct ionic_qdesc *sq,
 			    struct ionic_tbl_buf *buf, int max_wr, int max_sge,
-			    int max_data, int sq_spec, struct ib_udata *udata)
+			    int max_data, int sq_spec, struct ib_udata *udata,
+			    const struct uverbs_attr_bundle *attrs)
 {
 	u32 wqe_size;
 	int rc = 0;
@@ -2070,7 +2121,9 @@ static int ionic_qp_sq_init(struct ionic_ibdev *dev, struct ionic_ctx *ctx,
 		return rc;
 
 	if (udata) {
-		rc = ionic_validate_qdesc(sq);
+		rc = ionic_get_user_q_umem(dev, sq, attrs,
+					   UVERBS_ATTR_CREATE_QP_SQ_BUF_UMEM,
+					   &qp->sq_umem);
 		if (rc)
 			return rc;
 
@@ -2084,10 +2137,6 @@ static int ionic_qp_sq_init(struct ionic_ibdev *dev, struct ionic_ctx *ctx,
 
 		qp->sq_meta = NULL;
 		qp->sq_msn_idx = NULL;
-
-		qp->sq_umem = ib_umem_get_va(&dev->ibdev, sq->addr, sq->size, 0);
-		if (IS_ERR(qp->sq_umem))
-			return PTR_ERR(qp->sq_umem);
 	} else {
 		qp->sq_umem = NULL;
 
@@ -2289,7 +2338,8 @@ static void ionic_rq_destroy_cmb(struct ionic_ibdev *dev,
 static int ionic_rq_init(struct ionic_ibdev *dev, struct ionic_ctx *ctx,
 			 struct ionic_rq *rq, struct ionic_qdesc *qdesc,
 			 struct ionic_tbl_buf *buf, int max_wr, int max_sge,
-			 int rq_spec, struct ib_udata *udata)
+			 int rq_spec, struct ib_udata *udata,
+			 const struct uverbs_attr_bundle *attrs)
 {
 	u32 wqe_size;
 	int rc = 0;
@@ -2307,7 +2357,9 @@ static int ionic_rq_init(struct ionic_ibdev *dev, struct ionic_ctx *ctx,
 		return rc;
 
 	if (udata) {
-		rc = ionic_validate_qdesc(qdesc);
+		rc = ionic_get_user_q_umem(dev, qdesc, attrs,
+					   UVERBS_ATTR_CREATE_QP_RQ_BUF_UMEM,
+					   &rq->umem);
 		if (rc)
 			return rc;
 
@@ -2320,10 +2372,6 @@ static int ionic_rq_init(struct ionic_ibdev *dev, struct ionic_ctx *ctx,
 		rq->q.stride_log2 = qdesc->stride_log2;
 
 		rq->meta = NULL;
-
-		rq->umem = ib_umem_get_va(&dev->ibdev, qdesc->addr, qdesc->size, 0);
-		if (IS_ERR(rq->umem))
-			return PTR_ERR(rq->umem);
 	} else {
 		rq->umem = NULL;
 
@@ -2409,6 +2457,7 @@ int ionic_create_qp(struct ib_qp *ibqp, struct ib_qp_init_attr *attr,
 	struct ionic_qp *qp = to_ionic_qp(ibqp);
 	struct ionic_ctx *ctx =
 		rdma_udata_to_drv_context(udata, struct ionic_ctx, ibctx);
+	const struct uverbs_attr_bundle *attrs = NULL;
 	struct ionic_qp_resp resp = {};
 	struct ionic_qp_req req = {};
 	struct ionic_cq *cq;
@@ -2417,6 +2466,8 @@ int ionic_create_qp(struct ib_qp *ibqp, struct ib_qp_init_attr *attr,
 	int rc;
 
 	if (udata) {
+		attrs = rdma_udata_to_uverbs_attr_bundle(udata);
+
 		rc = ib_copy_validate_udata_in(udata, req, rsvd);
 		if (rc)
 			return rc;
@@ -2495,7 +2546,8 @@ int ionic_create_qp(struct ib_qp *ibqp, struct ib_qp_init_attr *attr,
 
 	rc = ionic_qp_sq_init(dev, ctx, qp, &req.sq, &sq_buf,
 			      attr->cap.max_send_wr, attr->cap.max_send_sge,
-			      attr->cap.max_inline_data, req.sq_spec, udata);
+			      attr->cap.max_inline_data, req.sq_spec, udata,
+			      attrs);
 	if (rc)
 		goto err_sq;
 
@@ -2514,7 +2566,7 @@ int ionic_create_qp(struct ib_qp *ibqp, struct ib_qp_init_attr *attr,
 		qp->rq.qid = qp->qpid;
 		rc = ionic_rq_init(dev, ctx, &qp->rq, &req.rq, &rq_buf,
 				   attr->cap.max_recv_wr, attr->cap.max_recv_sge,
-				   req.rq_spec, udata);
+				   req.rq_spec, udata, attrs);
 	}
 	if (rc)
 		goto err_rq;
@@ -3121,7 +3173,7 @@ int ionic_create_srq(struct ib_srq *ibsrq, struct ib_srq_init_attr *attr,
 
 	rc = ionic_rq_init(dev, ctx, &srq->rq, &req.rq, &buf,
 			   attr->attr.max_wr, attr->attr.max_sge,
-			   req.rq_spec, udata);
+			   req.rq_spec, udata, NULL);
 	if (rc)
 		return rc;
 
