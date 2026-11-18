@@ -278,7 +278,7 @@ struct qcom_battmgr_status {
 	int power_now;
 	unsigned int voltage_now;
 	unsigned int voltage_ocv;
-	unsigned int temperature;
+	int temperature;
 	unsigned int resistance;
 	unsigned int soh_percent;
 
@@ -1250,7 +1250,7 @@ static unsigned int qcom_battmgr_sc8280xp_parse_technology(const char *chemistry
 	return POWER_SUPPLY_TECHNOLOGY_UNKNOWN;
 }
 
-static unsigned int qcom_battmgr_sc8280xp_convert_temp(unsigned int temperature)
+static int qcom_battmgr_sc8280xp_convert_temp(int temperature)
 {
 	return DIV_ROUND_CLOSEST(temperature, 10);
 }
@@ -1467,7 +1467,7 @@ static void qcom_battmgr_sm8350_callback(struct qcom_battmgr *battmgr,
 			break;
 		case BATT_TEMP:
 			val = le32_to_cpu(resp->intval.value);
-			battmgr->status.temperature = DIV_ROUND_CLOSEST(val, 10);
+			battmgr->status.temperature = DIV_ROUND_CLOSEST((s32)val, 10);
 			break;
 		case BATT_TECHNOLOGY:
 			battmgr->info.technology = le32_to_cpu(resp->intval.value);
