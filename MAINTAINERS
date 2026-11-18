@@ -19869,6 +19869,7 @@ F:	tools/testing/selftests/nci/
 NFS, SUNRPC, AND LOCKD CLIENTS
 M:	Trond Myklebust <trondmy@kernel.org>
 M:	Anna Schumaker <anna@kernel.org>
+R:	Benjamin Coddington <bcodding@hammerspace.com>
 L:	linux-nfs@vger.kernel.org
 S:	Maintained
 W:	http://client.linux-nfs.org
