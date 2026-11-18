@@ -69,7 +69,7 @@ config KEXEC_SIG_FORCE
 	  the kexec_file_load() syscall.
 
 config KEXEC_IMAGE_VERIFY_SIG
-	bool "Enable Image signature verification support (ARM)"
+	bool "Enable Image signature verification support"
 	default ARCH_DEFAULT_KEXEC_IMAGE_VERIFY_SIG
 	depends on ARCH_SUPPORTS_KEXEC_IMAGE_VERIFY_SIG
 	depends on KEXEC_SIG
