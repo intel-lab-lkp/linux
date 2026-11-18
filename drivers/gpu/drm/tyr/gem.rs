@@ -82,16 +82,16 @@ pub(crate) enum KernelBoVaAlloc {
 /// a GEM object with automatic GPU virtual address (VA) space mapping and cleanup.
 ///
 /// When dropped, the buffer is automatically unmapped from the GPU VA space.
-pub(crate) struct KernelBo<'drm> {
+pub(crate) struct KernelBo<'bo> {
     /// The underlying GEM buffer object.
     bo: ARef<Bo>,
     /// The GPU VM this buffer is mapped into.
-    vm: Arc<Vm<'drm>>,
+    vm: Arc<Vm<'bo>>,
     /// The GPU VA range occupied by this buffer.
     va_range: Range<u64>,
 }
 
-impl<'drm> KernelBo<'drm> {
+impl<'bo> KernelBo<'bo> {
     /// Creates a new kernel-owned buffer object and maps it into GPU VA space.
     ///
     /// This function allocates a new shmem-backed GEM object and immediately maps
@@ -99,7 +99,7 @@ impl<'drm> KernelBo<'drm> {
     /// cleaned up when the [`KernelBo`] is dropped.
     pub(crate) fn new(
         ddev: &TyrDrmDevice,
-        vm: Arc<Vm<'drm>>,
+        vm: Arc<Vm<'bo>>,
         size: u64,
         va_alloc: KernelBoVaAlloc,
         flags: VmMapFlags,

@@ -131,7 +131,7 @@ impl SectionFlags {
 }
 
 /// A parsed section of the firmware binary.
-struct Section<'drm> {
+struct Section<'sec> {
     // Raw firmware section data for reset purposes
     #[expect(dead_code)]
     data: KVec<u8>,
@@ -139,23 +139,23 @@ struct Section<'drm> {
     // Keep the BO backing this firmware section so that both the
     // GPU mapping and CPU mapping remain valid until the Section is dropped.
     #[expect(dead_code)]
-    mem: gem::KernelBo<'drm>,
+    mem: gem::KernelBo<'sec>,
 }
 
 /// Loaded firmware with sections mapped into MCU VM.
-pub(crate) struct Firmware<'drm> {
+pub(crate) struct Firmware<'fw> {
     /// Iomem need to access registers.
-    iomem: Arc<IoMem<'drm>>,
+    iomem: Arc<IoMem<'fw>>,
 
     /// MCU VM.
-    vm: Arc<Vm<'drm>>,
+    vm: Arc<Vm<'fw>>,
 
     /// List of firmware sections.
     #[expect(dead_code)]
-    sections: KVec<Section<'drm>>,
+    sections: KVec<Section<'fw>>,
 }
 
-impl<'drm> Drop for Firmware<'drm> {
+impl<'fw> Drop for Firmware<'fw> {
     fn drop(&mut self) {
         // Stop the MCU before releasing its firmware mappings and memory.
         let _ = self.stop();
@@ -165,8 +165,8 @@ impl<'drm> Drop for Firmware<'drm> {
     }
 }
 
-impl<'drm> Firmware<'drm> {
-    fn init_section_mem(dev: &Device, mem: &mut KernelBo<'drm>, data: &KVec<u8>) -> Result {
+impl<'fw> Firmware<'fw> {
+    fn init_section_mem(dev: &Device, mem: &mut KernelBo<'fw>, data: &KVec<u8>) -> Result {
         if data.is_empty() {
             return Ok(());
         }
@@ -213,12 +213,12 @@ impl<'drm> Firmware<'drm> {
 
     /// Load firmware and map sections into MCU VM.
     pub(crate) fn new(
-        dev: &'drm Device<Bound>,
-        iomem: Arc<IoMem<'drm>>,
+        dev: &'fw Device<Bound>,
+        iomem: Arc<IoMem<'fw>>,
         ddev: &TyrDrmDevice,
-        mmu: ArcBorrow<'_, Mmu<'drm>>,
+        mmu: ArcBorrow<'_, Mmu<'fw>>,
         gpu_info: &GpuInfo,
-    ) -> Result<Firmware<'drm>> {
+    ) -> Result<Firmware<'fw>> {
         let vm = Vm::new(dev, ddev, mmu, gpu_info)?;
         vm.activate()?;
 

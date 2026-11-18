@@ -147,27 +147,27 @@ impl<'drm> VmAsData<'drm> {
 
 /// Coordinates all hardware-level address space operations through MMIO register
 /// operations including enabling, disabling, flushing, and updating address spaces.
-pub(crate) struct AddressSpaceManager<'drm> {
+pub(crate) struct AddressSpaceManager<'as_mgr> {
     /// Parent device used for logging.
-    dev: &'drm Device<Bound>,
+    dev: &'as_mgr Device<Bound>,
 
     /// Memory-mapped I/O region for GPU register access.
-    iomem: Arc<IoMem<'drm>>,
+    iomem: Arc<IoMem<'as_mgr>>,
 
     /// Bitmask of present address space slots from GPU_AS_PRESENT register.
     as_present: u32,
 }
 
-impl<'drm> AddressSpaceManager<'drm> {
+impl<'as_mgr> AddressSpaceManager<'as_mgr> {
     /// Creates a new address space manager.
     ///
     /// Initializes the manager with references to the platform device and
     /// I/O memory region, along with the bitmask of available AS slots.
     pub(super) fn new(
-        dev: &'drm Device<Bound>,
-        iomem: Arc<IoMem<'drm>>,
+        dev: &'as_mgr Device<Bound>,
+        iomem: Arc<IoMem<'as_mgr>>,
         as_present: u32,
-    ) -> Result<AddressSpaceManager<'drm>> {
+    ) -> Result<AddressSpaceManager<'as_mgr>> {
         if as_present.trailing_ones() != as_present.count_ones() {
             dev_err!(
                 dev,
@@ -436,9 +436,9 @@ impl<'drm> AddressSpaceManager<'drm> {
     }
 }
 
-impl<'drm> SlotOperations<MAX_AS> for AddressSpaceManager<'drm> {
+impl<'as_mgr> SlotOperations<MAX_AS> for AddressSpaceManager<'as_mgr> {
     /// VM address space data associated with a hardware slot.
-    type SlotData = Arc<VmAsData<'drm>>;
+    type SlotData = Arc<VmAsData<'as_mgr>>;
 
     fn seat(slot_data: &Self::SlotData) -> &LockedSeat<Self, MAX_AS> {
         &slot_data.as_seat
@@ -458,11 +458,11 @@ impl<'drm> SlotOperations<MAX_AS> for AddressSpaceManager<'drm> {
     }
 }
 
-impl<'drm> AsSlotManager<'drm> {
+impl<'as_mgr> AsSlotManager<'as_mgr> {
     /// Locks a region for translation table updates if the VM has an active slot.
     pub(super) fn start_vm_update(
         &mut self,
-        vm_as_data: &VmAsData<'drm>,
+        vm_as_data: &VmAsData<'as_mgr>,
         region: &Range<u64>,
     ) -> Result {
         let seat = vm_as_data.as_seat.access(self);
@@ -476,7 +476,7 @@ impl<'drm> AsSlotManager<'drm> {
     }
 
     /// Completes translation table updates and unlocks the region.
-    pub(super) fn end_vm_update(&mut self, vm_as_data: &VmAsData<'drm>) -> Result {
+    pub(super) fn end_vm_update(&mut self, vm_as_data: &VmAsData<'as_mgr>) -> Result {
         let seat = vm_as_data.as_seat.access(self);
         match seat.slot() {
             Some(slot) => {
@@ -488,7 +488,7 @@ impl<'drm> AsSlotManager<'drm> {
     }
 
     /// Flushes the translation table cache if the VM has an active slot.
-    pub(super) fn flush_vm(&mut self, vm_as_data: &VmAsData<'drm>) -> Result {
+    pub(super) fn flush_vm(&mut self, vm_as_data: &VmAsData<'as_mgr>) -> Result {
         let seat = vm_as_data.as_seat.access(self);
         match seat.slot() {
             Some(slot) => {
@@ -500,12 +500,12 @@ impl<'drm> AsSlotManager<'drm> {
     }
 
     /// Activates a VM by assigning it to a hardware slot.
-    pub(super) fn activate_vm(&mut self, vm_as_data: ArcBorrow<'_, VmAsData<'drm>>) -> Result {
+    pub(super) fn activate_vm(&mut self, vm_as_data: ArcBorrow<'_, VmAsData<'as_mgr>>) -> Result {
         self.activate(vm_as_data.into())
     }
 
     /// Deactivates a VM by evicting it from its hardware slot.
-    pub(super) fn deactivate_vm(&mut self, vm_as_data: &VmAsData<'drm>) -> Result {
+    pub(super) fn deactivate_vm(&mut self, vm_as_data: &VmAsData<'as_mgr>) -> Result {
         self.evict(&vm_as_data.as_seat)
     }
 }

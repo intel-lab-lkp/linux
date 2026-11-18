@@ -43,23 +43,23 @@ use crate::{
 
 pub(crate) mod address_space;
 
-pub(crate) type AsSlotManager<'drm> = SlotManager<AddressSpaceManager<'drm>, MAX_AS>;
+pub(crate) type AsSlotManager<'as_mgr> = SlotManager<AddressSpaceManager<'as_mgr>, MAX_AS>;
 
 /// Locked wrapper for carrying out virtual memory (VM) operations on the MMU.
 #[pin_data]
-pub(crate) struct Mmu<'drm> {
+pub(crate) struct Mmu<'mmu> {
     /// Slot Manager instance used to allocate hardware slots and write to MMU registers.
     #[pin]
-    pub(crate) as_manager: Mutex<AsSlotManager<'drm>>,
+    pub(crate) as_manager: Mutex<AsSlotManager<'mmu>>,
 }
 
-impl<'drm> Mmu<'drm> {
+impl<'mmu> Mmu<'mmu> {
     /// Create an MMU component for this device.
     pub(crate) fn new(
-        dev: &'drm Device<Bound>,
-        iomem: ArcBorrow<'_, IoMem<'drm>>,
+        dev: &'mmu Device<Bound>,
+        iomem: ArcBorrow<'_, IoMem<'mmu>>,
         gpu_info: &GpuInfo,
-    ) -> Result<Arc<Mmu<'drm>>> {
+    ) -> Result<Arc<Mmu<'mmu>>> {
         let present = AS_PRESENT::from_raw(gpu_info.as_present).present().get();
         let slot_count = present.count_ones().try_into()?;
 
@@ -81,17 +81,17 @@ impl<'drm> Mmu<'drm> {
 
     /// Assign a VM to an AS slot, provide a translation table,
     /// and update the MMU to make the VM resident.
-    pub(crate) fn activate_vm(&self, vm_as_data: ArcBorrow<'_, VmAsData<'drm>>) -> Result {
+    pub(crate) fn activate_vm(&self, vm_as_data: ArcBorrow<'_, VmAsData<'mmu>>) -> Result {
         self.as_manager.lock().activate_vm(vm_as_data)
     }
 
     /// Evict a VM from its AS slot and flush the MMU.
-    pub(crate) fn deactivate_vm(&self, vm_as_data: &VmAsData<'drm>) -> Result {
+    pub(crate) fn deactivate_vm(&self, vm_as_data: &VmAsData<'mmu>) -> Result {
         self.as_manager.lock().deactivate_vm(vm_as_data)
     }
 
     /// Flush MMU translation caches after a VM update.
-    pub(crate) fn flush_vm(&self, vm_as_data: &VmAsData<'drm>) -> Result {
+    pub(crate) fn flush_vm(&self, vm_as_data: &VmAsData<'mmu>) -> Result {
         self.as_manager.lock().flush_vm(vm_as_data)
     }
 
@@ -103,7 +103,7 @@ impl<'drm> Mmu<'drm> {
     /// If the VM is not resident, this is a NOP.
     pub(crate) fn start_vm_update(
         &self,
-        vm_as_data: &VmAsData<'drm>,
+        vm_as_data: &VmAsData<'mmu>,
         region: &Range<u64>,
     ) -> Result {
         self.as_manager.lock().start_vm_update(vm_as_data, region)
@@ -114,7 +114,7 @@ impl<'drm> Mmu<'drm> {
     /// If the VM is resident, this will let GPU accesses on the updated
     /// range go through, in case any of them were blocked.
     /// If the VM is not resident, this is a NOP.
-    pub(crate) fn end_vm_update(&self, vm_as_data: &VmAsData<'drm>) -> Result {
+    pub(crate) fn end_vm_update(&self, vm_as_data: &VmAsData<'mmu>) -> Result {
         self.as_manager.lock().end_vm_update(vm_as_data)
     }
 }

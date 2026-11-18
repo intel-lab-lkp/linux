@@ -316,34 +316,34 @@ pub(crate) struct GpuVmData<'drm> {
 ///
 /// Each VM can be mapped into a hardware address space slot.
 #[pin_data]
-pub(crate) struct Vm<'drm> {
+pub(crate) struct Vm<'vm> {
     /// Data referenced by an AS when the VM is active
-    as_data: Arc<VmAsData<'drm>>,
+    as_data: Arc<VmAsData<'vm>>,
     /// MMU manager.
-    mmu: Arc<Mmu<'drm>>,
+    mmu: Arc<Mmu<'vm>>,
     /// Parent device used for DMA mapping and page-table operations.
-    dev: &'drm Device<Bound>,
+    dev: &'vm Device<Bound>,
     /// DRM GPUVM core for managing virtual address space.
     #[pin]
-    gpuvm_unique: Mutex<UniqueRefGpuVm<GpuVmData<'drm>>>,
+    gpuvm_unique: Mutex<UniqueRefGpuVm<GpuVmData<'vm>>>,
     /// Non-core part of the GPUVM. Can be used for stuff that doesn't modify the
     /// internal mapping tree, like GpuVm::obtain()
-    gpuvm: ARef<GpuVm<GpuVmData<'drm>>>,
+    gpuvm: ARef<GpuVm<GpuVmData<'vm>>>,
     /// VA range for this VM.
     va_range: Range<u64>,
 }
 
-impl<'drm> Vm<'drm> {
+impl<'vm> Vm<'vm> {
     /// Creates a new GPU virtual address space.
     ///
     /// The VM is initialized with a page table configured according to the GPU's
     /// address translation capabilities and registered with the GPUVM framework.
     pub(crate) fn new(
-        dev: &'drm Device<Bound>,
+        dev: &'vm Device<Bound>,
         ddev: &TyrDrmDevice,
-        mmu: ArcBorrow<'_, Mmu<'drm>>,
+        mmu: ArcBorrow<'_, Mmu<'vm>>,
         gpu_info: &GpuInfo,
-    ) -> Result<Arc<Vm<'drm>>> {
+    ) -> Result<Arc<Vm<'vm>>> {
         let mmu_features = MMU_FEATURES::from_raw(gpu_info.mmu_features);
         let va_bits = mmu_features.va_bits().get();
         let pa_bits = mmu_features.pa_bits().get();
@@ -362,7 +362,7 @@ impl<'drm> Vm<'drm> {
             &*dummy_obj,
             range.clone(),
             reserve_range,
-            GpuVmData::<'drm> {
+            GpuVmData::<'vm> {
                 _phantom: PhantomData::<&()>,
             },
         )
@@ -389,7 +389,7 @@ impl<'drm> Vm<'drm> {
     }
 
     /// Returns the parent device used by this VM for DMA mapping and page-table operations.
-    pub(crate) fn dev(&self) -> &'drm Device<Bound> {
+    pub(crate) fn dev(&self) -> &'vm Device<Bound> {
         self.dev
     }
 
@@ -426,9 +426,9 @@ impl<'drm> Vm<'drm> {
     /// GPUVM framework and the hardware page table.
     fn exec_op<'a>(
         &self,
-        gpuvm_unique: &mut UniqueRefGpuVm<GpuVmData<'drm>>,
-        req: VmOpRequest<'drm>,
-        resources: &'a mut VmOpResources<'drm>,
+        gpuvm_unique: &mut UniqueRefGpuVm<GpuVmData<'vm>>,
+        req: VmOpRequest<'vm>,
+        resources: &'a mut VmOpResources<'vm>,
     ) -> Result {
         let pt = &self.as_data.page_table;
 
@@ -524,9 +524,9 @@ impl<'drm> Vm<'drm> {
         };
         let mut resources = VmOpResources {
             preallocated_gpuvas: [
-                Some(GpuVaAlloc::<GpuVmData<'drm>>::new(GFP_KERNEL)?),
-                Some(GpuVaAlloc::<GpuVmData<'drm>>::new(GFP_KERNEL)?),
-                Some(GpuVaAlloc::<GpuVmData<'drm>>::new(GFP_KERNEL)?),
+                Some(GpuVaAlloc::<GpuVmData<'vm>>::new(GFP_KERNEL)?),
+                Some(GpuVaAlloc::<GpuVmData<'vm>>::new(GFP_KERNEL)?),
+                Some(GpuVaAlloc::<GpuVmData<'vm>>::new(GFP_KERNEL)?),
             ],
         };
         let result = {
@@ -577,9 +577,9 @@ impl<'drm> Vm<'drm> {
                 [None, None, None]
             } else {
                 [
-                    Some(GpuVaAlloc::<GpuVmData<'drm>>::new(GFP_KERNEL)?),
-                    Some(GpuVaAlloc::<GpuVmData<'drm>>::new(GFP_KERNEL)?),
-                    Some(GpuVaAlloc::<GpuVmData<'drm>>::new(GFP_KERNEL)?),
+                    Some(GpuVaAlloc::<GpuVmData<'vm>>::new(GFP_KERNEL)?),
+                    Some(GpuVaAlloc::<GpuVmData<'vm>>::new(GFP_KERNEL)?),
+                    Some(GpuVaAlloc::<GpuVmData<'vm>>::new(GFP_KERNEL)?),
                 ]
             },
         };
