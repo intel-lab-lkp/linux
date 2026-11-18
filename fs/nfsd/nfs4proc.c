@@ -4420,7 +4420,7 @@ bool nfsd4_spo_must_allow(struct svc_rqst *rqstp)
 	struct nfsd4_compoundargs *argp = rqstp->rq_argp;
 	struct nfsd4_op *this;
 	struct nfsd4_compound_state *cstate = &resp->cstate;
-	struct nfs4_op_map *allow = &cstate->clp->cl_spo_must_allow;
+	struct nfs4_op_map *allow;
 	u32 opiter;
 
 	if (rqstp->rq_procinfo != &nfsd_version4.vs_proc[NFSPROC4_COMPOUND] ||
@@ -4430,6 +4430,7 @@ bool nfsd4_spo_must_allow(struct svc_rqst *rqstp)
 	if (cstate->spo_must_allowed)
 		return true;
 
+	allow = &cstate->clp->cl_spo_must_allow;
 	opiter = resp->opcnt;
 	while (opiter < argp->opcnt) {
 		this = &argp->ops[opiter++];
