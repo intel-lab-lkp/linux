@@ -44,9 +44,12 @@ static inline struct nvme_dmabuf_map *nvme_req_to_map(struct request *req)
 	return to_nvme_dmabuf_map(map);
 }
 
+extern const struct dma_buf_attach_ops nvme_dmabuf_importer_ops;
+
 void __nvme_remove_dmabufs(struct nvme_dma_buf_list *list);
 int __nvme_init_dma_buf_io_ctx(struct nvme_ctrl *ctrl,
 		struct nvme_dma_buf_list *buf_list,
+		struct dma_buf_attachment *attach,
 		struct dma_buf_io_ctx *ctx);
 
 static inline void nvme_remove_dmabufs(struct nvme_dma_buf_list *list)
@@ -57,11 +60,12 @@ static inline void nvme_remove_dmabufs(struct nvme_dma_buf_list *list)
 
 static inline int nvme_init_dma_buf_io_ctx(struct nvme_ctrl *ctrl,
 		struct nvme_dma_buf_list *buf_list,
+		struct dma_buf_attachment *attach,
 		struct dma_buf_io_ctx *ctx)
 {
 	if (!IS_ENABLED(CONFIG_DMA_SHARED_BUFFER))
 		return -EOPNOTSUPP;
-	return __nvme_init_dma_buf_io_ctx(ctrl, buf_list, ctx);
+	return __nvme_init_dma_buf_io_ctx(ctrl, buf_list, attach, ctx);
 }
 
 static inline void nvme_init_buf_list(struct nvme_dma_buf_list *buf_list)

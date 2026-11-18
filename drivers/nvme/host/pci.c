@@ -3771,8 +3771,16 @@ static int nvme_pci_init_dma_buf_io_ctx(struct nvme_ctrl *ctrl,
 		struct dma_buf_io_ctx *ctx)
 {
 	struct nvme_dev *dev = to_nvme_dev(ctrl);
+	struct dma_buf_attachment *attach;
 
-	return nvme_init_dma_buf_io_ctx(ctrl, &dev->dmabufs, ctx);
+	if (!IS_ENABLED(CONFIG_DMA_SHARED_BUFFER))
+		return -EOPNOTSUPP;
+
+	attach = dma_buf_dynamic_attach(ctx->dmabuf, dev->dev,
+					&nvme_dmabuf_importer_ops, ctx);
+	if (IS_ERR(attach))
+		return PTR_ERR(attach);
+	return nvme_init_dma_buf_io_ctx(ctrl, &dev->dmabufs, attach, ctx);
 }
 
 static const struct nvme_ctrl_ops nvme_pci_ctrl_ops = {
@@ -4571,5 +4579,6 @@ MODULE_AUTHOR("Matthew Wilcox <willy@linux.intel.com>");
 MODULE_LICENSE("GPL");
 MODULE_VERSION("1.0");
 MODULE_DESCRIPTION("NVMe host PCIe transport driver");
+MODULE_IMPORT_NS("DMA_BUF");
 module_init(nvme_init);
 module_exit(nvme_exit);
