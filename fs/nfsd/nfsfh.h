@@ -93,6 +93,7 @@ typedef struct svc_fh {
 						 */
 	bool			fh_use_wgather;	/* NFSv2 wgather option */
 	bool			fh_64bit_cookies;/* readdir cookie size */
+	bool			fh_spo_allowed;	/* SP4_MACH_CRED skips sec= */
 	int			fh_flags;	/* FH flags */
 	bool			fh_post_saved;	/* post-op attrs saved */
 	bool			fh_pre_saved;	/* pre-op attrs saved */
