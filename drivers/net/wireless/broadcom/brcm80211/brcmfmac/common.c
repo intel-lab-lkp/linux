@@ -10,6 +10,7 @@
 #include <linux/firmware.h>
 #include <brcmu_wifi.h>
 #include <brcmu_utils.h>
+#include <brcm_hw_ids.h>
 #include "core.h"
 #include "bus.h"
 #include "debug.h"
@@ -275,6 +276,7 @@ int brcmf_c_preinit_dcmds(struct brcmf_if *ifp)
 	struct brcmf_rev_info *ri;
 	char *clmver;
 	char *ptr;
+	s32 txbf;
 	s32 err;
 
 	if (is_valid_ether_addr(ifp->mac_addr)) {
@@ -432,8 +434,17 @@ int brcmf_c_preinit_dcmds(struct brcmf_if *ifp)
 		goto done;
 	}
 
-	/* Enable tx beamforming, errors can be ignored (not supported) */
-	(void)brcmf_fil_iovar_int_set(ifp, "txbf", 1);
+	/* Enable tx beamforming, errors can be ignored (not supported).
+	 * The Apple firmware for the BCM4364 has it on by default and then
+	 * beamforms a single spatial stream, as beamforming more than one
+	 * stream does not work. Turn it off there, so two streams are used.
+	 */
+	txbf = 1;
+	if (drvr->bus_if->chip == BRCM_CC_4364_CHIP_ID &&
+	    drvr->settings->board_type &&
+	    strstarts(drvr->settings->board_type, "apple,"))
+		txbf = 0;
+	(void)brcmf_fil_iovar_int_set(ifp, "txbf", txbf);
 done:
 	return err;
 }
