@@ -1246,7 +1246,8 @@ fn generate_drop_order_check(dcx: &mut DiagCtxt, info: &StructInfo) -> TokenStre
 
     let struct_span = struct_name.span().resolved_at(Span::mixed_site());
     quote_spanned! {struct_span =>
-        #[allow(non_snake_case, unused)]
+        // Generated bounds can appear both on lifetime parameters and in the where clause.
+        #[allow(non_snake_case, unused, clippy::multiple_bound_locations)]
         fn __drop_order_check #impl_generics_with_field_lt (
             // This must be present so the function can *assume* the implied bounds on the erased
             // struct. For example, if the struct has `&'a T`, Rust will infer `T: 'a`; we still
