@@ -2228,6 +2228,7 @@ static bool try_to_unmap_one(struct folio *folio, struct vm_area_struct *vma,
 	struct mmu_notifier_range range;
 	enum ttu_flags flags = (enum ttu_flags)(long)arg;
 	unsigned long nr_pages = 1, end_addr;
+	bool flush;
 	unsigned long pfn;
 	int ptes = 0;
 
@@ -2253,6 +2254,7 @@ static bool try_to_unmap_one(struct folio *folio, struct vm_area_struct *vma,
 
 	while (page_vma_mapped_walk(&pvmw)) {
 		nr_pages = 1;
+		flush = false;
 
 		/*
 		 * If the folio is in an mlock()d vma, we must not swap it out.
@@ -2339,11 +2341,18 @@ static bool try_to_unmap_one(struct folio *folio, struct vm_area_struct *vma,
 			 * architecture must guarantee that a clear->dirty
 			 * transition on a cached TLB entry is written through
 			 * and traps if the PTE is unmapped.
+			 *
+			 * If we don't defer the flush, we flush only once we
+			 * know that we won't restore the PTEs below. We never
+			 * defer the flush for lazyfree folios: if we discard
+			 * them, the PTE will be none, and a page fault could
+			 * map a new folio while stale TLB entries still exist.
 			 */
-			if (should_defer_flush(mm, flags))
+			if (!folio_test_lazyfree(folio) &&
+			    should_defer_flush(mm, flags))
 				set_tlb_ubc_flush_pending(mm, pteval, address, end_addr);
 			else
-				flush_tlb_range(vma, address, end_addr);
+				flush = true;
 			if (pte_dirty(pteval))
 				folio_mark_dirty(folio);
 		} else {
@@ -2402,6 +2411,8 @@ static bool try_to_unmap_one(struct folio *folio, struct vm_area_struct *vma,
 			add_mm_counter(mm, mm_counter_file(folio), -nr_pages);
 		}
 finish_unmap:
+		if (flush)
+			flush_tlb_range(vma, address, end_addr);
 		folio_remove_rmap_ptes(folio, page, nr_pages, vma);
 		if (vma_test_any_mask(vma, VMA_LOCKED_MASK))
 			mlock_drain_local();
