@@ -626,6 +626,8 @@ static void nfs_direct_write_reschedule(struct nfs_direct_req *dreq)
 		}
 	}
 
+	if (desc.pg_error == -EAGAIN && desc.pg_nolayout)
+		ssleep(1);
 	if (put_dreq(dreq))
 		nfs_direct_write_complete(dreq);
 }

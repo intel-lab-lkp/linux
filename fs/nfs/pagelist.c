@@ -872,6 +872,7 @@ void nfs_pageio_init(struct nfs_pageio_descriptor *desc,
 {
 	desc->pg_moreio = 0;
 	desc->pg_allow_mds = 0;
+	desc->pg_nolayout = 0;
 	desc->pg_inode = inode;
 	desc->pg_ops = pg_ops;
 	desc->pg_completion_ops = compl_ops;

@@ -982,6 +982,45 @@ static bool ff_layout_pg_retry_wait(struct nfs_pageio_descriptor *pgio)
 	return true;
 }
 
+/*
+ * Returns true if the inode's layouts forbid I/O through the MDS.
+ */
+static bool ff_layout_inode_no_fallback_to_mds(struct inode *inode, u32 iomode)
+{
+	return nfs_no_io_thru_mds(inode);
+}
+
+/*
+ * Refuse a write that has no layout segment and can't go through the MDS:
+ * -EAGAIN so that the caller resends it, or a hard error when the caller
+ * should give up.  pg_nolayout tells a caller that resends at once to
+ * wait first, once it has dropped its locks.
+ */
+static void ff_layout_pg_refuse_write(struct nfs_pageio_descriptor *pgio,
+				      struct nfs_page *req)
+{
+	struct nfs_server *server = NFS_SERVER(pgio->pg_inode);
+
+	trace_pnfs_mds_fallback_write_refused(pgio->pg_inode, req_offset(req),
+					      req->wb_bytes, IOMODE_RW,
+					      NFS_I(pgio->pg_inode)->layout,
+					      NULL);
+	if (server->flags & (NFS_MOUNT_SOFT | NFS_MOUNT_SOFTERR) &&
+	    io_maxretrans && req->wb_nio > io_maxretrans) {
+		if (server->flags & NFS_MOUNT_SOFTERR)
+			pgio->pg_error = -ETIMEDOUT;
+		else
+			pgio->pg_error = -EIO;
+		return;
+	}
+	if (fatal_signal_pending(current) || nfs_current_task_exiting()) {
+		pgio->pg_error = -ERESTARTSYS;
+		return;
+	}
+	pgio->pg_nolayout = 1;
+	pgio->pg_error = -EAGAIN;
+}
+
 static void
 ff_layout_pg_get_read(struct nfs_pageio_descriptor *pgio,
 		      struct nfs_page *req,
@@ -1108,7 +1147,7 @@ out_nolseg:
 	 * FF_FLAGS_NO_IO_THRU_MDS may itself be gone by now, which is why
 	 * this asks the inode and not the hdr.
 	 */
-	if (!nfs_no_io_thru_mds(pgio->pg_inode))
+	if (!ff_layout_inode_no_fallback_to_mds(pgio->pg_inode, IOMODE_READ))
 		goto out_mds;
 retry_nolseg:
 	/* Retry getting layout segment if lower layer returned -EAGAIN */
@@ -1156,9 +1195,13 @@ retry:
 			return;
 		}
 	}
-	/* If no lseg, fall back to write through mds */
-	if (pgio->pg_lseg == NULL)
-		goto out_mds;
+	if (!pgio->pg_lseg) {
+		if (pgio->pg_allow_mds ||
+		    !ff_layout_inode_no_fallback_to_mds(pgio->pg_inode, IOMODE_RW))
+			goto out_mds;
+		ff_layout_pg_refuse_write(pgio, req);
+		return;
+	}
 
 	/* Use a direct mapping of ds_idx to pgio mirror_idx */
 	if (pgio->pg_mirror_count != FF_LAYOUT_MIRROR_COUNT(pgio->pg_lseg))
@@ -1225,21 +1268,16 @@ ff_layout_pg_get_mirror_count_write(struct nfs_pageio_descriptor *pgio,
 	}
 	if (pgio->pg_lseg)
 		return FF_LAYOUT_MIRROR_COUNT(pgio->pg_lseg);
+	if (!pgio->pg_allow_mds &&
+	    ff_layout_inode_no_fallback_to_mds(pgio->pg_inode, IOMODE_RW)) {
+		ff_layout_pg_refuse_write(pgio, req);
+		goto out;
+	}
 
 	trace_pnfs_mds_fallback_pg_get_mirror_count(pgio->pg_inode,
 			0, NFS4_MAX_UINT64, IOMODE_RW,
 			NFS_I(pgio->pg_inode)->layout,
 			pgio->pg_lseg);
-	if (!pgio->pg_allow_mds && NFS_I(pgio->pg_inode)->layout &&
-	    ff_layout_hdr_no_fallback_to_mds(NFS_I(pgio->pg_inode)->layout)) {
-		/*
-		 * FF_FLAGS_NO_IO_THRU_MDS: no current lseg but the server's
-		 * policy forbids MDS fallback.  Surface -EAGAIN so writeback
-		 * retries rather than silently issuing the WRITE via MDS.
-		 */
-		pgio->pg_error = -EAGAIN;
-		goto out;
-	}
 	/* no lseg means that pnfs is not in use, so no mirroring here */
 	nfs_pageio_reset_write_mds(pgio);
 out:

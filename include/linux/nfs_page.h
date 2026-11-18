@@ -125,6 +125,11 @@ struct nfs_pageio_descriptor {
 	 * layout: the write goes through the MDS instead of waiting for one.
 	 */
 	unsigned char		pg_allow_mds : 1;
+	/*
+	 * Set by a layout driver that refused a write with -EAGAIN for lack
+	 * of a layout, so that a caller that resends waits first.
+	 */
+	unsigned char		pg_nolayout : 1;
 };
 
 /* arbitrarily selected limit to number of mirrors */
