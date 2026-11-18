@@ -10,6 +10,7 @@
 #include <rdma/uverbs_ioctl.h>
 
 #include <rdma/ionic-abi.h>
+#include <rdma/ionic_user_ioctl_cmds.h>
 #include <ionic_api.h>
 #include <ionic_regs.h>
 
@@ -490,6 +491,7 @@ int ionic_create_cq_common(struct ionic_vcq *vcq,
 			   const struct ib_cq_init_attr *attr,
 			   struct ionic_ctx *ctx,
 			   struct ib_udata *udata,
+			   const struct uverbs_attr_bundle *attrs,
 			   struct ionic_qdesc *req_cq,
 			   int udma_idx);
 int ionic_post_create_cq_cmd(struct ionic_cq *cq,

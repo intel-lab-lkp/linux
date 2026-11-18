@@ -11,6 +11,9 @@
 
 #include "ionic_ibdev.h"
 
+#define UVERBS_MODULE_NAME ionic_rdma
+#include <rdma/uverbs_named_ioctl.h>
+
 #define DRIVER_DESCRIPTION "AMD Pensando RoCE HCA driver"
 #define DEVICE_DESCRIPTION "AMD Pensando RoCE HCA"
 
@@ -217,6 +220,18 @@ static void ionic_disassociate_ucontext(struct ib_ucontext *ibcontext)
 	 */
 }
 
+ADD_UVERBS_ATTRIBUTES_SIMPLE(
+	ionic_cq_create,
+	UVERBS_OBJECT_CQ,
+	UVERBS_METHOD_CQ_CREATE,
+	UVERBS_ATTR_UMEM(IONIC_IB_ATTR_CREATE_CQ_BUF_UMEM_0, UA_OPTIONAL),
+	UVERBS_ATTR_UMEM(IONIC_IB_ATTR_CREATE_CQ_BUF_UMEM_1, UA_OPTIONAL));
+
+static const struct uapi_definition ionic_uapi_defs[] = {
+	UAPI_DEF_CHAIN_OBJ_TREE(UVERBS_OBJECT_CQ, &ionic_cq_create),
+	{},
+};
+
 static const struct ib_device_ops ionic_dev_ops = {
 	.owner = THIS_MODULE,
 	.driver_id = RDMA_DRIVER_IONIC,
@@ -375,6 +390,8 @@ static struct ionic_ibdev *ionic_create_ibdev(struct ionic_aux_dev *ionic_adev)
 		ib_set_device_ops(&dev->ibdev, &ionic_srq_ops);
 
 	ionic_stats_init(dev);
+
+	ibdev->driver_def = ionic_uapi_defs;
 
 	rc = ib_register_device(ibdev, "ionic_%d", ibdev->dev.parent);
 	if (rc)
