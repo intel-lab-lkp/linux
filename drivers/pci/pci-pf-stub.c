@@ -36,6 +36,7 @@ static struct pci_driver pf_stub_driver = {
 	.id_table		= pci_pf_stub_whitelist,
 	.probe			= pci_pf_stub_probe,
 	.sriov_configure	= pci_sriov_configure_simple,
+	.driver.support_driver_override = true,
 };
 module_pci_driver(pf_stub_driver);
 

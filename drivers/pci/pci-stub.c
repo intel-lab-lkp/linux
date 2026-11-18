@@ -37,6 +37,7 @@ static struct pci_driver stub_driver = {
 	.id_table	= NULL,	/* only dynamic id's */
 	.probe		= pci_stub_probe,
 	.driver_managed_dma = true,
+	.driver.support_driver_override = true,
 };
 
 static int __init pci_stub_init(void)
