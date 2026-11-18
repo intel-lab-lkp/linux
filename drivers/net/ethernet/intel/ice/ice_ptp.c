@@ -1419,11 +1419,8 @@ void ice_ptp_link_change(struct ice_pf *pf, bool linkup)
 		/* Do not reconfigure E810 or E830 PHY */
 		break;
 	case ICE_MAC_GENERIC:
-		ice_ptp_port_phy_restart(ptp_port);
-		break;
 	case ICE_MAC_GENERIC_3K_E825:
-		if (linkup)
-			ice_ptp_port_phy_restart(ptp_port);
+		ice_ptp_port_phy_restart(ptp_port);
 		break;
 	default:
 		dev_warn(ice_pf_to_dev(pf), "%s: Unknown PHY type\n", __func__);
