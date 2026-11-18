@@ -15,10 +15,11 @@ static void nvme_dmabuf_invalidate_mappings(struct dma_buf_attachment *attach)
 	dma_buf_io_invalidate_mappings(ctx);
 }
 
-static const struct dma_buf_attach_ops nvme_dmabuf_importer_ops = {
+const struct dma_buf_attach_ops nvme_dmabuf_importer_ops = {
 	.invalidate_mappings	= nvme_dmabuf_invalidate_mappings,
 	.allow_peer2peer	= true,
 };
+EXPORT_SYMBOL_GPL(nvme_dmabuf_importer_ops);
 
 static struct dma_buf_io_map *nvme_dma_buf_io_map(struct dma_buf_io_ctx *ctx)
 {
@@ -127,23 +128,21 @@ static const struct dma_buf_io_ops nvme_dma_buf_io_ops = {
 
 static int nvme_init_io_ctx_locked(struct nvme_ctrl *ctrl,
 		struct nvme_dma_buf_list *buf_list,
+		struct dma_buf_attachment *attach,
 		struct dma_buf_io_ctx *ctx)
 {
 	struct nvme_dma_buf_io_ctx *nvme_ctx;
-	struct dma_buf_attachment *attach;
+	int ret;
 
-	if (buf_list->dead)
-		return -ENODEV;
+	if (buf_list->dead) {
+		ret = -ENODEV;
+		goto err_detach;
+	}
 
 	nvme_ctx = kzalloc_obj(*nvme_ctx);
-	if (!nvme_ctx)
-		return -ENOMEM;
-
-	attach = dma_buf_dynamic_attach(ctx->dmabuf, ctrl->dev,
-					&nvme_dmabuf_importer_ops, ctx);
-	if (IS_ERR(attach)) {
-		kfree(nvme_ctx);
-		return PTR_ERR(attach);
+	if (!nvme_ctx) {
+		ret = -ENOMEM;
+		goto err_detach;
 	}
 
 	nvme_get_ctrl(ctrl);
@@ -155,16 +154,26 @@ static int nvme_init_io_ctx_locked(struct nvme_ctrl *ctrl,
 	ctx->dev_priv = nvme_ctx;
 	ctx->dev_ops = &nvme_dma_buf_io_ops;
 	return 0;
+
+err_detach:
+	dma_buf_detach(ctx->dmabuf, attach);
+	return ret;
 }
 
+/*
+ * @attach must have been created with nvme_dmabuf_importer_ops and @ctx as
+ * the importer private data. The context takes ownership of it, and it is
+ * detached on failure or when the context is released.
+ */
 int __nvme_init_dma_buf_io_ctx(struct nvme_ctrl *ctrl,
 		struct nvme_dma_buf_list *buf_list,
+		struct dma_buf_attachment *attach,
 		struct dma_buf_io_ctx *ctx)
 {
 	int ret;
 
 	mutex_lock(&buf_list->lock);
-	ret = nvme_init_io_ctx_locked(ctrl, buf_list, ctx);
+	ret = nvme_init_io_ctx_locked(ctrl, buf_list, attach, ctx);
 	mutex_unlock(&buf_list->lock);
 	return ret;
 }
