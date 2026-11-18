@@ -27,6 +27,7 @@
 
 #include "nvme.h"
 #include "fabrics.h"
+#include "dmabuf.h"
 
 
 #define NVME_RDMA_CM_TIMEOUT_MS		3000		/* 3 second */
@@ -139,6 +140,12 @@ struct nvme_rdma_ctrl {
 	struct nvme_ctrl	ctrl;
 	bool			use_inline_data;
 	u32			io_queues[HCTX_MAX_TYPES];
+
+	/*
+	 * dma-buf I/O contexts. Registration is refused while there is no
+	 * admin queue, as ctrl->device is not valid then.
+	 */
+	struct nvme_dma_buf_list dmabufs;
 };
 
 static inline struct nvme_rdma_ctrl *to_rdma_ctrl(struct nvme_ctrl *ctrl)
@@ -780,8 +787,17 @@ static int nvme_rdma_alloc_tag_set(struct nvme_ctrl *ctrl)
 			cmd_size);
 }
 
+static void nvme_rdma_set_dmabufs_dead(struct nvme_rdma_ctrl *ctrl, bool dead)
+{
+	mutex_lock(&ctrl->dmabufs.lock);
+	ctrl->dmabufs.dead = dead;
+	mutex_unlock(&ctrl->dmabufs.lock);
+}
+
 static void nvme_rdma_destroy_admin_queue(struct nvme_rdma_ctrl *ctrl)
 {
+	nvme_rdma_set_dmabufs_dead(ctrl, true);
+
 	if (ctrl->async_event_sqe.data) {
 		cancel_work_sync(&ctrl->ctrl.async_event_work);
 		nvme_rdma_free_qe(ctrl->device->dev, &ctrl->async_event_sqe,
@@ -854,6 +870,7 @@ static int nvme_rdma_configure_admin_queue(struct nvme_rdma_ctrl *ctrl,
 	if (error)
 		goto out_quiesce_queue;
 
+	nvme_rdma_set_dmabufs_dead(ctrl, false);
 	return 0;
 
 out_quiesce_queue:
@@ -1249,6 +1266,13 @@ static void nvme_rdma_dma_unmap_req(struct ib_device *ibdev, struct request *rq)
 {
 	struct nvme_rdma_request *req = blk_mq_rq_to_pdu(rq);
 
+	/* dma-buf addresses are mapped for the lifetime of the map */
+	if (blk_mq_rq_is_dmabuf(rq)) {
+		sg_free_table_chained(&req->data_sgl.sg_table,
+				      NVME_INLINE_SG_CNT);
+		return;
+	}
+
 	if (blk_integrity_rq(rq)) {
 		ib_dma_unmap_sg(ibdev, req->metadata_sgl->sg_table.sgl,
 				req->metadata_sgl->nents, rq_dma_dir(rq));
@@ -1555,6 +1579,100 @@ out_free_table:
 	return ret;
 }
 
+/*
+ * Build the data scatterlist of a dma-buf request from the DMA address
+ * table of its map. The addresses are already mapped for the RDMA device
+ * the dma-buf is attached to, so there is no DMA mapping here.
+ */
+static int nvme_rdma_dma_map_dmabuf_req(struct nvme_rdma_queue *queue,
+		struct request *rq, int *count)
+{
+	struct nvme_rdma_request *req = blk_mq_rq_to_pdu(rq);
+	struct nvme_dmabuf_map *map = nvme_req_to_map(rq);
+	struct nvme_dma_buf_io_ctx *nvme_ctx = map->base.ctx->dev_priv;
+	size_t offset = rq->bio->bi_iter.bi_offset;
+	size_t remaining = blk_rq_payload_bytes(rq);
+	unsigned int first = offset / NVME_CTRL_PAGE_SIZE;
+	unsigned int last = (offset + remaining - 1) / NVME_CTRL_PAGE_SIZE;
+	dma_addr_t *dma_list = map->dma_list;
+	struct scatterlist *sg;
+	unsigned int i, nents = 1;
+	dma_addr_t addr;
+	size_t len;
+	int ret;
+
+	BUILD_BUG_ON(NVME_CTRL_PAGE_SIZE != SZ_4K);
+
+	/* A reconnect may have moved the controller to another RDMA device. */
+	if (unlikely(nvme_ctx->owner != queue->device->dev))
+		return -ENODEV;
+	if (WARN_ON_ONCE(!remaining || last >= map->nr_entries))
+		return -EINVAL;
+
+	for (i = first + 1; i <= last; i++)
+		if (dma_list[i] != dma_list[i - 1] + NVME_CTRL_PAGE_SIZE)
+			nents++;
+
+	req->data_sgl.sg_table.sgl = (struct scatterlist *)(req + 1);
+	ret = sg_alloc_table_chained(&req->data_sgl.sg_table, nents,
+			req->data_sgl.sg_table.sgl, NVME_INLINE_SG_CNT);
+	if (ret)
+		return -ENOMEM;
+
+	sg = req->data_sgl.sg_table.sgl;
+	addr = dma_list[first] + (offset & (NVME_CTRL_PAGE_SIZE - 1));
+	len = min_t(size_t, remaining,
+		    NVME_CTRL_PAGE_SIZE - (offset & (NVME_CTRL_PAGE_SIZE - 1)));
+	remaining -= len;
+
+	for (i = first + 1; i <= last; i++) {
+		size_t chunk = min_t(size_t, remaining, NVME_CTRL_PAGE_SIZE);
+
+		if (dma_list[i] != addr + len) {
+			sg_dma_address(sg) = addr;
+			sg_dma_len(sg) = len;
+			sg->length = len;
+			sg = sg_next(sg);
+			addr = dma_list[i];
+			len = 0;
+		}
+		len += chunk;
+		remaining -= chunk;
+	}
+	sg_dma_address(sg) = addr;
+	sg_dma_len(sg) = len;
+	sg->length = len;
+
+	req->data_sgl.nents = nents;
+	*count = nents;
+	return 0;
+}
+
+static int nvme_rdma_map_dmabuf(struct nvme_rdma_queue *queue,
+		struct request *rq, struct nvme_command *c)
+{
+	struct nvme_rdma_request *req = blk_mq_rq_to_pdu(rq);
+	int count, ret;
+
+	/* No PI support for dma-buf requests yet */
+	if (req->use_sig_mr || blk_integrity_rq(rq))
+		return -EOPNOTSUPP;
+
+	ret = nvme_rdma_dma_map_dmabuf_req(queue, rq, &count);
+	if (unlikely(ret))
+		return ret;
+
+	/*
+	 * Always register a memory region, so that the target can only access
+	 * the range of the dma-buf this request covers.
+	 */
+	ret = nvme_rdma_map_sg_fr(queue, req, c, count);
+	if (unlikely(ret))
+		sg_free_table_chained(&req->data_sgl.sg_table,
+				      NVME_INLINE_SG_CNT);
+	return ret;
+}
+
 static int nvme_rdma_map_data(struct nvme_rdma_queue *queue,
 		struct request *rq, struct nvme_command *c)
 {
@@ -1571,6 +1689,9 @@ static int nvme_rdma_map_data(struct nvme_rdma_queue *queue,
 
 	if (!blk_rq_nr_phys_segments(rq))
 		return nvme_rdma_set_sg_null(c);
+
+	if (blk_mq_rq_is_dmabuf(rq))
+		return nvme_rdma_map_dmabuf(queue, rq, c);
 
 	ret = nvme_rdma_dma_map_req(ibdev, rq, &count, &pi_count);
 	if (unlikely(ret))
@@ -2194,9 +2315,13 @@ static void nvme_rdma_shutdown_ctrl(struct nvme_rdma_ctrl *ctrl, bool shutdown)
 	nvme_rdma_teardown_admin_queue(ctrl, shutdown);
 }
 
-static void nvme_rdma_delete_ctrl(struct nvme_ctrl *ctrl)
+static void nvme_rdma_delete_ctrl(struct nvme_ctrl *nctrl)
 {
-	nvme_rdma_shutdown_ctrl(to_rdma_ctrl(ctrl), true);
+	struct nvme_rdma_ctrl *ctrl = to_rdma_ctrl(nctrl);
+
+	nvme_rdma_shutdown_ctrl(ctrl, true);
+	/* Namespace removal has drained I/O, so detach the contexts. */
+	nvme_remove_dmabufs(&ctrl->dmabufs);
 }
 
 static void nvme_rdma_reset_ctrl_work(struct work_struct *work)
@@ -2232,6 +2357,37 @@ static bool nvme_rdma_supports_pci_p2pdma(struct nvme_ctrl *ctrl)
 	return ib_dma_pci_p2p_dma_supported(r_ctrl->device->dev);
 }
 
+static int nvme_rdma_init_dma_buf_io_ctx(struct nvme_ctrl *nctrl,
+		struct dma_buf_io_ctx *ctx)
+{
+	struct nvme_rdma_ctrl *ctrl = to_rdma_ctrl(nctrl);
+	struct dma_buf_attachment *attach;
+	struct ib_device *ibdev;
+	int ret;
+
+	/*
+	 * Attach for the RDMA device the controller is currently connected
+	 * through. ctrl->device is valid while the context list is not dead.
+	 */
+	mutex_lock(&ctrl->dmabufs.lock);
+	if (ctrl->dmabufs.dead) {
+		ret = -ENODEV;
+		goto out_unlock;
+	}
+	ibdev = ctrl->device->dev;
+	attach = ib_dma_buf_dynamic_attach(ibdev, ctx->dmabuf,
+					   &nvme_dmabuf_importer_ops, ctx);
+	if (IS_ERR(attach)) {
+		ret = PTR_ERR(attach);
+		goto out_unlock;
+	}
+	ret = nvme_init_dma_buf_io_ctx_locked(nctrl, &ctrl->dmabufs, attach,
+					      ibdev, ctx);
+out_unlock:
+	mutex_unlock(&ctrl->dmabufs.lock);
+	return ret;
+}
+
 static const struct nvme_ctrl_ops nvme_rdma_ctrl_ops = {
 	.name			= "rdma",
 	.module			= THIS_MODULE,
@@ -2247,6 +2403,7 @@ static const struct nvme_ctrl_ops nvme_rdma_ctrl_ops = {
 	.stop_ctrl		= nvme_rdma_stop_ctrl,
 	.get_virt_boundary	= nvme_get_virt_boundary,
 	.supports_pci_p2pdma	= nvme_rdma_supports_pci_p2pdma,
+	.init_dma_buf_io_ctx	= nvme_rdma_init_dma_buf_io_ctx,
 };
 
 /*
@@ -2344,6 +2501,9 @@ static struct nvme_rdma_ctrl *nvme_rdma_alloc_ctrl(struct device *dev,
 	for (i = 0; i < ctrl->ctrl.queue_count; i++)
 		ctrl->queues[i].ctrl = ctrl;
 
+	nvme_init_buf_list(&ctrl->dmabufs);
+	ctrl->dmabufs.dead = true;
+
 	ret = nvme_init_ctrl(&ctrl->ctrl, dev, &nvme_rdma_ctrl_ops,
 				0 /* no quirks, we're perfect! */);
 	if (ret)
@@ -2413,7 +2573,7 @@ static void nvme_rdma_remove_one(struct ib_device *ib_device, void *client_data)
 {
 	struct nvme_rdma_ctrl *ctrl;
 	struct nvme_rdma_device *ndev;
-	bool found = false;
+	bool found = false, need_flush;
 
 	mutex_lock(&device_list_mutex);
 	list_for_each_entry(ndev, &device_list, entry) {
@@ -2423,20 +2583,24 @@ static void nvme_rdma_remove_one(struct ib_device *ib_device, void *client_data)
 		}
 	}
 	mutex_unlock(&device_list_mutex);
+	need_flush = found;
 
-	if (!found)
-		return;
-
-	/* Delete all controllers using this device */
+	/*
+	 * Delete controllers using this device, and controllers that
+	 * reconnected elsewhere but still have dma-bufs attached to it.
+	 */
 	mutex_lock(&nvme_rdma_ctrl_mutex);
 	list_for_each_entry(ctrl, &nvme_rdma_ctrl_list, list) {
-		if (ctrl->device->dev != ib_device)
+		if (!(found && ctrl->device->dev == ib_device) &&
+		    !nvme_dmabufs_use_owner(&ctrl->dmabufs, ib_device))
 			continue;
 		nvme_delete_ctrl(&ctrl->ctrl);
+		need_flush = true;
 	}
 	mutex_unlock(&nvme_rdma_ctrl_mutex);
 
-	flush_workqueue(nvme_delete_wq);
+	if (need_flush)
+		flush_workqueue(nvme_delete_wq);
 }
 
 static struct ib_client nvme_rdma_ib_client = {

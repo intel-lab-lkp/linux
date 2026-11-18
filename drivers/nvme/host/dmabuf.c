@@ -120,19 +120,60 @@ void __nvme_remove_dmabufs(struct nvme_dma_buf_list *list)
 }
 EXPORT_SYMBOL_GPL(__nvme_remove_dmabufs);
 
+/**
+ * __nvme_dmabufs_use_owner - check whether any context has the given owner
+ * @list:	the controller's dma-buf context list
+ * @owner:	the owner to look for
+ *
+ * Return: true if a dma-buf context in @list was attached for @owner.
+ */
+bool __nvme_dmabufs_use_owner(struct nvme_dma_buf_list *list, void *owner)
+{
+	struct nvme_dma_buf_io_ctx *ctx;
+	bool found = false;
+
+	mutex_lock(&list->lock);
+	list_for_each_entry(ctx, &list->ctxs, list) {
+		if (ctx->owner == owner) {
+			found = true;
+			break;
+		}
+	}
+	mutex_unlock(&list->lock);
+	return found;
+}
+EXPORT_SYMBOL_GPL(__nvme_dmabufs_use_owner);
+
 static const struct dma_buf_io_ops nvme_dma_buf_io_ops = {
 	.map		= nvme_dma_buf_io_map,
 	.unmap		= nvme_dma_buf_io_unmap,
 	.release	= nvme_dma_buf_io_release,
 };
 
-static int nvme_init_io_ctx_locked(struct nvme_ctrl *ctrl,
+/**
+ * __nvme_init_dma_buf_io_ctx_locked - initialise a dma-buf I/O context
+ * @ctrl:	controller the context issues I/O to
+ * @buf_list:	the controller's dma-buf context list
+ * @attach:	attachment of the dma-buf, see __nvme_init_dma_buf_io_ctx()
+ * @owner:	identifies the device @attach was made for, may be NULL
+ * @ctx:	dma-buf I/O context to initialise
+ *
+ * Locked variant of __nvme_init_dma_buf_io_ctx(), for transports that select
+ * the device and create @attach under @buf_list->lock, which the caller must
+ * hold. The attachment requirements and ownership rules are the same.
+ *
+ * Return: 0 on success, or a negative errno code otherwise.
+ */
+int __nvme_init_dma_buf_io_ctx_locked(struct nvme_ctrl *ctrl,
 		struct nvme_dma_buf_list *buf_list,
-		struct dma_buf_attachment *attach,
+		struct dma_buf_attachment *attach, void *owner,
 		struct dma_buf_io_ctx *ctx)
+	__must_hold(&buf_list->lock)
 {
 	struct nvme_dma_buf_io_ctx *nvme_ctx;
 	int ret;
+
+	lockdep_assert_held(&buf_list->lock);
 
 	if (buf_list->dead) {
 		ret = -ENODEV;
@@ -148,6 +189,7 @@ static int nvme_init_io_ctx_locked(struct nvme_ctrl *ctrl,
 	nvme_get_ctrl(ctrl);
 	list_add(&nvme_ctx->list, &buf_list->ctxs);
 	nvme_ctx->attach = attach;
+	nvme_ctx->owner = owner;
 	nvme_ctx->base = ctx;
 	nvme_ctx->ctrl = ctrl;
 	nvme_ctx->buf_list = buf_list;
@@ -159,6 +201,7 @@ err_detach:
 	dma_buf_detach(ctx->dmabuf, attach);
 	return ret;
 }
+EXPORT_SYMBOL_GPL(__nvme_init_dma_buf_io_ctx_locked);
 
 /*
  * @attach must have been created with nvme_dmabuf_importer_ops and @ctx as
@@ -173,7 +216,8 @@ int __nvme_init_dma_buf_io_ctx(struct nvme_ctrl *ctrl,
 	int ret;
 
 	mutex_lock(&buf_list->lock);
-	ret = nvme_init_io_ctx_locked(ctrl, buf_list, attach, ctx);
+	ret = __nvme_init_dma_buf_io_ctx_locked(ctrl, buf_list, attach, NULL,
+						ctx);
 	mutex_unlock(&buf_list->lock);
 	return ret;
 }
