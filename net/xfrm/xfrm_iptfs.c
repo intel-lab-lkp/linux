@@ -1914,6 +1914,20 @@ nospace:
 			continue;
 		}
 
+		/* The skb will wait on xtfs->queue until the delay timer fires,
+		 * and iptfs_output_queued() -> xfrm_output() then dereferences
+		 * its dst. skb_dst() can be a no-ref dst (e.g. the bundle built
+		 * for a TCP retransmission) that RCU frees while the skb is
+		 * queued, so pin it before queuing; if it is already being
+		 * destroyed, drop the packet rather than queue a dangling
+		 * pointer.
+		 */
+		if (unlikely(!skb_dst_force(skb))) {
+			XFRM_INC_STATS(net, LINUX_MIB_XFRMOUTERROR);
+			kfree_skb_reason(skb, SKB_DROP_REASON_NOT_SPECIFIED);
+			continue;
+		}
+
 		/* Enqueue to send in tunnel */
 		ok = iptfs_enqueue(xtfs, skb);
 		if (!ok)
