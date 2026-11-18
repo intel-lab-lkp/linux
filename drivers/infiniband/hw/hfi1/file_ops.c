@@ -526,6 +526,10 @@ static int hfi1_file_mmap(struct file *fp, struct vm_area_struct *vma)
 		is_vmalloc = 1;
 		break;
 	case SUBCTXT_EGRBUF:
+		if (flags & VM_WRITE) {
+			ret = -EPERM;
+			goto done;
+		}
 		memvirt = uctxt->subctxt_rcvegrbuf;
 		memlen = uctxt->egrbufs.size * uctxt->subctxt_cnt;
 		flags &= ~VM_MAYWRITE;
