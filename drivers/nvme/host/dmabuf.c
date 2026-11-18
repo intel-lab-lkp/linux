@@ -1,12 +1,12 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Code for supporting dma-buf I/O maps in the NVMe driver.
+ * Code for supporting dma-buf I/O maps in the NVMe host drivers.
  * Copyright (C) 2026 Pavel Begunkov <asml.silence@gmail.com>
  */
 
 #include <linux/dma-resv.h>
 
-#include "pci-dmabuf.h"
+#include "dmabuf.h"
 
 static void nvme_dmabuf_invalidate_mappings(struct dma_buf_attachment *attach)
 {
@@ -104,7 +104,7 @@ static void nvme_dma_buf_io_release(struct dma_buf_io_ctx *base_ctx)
 	kfree(ctx);
 }
 
-void __nvme_pci_remove_dmabuf(struct nvme_dma_buf_list *list)
+void __nvme_remove_dmabufs(struct nvme_dma_buf_list *list)
 {
 	struct nvme_dma_buf_io_ctx *ctx, *tmp;
 
@@ -117,8 +117,9 @@ void __nvme_pci_remove_dmabuf(struct nvme_dma_buf_list *list)
 	}
 	mutex_unlock(&list->lock);
 }
+EXPORT_SYMBOL_GPL(__nvme_remove_dmabufs);
 
-const struct dma_buf_io_ops nvme_dma_buf_io_ops = {
+static const struct dma_buf_io_ops nvme_dma_buf_io_ops = {
 	.map		= nvme_dma_buf_io_map,
 	.unmap		= nvme_dma_buf_io_unmap,
 	.release	= nvme_dma_buf_io_release,
@@ -167,3 +168,6 @@ int __nvme_init_dma_buf_io_ctx(struct nvme_ctrl *ctrl,
 	mutex_unlock(&buf_list->lock);
 	return ret;
 }
+EXPORT_SYMBOL_GPL(__nvme_init_dma_buf_io_ctx);
+
+MODULE_IMPORT_NS("DMA_BUF");
