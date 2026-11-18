@@ -38,6 +38,7 @@
 
 #include <linux/errno.h>
 #include <linux/err.h>
+#include <linux/dma-buf.h>
 #include <linux/export.h>
 #include <linux/string.h>
 #include <linux/slab.h>
@@ -3217,3 +3218,30 @@ void rdma_free_hw_stats_struct(struct rdma_hw_stats *stats)
 	kfree(stats);
 }
 EXPORT_SYMBOL(rdma_free_hw_stats_struct);
+
+/**
+ * ib_dma_buf_dynamic_attach - attach a dma-buf for DMA by an RDMA device
+ * @dev: RDMA device that will access the dma-buf
+ * @dmabuf: dma-buf to attach
+ * @importer_ops: importer callbacks, see dma_buf_dynamic_attach()
+ * @importer_priv: importer private data, see dma_buf_dynamic_attach()
+ *
+ * Attach @dmabuf to the device that does DMA for @dev. Devices using
+ * virtual DMA have no such device and are not supported.
+ *
+ * Return: the attachment, or an ERR_PTR() on failure.
+ */
+struct dma_buf_attachment *
+ib_dma_buf_dynamic_attach(struct ib_device *dev, struct dma_buf *dmabuf,
+			  const struct dma_buf_attach_ops *importer_ops,
+			  void *importer_priv)
+{
+	if (ib_uses_virt_dma(dev))
+		return ERR_PTR(-EOPNOTSUPP);
+
+	return dma_buf_dynamic_attach(dmabuf, dev->dma_device, importer_ops,
+				      importer_priv);
+}
+EXPORT_SYMBOL_GPL(ib_dma_buf_dynamic_attach);
+
+MODULE_IMPORT_NS("DMA_BUF");

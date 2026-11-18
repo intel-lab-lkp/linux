@@ -4323,6 +4323,13 @@ static inline bool ib_dma_pci_p2p_dma_supported(struct ib_device *dev)
 	return dma_pci_p2pdma_supported(dev->dma_device);
 }
 
+struct dma_buf;
+struct dma_buf_attach_ops;
+struct dma_buf_attachment *
+ib_dma_buf_dynamic_attach(struct ib_device *dev, struct dma_buf *dmabuf,
+			  const struct dma_buf_attach_ops *importer_ops,
+			  void *importer_priv);
+
 /**
  * ib_virt_dma_to_ptr - Convert a dma_addr to a kernel pointer
  * @dma_addr: The DMA address
