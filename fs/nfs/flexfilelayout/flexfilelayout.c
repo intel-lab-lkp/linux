@@ -641,12 +641,8 @@ ff_layout_alloc_lseg(struct pnfs_layout_hdr *lh,
 	if (!p)
 		goto out_sort_mirrors;
 	fls->flags = be32_to_cpup(p);
-	if (fls->flags & FF_FLAGS_NO_IO_THRU_MDS) {
-		set_bit(NFS4_FF_HDR_NO_IO_THRU_MDS,
-			&FF_LAYOUT_FROM_HDR(lh)->flags);
-		/* Outlives this layout hdr; see NFS_INO_NO_IO_THRU_MDS */
+	if (fls->flags & FF_FLAGS_NO_IO_THRU_MDS)
 		nfs_set_no_io_thru_mds(lh->plh_inode);
-	}
 
 	p = xdr_inline_decode(&stream, 4);
 	if (!p)
@@ -1145,7 +1141,7 @@ out_nolseg:
 	 * MDS there is no fallback to take, so wait for a layout on the
 	 * same terms as the -EAGAIN above.  The layout hdr that carried
 	 * FF_FLAGS_NO_IO_THRU_MDS may itself be gone by now, which is why
-	 * this asks the inode and not the hdr.
+	 * the flag is kept on the inode.
 	 */
 	if (!ff_layout_inode_no_fallback_to_mds(pgio->pg_inode, IOMODE_READ))
 		goto out_mds;

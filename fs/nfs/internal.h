@@ -556,11 +556,10 @@ static inline bool nfs_file_io_is_buffered(struct nfs_inode *nfsi)
  * FF_FLAGS_NO_IO_THRU_MDS in ff_layout_alloc_lseg()).  The RFC 5661
  * mdsthreshold hint must not be acted on for such a file, since the only
  * thing pnfs_within_mdsthreshold() can ask for is the one thing the
- * layout forbids.  Servers are assumed to be consistent in their
- * no-fallback policy per file, the same assumption
- * ff_layout_hdr_no_fallback_to_mds() already makes; if one were not, the
- * only effect is that its mdsthreshold hint - a SHOULD - stops being
- * honored for an inode that is already in core.
+ * layout forbids.  Flexfiles also retries reads and writes that have no
+ * layout segment instead of sending them through the MDS, except
+ * writeback of a single locked folio (pg_allow_mds).  Servers are
+ * assumed to be consistent in their no-fallback policy per file.
  */
 #define NFS_INO_NO_IO_THRU_MDS	(30)
 
