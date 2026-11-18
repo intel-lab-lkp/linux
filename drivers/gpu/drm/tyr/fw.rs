@@ -29,7 +29,8 @@ use kernel::{
     num::Bounded,
     prelude::*,
     str::CString,
-    time, //
+    time,
+    types::ScopeGuard, //
 };
 
 use crate::{
@@ -228,46 +229,40 @@ impl<'fw> Firmware<'fw> {
             sections: {
                 let vm = vm.get_ref();
                 vm.activate()?;
+                let guard = ScopeGuard::new(|| vm.kill());
 
-                let result: Result<_> = (|| {
-                    let (fw, parsed_sections) = Self::load(dev, ddev, gpu_info)?;
-                    let mut sections = KVec::new();
-                    for parsed in parsed_sections {
-                        let size =
-                            u64::from(parsed.va.end.checked_sub(parsed.va.start).ok_or(EINVAL)?);
+                let (fw, parsed_sections) = Self::load(dev, ddev, gpu_info)?;
+                let mut sections = KVec::new();
+                for parsed in parsed_sections {
+                    let size =
+                        u64::from(parsed.va.end.checked_sub(parsed.va.start).ok_or(EINVAL)?);
 
-                        let va = u64::from(parsed.va.start);
+                    let va = u64::from(parsed.va.start);
 
-                        let mut mem = KernelBo::new(
-                            ddev,
-                            vm,
-                            size,
-                            KernelBoVaAlloc::Explicit(va),
-                            parsed.vm_map_flags,
-                        )?;
+                    let mut mem = KernelBo::new(
+                        ddev,
+                        vm,
+                        size,
+                        KernelBoVaAlloc::Explicit(va),
+                        parsed.vm_map_flags,
+                    )?;
 
-                        let section_start = parsed.data_range.start as usize;
-                        let section_end = parsed.data_range.end as usize;
-                        let mut data = KVec::new();
+                    let section_start = parsed.data_range.start as usize;
+                    let section_end = parsed.data_range.end as usize;
+                    let mut data = KVec::new();
 
-                        // Ensure that the firmware slice is not out of bounds.
-                        let fw_data = fw.data();
-                        let bytes = fw_data.get(section_start..section_end).ok_or(EINVAL)?;
-                        data.extend_from_slice(bytes, GFP_KERNEL)?;
+                    // Ensure that the firmware slice is not out of bounds.
+                    let fw_data = fw.data();
+                    let bytes = fw_data.get(section_start..section_end).ok_or(EINVAL)?;
+                    data.extend_from_slice(bytes, GFP_KERNEL)?;
 
-                        Self::init_section_mem(dev, &mut mem, &data)?;
+                    Self::init_section_mem(dev, &mut mem, &data)?;
 
-                        sections.push(Section { data, mem }, GFP_KERNEL)?;
-                    }
-
-                    Ok(sections)
-                })();
-
-                if result.is_err() {
-                    vm.kill();
+                    sections.push(Section { data, mem }, GFP_KERNEL)?;
                 }
 
-                result?
+                guard.dismiss();
+                sections
             },
         })
     }
