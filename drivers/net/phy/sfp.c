@@ -482,6 +482,44 @@ static void sfp_fixup_rollball_cc(struct sfp *sfp)
 	sfp->id.base.extended_cc = SFF8024_ECC_10GBASE_T_SFI;
 }
 
+static size_t sfp_strlen(const char *str, size_t maxlen)
+{
+	size_t size, i;
+
+	/* Trailing characters should be filled with space chars, but
+	 * some manufacturers can't read SFF-8472 and use NUL.
+	 */
+	for (i = 0, size = 0; i < maxlen; i++)
+		if (str[i] != ' ' && str[i] != '\0')
+			size = i + 1;
+
+	return size;
+}
+
+static void sfp_fixup_oem_10gt(struct sfp *sfp)
+{
+	char rev = sfp->id.base.vendor_rev[0];
+
+	/* Revisions A and B of this module have no RollBall I2C-to-MDIO
+	 * bridge (on rev A, page 3 of the 0x51 EEPROM just echoes written
+	 * bytes), so every RollBall command times out and the PHY probe
+	 * keeps retrying for over nine minutes, holding rtnl_lock for ~20
+	 * seconds per attempt. The PHY is not accessible at all, so use the
+	 * module without one.
+	 */
+	if (sfp_strlen(sfp->id.base.vendor_rev, 4) == 1 &&
+	    (rev == 'A' || rev == 'B')) {
+		dev_info(sfp->dev,
+			 "rev %c has no RollBall MDIO bridge, not probing for a PHY\n",
+			 rev);
+		sfp->mdio_protocol = MDIO_I2C_NONE;
+		sfp->id.base.extended_cc = SFF8024_ECC_10GBASE_T_SFI;
+		return;
+	}
+
+	sfp_fixup_rollball_cc(sfp);
+}
+
 static void sfp_quirk_2500basex(const struct sfp_eeprom_id *id,
 				struct sfp_module_caps *caps)
 {
@@ -629,7 +667,7 @@ static const struct sfp_quirk sfp_quirks[] = {
 	// OEM SFP-GE-T is a 1000Base-T module with broken TX_FAULT indicator
 	SFP_QUIRK_F("OEM", "SFP-GE-T", sfp_fixup_ignore_tx_fault),
 
-	SFP_QUIRK_F("OEM", "SFP-10G-T", sfp_fixup_rollball_cc),
+	SFP_QUIRK_F("OEM", "SFP-10G-T", sfp_fixup_oem_10gt),
 	SFP_QUIRK_S("OEM", "SFP-2.5G-T", sfp_quirk_oem_2_5g),
 	SFP_QUIRK_S("OEM", "SFP-2.5G-BX10-D", sfp_quirk_2500basex),
 	SFP_QUIRK_S("OEM", "SFP-2.5G-BX10-U", sfp_quirk_2500basex),
@@ -655,20 +693,6 @@ static const struct sfp_quirk sfp_quirks[] = {
 
 	SFP_QUIRK_S("ZOERAX", "SFP-2.5G-T", sfp_quirk_oem_2_5g),
 };
-
-static size_t sfp_strlen(const char *str, size_t maxlen)
-{
-	size_t size, i;
-
-	/* Trailing characters should be filled with space chars, but
-	 * some manufacturers can't read SFF-8472 and use NUL.
-	 */
-	for (i = 0, size = 0; i < maxlen; i++)
-		if (str[i] != ' ' && str[i] != '\0')
-			size = i + 1;
-
-	return size;
-}
 
 static bool sfp_match(const char *qs, const char *str, size_t len, bool prefix)
 {
