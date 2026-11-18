@@ -27,12 +27,17 @@ properties:
       - enum:
           - qcom,pm8150b-vbus-reg
           - qcom,pm4125-vbus-reg
+          - qcom,pmi8998-vbus-reg
       - items:
           - enum:
               - qcom,pm6150-vbus-reg
               - qcom,pm7250b-vbus-reg
               - qcom,pmi632-vbus-reg
           - const: qcom,pm8150b-vbus-reg
+      - items:
+          - enum:
+              - qcom,pm660-vbus-reg
+          - const: qcom,pm8998-vbus-reg
 
   reg:
     maxItems: 1
