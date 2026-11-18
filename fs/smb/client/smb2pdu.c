@@ -5984,6 +5984,17 @@ SMB2_set_info_init(struct cifs_tcon *tcon, struct TCP_Server_Info *server,
 	req->AdditionalInformation = cpu_to_le32(additional_info);
 
 	req->BufferOffset = cpu_to_le16(sizeof(struct smb2_set_info_req));
+
+	/*
+	 * The request object is CIFSMaxBufSize + MAX_SMB2_HDR_SIZE bytes
+	 * and Buffer starts at sizeof(struct smb2_set_info_req).
+	 */
+	if (*size > CIFSMaxBufSize + MAX_SMB2_HDR_SIZE -
+		    sizeof(struct smb2_set_info_req)) {
+		cifs_buf_release(req);
+		return -EINVAL;
+	}
+
 	req->BufferLength = cpu_to_le32(*size);
 
 	memcpy(req->Buffer, *data, *size);
