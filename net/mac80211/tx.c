@@ -1647,6 +1647,7 @@ int ieee80211_txq_setup_flows(struct ieee80211_local *local)
 	int ret;
 	int i;
 	bool supp_vht = false;
+	bool supp_he = false;
 	enum nl80211_band band;
 
 	ret = fq_init(fq, 4096);
@@ -1654,10 +1655,12 @@ int ieee80211_txq_setup_flows(struct ieee80211_local *local)
 		return ret;
 
 	/*
-	 * If the hardware doesn't support VHT, it is safe to limit the maximum
-	 * queue size. 4 Mbytes is 64 max-size aggregates in 802.11n.
+	 * If the hardware supports neither VHT nor HE, it is safe to limit the
+	 * maximum queue size. 4 Mbytes is 64 max-size aggregates in 802.11n.
+	 * HE counts as well, since a 6 GHz only radio has no VHT.
 	 */
 	for (band = 0; band < NUM_NL80211_BANDS; band++) {
+		const struct ieee80211_sband_iftype_data *iftd;
 		struct ieee80211_supported_band *sband;
 
 		sband = local->hw.wiphy->bands[band];
@@ -1665,9 +1668,12 @@ int ieee80211_txq_setup_flows(struct ieee80211_local *local)
 			continue;
 
 		supp_vht = supp_vht || sband->vht_cap.vht_supported;
+
+		for_each_sband_iftype_data(sband, i, iftd)
+			supp_he = supp_he || iftd->he_cap.has_he;
 	}
 
-	if (!supp_vht)
+	if (!supp_vht && !supp_he)
 		fq->memory_limit = 4 << 20; /* 4 Mbytes */
 
 	codel_params_init(&local->cparams);
