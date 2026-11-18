@@ -607,7 +607,7 @@ static void sh_mmcif_single_read(struct sh_mmcif_host *host,
 			   BLOCK_SIZE_MASK) + 3;
 
 	sg_miter_start(&host->sg_miter, data->sg, data->sg_len,
-		       SG_MITER_TO_SG);
+		       SG_MITER_LOCAL | SG_MITER_TO_SG);
 
 	host->wait_for = MMCIF_WAIT_FOR_READ;
 
@@ -624,7 +624,6 @@ static bool sh_mmcif_read_block(struct sh_mmcif_host *host)
 	int i;
 
 	if (host->sd_error) {
-		sg_miter_stop(sgm);
 		data->error = sh_mmcif_error_manage(host);
 		dev_dbg(dev, "%s(): %d\n", __func__, data->error);
 		return false;
@@ -632,7 +631,6 @@ static bool sh_mmcif_read_block(struct sh_mmcif_host *host)
 
 	if (!sg_miter_next(sgm)) {
 		/* This should not happen on single blocks */
-		sg_miter_stop(sgm);
 		return false;
 	}
 
@@ -641,6 +639,8 @@ static bool sh_mmcif_read_block(struct sh_mmcif_host *host)
 	for (i = 0; i < host->blocksize / 4; i++)
 		*p++ = sh_mmcif_readl(host->addr, MMCIF_CE_DATA);
 
+	data->bytes_xfered += host->blocksize;
+	sgm->consumed = host->blocksize;
 	sg_miter_stop(&host->sg_miter);
 
 	/* buffer read end */
@@ -653,7 +653,6 @@ static bool sh_mmcif_read_block(struct sh_mmcif_host *host)
 static void sh_mmcif_multi_read(struct sh_mmcif_host *host,
 				struct mmc_request *mrq)
 {
-	struct sg_mapping_iter *sgm = &host->sg_miter;
 	struct mmc_data *data = mrq->data;
 
 	if (!data->sg_len || !data->sg->length)
@@ -662,14 +661,8 @@ static void sh_mmcif_multi_read(struct sh_mmcif_host *host,
 	host->blocksize = sh_mmcif_readl(host->addr, MMCIF_CE_BLOCK_SET) &
 		BLOCK_SIZE_MASK;
 
-	sg_miter_start(sgm, data->sg, data->sg_len,
-		       SG_MITER_TO_SG);
-
-	/* Advance to the first sglist entry */
-	if (!sg_miter_next(sgm)) {
-		sg_miter_stop(sgm);
-		return;
-	}
+	sg_miter_start(&host->sg_miter, data->sg, data->sg_len,
+		       SG_MITER_LOCAL | SG_MITER_TO_SG);
 
 	host->wait_for = MMCIF_WAIT_FOR_MREAD;
 
@@ -685,27 +678,26 @@ static bool sh_mmcif_mread_block(struct sh_mmcif_host *host)
 	int i;
 
 	if (host->sd_error) {
-		sg_miter_stop(sgm);
 		data->error = sh_mmcif_error_manage(host);
 		dev_dbg(dev, "%s(): %d\n", __func__, data->error);
 		return false;
 	}
+
+	if (!sg_miter_next(sgm))
+		return false;
 
 	p = sgm->addr;
 
 	for (i = 0; i < host->blocksize / 4; i++)
 		*p++ = sh_mmcif_readl(host->addr, MMCIF_CE_DATA);
 
+	data->bytes_xfered += host->blocksize;
 	sgm->consumed = host->blocksize;
+	sg_miter_stop(sgm);
 
 	sh_mmcif_bitset(host, MMCIF_CE_INT_MASK, MASK_MBUFREN);
 
-	if (!sg_miter_next(sgm)) {
-		sg_miter_stop(sgm);
-		return false;
-	}
-
-	return true;
+	return data->bytes_xfered < host->blocksize * data->blocks;
 }
 
 static void sh_mmcif_single_write(struct sh_mmcif_host *host,
@@ -717,7 +709,7 @@ static void sh_mmcif_single_write(struct sh_mmcif_host *host,
 			   BLOCK_SIZE_MASK) + 3;
 
 	sg_miter_start(&host->sg_miter, data->sg, data->sg_len,
-		       SG_MITER_FROM_SG);
+		       SG_MITER_LOCAL | SG_MITER_FROM_SG);
 
 	host->wait_for = MMCIF_WAIT_FOR_WRITE;
 
@@ -734,7 +726,6 @@ static bool sh_mmcif_write_block(struct sh_mmcif_host *host)
 	int i;
 
 	if (host->sd_error) {
-		sg_miter_stop(sgm);
 		data->error = sh_mmcif_error_manage(host);
 		dev_dbg(dev, "%s(): %d\n", __func__, data->error);
 		return false;
@@ -742,7 +733,6 @@ static bool sh_mmcif_write_block(struct sh_mmcif_host *host)
 
 	if (!sg_miter_next(sgm)) {
 		/* This should not happen on single blocks */
-		sg_miter_stop(sgm);
 		return false;
 	}
 
@@ -751,6 +741,8 @@ static bool sh_mmcif_write_block(struct sh_mmcif_host *host)
 	for (i = 0; i < host->blocksize / 4; i++)
 		sh_mmcif_writel(host->addr, MMCIF_CE_DATA, *p++);
 
+	data->bytes_xfered += host->blocksize;
+	sgm->consumed = host->blocksize;
 	sg_miter_stop(&host->sg_miter);
 
 	/* buffer write end */
@@ -763,7 +755,6 @@ static bool sh_mmcif_write_block(struct sh_mmcif_host *host)
 static void sh_mmcif_multi_write(struct sh_mmcif_host *host,
 				struct mmc_request *mrq)
 {
-	struct sg_mapping_iter *sgm = &host->sg_miter;
 	struct mmc_data *data = mrq->data;
 
 	if (!data->sg_len || !data->sg->length)
@@ -772,14 +763,8 @@ static void sh_mmcif_multi_write(struct sh_mmcif_host *host,
 	host->blocksize = sh_mmcif_readl(host->addr, MMCIF_CE_BLOCK_SET) &
 		BLOCK_SIZE_MASK;
 
-	sg_miter_start(sgm, data->sg, data->sg_len,
-		       SG_MITER_FROM_SG);
-
-	/* Advance to the first sglist entry */
-	if (!sg_miter_next(sgm)) {
-		sg_miter_stop(sgm);
-		return;
-	}
+	sg_miter_start(&host->sg_miter, data->sg, data->sg_len,
+		       SG_MITER_LOCAL | SG_MITER_FROM_SG);
 
 	host->wait_for = MMCIF_WAIT_FOR_MWRITE;
 
@@ -795,27 +780,26 @@ static bool sh_mmcif_mwrite_block(struct sh_mmcif_host *host)
 	int i;
 
 	if (host->sd_error) {
-		sg_miter_stop(sgm);
 		data->error = sh_mmcif_error_manage(host);
 		dev_dbg(dev, "%s(): %d\n", __func__, data->error);
 		return false;
 	}
+
+	if (!sg_miter_next(sgm))
+		return false;
 
 	p = sgm->addr;
 
 	for (i = 0; i < host->blocksize / 4; i++)
 		sh_mmcif_writel(host->addr, MMCIF_CE_DATA, *p++);
 
+	data->bytes_xfered += host->blocksize;
 	sgm->consumed = host->blocksize;
-
-	if (!sg_miter_next(sgm)) {
-		sg_miter_stop(sgm);
-		return false;
-	}
+	sg_miter_stop(sgm);
 
 	sh_mmcif_bitset(host, MMCIF_CE_INT_MASK, MASK_MBUFWEN);
 
-	return true;
+	return data->bytes_xfered < host->blocksize * data->blocks;
 }
 
 static void sh_mmcif_get_response(struct sh_mmcif_host *host,
@@ -1294,9 +1278,6 @@ static irqreturn_t sh_mmcif_irqt(int irq, void *dev_id)
 
 	if (host->wait_for != MMCIF_WAIT_FOR_STOP) {
 		struct mmc_data *data = mrq->data;
-		if (!mrq->cmd->error && data && !data->error)
-			data->bytes_xfered =
-				data->blocks * data->blksz;
 
 		if (mrq->stop && !mrq->cmd->error && (!data || !data->error)) {
 			sh_mmcif_stop_cmd(host, mrq);
