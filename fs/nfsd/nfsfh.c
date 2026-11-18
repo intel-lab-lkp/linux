@@ -499,7 +499,7 @@ __fh_verify(struct svc_rqst *rqstp,
 		may_bypass_gss = true;
 
 	/* The xprtsec= policy applies even when the flavor check is bypassed. */
-	if (!(access & NFSD_MAY_BYPASS_FLAVOR)) {
+	if (!(access & NFSD_MAY_BYPASS_FLAVOR) && !fhp->fh_spo_allowed) {
 		error = check_security_flavor(exp, rqstp, may_bypass_gss);
 		if (error)
 			goto out;
@@ -709,6 +709,7 @@ fh_compose(struct svc_fh *fhp, struct svc_export *exp, struct dentry *dentry,
 
 	struct inode * inode = d_inode(dentry);
 	dev_t ex_dev = exp_sb(exp)->s_dev;
+	bool spo_allowed;
 
 	dprintk("nfsd: fh_compose(exp %02x:%02x/%llu %pd2, ino=%llu)\n",
 		MAJOR(ex_dev), MINOR(ex_dev),
@@ -725,8 +726,13 @@ fh_compose(struct svc_fh *fhp, struct svc_export *exp, struct dentry *dentry,
 	/* If we have a ref_fh, then copy the fh_no_wcc setting from it. */
 	fhp->fh_no_wcc = ref_fh ? ref_fh->fh_no_wcc : false;
 
+	/* The sec= check is per export, so its result holds for @fhp too. */
+	spo_allowed = ref_fh && ref_fh->fh_export == exp &&
+		      ref_fh->fh_spo_allowed;
+
 	if (ref_fh == fhp)
 		fh_put(ref_fh);
+	fhp->fh_spo_allowed = spo_allowed;
 
 	if (fhp->fh_dentry) {
 		printk(KERN_ERR "fh_compose: fh %pd2 not initialized!\n",
@@ -914,6 +920,7 @@ fh_put(struct svc_fh *fhp)
 		fhp->fh_export = NULL;
 	}
 	fhp->fh_no_wcc = false;
+	fhp->fh_spo_allowed = false;
 	return;
 }
 

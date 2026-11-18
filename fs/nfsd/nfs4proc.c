@@ -1545,7 +1545,9 @@ nfsd4_verify_copy(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 		return nfserr_nofilehandle;
 
 	/* A cached open stateid does not authorize the saved source export. */
-	status = check_nfsd_access(cstate->save_fh.fh_export, rqstp, 0);
+	status = check_nfsd_access(cstate->save_fh.fh_export, rqstp,
+				   cstate->save_fh.fh_spo_allowed ?
+				   NFSD_MAY_BYPASS_FLAVOR : 0);
 	if (status)
 		return status == nfserr_wrongsec ? nfserr_acces : status;
 	crossed = cstate->save_fh.fh_export != cstate->current_fh.fh_export;
@@ -3324,6 +3326,13 @@ static bool open_handles_wrongsec(const struct nfsd4_op *op)
 	}
 }
 
+static bool op_handles_wrongsec(const struct nfsd4_op *op)
+{
+	if (op->opnum == OP_OPEN)
+		return open_handles_wrongsec(op);
+	return op->opdesc->op_flags & OP_HANDLES_WRONGSEC;
+}
+
 static bool need_wrongsec_check(struct svc_rqst *rqstp)
 {
 	struct nfsd4_compoundres *resp = rqstp->rq_resp;
@@ -3331,7 +3340,6 @@ static bool need_wrongsec_check(struct svc_rqst *rqstp)
 	struct nfsd4_op *this = &argp->ops[resp->opcnt - 1];
 	struct nfsd4_op *next = NULL;
 	const struct nfsd4_operation *thisd = OPDESC(this);
-	const struct nfsd4_operation *nextd;
 	unsigned int i;
 
 	/* Only put-filehandle operations need a deferred WRONGSEC check. */
@@ -3361,16 +3369,34 @@ static bool need_wrongsec_check(struct svc_rqst *rqstp)
 	 */
 	if (resp->cstate.minorversion == 0 && next->opnum == OP_SECINFO)
 		return true;
-	if (next->opnum == OP_OPEN)
-		return !open_handles_wrongsec(next);
-	nextd = OPDESC(next);
 	/*
 	 * RFC 8881 Section 2.6.3.1.1.2: a later put-filehandle operation
 	 * replaces this one. Other marked operations check WRONGSEC
 	 * themselves.
 	 */
-	return !(nextd->op_flags &
-		  (OP_HANDLES_WRONGSEC | OP_IS_PUTFH_LIKE));
+	return !op_handles_wrongsec(next) &&
+	       !(next->opdesc->op_flags & OP_IS_PUTFH_LIKE);
+}
+
+static bool nfsd4_spo_must_allow(struct svc_rqst *rqstp);
+
+static __be32 nfsd4_check_putfh_access(struct svc_rqst *rqstp)
+{
+	struct nfsd4_compoundres *resp = rqstp->rq_resp;
+	struct svc_fh *fhp = &resp->cstate.current_fh;
+	__be32 status;
+
+	status = check_nfsd_access(fhp->fh_export, rqstp,
+				   NFSD_MAY_BYPASS_FLAVOR);
+	if (status != nfs_ok)
+		return status;
+	status = check_security_flavor(fhp->fh_export, rqstp, false);
+	if (status != nfserr_wrongsec || !nfsd4_spo_must_allow(rqstp))
+		return status;
+
+	/* The machine credential's flavor can be absent from the sec= list. */
+	fhp->fh_spo_allowed = true;
+	return nfs_ok;
 }
 
 #ifdef CONFIG_NFSD_V4_2_INTER_SSC
@@ -3537,6 +3563,17 @@ nfsd4_proc_compound(struct svc_rqst *rqstp)
 		if (op->status)
 			goto encode_op;
 
+		/*
+		 * The SP4_MACH_CRED exception does not extend to an operation
+		 * that checks the export's sec= list itself.
+		 */
+		if (op_handles_wrongsec(op))
+			current_fh->fh_spo_allowed = false;
+
+		/* A new subseries ends the saved filehandle's exemption. */
+		if (op->opdesc->op_flags & OP_IS_PUTFH_LIKE)
+			cstate->save_fh.fh_spo_allowed = false;
+
 		if (op->opdesc->op_get_currentstateid)
 			op->opdesc->op_get_currentstateid(cstate, &op->u);
 		op->status = op->opdesc->op_func(rqstp, cstate, &op->u);
@@ -3557,8 +3594,7 @@ nfsd4_proc_compound(struct svc_rqst *rqstp)
 
 			if (current_fh->fh_export &&
 					need_wrongsec_check(rqstp)) {
-				op->status = check_nfsd_access(current_fh->fh_export,
-							       rqstp, 0);
+				op->status = nfsd4_check_putfh_access(rqstp);
 				/* READ with a stateid does not call fh_verify(). */
 				if (!op->status)
 					svc_xprt_set_valid(rqstp->rq_xprt);
@@ -4405,16 +4441,20 @@ static const struct nfsd4_operation nfsd4_ops[] = {
 };
 
 /**
- * nfsd4_spo_must_allow - Determine if the compound op contains an
+ * nfsd4_spo_must_allow - Determine if the current subseries contains an
  * operation that is allowed to be sent with machine credentials
  *
- * @rqstp: a pointer to the struct svc_rqst
+ * @rqstp: an NFSv4 COMPOUND request that nfsd4_proc_compound() is processing
  *
- * Checks to see if the compound contains a spo_must_allow op
- * and confirms that it was sent with the proper machine creds.
+ * Checks whether the operations after the current one, up to the next operation
+ * that replaces the current filehandle, include a spo_must_allow op that uses
+ * the current filehandle.
+ *
+ * Return: %true if such an operation is present and @rqstp carries the client's
+ * machine credential, otherwise %false.
  */
 
-bool nfsd4_spo_must_allow(struct svc_rqst *rqstp)
+static bool nfsd4_spo_must_allow(struct svc_rqst *rqstp)
 {
 	struct nfsd4_compoundres *resp = rqstp->rq_resp;
 	struct nfsd4_compoundargs *argp = rqstp->rq_argp;
@@ -4423,26 +4463,28 @@ bool nfsd4_spo_must_allow(struct svc_rqst *rqstp)
 	struct nfs4_op_map *allow;
 	u32 opiter;
 
-	if (rqstp->rq_procinfo != &nfsd_version4.vs_proc[NFSPROC4_COMPOUND] ||
-	    cstate->minorversion == 0)
+	if (cstate->minorversion == 0)
 		return false;
-
-	if (cstate->spo_must_allowed)
-		return true;
 
 	allow = &cstate->clp->cl_spo_must_allow;
 	opiter = resp->opcnt;
 	while (opiter < argp->opcnt) {
 		this = &argp->ops[opiter++];
+		/* Later operations use the filehandle this one sets. */
+		if (this->opdesc &&
+		    ((this->opdesc->op_flags & OP_IS_PUTFH_LIKE) ||
+		     op_handles_wrongsec(this)))
+			break;
+		/* Only an operation that uses the filehandle can exempt it. */
+		if (this->opdesc &&
+		    (this->opdesc->op_flags & ALLOWED_WITHOUT_FH))
+			continue;
 		if (this->opnum <= LAST_NFS4_OP &&
 		    test_bit(this->opnum, allow->u.longs) &&
 		    cstate->clp->cl_mach_cred &&
-		    nfsd4_mach_creds_match(cstate->clp, rqstp)) {
-			cstate->spo_must_allowed = true;
+		    nfsd4_mach_creds_match(cstate->clp, rqstp))
 			return true;
-		}
 	}
-	cstate->spo_must_allowed = false;
 	return false;
 }
 

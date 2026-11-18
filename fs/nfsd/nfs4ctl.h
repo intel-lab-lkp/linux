@@ -31,7 +31,6 @@ int nfs4_state_start(void);
 int nfs4_state_start_net(struct net *net);
 void nfs4_state_shutdown(void);
 void nfs4_state_shutdown_net(struct net *net);
-bool nfsd4_spo_must_allow(struct svc_rqst *rqstp);
 int nfsd4_create_laundry_wq(void);
 void nfsd4_destroy_laundry_wq(void);
 bool nfsd_wait_for_delegreturn(struct svc_rqst *rqstp, struct inode *inode);
@@ -52,10 +51,6 @@ static inline int nfs4_state_start(void) { return 0; }
 static inline int nfs4_state_start_net(struct net *net) { return 0; }
 static inline void nfs4_state_shutdown(void) { }
 static inline void nfs4_state_shutdown_net(struct net *net) { }
-static inline bool nfsd4_spo_must_allow(struct svc_rqst *rqstp)
-{
-	return false;
-}
 static inline int nfsd4_create_laundry_wq(void) { return 0; };
 static inline void nfsd4_destroy_laundry_wq(void) {};
 static inline bool nfsd_wait_for_delegreturn(struct svc_rqst *rqstp,

@@ -2013,8 +2013,8 @@ __be32 check_xprtsec_policy(struct svc_export *exp, struct svc_rqst *rqstp)
  *
  * Helper function for check_nfsd_access().  Note that callers should be
  * using check_nfsd_access() instead of calling this function directly.  The
- * one exception is __fh_verify() since it has logic that may result in one
- * or both of the helpers being skipped.
+ * exceptions are __fh_verify(), which can skip one or both helpers, and
+ * nfsd4_check_putfh_access(), which can override a flavor mismatch.
  *
  * Return values:
  *   %nfs_ok if access is granted, or
@@ -2039,15 +2039,6 @@ __be32 check_security_flavor(struct svc_export *exp, struct svc_rqst *rqstp,
 		    rqstp->rq_cred.cr_flavor == RPC_AUTH_UNIX)
 			return nfs_ok;
 	}
-
-	/* If the compound op contains a spo_must_allowed op,
-	 * it will be sent with integrity/protection which
-	 * will have to be expressly allowed on mounts that
-	 * don't support it
-	 */
-
-	if (nfsd4_spo_must_allow(rqstp))
-		return nfs_ok;
 
 	/* Some calls may be processed without authentication
 	 * on GSS exports. For example NFS2/3 calls on root
