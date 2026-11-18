@@ -7344,8 +7344,9 @@ int alloc_contig_frozen_range_noprof(unsigned long start, unsigned long end,
 	 */
 
 	ret = start_isolate_page_range(start, end, mode);
+	/* After a failure, whatever is still isolated belongs to someone else */
 	if (ret)
-		goto done;
+		return ret;
 
 	drain_all_pages(cc.zone);
 
