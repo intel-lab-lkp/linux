@@ -2234,6 +2234,19 @@ static void iptfs_output_queued(struct xfrm_state *x, struct sk_buff_head *list)
 		if (iptfs_first_skb(&skb, xtfs, mtu))
 			continue;
 
+		/* A clone shares skb_shinfo(), and with it the frag_list we
+		 * are about to append to, with its original, e.g. the skb TCP
+		 * keeps for retransmission. A cloned head that has a frag_list,
+		 * or that we cannot unclone, is sent on its own rather than
+		 * aggregated; the skbs on a frag_list stay shared with the
+		 * original even after an unclone, so they are never appended.
+		 */
+		if (skb_cloned(skb) &&
+		    (skb_has_frag_list(skb) || skb_unclone(skb, GFP_ATOMIC))) {
+			xfrm_output(NULL, skb);
+			continue;
+		}
+
 		/* If fragmentation was required the returned skb is the last
 		 * IPTFS fragment in the chain, and it's IPTFS header blkoff has
 		 * been set just past the end of the fragment data.
@@ -2273,6 +2286,13 @@ static void iptfs_output_queued(struct xfrm_state *x, struct sk_buff_head *list)
 			if (skb2->len > remaining)
 				break;
 
+			/* Appending re-homes skb2's frag_list, which a clone
+			 * shares with its original. Leave such an skb to be
+			 * sent on its own as the next head.
+			 */
+			if (skb_cloned(skb2) && skb_has_frag_list(skb2))
+				break;
+
 			__skb_unlink(skb2, list);
 
 			/* Consider the buffer Tx'd and no longer owned */
@@ -2292,10 +2312,13 @@ static void iptfs_output_queued(struct xfrm_state *x, struct sk_buff_head *list)
 			/* skb->pp_recycle is passed to __skb_flag_unref for all
 			 * frag pages so we can only share pages with skb's who
 			 * match ourselves.
+			 *
+			 * iptfs_consume_frags() empties skb2's frags, which a
+			 * clone shares with its original.
 			 */
 			shi2 = skb_shinfo(skb2);
 			if (share_ok &&
-			    (shi2->frag_list ||
+			    (skb_cloned(skb2) || shi2->frag_list ||
 			     (!skb2->head_frag && skb_headlen(skb)) ||
 			     skb->pp_recycle != skb2->pp_recycle ||
 			     skb_zcopy(skb2) ||
