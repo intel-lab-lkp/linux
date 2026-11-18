@@ -154,6 +154,9 @@ struct vfio_pci_core_device {
 	u8			tph_policy;
 	u8			tph_opt_in;
 	u32			tph_vcap;
+	s64			*tph_st_cpu;
+	struct hlist_node	tph_cpuhp_node;
+	struct mutex		tph_lock;
 };
 
 enum vfio_pci_io_width {
