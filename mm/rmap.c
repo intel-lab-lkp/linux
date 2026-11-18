@@ -731,6 +731,11 @@ void try_to_unmap_flush_dirty(void)
 		try_to_unmap_flush();
 }
 
+bool try_to_unmap_flush_pending(void)
+{
+	return current->tlb_ubc.flush_required;
+}
+
 /*
  * Bits 0-14 of mm->tlb_flush_batched record pending generations.
  * Bits 16-30 of mm->tlb_flush_batched bit record flushed generations.

@@ -1732,16 +1732,19 @@ failed:
 /**
  * folio_alloc_swap - allocate swap space for a folio
  * @folio: folio we want to move to swap
+ * @may_sync_discard: whether we may wait for synchronous discard I/O
  *
  * Allocate swap space for the folio and add the folio to the
  * swap cache.
  *
  * Context: Caller needs to hold the folio lock.
  * Return: %0 on success, %-E2BIG if splitting the folio might allow swapout,
+ * %-EBUSY if allocation failed but retrying with @may_sync_discard might
+ * succeed,
  * %-ENOSPC if no global swap space is available, or %-ENOMEM if splitting
  * would not help.
  */
-int folio_alloc_swap(struct folio *folio)
+int folio_alloc_swap(struct folio *folio, bool may_sync_discard)
 {
 	unsigned int order = folio_order(folio);
 	unsigned int size = 1 << order;
@@ -1774,6 +1777,8 @@ again:
 	local_unlock(&percpu_swap_cluster.lock);
 
 	if (!order && unlikely(!folio_test_swapcache(folio))) {
+		if (!may_sync_discard)
+			return -EBUSY;
 		if (swap_sync_discard())
 			goto again;
 	}

@@ -1936,7 +1936,7 @@ try_split:
 		folio_mark_uptodate(folio);
 	}
 
-	ret = folio_alloc_swap(folio);
+	ret = folio_alloc_swap(folio, /* may_sync_discard= */ true);
 	if (!ret) {
 		bool first_swapped = shmem_recalc_inode(inode, 0, nr_pages);
 		int error;

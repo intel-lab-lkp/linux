@@ -1156,6 +1156,91 @@ static bool may_enter_fs(struct folio *folio, gfp_t gfp_mask)
 }
 
 /*
+ * Maximum number of staged folios that shrink_folio_list() collects before
+ * it flushes the TLB.
+ */
+#define MAX_STAGED_FOLIOS	64
+
+struct staged_folios {
+	/* Locked folios, waiting for the TLB flush. */
+	struct list_head unflushed;
+	/* Unlocked folios, after the TLB flush (if required). */
+	struct list_head flushed;
+	/* Number of folios in the current batch. */
+	unsigned int nr_folios;
+};
+
+static bool staged_folios_empty(struct staged_folios *staged)
+{
+	return list_empty(&staged->unflushed) &&
+	       list_empty(&staged->flushed);
+}
+
+static void staged_folios_add(struct staged_folios *staged,
+		struct folio *folio, bool unmapped)
+{
+	if (unmapped && try_to_unmap_flush_pending()) {
+		/* Keep the folio locked until we flushed the TLB. */
+		list_add_tail(&folio->lru, &staged->unflushed);
+	} else {
+		folio_unlock(folio);
+		list_add_tail(&folio->lru, &staged->flushed);
+	}
+	staged->nr_folios++;
+}
+
+static void staged_folios_flush(struct staged_folios *staged)
+{
+	struct folio *folio;
+
+	try_to_unmap_flush();
+	list_for_each_entry(folio, &staged->unflushed, lru)
+		folio_unlock(folio);
+	list_splice_tail_init(&staged->unflushed, &staged->flushed);
+}
+
+static struct folio *staged_folios_next(struct staged_folios *staged,
+		struct list_head *folio_list)
+{
+	struct folio *folio;
+
+	if (staged_folios_empty(staged))
+		return NULL;
+	/* Collect more folios until we have enough or there are no more. */
+	if (staged->nr_folios < MAX_STAGED_FOLIOS && !list_empty(folio_list))
+		return NULL;
+
+	/* Flush the TLB and unlock the folios that waited for the flush. */
+	staged_folios_flush(staged);
+
+	folio = list_first_entry(&staged->flushed, struct folio, lru);
+	list_del(&folio->lru);
+	/* We handed out all folios: start collecting again. */
+	if (list_empty(&staged->flushed))
+		staged->nr_folios = 0;
+	return folio;
+}
+
+static int staged_folios_alloc_swap(struct staged_folios *staged,
+		struct folio *folio)
+{
+	bool may_sync_discard = list_empty(&staged->unflushed);
+	int ret;
+
+	ret = folio_alloc_swap(folio, may_sync_discard);
+	if (ret != -EBUSY)
+		return ret;
+
+	/*
+	 * Don't wait for synchronous discard I/O while keeping other folios
+	 * locked: there is potential for deadlocks and long delays.
+	 */
+	staged_folios_flush(staged);
+	may_sync_discard = true;
+	return folio_alloc_swap(folio, may_sync_discard);
+}
+
+/*
  * shrink_folio_list() returns the number of reclaimed pages
  */
 static unsigned int shrink_folio_list(struct list_head *folio_list,
@@ -1166,6 +1251,10 @@ static unsigned int shrink_folio_list(struct list_head *folio_list,
 	struct folio_batch free_folios;
 	LIST_HEAD(ret_folios);
 	LIST_HEAD(demote_folios);
+	struct staged_folios staged = {
+		.unflushed = LIST_HEAD_INIT(staged.unflushed),
+		.flushed = LIST_HEAD_INIT(staged.flushed),
+	};
 	unsigned int nr_reclaimed = 0, nr_demoted = 0;
 	unsigned int pgactivate = 0;
 	bool do_demote_pass;
@@ -1177,14 +1266,40 @@ static unsigned int shrink_folio_list(struct list_head *folio_list,
 	do_demote_pass = can_demote(pgdat->node_id, sc, memcg);
 
 retry:
-	while (!list_empty(folio_list)) {
+	/*
+	 * We take folios from folio_list to pre-process them (lock, check,
+	 * unmap). Then, they move to the staged(unflushed) list, from where
+	 * they move to the staged(flushed) list after a batched TLB flush
+	 * and after unlocking them. If no TLB flush is pending for a folio,
+	 * it moves to the staged(flushed) list directly.
+	 *
+	 * We then take folios from the staged(flushed) list to actually
+	 * reclaim them, or to activate them if they are still mapped.
+	 *
+	 * So we pre-process folios from folio_list until we collected a batch
+	 * of staged folios, or until there are no more folios to
+	 * pre-process. Then, we perform a single TLB flush and reclaim all
+	 * folios of that batch, before we pre-process more folios.
+	 *
+	 * Once all lists are empty, we are done.
+	 *
+	 * TODO: the stages of this algorithm should be cleanly separated.
+	 */
+	while (!list_empty(folio_list) || !staged_folios_empty(&staged)) {
 		struct address_space *mapping;
 		struct folio *folio;
 		enum folio_references references = FOLIOREF_RECLAIM;
 		bool dirty, writeback;
+		bool unmapped = false;
 		unsigned int nr_pages;
 
 		cond_resched();
+
+		folio = staged_folios_next(&staged, folio_list);
+		if (folio) {
+			nr_pages = folio_nr_pages(folio);
+			goto reclaim_staged;
+		}
 
 		folio = lru_to_folio(folio_list);
 		list_del(&folio->lru);
@@ -1324,6 +1439,11 @@ retry:
 			/* Case 3 above */
 			} else {
 				folio_unlock(folio);
+				/*
+				 * Don't wait for writeback while keeping
+				 * staged folios locked.
+				 */
+				staged_folios_flush(&staged);
 				folio_wait_writeback(folio);
 				/* then go back and try same folio again */
 				list_add_tail(&folio->lru, folio_list);
@@ -1382,7 +1502,7 @@ retry:
 				    split_folio_to_list(folio, folio_list))
 					goto activate_locked;
 			}
-			ret = folio_alloc_swap(folio);
+			ret = staged_folios_alloc_swap(&staged, folio);
 			if (ret) {
 				int __maybe_unused order = folio_order(folio);
 
@@ -1401,7 +1521,7 @@ retry:
 				}
 #endif
 				count_mthp_stat(order, MTHP_STAT_SWPOUT_FALLBACK);
-				if (folio_alloc_swap(folio))
+				if (staged_folios_alloc_swap(&staged, folio))
 					goto activate_locked_split;
 			}
 			/*
@@ -1455,20 +1575,35 @@ retry:
 				flags |= TTU_SYNC;
 
 			try_to_unmap(folio, flags);
-			/*
-			 * Flush deferred writable TLB entries before we could
-			 * drop the folio lock and others could start writeback.
-			 */
-			if (folio_test_dirty(folio))
-				try_to_unmap_flush_dirty();
+			unmapped = true;
 			if (folio_mapped(folio)) {
 				stat->nr_unmap_fail += nr_pages;
 				if (!was_swapbacked &&
 				    folio_test_swapbacked(folio))
 					stat->nr_lazyfree_fail += nr_pages;
-				goto activate_locked;
 			}
 		}
+
+		staged_folios_add(&staged, folio, unmapped);
+		continue;
+
+reclaim_staged:
+		if (!folio_trylock(folio))
+			goto keep;
+
+		/*
+		 * We failed to unmap the folio, or it was mapped again while it
+		 * was unlocked.
+		 */
+		if (folio_mapped(folio))
+			goto activate_locked;
+		/*
+		 * While the folio was unlocked, writeback might have started, or
+		 * it might have been poisoned.
+		 */
+		if (folio_test_writeback(folio) ||
+		    folio_contain_hwpoisoned_page(folio))
+			goto keep_locked;
 
 		/*
 		 * Folio is unmapped now so it cannot be newly pinned anymore.
