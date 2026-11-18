@@ -958,7 +958,7 @@ impl Process {
             .lock()
             .by_handle
             .get_mut(&handle)
-            .ok_or(ENOENT)?
+            .ok_or(EINVAL)?
             .node_ref()
             .clone(strong)
     }
