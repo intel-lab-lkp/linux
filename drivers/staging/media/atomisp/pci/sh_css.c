@@ -8120,8 +8120,6 @@ ia_css_stream_create(const struct ia_css_stream_config *stream_config,
 				sh_css_pipe_get_viewfinder_frame_info(curr_pipe,
 								      &pipe_info->vf_output_info[j],
 								      j);
-				if (err)
-					goto ERR;
 			}
 		}
 
