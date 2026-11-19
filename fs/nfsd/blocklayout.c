@@ -228,7 +228,7 @@ nfsd4_block_commit_blocks(struct inode *inode, struct nfsd4_layoutcommit *lcp,
 	error = inode->i_sb->s_export_op->block_ops->commit_blocks(inode,
 			iomaps, nr_iomaps,
 			lcp->lc_size_chg ? lcp->lc_newsize : 0);
-	kfree(iomaps);
+	kvfree(iomaps);
 	return nfserrno(error);
 }
 
