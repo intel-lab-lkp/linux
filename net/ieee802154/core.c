@@ -222,6 +222,7 @@ int cfg802154_switch_netns(struct cfg802154_registered_device *rdev,
 {
 	struct wpan_dev *wpan_dev;
 	int err = 0;
+	int ret;
 
 	list_for_each_entry(wpan_dev, &rdev->wpan_dev_list, list) {
 		if (!wpan_dev->netdev)
@@ -249,6 +250,7 @@ int cfg802154_switch_netns(struct cfg802154_registered_device *rdev,
 	return 0;
 
 errout:
+	ret = err;
 	/* failed -- clean up to old netns */
 	net = wpan_phy_net(&rdev->wpan_phy);
 
@@ -264,7 +266,7 @@ errout:
 		wpan_dev->netdev->netns_immutable = true;
 	}
 
-	return err;
+	return ret;
 }
 
 void cfg802154_dev_free(struct cfg802154_registered_device *rdev)
