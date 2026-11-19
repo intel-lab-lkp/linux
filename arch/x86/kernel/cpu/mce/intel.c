@@ -244,6 +244,7 @@ static void cmci_claim_bank(int bank, u64 val, int bios_zero_thresh, int *bios_w
 
 	/* This CPU successfully set the enable bit. */
 	set_bit(bank, (void *)this_cpu_ptr(&mce_banks_owned));
+	storm->banks[bank].poll_only = false;
 
 	if ((val & MCI_CTL2_CMCI_THRESHOLD_MASK) == CMCI_STORM_THRESHOLD) {
 		pr_notice("CPU%d BANK%d CMCI inherited storm\n", smp_processor_id(), bank);
@@ -407,6 +408,13 @@ void intel_init_cmci(void)
 	int banks;
 
 	if (!cmci_supported(&banks)) {
+		struct mca_storm_desc *storm = this_cpu_ptr(&storm_desc);
+		int i;
+
+		/* Without CMCI there is no storm to mitigate. */
+		for (i = 0; i < MAX_NR_BANKS; i++)
+			storm->banks[i].poll_only = true;
+
 		mc_poll_banks = cmci_mc_poll_banks;
 		return;
 	}
