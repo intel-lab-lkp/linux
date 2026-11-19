@@ -49,4 +49,9 @@ struct mali_vpu_session {
 int mali_vpu_session_init(struct mali_vpu_session *sess);
 void mali_vpu_session_cleanup(struct mali_vpu_session *sess);
 
+static inline struct mali_vpu_session *mali_vpu_get_session(struct file *filp)
+{
+	return container_of(file_to_v4l2_fh(filp), struct mali_vpu_session, fh);
+}
+
 #endif /* __MALI_VPU_SESSION_H__ */
