@@ -514,7 +514,7 @@ struct uacce_device *uacce_alloc(struct device *parent,
 	uacce->flags = flags;
 	uacce->ops = interface->ops;
 
-	ret = xa_alloc(&uacce_xa, &uacce->dev_id, uacce, xa_limit_32b,
+	ret = xa_alloc(&uacce_xa, &uacce->dev_id, NULL, xa_limit_32b,
 		       GFP_KERNEL);
 	if (ret < 0)
 		goto err_with_uacce;
@@ -549,6 +549,10 @@ int uacce_register(struct uacce_device *uacce)
 
 	if (!uacce)
 		return -ENODEV;
+
+	ret = xa_err(xa_store(&uacce_xa, uacce->dev_id, uacce, GFP_KERNEL));
+	if (ret)
+		return ret;
 
 	uacce->cdev = cdev_alloc();
 	if (!uacce->cdev)
