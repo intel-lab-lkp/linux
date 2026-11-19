@@ -349,8 +349,15 @@ armpmu_add(struct perf_event *event, int flags)
 
 	/* If we don't have a space for the counter then finish early. */
 	idx = armpmu->get_event_idx(hw_events, event);
-	if (idx < 0)
+	if (idx < 0) {
+		if (!bitmap_equal(hw_events->cntr_mask, armpmu->cntr_mask,
+				  ARMPMU_MAX_HWEVENTS)) {
+			hw_events->host_squeezed = true;
+			if (event->group_leader->attr.pinned)
+				pr_warn_once("perf: Pinned host event squeezed out by KVM guest PMU partition\n");
+		}
 		return idx;
+	}
 
 	/* The newly-allocated counter should be empty */
 	WARN_ON_ONCE(hw_events->events[idx]);

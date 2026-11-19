@@ -154,6 +154,70 @@ static u64 kvm_pmu_direct_pmcr_read(struct kvm_vcpu *vcpu)
 	return u64_replace_bits(pmcr, n, ARMV8_PMU_PMCR_N);
 }
 
+/* Callback to update counter mask between perf scheduling */
+static void kvm_pmu_update_mask(struct pmu *pmu, void *data)
+{
+	struct arm_pmu *arm_pmu = to_arm_pmu(pmu);
+	struct pmu_hw_events *cpuc = this_cpu_ptr(arm_pmu->hw_events);
+	unsigned long *new_mask = data;
+
+	bitmap_copy(cpuc->cntr_mask, new_mask, ARMPMU_MAX_HWEVENTS);
+}
+
+/**
+ * kvm_pmu_set_guest_counters() - Handle dynamic counter reservations
+ * @cpu_pmu: struct arm_pmu to potentially modify
+ * @guest_mask: new guest mask for the pmu
+ *
+ * Check if guest counters will interfere with current host events and
+ * call into perf_pmu_resched_update if a reschedule is required.
+ */
+static void kvm_pmu_set_guest_counters(struct arm_pmu *cpu_pmu, u64 guest_mask)
+{
+	struct pmu_hw_events *cpuc;
+	DECLARE_BITMAP(guest_bitmap, ARMPMU_MAX_HWEVENTS);
+	DECLARE_BITMAP(new_mask, ARMPMU_MAX_HWEVENTS);
+	unsigned long flags;
+	bool need_resched = false;
+
+	if (!cpu_pmu)
+		return;
+
+	local_irq_save(flags);
+	cpuc = this_cpu_ptr(cpu_pmu->hw_events);
+
+	bitmap_from_arr64(guest_bitmap, &guest_mask, ARMPMU_MAX_HWEVENTS);
+	bitmap_copy(new_mask, cpu_pmu->cntr_mask, ARMPMU_MAX_HWEVENTS);
+
+	if (guest_mask) {
+		/* Subtract guest counters from available host mask */
+		bitmap_andnot(new_mask, new_mask, guest_bitmap, ARMPMU_MAX_HWEVENTS);
+
+		/* Did we collide with an active host event? */
+		if (bitmap_intersects(cpuc->used_mask, guest_bitmap, ARMPMU_MAX_HWEVENTS)) {
+			need_resched = true;
+			cpuc->host_squeezed = true;
+		}
+	} else {
+		/*
+		 * Restoring to full mask.
+		 * Only resched if we previously squeezed an event.
+		 */
+		if (cpuc->host_squeezed) {
+			need_resched = true;
+			cpuc->host_squeezed = false;
+		}
+	}
+
+	if (need_resched)
+		/* Collision: run full perf reschedule */
+		perf_pmu_resched_update(&cpu_pmu->pmu, kvm_pmu_update_mask, new_mask);
+	else
+		/* Host was never using guest counters anyway */
+		bitmap_copy(cpuc->cntr_mask, new_mask, ARMPMU_MAX_HWEVENTS);
+	local_irq_restore(flags);
+}
+
 static u64 kvm_pmu_direct_cntr_read(struct kvm_vcpu *vcpu, u8 idx)
 {
 	lockdep_assert_preemption_disabled();
@@ -422,15 +486,7 @@ static void kvm_pmu_apply_event_filter(struct kvm_vcpu *vcpu)
 		kvm_pmu_apply_single_event_filter(vcpu, i);
 }
 
-/**
- * kvm_pmu_load() - Load untrapped PMU registers
- * @vcpu: Pointer to struct kvm_vcpu
- *
- * Load all untrapped PMU registers from the VCPU into the PCPU. Mask
- * to only bits belonging to guest-reserved counters and leave
- * host-reserved counters alone in bitmask registers.
- */
-void kvm_pmu_load(struct kvm_vcpu *vcpu)
+static void __kvm_pmu_load(struct kvm_vcpu *vcpu, bool reserve_counters)
 {
 	struct arm_pmu *pmu = vcpu->kvm->arch.arm_pmu;
 	unsigned long guest_counters;
@@ -446,13 +502,18 @@ void kvm_pmu_load(struct kvm_vcpu *vcpu)
 	if (!kvm_pmu_is_partitioned(vcpu->kvm) || !vcpu->wants_to_run || !pmu)
 		return;
 
+	preempt_disable();
 	local_irq_save(flags);
 	if (!cpumask_test_cpu(smp_processor_id(), &pmu->supported_cpus)) {
 		local_irq_restore(flags);
+		preempt_enable();
 		return;
 	}
 
 	guest_counters = kvm_vcpu_pmu_guest_counter_mask(vcpu);
+	if (reserve_counters)
+		kvm_pmu_set_guest_counters(pmu, guest_counters);
+
 	kvm_pmu_apply_event_filter(vcpu);
 
 	for_each_set_bit(i, &guest_counters, ARMPMU_MAX_HWEVENTS) {
@@ -505,17 +566,26 @@ void kvm_pmu_load(struct kvm_vcpu *vcpu)
 	write_sysreg(~val & mask, pmintenclr_el1);
 
 	local_irq_restore(flags);
+	preempt_enable();
 }
 
 /**
- * kvm_pmu_put() - Put untrapped PMU registers
+ * kvm_pmu_load() - Load untrapped PMU registers
  * @vcpu: Pointer to struct kvm_vcpu
  *
- * Put all untrapped PMU registers from the PCPU into the VCPU. Mask
+ * Load all untrapped PMU registers from the VCPU into the PCPU. Mask
  * to only bits belonging to guest-reserved counters and leave
  * host-reserved counters alone in bitmask registers.
  */
-void kvm_pmu_put(struct kvm_vcpu *vcpu)
+void kvm_pmu_load(struct kvm_vcpu *vcpu)
+{
+	bool reserve = !vcpu_get_flag(vcpu, IN_NESTED_ERET) &&
+		       !vcpu_get_flag(vcpu, IN_NESTED_EXCEPTION);
+
+	__kvm_pmu_load(vcpu, reserve);
+}
+
+static void __kvm_pmu_put(struct kvm_vcpu *vcpu, bool release_counters)
 {
 	struct arm_pmu *pmu = vcpu->kvm->arch.arm_pmu;
 	unsigned long guest_counters;
@@ -533,12 +603,13 @@ void kvm_pmu_put(struct kvm_vcpu *vcpu)
 	if (!kvm_pmu_is_partitioned(vcpu->kvm) || !vcpu->wants_to_run || !pmu)
 		return;
 
-	local_irq_save(flags);
+	preempt_disable();
 	if (!cpumask_test_cpu(smp_processor_id(), &pmu->supported_cpus)) {
-		local_irq_restore(flags);
+		preempt_enable();
 		return;
 	}
 
+	local_irq_save(flags);
 	guest_counters = kvm_vcpu_pmu_guest_counter_mask(vcpu);
 	mask = guest_counters;
 
@@ -595,5 +666,24 @@ void kvm_pmu_put(struct kvm_vcpu *vcpu)
 	__vcpu_rmw_sys_reg(vcpu, PMOVSSET_EL0, |=, val & mask);
 	write_sysreg(val & mask, pmovsclr_el0);
 
+	if (release_counters)
+		kvm_pmu_set_guest_counters(pmu, 0);
 	local_irq_restore(flags);
+	preempt_enable();
+}
+
+/**
+ * kvm_pmu_put() - Put untrapped PMU registers
+ * @vcpu: Pointer to struct kvm_vcpu
+ *
+ * Put all untrapped PMU registers from the PCPU into the VCPU. Mask
+ * to only bits belonging to guest-reserved counters and leave
+ * host-reserved counters alone in bitmask registers.
+ */
+void kvm_pmu_put(struct kvm_vcpu *vcpu)
+{
+	bool release = !vcpu_get_flag(vcpu, IN_NESTED_ERET) &&
+		       !vcpu_get_flag(vcpu, IN_NESTED_EXCEPTION);
+
+	__kvm_pmu_put(vcpu, release);
 }
