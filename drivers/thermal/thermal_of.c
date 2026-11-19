@@ -10,8 +10,11 @@
 
 #include <linux/err.h>
 #include <linux/export.h>
+#include <linux/init.h>
 #include <linux/of.h>
 #include <linux/slab.h>
+#include <linux/overflow.h>
+#include <linux/units.h>
 #include <linux/thermal.h>
 #include <linux/types.h>
 #include <linux/string.h>
@@ -31,6 +34,14 @@ struct thermal_of_source {
 	struct thermal_zone_device *tz;
 };
 
+struct thermal_of_aggregate {
+	struct list_head node;
+	struct device_node *np;
+	struct thermal_zone_aggregate aggregate;
+	struct thermal_zone_device *tz;
+	bool failed;
+};
+
 /*
  * OF lifecycle operations are serialized outside thermal zone locks. Thermal
  * callbacks must not acquire this mutex. Source removal holds it until all OF
@@ -38,6 +49,11 @@ struct thermal_of_source {
  */
 static DEFINE_MUTEX(thermal_of_lock);
 static LIST_HEAD(thermal_of_sources);
+static LIST_HEAD(thermal_of_aggregates);
+static bool thermal_of_aggregates_ready;
+
+static void thermal_of_aggregate_retry(void);
+static void thermal_of_aggregate_release(struct thermal_of_aggregate *aggregate);
 
 static int thermal_of_source_add(struct device_node *provider, int id,
 				 struct thermal_zone_device *tz)
@@ -59,18 +75,29 @@ static int thermal_of_source_add(struct device_node *provider, int id,
 	source->id = id;
 	source->tz = tz;
 	list_add_tail(&source->node, &thermal_of_sources);
+	thermal_of_aggregate_retry();
 	return 0;
 }
 
 static void thermal_of_source_remove(struct thermal_zone_device *tz)
 {
 	struct thermal_of_source *source;
+	struct thermal_of_aggregate *aggregate;
+	unsigned int i;
 
 	guard(mutex)(&thermal_of_lock);
 	list_for_each_entry(source, &thermal_of_sources, node) {
 		if (source->tz != tz)
 			continue;
 		list_del(&source->node);
+		list_for_each_entry(aggregate, &thermal_of_aggregates, node) {
+			for (i = 0; i < aggregate->aggregate.num_entries; i++) {
+				if (aggregate->aggregate.entries[i].tz == tz) {
+					thermal_of_aggregate_release(aggregate);
+					break;
+				}
+			}
+		}
 		of_node_put(source->provider);
 		kfree(source);
 		break;
@@ -217,6 +244,9 @@ static struct device_node *of_thermal_zone_find(struct device_node *sensor, int 
 			pr_err("%pOFP: missing thermal sensor\n", child);
 			return ERR_PTR(-EINVAL);
 		}
+		/* Multi-source nodes are instantiated by the OF aggregate manager. */
+		if (count > 1)
+			continue;
 
 		for (i = 0; i < count; i++) {
 
@@ -486,7 +516,8 @@ thermal_of_zone_register_node(struct device_node *np, void *data,
 	if (ret) {
 		pr_err("Failed to enable thermal zone '%s', id=%d: %d\n",
 		       tz->type, tz->id, ret);
-		thermal_of_zone_unregister(tz);
+		thermal_zone_device_disable(tz);
+		thermal_zone_device_unregister(tz);
 		return ERR_PTR(ret);
 	}
 
@@ -527,6 +558,190 @@ thermal_of_zone_register(struct device_node *sensor, int id, void *data,
 
 	return tz;
 }
+
+#ifdef CONFIG_THERMAL_AGGREGATION
+/* All aggregate construction and destruction runs under thermal_of_lock. */
+static void thermal_of_aggregate_release(struct thermal_of_aggregate *aggregate)
+{
+	unsigned int i;
+
+	lockdep_assert_held(&thermal_of_lock);
+	if (aggregate->tz) {
+		/* Do not recurse into OF source removal while holding the OF mutex. */
+		thermal_zone_device_disable(aggregate->tz);
+		thermal_zone_device_unregister(aggregate->tz);
+		aggregate->tz = NULL;
+	}
+	for (i = 0; i < aggregate->aggregate.num_entries; i++)
+		thermal_zone_device_put(aggregate->aggregate.entries[i].tz);
+	kfree(aggregate->aggregate.entries);
+	aggregate->aggregate.entries = NULL;
+	aggregate->aggregate.num_entries = 0;
+}
+
+static struct thermal_zone_device *
+thermal_of_source_get(const struct of_phandle_args *spec)
+{
+	struct thermal_of_source *source;
+	int id = spec->args_count ? spec->args[0] : 0;
+
+	lockdep_assert_held(&thermal_of_lock);
+	/* The existing OF source registration API identifies sensors by one ID. */
+	if (spec->args_count > 1)
+		return ERR_PTR(-EINVAL);
+
+	list_for_each_entry(source, &thermal_of_sources, node)
+		if (source->provider == spec->np && source->id == id)
+			return thermal_zone_device_get(source->tz);
+
+	return ERR_PTR(-EPROBE_DEFER);
+}
+
+static int thermal_of_aggregate_create(struct thermal_of_aggregate *aggregate)
+{
+	struct thermal_zone_device_ops ops = {};
+	struct thermal_zone_params tzp = { .no_hwmon = true };
+	struct device_node *np = aggregate->np;
+	struct thermal_zone_aggregate *desc = &aggregate->aggregate;
+	int count, ncoef, ret, i;
+
+	lockdep_assert_held(&thermal_of_lock);
+	count = of_count_phandle_with_args(np, "thermal-sensors", "#thermal-sensor-cells");
+	if (count < 2)
+		return -EINVAL;
+
+	desc->entries = kcalloc(count, sizeof(*desc->entries), GFP_KERNEL);
+	if (!desc->entries)
+		return -ENOMEM;
+
+	for (i = 0; i < count; i++) {
+		struct of_phandle_args spec;
+		struct thermal_zone_device *source;
+
+		ret = of_parse_phandle_with_args(np, "thermal-sensors", "#thermal-sensor-cells",
+						 i, &spec);
+		if (ret)
+			goto release;
+		source = thermal_of_source_get(&spec);
+		of_node_put(spec.np);
+		if (IS_ERR(source)) {
+			ret = PTR_ERR(source);
+			goto release;
+		}
+		desc->entries[i].tz = source;
+		desc->num_entries++;
+	}
+
+	/*
+	 * Missing multipliers request the core's averaging defaults. Explicit DT
+	 * multipliers retain their unscaled integer meaning: convert to internal
+	 * thousandths, checking overflow, and leave the final offset unscaled.
+	 * Legacy single-source calibration never passes through this path.
+	 */
+	if (of_find_property(np, "coefficients", NULL)) {
+		ncoef = of_property_count_u32_elems(np, "coefficients");
+		if (ncoef != count && ncoef != count + 1) {
+			ret = -EINVAL;
+			goto release;
+		}
+		for (i = 0; i < count; i++) {
+			u32 raw;
+
+			ret = of_property_read_u32_index(np, "coefficients", i, &raw);
+			if (ret)
+				goto release;
+			if (check_mul_overflow((s32)raw, (s32)PERMILLE,
+					       &desc->entries[i].coefficient)) {
+				ret = -ERANGE;
+				goto release;
+			}
+			/* Zero cannot encode presence in the core initializer. */
+			if (!desc->entries[i].coefficient) {
+				ret = -EINVAL;
+				goto release;
+			}
+		}
+		if (ncoef == count + 1) {
+			u32 raw;
+
+			ret = of_property_read_u32_index(np, "coefficients", count, &raw);
+			if (ret)
+				goto release;
+			tzp.offset = (s32)raw;
+		}
+	}
+	of_property_read_u32(np, "sustainable-power", &tzp.sustainable_power);
+	tzp.aggregate = desc;
+	aggregate->tz = thermal_of_zone_register_node(np, NULL, &ops, &tzp);
+	if (IS_ERR(aggregate->tz)) {
+		ret = PTR_ERR(aggregate->tz);
+		aggregate->tz = NULL;
+		goto release;
+	}
+	return 0;
+
+release:
+	thermal_of_aggregate_release(aggregate);
+	return ret;
+}
+
+static void thermal_of_aggregate_retry(void)
+{
+	struct thermal_of_aggregate *aggregate;
+
+	lockdep_assert_held(&thermal_of_lock);
+	if (!thermal_of_aggregates_ready)
+		return;
+
+	list_for_each_entry(aggregate, &thermal_of_aggregates, node) {
+		int ret;
+
+		if (aggregate->tz || aggregate->failed)
+			continue;
+		ret = thermal_of_aggregate_create(aggregate);
+		if (ret && ret != -EPROBE_DEFER && ret != -ENOMEM) {
+			pr_err("%pOF: failed to create aggregate: %d\n", aggregate->np, ret);
+			aggregate->failed = true;
+		}
+	}
+}
+
+static int __init thermal_of_aggregate_init(void)
+{
+	struct device_node *np __free(device_node) = of_find_node_by_name(NULL, "thermal-zones");
+
+	if (!np)
+		return 0;
+
+	guard(mutex)(&thermal_of_lock);
+	for_each_available_child_of_node_scoped(np, child) {
+		struct thermal_of_aggregate *aggregate;
+		int count;
+
+		count = of_count_phandle_with_args(child, "thermal-sensors",
+						   "#thermal-sensor-cells");
+		if (count <= 1)
+			continue;
+		aggregate = kzalloc_obj(*aggregate);
+		if (!aggregate) {
+			struct thermal_of_aggregate *pos, *next;
+
+			list_for_each_entry_safe(pos, next, &thermal_of_aggregates, node) {
+				list_del(&pos->node);
+				of_node_put(pos->np);
+				kfree(pos);
+			}
+			return -ENOMEM;
+		}
+		aggregate->np = of_node_get(child);
+		list_add_tail(&aggregate->node, &thermal_of_aggregates);
+	}
+	thermal_of_aggregates_ready = true;
+	thermal_of_aggregate_retry();
+	return 0;
+}
+late_initcall(thermal_of_aggregate_init);
+#endif /* CONFIG_THERMAL_AGGREGATION */
 
 static void devm_thermal_of_zone_release(struct device *dev, void *res)
 {
