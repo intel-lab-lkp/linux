@@ -693,6 +693,8 @@ static struct aa_label *__label_insert(struct aa_labelset *ls,
 
 		parent = *new;
 		if (result == 0) {
+			bool replaced;
+
 			/* !__aa_get_label means queued for destruction,
 			 * so replace in place, however the label has
 			 * died before the replacement so do not share
@@ -703,7 +705,8 @@ static struct aa_label *__label_insert(struct aa_labelset *ls,
 					return this;
 			} else
 				__proxy_share(this, label);
-			AA_BUG(!__label_replace(this, label));
+			replaced = __label_replace(this, label);
+			AA_BUG(!replaced);
 			return aa_get_label(label);
 		} else if (result < 0)
 			new = &((*new)->rb_left);
