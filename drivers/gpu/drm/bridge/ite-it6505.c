@@ -439,6 +439,8 @@ struct it6505 {
 	struct mutex extcon_lock;
 	struct mutex mode_lock; /* used to bridge_detect */
 	struct mutex aux_lock; /* used to aux data transfers */
+	struct mutex aux_reg_lock; /* protects aux_registered */
+	bool aux_registered;
 	struct regmap *regmap;
 	struct drm_display_mode source_output_mode;
 	struct drm_display_mode video_info;
@@ -3069,6 +3071,29 @@ static inline struct it6505 *bridge_to_it6505(struct drm_bridge *bridge)
 	return container_of(bridge, struct it6505, bridge);
 }
 
+static int it6505_register_aux(struct it6505 *it6505)
+{
+	int ret;
+
+	mutex_lock(&it6505->aux_reg_lock);
+	ret = drm_dp_aux_register(&it6505->aux);
+	if (!ret)
+		it6505->aux_registered = true;
+	mutex_unlock(&it6505->aux_reg_lock);
+
+	return ret;
+}
+
+static void it6505_unregister_aux(struct it6505 *it6505)
+{
+	mutex_lock(&it6505->aux_reg_lock);
+	if (it6505->aux_registered) {
+		drm_dp_aux_unregister(&it6505->aux);
+		it6505->aux_registered = false;
+	}
+	mutex_unlock(&it6505->aux_reg_lock);
+}
+
 static int it6505_bridge_attach(struct drm_bridge *bridge,
 				struct drm_encoder *encoder,
 				enum drm_bridge_attach_flags flags)
@@ -3085,8 +3110,7 @@ static int it6505_bridge_attach(struct drm_bridge *bridge,
 	/* Register aux channel */
 	it6505->aux.drm_dev = bridge->dev;
 
-	ret = drm_dp_aux_register(&it6505->aux);
-
+	ret = it6505_register_aux(it6505);
 	if (ret < 0) {
 		dev_err(dev, "Failed to register aux: %d", ret);
 		return ret;
@@ -3096,6 +3120,7 @@ static int it6505_bridge_attach(struct drm_bridge *bridge,
 		ret = it6505_use_notifier_module(it6505);
 		if (ret < 0) {
 			dev_err(dev, "use notifier module failed");
+			it6505_unregister_aux(it6505);
 			return ret;
 		}
 	}
@@ -3109,6 +3134,7 @@ static void it6505_bridge_detach(struct drm_bridge *bridge)
 
 	flush_work(&it6505->link_works);
 	it6505_remove_notifier_module(it6505);
+	it6505_unregister_aux(it6505);
 }
 
 static enum drm_mode_status
@@ -3573,6 +3599,7 @@ static int it6505_i2c_probe(struct i2c_client *client)
 	mutex_init(&it6505->extcon_lock);
 	mutex_init(&it6505->mode_lock);
 	mutex_init(&it6505->aux_lock);
+	mutex_init(&it6505->aux_reg_lock);
 
 	it6505->bridge.of_node = client->dev.of_node;
 	it6505->connector_status = connector_status_disconnected;
@@ -3655,7 +3682,7 @@ static void it6505_i2c_remove(struct i2c_client *client)
 	struct it6505 *it6505 = i2c_get_clientdata(client);
 
 	drm_bridge_remove(&it6505->bridge);
-	drm_dp_aux_unregister(&it6505->aux);
+	it6505_unregister_aux(it6505);
 	it6505_debugfs_remove(it6505);
 	it6505_remove_notifier_module(it6505);
 	disable_irq(it6505->irq);
