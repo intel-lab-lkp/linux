@@ -211,10 +211,13 @@ int for_each_thermal_cooling_device(int (*cb)(struct thermal_cooling_device *,
 int for_each_thermal_governor(int (*cb)(struct thermal_governor *, void *),
 			      void *thermal_governor);
 
+struct thermal_zone_device *thermal_zone_device_get(struct thermal_zone_device *tz);
+void thermal_zone_device_put(struct thermal_zone_device *tz);
+
 struct thermal_zone_device *thermal_zone_get_by_id(int id);
 
 DEFINE_CLASS(thermal_zone_get_by_id, struct thermal_zone_device *,
-	     if (_T) put_device(&_T->device), thermal_zone_get_by_id(id), int id)
+	     thermal_zone_device_put(_T), thermal_zone_get_by_id(id), int id)
 
 static inline bool cdev_is_power_actor(struct thermal_cooling_device *cdev)
 {

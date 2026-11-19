@@ -698,6 +698,35 @@ int for_each_thermal_zone(int (*cb)(struct thermal_zone_device *, void *),
 	return 0;
 }
 
+/**
+ * thermal_zone_device_get() - acquire a thermal zone device reference
+ * @tz: thermal zone device, or NULL
+ *
+ * The caller must protect @tz against concurrent destruction, for example
+ * by holding an existing reference or thermal_list_lock. The reference
+ * protects the zone's lifetime, not its operational availability.
+ *
+ * Return: @tz, or NULL if @tz is NULL.
+ */
+struct thermal_zone_device *
+thermal_zone_device_get(struct thermal_zone_device *tz)
+{
+	if (tz)
+		get_device(&tz->device);
+
+	return tz;
+}
+
+/**
+ * thermal_zone_device_put() - release a thermal zone device reference
+ * @tz: thermal zone device, or NULL
+ */
+void thermal_zone_device_put(struct thermal_zone_device *tz)
+{
+	if (tz)
+		put_device(&tz->device);
+}
+
 struct thermal_zone_device *thermal_zone_get_by_id(int id)
 {
 	struct thermal_zone_device *tz;
@@ -705,10 +734,8 @@ struct thermal_zone_device *thermal_zone_get_by_id(int id)
 	guard(mutex)(&thermal_list_lock);
 
 	list_for_each_entry(tz, &thermal_tz_list, node) {
-		if (tz->id == id) {
-			get_device(&tz->device);
-			return tz;
-		}
+		if (tz->id == id)
+			return thermal_zone_device_get(tz);
 	}
 
 	return NULL;
