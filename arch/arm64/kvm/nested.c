@@ -896,6 +896,30 @@ static unsigned long s2_mapping_to_nested_start(struct kvm_guest_s2_mapping *map
 	return mapping->nested.start & ~S2_MMU_IDX_MASK;
 }
 
+static bool guest_s2_mapping_exists(struct kvm_s2_mmu *mmu,
+				    struct kvm_guest_s2_mapping *mapping)
+{
+	struct interval_tree_node *node;
+
+	for (node = interval_tree_iter_first(&mmu->guest_s2_mappings,
+					     mapping->nested.start,
+					     mapping->nested.last);
+	     node;
+	     node = interval_tree_iter_next(node, mapping->nested.start,
+					    mapping->nested.last)) {
+		struct kvm_guest_s2_mapping *curr;
+
+		curr = container_of(node, struct kvm_guest_s2_mapping, nested);
+		if (curr->nested.start == mapping->nested.start &&
+		    curr->nested.last == mapping->nested.last &&
+		    curr->canonical.start == mapping->canonical.start &&
+		    curr->canonical.last == mapping->canonical.last)
+			return true;
+	}
+
+	return false;
+}
+
 void kvm_record_guest_s2_mapping(struct kvm_s2_mmu *mmu, gpa_t canonical_ipa,
 				 gpa_t nested_ipa, size_t map_size,
 				 struct kvm_guest_s2_mapping *mapping)
@@ -915,9 +939,32 @@ void kvm_record_guest_s2_mapping(struct kvm_s2_mmu *mmu, gpa_t canonical_ipa,
 
 	tag_s2_mapping_mmu(mapping, mmu);
 
-	guard(spinlock)(&kvm->arch.guest_s2_tracking_lock);
-	interval_tree_insert(&mapping->nested, &mmu->guest_s2_mappings);
-	interval_tree_insert(&mapping->canonical, &kvm->arch.mmu.guest_s2_mappings);
+	scoped_guard(spinlock, &kvm->arch.guest_s2_tracking_lock) {
+		if (!guest_s2_mapping_exists(mmu, mapping)) {
+			interval_tree_insert(&mapping->nested,
+					     &mmu->guest_s2_mappings);
+			interval_tree_insert(&mapping->canonical,
+					     &kvm->arch.mmu.guest_s2_mappings);
+			mapping = NULL;
+		}
+	}
+
+	kfree(mapping);
+}
+
+static bool guest_s2_mapping_unmapped(struct kvm_s2_mmu *mmu,
+				      gpa_t nested_start, size_t map_size)
+{
+	kvm_pte_t pte;
+	s8 level;
+
+	if (!mmu->pgt)
+		return true;
+
+	if (kvm_pgtable_get_leaf(mmu->pgt, nested_start, &pte, &level, 0))
+		return false;
+
+	return !kvm_pte_valid(pte) && kvm_granule_size(level) >= map_size;
 }
 
 void kvm_remove_guest_s2_mappings(struct kvm_s2_mmu *mmu, gpa_t nipa,
@@ -937,17 +984,24 @@ void kvm_remove_guest_s2_mappings(struct kvm_s2_mmu *mmu, gpa_t nipa,
 	node = interval_tree_iter_first(&mmu->guest_s2_mappings, nipa, nipa_end);
 	while (node) {
 		unsigned long nested_start;
+		size_t map_size;
 
 		next = interval_tree_iter_next(node, nipa, nipa_end);
 		mapping = container_of(node, struct kvm_guest_s2_mapping,
 				       nested);
 		/*
-		 * Tracking must be conservative on removal, only remove
-		 * mappings that are within the unmap range.
+		 * A sub-block unmap tears down an unsplit shadow block entry
+		 * in mmu->pgt, whereas a split block may still have valid
+		 * sub-page entries outside [nipa, nipa_end]. Remove the
+		 * tracking entry when it lies within the unmap range or no
+		 * mappings remain across its span in mmu->pgt.
 		 */
 		nested_start = s2_mapping_to_nested_start(mapping);
-		if (nipa <= nested_start && nipa_end >= mapping->nested.last) {
-			interval_tree_remove(&mapping->nested, &mmu->guest_s2_mappings);
+		map_size = mapping->nested.last - nested_start + 1;
+		if ((nipa <= nested_start && nipa_end >= mapping->nested.last) ||
+		    guest_s2_mapping_unmapped(mmu, nested_start, map_size)) {
+			interval_tree_remove(&mapping->nested,
+					     &mmu->guest_s2_mappings);
 			interval_tree_remove(&mapping->canonical,
 					     &kvm->arch.mmu.guest_s2_mappings);
 			kfree(mapping);
