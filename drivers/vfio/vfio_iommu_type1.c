@@ -93,8 +93,8 @@ struct vfio_dma {
 	bool			iommu_mapped;
 	bool			lock_cap;	/* capable(CAP_IPC_LOCK) */
 	bool			vaddr_invalid;
-	bool			has_rsvd;	/* has 1 or more rsvd pfns */
-	bool			has_non_rsvd;	/* has 1 or more !rsvd pfns */
+	bool			has_pfnmap;	/* has 1 or more pfnmap pfns */
+	bool			has_gup_pinned;	/* has 1 or more GUP-pinned pfns */
 	struct task_struct	*task;
 	struct rb_root		pfn_list;	/* Ex-user pinned pfn list */
 	unsigned long		*bitmap;
@@ -416,6 +416,13 @@ static struct vfio_pfn *vfio_iova_get_vfio_pfn(struct vfio_dma *dma,
 	return vpfn;
 }
 
+static inline void put_gup_pfns(unsigned long start_pfn, unsigned long npage,
+				int prot)
+{
+	unpin_user_page_range_dirty_lock(pfn_to_page(start_pfn), npage,
+					 prot & IOMMU_WRITE);
+}
+
 static int vfio_iova_put_vfio_pfn(struct vfio_dma *dma, struct vfio_pfn *vpfn)
 {
 	int ret = 0;
@@ -523,12 +530,11 @@ static void vfio_batch_init_single(struct vfio_batch *batch)
 
 static void vfio_batch_unpin(struct vfio_batch *batch, struct vfio_dma *dma)
 {
-	while (batch->size) {
-		unsigned long pfn = page_to_pfn(batch->pages[batch->offset]);
-
-		put_pfn(pfn, dma->prot);
-		batch->offset++;
-		batch->size--;
+	if (batch->size) {
+		unpin_user_pages_dirty_lock(&batch->pages[batch->offset],
+					    batch->size,
+					    dma->prot & IOMMU_WRITE);
+		batch->size = 0;
 	}
 }
 
@@ -674,6 +680,15 @@ static long vpfn_pages(struct vfio_dma *dma,
 }
 
 /*
+ * After a successful vaddr_get_pfns(), GUP populates batch->pages while
+ * VM_PFNMAP leaves the batch empty.
+ */
+static bool vfio_batch_is_pfnmap(const struct vfio_batch *batch)
+{
+	return batch->size == 0;
+}
+
+/*
  * Attempt to pin pages.  We really don't want to track all the pfns and
  * the iommu can only map chunks of consecutive pfns anyway, so get the
  * first page and all consecutive pages with the same locking.
@@ -685,7 +700,7 @@ static long vfio_pin_pages_remote(struct vfio_dma *dma, unsigned long vaddr,
 	unsigned long pfn;
 	struct mm_struct *mm = current->mm;
 	long ret, pinned = 0, lock_acct = 0;
-	bool rsvd;
+	bool pfnmap = false;
 	dma_addr_t iova = vaddr - dma->vaddr + dma->iova;
 
 	/* This code path is only user initiated */
@@ -696,7 +711,6 @@ static long vfio_pin_pages_remote(struct vfio_dma *dma, unsigned long vaddr,
 		/* Leftover pages in batch from an earlier call. */
 		*pfn_base = page_to_pfn(batch->pages[batch->offset]);
 		pfn = *pfn_base;
-		rsvd = is_invalid_reserved_pfn(*pfn_base);
 	} else {
 		*pfn_base = 0;
 	}
@@ -721,12 +735,18 @@ static long vfio_pin_pages_remote(struct vfio_dma *dma, unsigned long vaddr,
 
 			if (!*pfn_base) {
 				*pfn_base = pfn;
-				rsvd = is_invalid_reserved_pfn(*pfn_base);
+				pfnmap = vfio_batch_is_pfnmap(batch);
+			} else if (pfnmap != vfio_batch_is_pfnmap(batch)) {
+				/*
+				 * Handle PFNMAP and GUP pages separately; any
+				 * GUP pages remain in batch for the next call.
+				 */
+				goto out;
 			}
 
 			/* Handle pfnmap */
-			if (!batch->size) {
-				if (pfn != *pfn_base + pinned || !rsvd)
+			if (pfnmap) {
+				if (pfn != *pfn_base + pinned)
 					goto out;
 
 				pinned += ret;
@@ -742,32 +762,20 @@ static long vfio_pin_pages_remote(struct vfio_dma *dma, unsigned long vaddr,
 		 * due to the fact that vaddr_get_pfns() needs to provide the
 		 * initial pfn for pfnmaps.  Therefore to reduce redundancy,
 		 * the next pfn is fetched at the end of the loop.
-		 * A PageReserved() page could still qualify as page backed
-		 * and rsvd here, and therefore continues to use the batch.
 		 */
 		while (true) {
-			long nr_pages, acct_pages = 0;
+			long nr_pages, acct_pages;
 
-			if (pfn != *pfn_base + pinned ||
-			    rsvd != is_invalid_reserved_pfn(pfn))
+			if (pfn != *pfn_base + pinned)
 				goto out;
 
-			/*
-			 * Using GUP with the FOLL_LONGTERM in
-			 * vaddr_get_pfns() will not return invalid
-			 * or reserved pages.
-			 */
 			nr_pages = num_pages_contiguous(
 					&batch->pages[batch->offset],
 					batch->size);
-			if (!rsvd) {
-				acct_pages = nr_pages;
-				acct_pages -= vpfn_pages(dma, iova, nr_pages);
-			}
+			acct_pages = nr_pages - vpfn_pages(dma, iova, nr_pages);
 
 			/*
-			 * Reserved pages aren't counted against the user,
-			 * externally pinned pages are already counted against
+			 * Externally pinned pages are already counted against
 			 * the user.
 			 */
 			if (acct_pages) {
@@ -796,29 +804,21 @@ static long vfio_pin_pages_remote(struct vfio_dma *dma, unsigned long vaddr,
 	}
 
 out:
-	dma->has_rsvd |= rsvd;
-	dma->has_non_rsvd |= !rsvd;
 	ret = vfio_lock_acct(dma, lock_acct, false);
 
 unpin_out:
 	if (ret < 0) {
-		if (pinned && !rsvd) {
-			for (pfn = *pfn_base ; pinned ; pfn++, pinned--)
-				put_pfn(pfn, dma->prot);
-		}
+		if (pinned && !pfnmap)
+			put_gup_pfns(*pfn_base, pinned, dma->prot);
 		vfio_batch_unpin(batch, dma);
 
 		return ret;
 	}
 
-	return pinned;
-}
+	dma->has_pfnmap |= pfnmap;
+	dma->has_gup_pinned |= !pfnmap;
 
-static inline void put_valid_unreserved_pfns(unsigned long start_pfn,
-		unsigned long npage, int prot)
-{
-	unpin_user_page_range_dirty_lock(pfn_to_page(start_pfn), npage,
-					 prot & IOMMU_WRITE);
+	return pinned;
 }
 
 static long vfio_unpin_pages_remote(struct vfio_dma *dma, dma_addr_t iova,
@@ -827,16 +827,23 @@ static long vfio_unpin_pages_remote(struct vfio_dma *dma, dma_addr_t iova,
 {
 	long unlocked = 0, locked = vpfn_pages(dma, iova, npage);
 
-	if (dma->has_rsvd) {
-		if (dma->has_non_rsvd) {
+	if (dma->has_pfnmap) {
+		if (dma->has_gup_pinned) {
 			unsigned long i;
 
+			/*
+			 * Because there is no way to tell if this DMA region
+			 * was PFNMAP or GUP-pinned, fall back to the
+			 * heuristic in put_pfn() of skipping invalid and
+			 * reserved pfns, which fails to unpin reserved pages
+			 * that were GUP-pinned.
+			 */
 			for (i = 0; i < npage; i++)
 				if (put_pfn(pfn++, dma->prot))
 					unlocked++;
 		}
 	} else {
-		put_valid_unreserved_pfns(pfn, npage, dma->prot);
+		put_gup_pfns(pfn, npage, dma->prot);
 		unlocked = npage;
 	}
 	if (do_accounting)
@@ -1231,6 +1238,9 @@ static long vfio_unmap_unpin(struct vfio_iommu *iommu, struct vfio_dma *dma,
 		unlocked += vfio_sync_unpin(dma, domain, &unmapped_region_list,
 					    &iotlb_gather);
 	}
+
+	dma->has_pfnmap = false;
+	dma->has_gup_pinned = false;
 
 	if (do_accounting) {
 		vfio_lock_acct(dma, -unlocked, true);
@@ -1947,6 +1957,9 @@ unwind:
 			vfio_unpin_pages_remote(dma, iova, phys >> PAGE_SHIFT,
 						size >> PAGE_SHIFT, true);
 		}
+
+		dma->has_pfnmap = false;
+		dma->has_gup_pinned = false;
 	}
 
 	vfio_batch_fini(&batch);
