@@ -144,6 +144,8 @@ EXPORT_SYMBOL_GPL(ehci_cf_port_reset_rwsem);
 
 static int usb_reset_and_verify_device(struct usb_device *udev);
 static int hub_port_disable(struct usb_hub *hub, int port1, int set_state);
+static void hub_queue_peer_reset(struct usb_hub *hub);
+static void hub_peer_reset_work(struct work_struct *ws);
 static bool hub_port_warm_reset_required(struct usb_hub *hub, int port1,
 		u16 portstatus);
 
@@ -1346,6 +1348,10 @@ static void hub_activate(struct usb_hub *hub, enum hub_activation_type type)
 
 	/* Scan all ports that need attention */
 	kick_hub_wq(hub);
+
+	if (!hdev->parent && hub_is_superspeed(hdev) &&
+	    (type == HUB_INIT2 || type == HUB_INIT3))
+		hub_queue_peer_reset(hub);
  abort:
 	if (type == HUB_INIT2 || type == HUB_INIT3) {
 		/* Allow autosuspend if it was suppressed */
@@ -1419,6 +1425,10 @@ static void hub_quiesce(struct usb_hub *hub, enum hub_quiescing_type type)
 	/* Stop hub_wq and related activity */
 	timer_delete_sync(&hub->irq_urb_retry);
 	flush_delayed_work(&hub->post_resume_work);
+	if (cancel_work_sync(&hub->peer_reset_work)) {
+		usb_autopm_put_interface_no_suspend(to_usb_interface(hub->intfdev));
+		hub_put(hub);
+	}
 	usb_kill_urb(hub->urb);
 	if (hub->has_indicators)
 		cancel_delayed_work_sync(&hub->leds);
@@ -1978,6 +1988,7 @@ static int hub_probe(struct usb_interface *intf, const struct usb_device_id *id)
 	INIT_DELAYED_WORK(&hub->leds, led_work);
 	INIT_DELAYED_WORK(&hub->init_work, NULL);
 	INIT_DELAYED_WORK(&hub->post_resume_work, hub_post_resume);
+	INIT_WORK(&hub->peer_reset_work, hub_peer_reset_work);
 	INIT_WORK(&hub->events, hub_event);
 	INIT_LIST_HEAD(&hub->onboard_devs);
 	spin_lock_init(&hub->irq_urb_lock);
@@ -3276,6 +3287,116 @@ static void usb_unlock_port(struct usb_port *port_dev)
 {
 	mutex_unlock(&port_dev->status_lock);
 	__release(&port_dev->status_lock);
+}
+
+static void hub_reset_peer_child(struct usb_hub *hub, int port1,
+				 struct usb_device *peer_hdev, int peer_port1)
+{
+	struct usb_port *ss_port = hub->ports[port1 - 1];
+	struct usb_port *port_dev;
+	struct usb_hub *peer_hub;
+	struct usb_device *udev;
+	u16 portstatus, portchange;
+
+	/* Keep hub_wq off the SuperSpeed port until the USB 2.0 device is gone */
+	mutex_lock_nested(&ss_port->status_lock, SINGLE_DEPTH_NESTING);
+	usb_lock_device(peer_hdev);
+	if (hub->quiescing)
+		goto out;
+	peer_hub = usb_hub_to_struct_hub(peer_hdev);
+	if (!peer_hub || peer_port1 > peer_hdev->maxchild)
+		goto out;
+
+	port_dev = peer_hub->ports[peer_port1 - 1];
+	udev = port_dev->child;
+	if (!udev || udev->speed != USB_SPEED_HIGH ||
+	    udev->descriptor.bDeviceClass == USB_CLASS_HUB)
+		goto out;
+
+	if (usb_hub_port_status(hub, port1, &portstatus, &portchange) ||
+	    (portstatus & USB_PORT_STAT_CONNECTION))
+		goto out;
+
+	usb_lock_device(udev);
+	if (udev->state != USB_STATE_NOTATTACHED &&
+	    udev->bos && udev->bos->ss_cap) {
+		dev_info(&udev->dev,
+			 "SuperSpeed peer port available, resetting\n");
+		port_dev->ss_retry = ss_port;
+		usb_reset_device(udev);
+		port_dev->ss_retry = NULL;
+	}
+	usb_unlock_device(udev);
+
+	/* As hub_port_connect() would */
+	if (udev->state == USB_STATE_NOTATTACHED) {
+		struct usb_hcd *hcd = bus_to_hcd(peer_hdev->bus);
+
+		if (hcd->usb_phy)
+			usb_phy_notify_disconnect(hcd->usb_phy, udev->speed);
+		usb_disconnect(&port_dev->child);
+	}
+out:
+	usb_unlock_device(peer_hdev);
+	mutex_unlock(&ss_port->status_lock);
+}
+
+static void hub_peer_reset_work(struct work_struct *ws)
+{
+	struct usb_hub *hub = container_of(ws, struct usb_hub, peer_reset_work);
+	struct usb_device *hdev = hub->hdev;
+	int port1;
+
+	for (port1 = 1; ; port1++) {
+		struct usb_device *peer_hdev = NULL;
+		struct usb_port *port_dev;
+		int peer_port1 = 0;
+
+		mutex_lock(&usb_port_peer_mutex);
+		if (port1 > hdev->maxchild || hub->quiescing) {
+			mutex_unlock(&usb_port_peer_mutex);
+			break;
+		}
+		port_dev = hub->ports[port1 - 1];
+		if (port_dev->connector_peer && port_dev->peer) {
+			peer_hdev = to_usb_device(port_dev->peer->dev.parent->parent);
+			peer_port1 = port_dev->peer->portnum;
+			if (peer_hdev->parent ||
+			    peer_hdev->bus->controller == hdev->bus->controller)
+				peer_hdev = NULL;
+			else
+				usb_get_dev(peer_hdev);
+		}
+		mutex_unlock(&usb_port_peer_mutex);
+
+		if (peer_hdev) {
+			hub_reset_peer_child(hub, port1, peer_hdev, peer_port1);
+			usb_put_dev(peer_hdev);
+		}
+	}
+
+	usb_autopm_put_interface_async(to_usb_interface(hub->intfdev));
+	hub_put(hub);
+}
+
+static void hub_queue_peer_reset(struct usb_hub *hub)
+{
+	struct usb_interface *intf = to_usb_interface(hub->intfdev);
+	int port1;
+
+	for (port1 = 1; port1 <= hub->hdev->maxchild; port1++) {
+		if (hub->ports[port1 - 1]->connector_peer)
+			break;
+	}
+	if (port1 > hub->hdev->maxchild)
+		return;
+
+	usb_autopm_get_interface_no_resume(intf);
+	hub_get(hub);
+	if (!queue_work(hub_wq, &hub->peer_reset_work)) {
+		usb_autopm_put_interface_async(intf);
+		hub_put(hub);
+	}
 }
 
 #ifdef	CONFIG_PM
@@ -4899,6 +5020,37 @@ static int get_bMaxPacketSize0(struct usb_device *udev,
 
 #define GET_DESCRIPTOR_BUFSIZE	64
 
+/* -ENOTCONN if the device moved to its SuperSpeed peer port */
+static int hub_wait_ss_retry(struct usb_hub *hub, int port1,
+			     struct usb_port *ss_port)
+{
+	struct usb_device *ss_hdev = to_usb_device(ss_port->dev.parent->parent);
+	struct usb_hub *ss_hub = usb_hub_to_struct_hub(ss_hdev);
+	u16 portstatus, portchange;
+	int i;
+
+	for (i = 0; i < 20; i++) {
+		msleep(50);
+		if (!ss_hub ||
+		    usb_hub_port_status(ss_hub, ss_port->portnum, &portstatus,
+					&portchange))
+			return 0;
+		if (portstatus & USB_PORT_STAT_CONNECTION)
+			break;
+	}
+	if (i == 20)
+		return 0;
+
+	/* Else hub_wq resets the port again */
+	for (i = 0; i < 20; i++) {
+		if (usb_hub_port_status(hub, port1, &portstatus, &portchange) ||
+		    !(portstatus & USB_PORT_STAT_CONNECTION))
+			break;
+		msleep(50);
+	}
+	return -ENOTCONN;
+}
+
 /* Reset device, (re)assign address, get device descriptor.
  * Device connection must be stable, no more debouncing needed.
  * Returns device in USB_STATE_ADDRESS, except on error.
@@ -4958,6 +5110,12 @@ hub_port_init(struct usb_hub *hub, struct usb_device *udev, int port1,
 	if (retval < 0)		/* error or disconnect */
 		goto fail;
 	/* success, speed is known */
+
+	if (port_dev->ss_retry) {
+		retval = hub_wait_ss_retry(hub, port1, port_dev->ss_retry);
+		if (retval)
+			goto fail;
+	}
 
 	retval = -ENODEV;
 
