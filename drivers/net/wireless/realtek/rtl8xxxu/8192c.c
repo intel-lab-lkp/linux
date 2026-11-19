@@ -726,6 +726,7 @@ struct rtl8xxxu_fileops rtl8192cu_fops = {
 	.hw_feature_report = 0,
 	.max_macid_num = 32,
 	.max_sec_cam_num = 32,
+	.has_c2hevt_tx_report = 1,
 	.adda_1t_init = 0x0b1b25a0,
 	.adda_1t_path_on = 0x0bdb25a0,
 	.adda_2t_path_on_a = 0x04db25a4,
