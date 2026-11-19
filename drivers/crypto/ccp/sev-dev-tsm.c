@@ -5,7 +5,6 @@
 #include <linux/pci.h>
 #include <linux/device.h>
 #include <linux/tsm.h>
-#include <linux/iommu.h>
 #include <linux/pci-doe.h>
 #include <linux/bitfield.h>
 #include <linux/module.h>
