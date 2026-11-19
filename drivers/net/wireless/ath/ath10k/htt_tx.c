@@ -1383,6 +1383,8 @@ static int ath10k_htt_tx_hl(struct ath10k_htt *htt, enum ath10k_hw_txrx_mode txm
 		ath10k_htt_tx_free_msdu_id(htt, msdu_id);
 		spin_unlock_bh(&htt->tx_lock);
 	}
+	if (res)
+		dev_kfree_skb_any(msdu);
 
 out:
 	return res;
