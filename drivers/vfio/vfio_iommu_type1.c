@@ -130,6 +130,7 @@ struct vfio_pfn {
 	dma_addr_t		iova;		/* Device address */
 	unsigned long		pfn;		/* Host pfn */
 	unsigned int		ref_count;
+	bool			pfnmap;
 };
 
 struct vfio_regions {
@@ -151,8 +152,6 @@ struct vfio_regions {
  */
 #define DIRTY_BITMAP_PAGES_MAX	 ((u64)INT_MAX)
 #define DIRTY_BITMAP_SIZE_MAX	 DIRTY_BITMAP_BYTES(DIRTY_BITMAP_PAGES_MAX)
-
-static int put_pfn(unsigned long pfn, int prot);
 
 static struct vfio_iommu_group*
 vfio_iommu_find_iommu_group(struct vfio_iommu *iommu,
@@ -384,7 +383,7 @@ static void vfio_unlink_pfn(struct vfio_dma *dma, struct vfio_pfn *old)
 }
 
 static int vfio_add_to_pfn_list(struct vfio_dma *dma, dma_addr_t iova,
-				unsigned long pfn)
+				unsigned long pfn, bool pfnmap)
 {
 	struct vfio_pfn *vpfn;
 
@@ -395,6 +394,7 @@ static int vfio_add_to_pfn_list(struct vfio_dma *dma, dma_addr_t iova,
 	vpfn->iova = iova;
 	vpfn->pfn = pfn;
 	vpfn->ref_count = 1;
+	vpfn->pfnmap = pfnmap;
 	vfio_link_pfn(dma, vpfn);
 	return 0;
 }
@@ -429,7 +429,10 @@ static int vfio_iova_put_vfio_pfn(struct vfio_dma *dma, struct vfio_pfn *vpfn)
 
 	vpfn->ref_count--;
 	if (!vpfn->ref_count) {
-		ret = put_pfn(vpfn->pfn, dma->prot);
+		if (!vpfn->pfnmap) {
+			put_gup_pfns(vpfn->pfn, 1, dma->prot);
+			ret = 1;
+		}
 		vfio_remove_from_pfn_list(dma, vpfn);
 	}
 	return ret;
@@ -655,7 +658,7 @@ static long vpfn_pages(struct vfio_dma *dma,
 	if (likely(!top))
 		return 0;
 
-	if (!is_invalid_reserved_pfn(top->pfn))
+	if (!top->pfnmap)
 		ret++;
 
 	prev = next = &top->node;
@@ -664,7 +667,7 @@ static long vpfn_pages(struct vfio_dma *dma,
 		vpfn = rb_entry(prev, struct vfio_pfn, node);
 		if (vpfn->iova < iova_start)
 			break;
-		if (!is_invalid_reserved_pfn(vpfn->pfn))
+		if (!vpfn->pfnmap)
 			ret++;
 	}
 
@@ -672,7 +675,7 @@ static long vpfn_pages(struct vfio_dma *dma,
 		vpfn = rb_entry(next, struct vfio_pfn, node);
 		if (vpfn->iova >= iova_end)
 			break;
-		if (!is_invalid_reserved_pfn(vpfn->pfn))
+		if (!vpfn->pfnmap)
 			ret++;
 	}
 
@@ -853,7 +856,8 @@ static long vfio_unpin_pages_remote(struct vfio_dma *dma, dma_addr_t iova,
 }
 
 static int vfio_pin_page_external(struct vfio_dma *dma, unsigned long vaddr,
-				  unsigned long *pfn_base, bool do_accounting)
+				  unsigned long *pfn_base, bool do_accounting,
+				  bool *pfnmap)
 {
 	struct vfio_batch batch;
 	struct mm_struct *mm;
@@ -869,12 +873,13 @@ static int vfio_pin_page_external(struct vfio_dma *dma, unsigned long vaddr,
 	if (ret != 1)
 		goto out;
 
+	*pfnmap = vfio_batch_is_pfnmap(&batch);
 	ret = 0;
 
-	if (do_accounting && !is_invalid_reserved_pfn(*pfn_base)) {
+	if (do_accounting && !*pfnmap) {
 		ret = vfio_lock_acct(dma, 1, false);
 		if (ret) {
-			put_pfn(*pfn_base, dma->prot);
+			put_gup_pfns(*pfn_base, 1, dma->prot);
 			if (ret == -ENOMEM)
 				pr_warn("%s: Task %s (%d) RLIMIT_MEMLOCK "
 					"(%ld) exceeded\n", __func__,
@@ -957,6 +962,7 @@ static int vfio_iommu_type1_pin_pages(void *iommu_data,
 		unsigned long phys_pfn;
 		dma_addr_t iova;
 		struct vfio_pfn *vpfn;
+		bool pfnmap;
 
 		iova = user_iova + PAGE_SIZE * i;
 		dma = vfio_find_dma(iommu, iova, PAGE_SIZE);
@@ -978,7 +984,7 @@ static int vfio_iommu_type1_pin_pages(void *iommu_data,
 
 		remote_vaddr = dma->vaddr + (iova - dma->iova);
 		ret = vfio_pin_page_external(dma, remote_vaddr, &phys_pfn,
-					     do_accounting);
+					     do_accounting, &pfnmap);
 		if (ret)
 			goto pin_unwind;
 
@@ -987,10 +993,13 @@ static int vfio_iommu_type1_pin_pages(void *iommu_data,
 			goto pin_unwind;
 		}
 
-		ret = vfio_add_to_pfn_list(dma, iova, phys_pfn);
+		ret = vfio_add_to_pfn_list(dma, iova, phys_pfn, pfnmap);
 		if (ret) {
-			if (put_pfn(phys_pfn, dma->prot) && do_accounting)
-				vfio_lock_acct(dma, -1, true);
+			if (!pfnmap) {
+				put_gup_pfns(phys_pfn, 1, dma->prot);
+				if (do_accounting)
+					vfio_lock_acct(dma, -1, true);
+			}
 			goto pin_unwind;
 		}
 
@@ -2471,7 +2480,7 @@ static void vfio_iommu_unmap_unpin_reaccount(struct vfio_iommu *iommu)
 			struct vfio_pfn *vpfn = rb_entry(p, struct vfio_pfn,
 							 node);
 
-			if (!is_invalid_reserved_pfn(vpfn->pfn))
+			if (!vpfn->pfnmap)
 				locked++;
 		}
 		vfio_lock_acct(dma, locked - unlocked, true);
