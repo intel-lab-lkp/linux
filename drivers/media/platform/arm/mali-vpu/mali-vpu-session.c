@@ -329,7 +329,7 @@ static int mali_vpu_submit_deferred_bufs_for_queue(struct mali_vpu_session *sess
 	return 0;
 }
 
-static int mali_vpu_submit_deferred_bufs(struct mali_vpu_session *sess)
+int mali_vpu_submit_deferred_bufs(struct mali_vpu_session *sess)
 {
 	int ret;
 
@@ -448,7 +448,7 @@ static void mali_vpu_session_buffer_done(struct mali_vpu_session *sess,
 	if (V4L2_TYPE_IS_CAPTURE(vpu_buf->type) &&
 	    !q->last_buffer_dequeued &&
 	    (vbuf->flags & V4L2_BUF_FLAG_LAST) &&
-	    !sess->drc_pending) {
+	    sess->sess_state != MALI_VPU_DEC_STATE_DYNAMIC_RESOLUTION_CHANGE) {
 		const struct v4l2_event event = {
 			.type = V4L2_EVENT_EOS,
 		};
@@ -513,7 +513,14 @@ static int mali_vpu_session_handle_fw_msg(struct mali_vpu_session *sess,
 		state = mali_vpu_buffer_update_info_to_v4l2(vpu_buf);
 
 		mali_vpu_session_buffer_done(sess, vpu_buf, state);
-
+		if (vpu_buf->flags & MALI_VPU_BUFFER_EOS) {
+			if (V4L2_TYPE_IS_OUTPUT(vpu_buf->type) &&
+			    sess->sess_state == MALI_VPU_STATE_STREAMING) {
+				ret = mali_vpu_dec_update_state(sess, MALI_VPU_STATE_DRAIN);
+				if (ret)
+					return ret;
+			}
+		}
 		return 0;
 	}
 	case MALI_VPU_FW_CODE_PONG:
@@ -569,17 +576,31 @@ static int mali_vpu_session_handle_fw_msg(struct mali_vpu_session *sess,
 			fw_msg->data.dpb_held_frames);
 		return 0;
 	case MALI_VPU_FW_CODE_OUTPUT_FLUSH:
-		dev_dbg(sess->vpu_dev->dev, "fw rsp: Dst queue flushed\n");
-		if (sess->role == MALI_VPU_DECODER && sess->drc_pending)
+		if (sess->sess_state == MALI_VPU_DEC_STATE_DYNAMIC_RESOLUTION_CHANGE ||
+		    sess->sess_state == MALI_VPU_DEC_STATE_FIRST_SOURCE_CHANGE) {
 			return mali_vpu_session_send_drc_event(sess);
+		}
 
 		return 0;
 	case MALI_VPU_FW_CODE_ALLOC_PARAM:
 		ret = mali_vpu_session_update_capture_format(sess, fw_msg->data.alloc_params);
-		if (!ret)
-			sess->drc_pending = true;
+		if (ret)
+			return ret;
 
-		return ret;
+		if (sess->sess_state == MALI_VPU_STATE_STREAMING) {
+			ret =
+			mali_vpu_dec_update_state(sess,
+						  MALI_VPU_DEC_STATE_DYNAMIC_RESOLUTION_CHANGE);
+			if (ret)
+				return ret;
+		} else if (sess->sess_state == MALI_VPU_STATE_STOPPED) {
+			ret = mali_vpu_dec_update_state(sess,
+							MALI_VPU_DEC_STATE_FIRST_SOURCE_CHANGE);
+			if (ret)
+				return ret;
+		}
+
+		return 0;
 	case MALI_VPU_FW_CODE_SEQUENCE_PARAMS: {
 		struct vb2_queue *dst_q;
 		u32 buffers_min;
@@ -829,7 +850,7 @@ int mali_vpu_session_qbuf(struct mali_vpu_session *sess, struct vb2_buffer *vb2_
 	 * Do not give the requeued buffer back to fw as it belongs to pre DRC
 	 * allocation which will be unmapped immediately afterwards.
 	 */
-	if (sess->drc_pending && sess->role == MALI_VPU_DECODER &&
+	if (sess->sess_state == MALI_VPU_DEC_STATE_DYNAMIC_RESOLUTION_CHANGE &&
 	    mali_vpu_is_raw_q(sess, vb2_buf->type) &&
 	    port->stream_requested) {
 		v4l2_buf->flags |= V4L2_BUF_FLAG_LAST;
@@ -840,7 +861,9 @@ int mali_vpu_session_qbuf(struct mali_vpu_session *sess, struct vb2_buffer *vb2_
 
 	if (!port->stream_requested ||
 	    !mali_vpu_session_can_stream(sess) ||
-	    sess->fw_state != MALI_VPU_FW_STATE_RUNNING) {
+	    sess->fw_state != MALI_VPU_FW_STATE_RUNNING ||
+	    (V4L2_TYPE_IS_OUTPUT(vb2_buf->type) &&
+	    sess->sess_state == MALI_VPU_STATE_DRAIN)) {
 		vpu_buf->attr = MALI_VPU_BUF_ATTR_DEFERRED;
 
 		if (V4L2_TYPE_IS_OUTPUT(vb2_buf->type))
@@ -949,6 +972,7 @@ int mali_vpu_session_prepare_streaming(struct mali_vpu_session *sess,
 				       enum v4l2_buf_type type)
 {
 	struct mali_vpu_port *port = mali_vpu_session_get_port(sess, type);
+	enum mali_vpu_sess_state old_state;
 	int ret;
 
 	lockdep_assert_held(&sess->vq_lock);
@@ -964,6 +988,12 @@ int mali_vpu_session_prepare_streaming(struct mali_vpu_session *sess,
 	    sess->fw_requested_state != MALI_VPU_FW_STATE_RUNNING)
 		return -EBUSY;
 
+	old_state = sess->sess_state;
+
+	ret = mali_vpu_dec_state_change_streamon(sess, type);
+	if (ret)
+		return ret;
+
 	port->stream_requested = true;
 
 	if (sess->fw_bin_state == MALI_VPU_SESSION_FW_BIN_READY &&
@@ -975,15 +1005,14 @@ int mali_vpu_session_prepare_streaming(struct mali_vpu_session *sess,
 		}
 	}
 
-	if (sess->role == MALI_VPU_DECODER && mali_vpu_is_raw_q(sess, type))
-		sess->drc_pending = false;
-
 	port->sequence = 0;
 
 	return 0;
 
 err_rollback:
+
 	port->stream_requested = false;
+	sess->sess_state = old_state;
 
 	return ret;
 }
@@ -991,6 +1020,7 @@ err_rollback:
 int mali_vpu_session_streamoff(struct mali_vpu_session *sess, enum v4l2_buf_type type)
 {
 	struct mali_vpu_port *port = mali_vpu_session_get_port(sess, type);
+	bool drc_capture;
 	int ret;
 
 	lockdep_assert_held(&sess->vq_lock);
@@ -1003,12 +1033,19 @@ int mali_vpu_session_streamoff(struct mali_vpu_session *sess, enum v4l2_buf_type
 	if (sess->error)
 		return 0;
 
+	drc_capture =
+		sess->sess_state == MALI_VPU_DEC_STATE_DYNAMIC_RESOLUTION_CHANGE &&
+		mali_vpu_is_raw_q(sess, type);
+
+	ret = mali_vpu_dec_state_change_streamoff(sess, type);
+	if (ret)
+		goto err_session;
+
 	if (sess->fw_bin_state != MALI_VPU_SESSION_FW_BIN_READY ||
 	    !sess->sched_sess.lsid)
 		return 0;
 
-	if (sess->drc_pending && sess->role == MALI_VPU_DECODER &&
-	    mali_vpu_is_raw_q(sess, type)) {
+	if (drc_capture) {
 		ret = mali_vpu_session_wait_pending(sess);
 		if (ret)
 			goto err_session;

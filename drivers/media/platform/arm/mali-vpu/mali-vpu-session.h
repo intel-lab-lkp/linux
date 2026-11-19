@@ -17,6 +17,7 @@
 #include "mali-vpu-firmware.h"
 #include "mali-vpu-formats.h"
 #include "mali-vpu-mmu.h"
+#include "mali-vpu-state.h"
 
 struct v4l2_m2m_ctx;
 struct mali_vpu_fw_bin;
@@ -115,7 +116,7 @@ enum mali_vpu_session_fw_bin_state {
  * @sched_sess: Scheduler state used to map this session to an LSID.
  * @ncores: Number of cores assigned to this session by scheduler.
  * @error: Fatal session error code.
- * @drc_pending: Dynamic resolution change is waiting for CAPTURE reconfigure.
+ * @sess_state: Session main state.
  */
 struct mali_vpu_session {
 	struct mali_vpu_dev		*vpu_dev;
@@ -148,7 +149,7 @@ struct mali_vpu_session {
 	struct mali_vpu_sched_session	sched_sess;
 	u32				ncores;
 	int				error;
-	bool				drc_pending;
+	enum mali_vpu_sess_state	sess_state;
 };
 
 int mali_vpu_session_init(struct mali_vpu_session *sess);
@@ -163,6 +164,7 @@ void mali_vpu_session_irq(struct mali_vpu_session *sess);
 int mali_vpu_session_qbuf(struct mali_vpu_session *sess, struct vb2_buffer *vb2_buf);
 void mali_vpu_session_reset_ts_metadata(struct mali_vpu_session *sess);
 int mali_vpu_session_fw_send_eos(struct mali_vpu_session *sess);
+int mali_vpu_submit_deferred_bufs(struct mali_vpu_session *sess);
 
 static inline struct mali_vpu_session *mali_vpu_get_session(struct file *filp)
 {
