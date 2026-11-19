@@ -1914,6 +1914,7 @@ static int ff_layout_write_done_cb(struct rpc_task *task,
 		set_bit(NFS_IOHDR_RESEND_MDS, &hdr->flags);
 		return task->tk_status;
 	case -EAGAIN:
+		rpc_restart_call_prepare(task);
 		return -EAGAIN;
 	case -NFS4ERR_FATAL_IOERROR:
 		task->tk_status = -EIO;
