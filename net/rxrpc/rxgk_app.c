@@ -147,6 +147,13 @@ int rxgk_yfs_decode_ticket(struct rxrpc_connection *conn, struct sk_buff *skb,
 	if (ret < 0)
 		goto error_key;
 
+	ret = key_validate(key);
+	if (ret < 0) {
+		ret = rxrpc_abort_conn(conn, skb, RXGK_EXPIRED, ret,
+				       rxgk_abort_resp_tok_expired);
+		goto error_key;
+	}
+
 	token = key->payload.data[0];
 	token->no_leak_key = true;
 	*_key = key;
