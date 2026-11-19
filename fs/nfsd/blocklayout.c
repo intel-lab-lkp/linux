@@ -269,15 +269,18 @@ static __be32
 nfsd4_block_proc_layoutcommit(struct inode *inode, struct svc_rqst *rqstp,
 		struct nfsd4_layoutcommit *lcp)
 {
+	__be32 scratch[XDR_QUADLEN(NFS4_DEVICEID4_SIZE)];
+	struct xdr_stream xdr;
 	struct iomap *iomaps;
 	int nr_iomaps;
 	__be32 nfserr;
 
-	rqstp->rq_arg = lcp->lc_up_layout;
-	svcxdr_init_decode(rqstp);
+	xdr_init_decode(&xdr, &lcp->lc_up_layout, NULL, NULL);
+	xdr_set_scratch_buffer(&xdr, scratch, sizeof(scratch));
 
-	nfserr = nfsd4_block_decode_layoutupdate(&rqstp->rq_arg_stream,
-			&iomaps, &nr_iomaps, i_blocksize(inode));
+	nfserr = nfsd4_block_decode_layoutupdate(&xdr, &iomaps, &nr_iomaps,
+						 i_blocksize(inode));
+	xdr_finish_decode(&xdr);
 	if (nfserr != nfs_ok)
 		return nfserr;
 
@@ -461,15 +464,18 @@ static __be32
 nfsd4_scsi_proc_layoutcommit(struct inode *inode, struct svc_rqst *rqstp,
 		struct nfsd4_layoutcommit *lcp)
 {
+	__be32 scratch[XDR_QUADLEN(NFS4_DEVICEID4_SIZE)];
+	struct xdr_stream xdr;
 	struct iomap *iomaps;
 	int nr_iomaps;
 	__be32 nfserr;
 
-	rqstp->rq_arg = lcp->lc_up_layout;
-	svcxdr_init_decode(rqstp);
+	xdr_init_decode(&xdr, &lcp->lc_up_layout, NULL, NULL);
+	xdr_set_scratch_buffer(&xdr, scratch, sizeof(scratch));
 
-	nfserr = nfsd4_scsi_decode_layoutupdate(&rqstp->rq_arg_stream,
-			&iomaps, &nr_iomaps, i_blocksize(inode));
+	nfserr = nfsd4_scsi_decode_layoutupdate(&xdr, &iomaps, &nr_iomaps,
+						i_blocksize(inode));
+	xdr_finish_decode(&xdr);
 	if (nfserr != nfs_ok)
 		return nfserr;
 
