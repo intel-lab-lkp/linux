@@ -12,4 +12,23 @@
 #define M68060_PCR_DFP		0x00000002	/* disable the FPU */
 #define M68060_PCR_ESS		0x00000001	/* enable superscalar dispatch */
 
+#ifndef __ASSEMBLY__
+
+#include <linux/types.h>
+
+static inline u32 m68060_get_pcr(void)
+{
+	u32 pcr;
+
+	asm volatile (".chip 68060; movec %%pcr,%0; .chip 68k" : "=d" (pcr));
+	return pcr;
+}
+
+static inline void m68060_set_pcr(u32 pcr)
+{
+	asm volatile (".chip 68060; movec %0,%%pcr; .chip 68k" : : "d" (pcr));
+}
+
+#endif /* __ASSEMBLY__ */
+
 #endif /* _ASM_M68K_M68060_H */

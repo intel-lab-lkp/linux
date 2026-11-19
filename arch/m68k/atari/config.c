@@ -47,6 +47,7 @@
 #include <asm/hwtest.h>
 #include <asm/io.h>
 #include <asm/config.h>
+#include <asm/m68060.h>
 
 #include "atari.h"
 
@@ -512,11 +513,7 @@ static void atari_reset(void)
 		unsigned long jmp_addr040 = virt_to_phys(&&jmp_addr_label040);
 		if (CPU_IS_060) {
 			/* 68060: clear PCR to turn off superscalar operation */
-			asm volatile ("\n"
-				"	.chip 68060\n"
-				"	movec %0,%%pcr\n"
-				"	.chip 68k"
-				: : "d" (0));
+			m68060_set_pcr(0);
 		}
 
 		asm volatile ("\n"

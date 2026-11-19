@@ -230,14 +230,11 @@ void __init setup_arch(char **cmdline_p)
 #endif
 
 	if (CPU_IS_060) {
-		u32 pcr;
+		u32 pcr = m68060_get_pcr();
 
-		asm (".chip 68060; movec %%pcr,%0; .chip 68k"
-		     : "=d" (pcr));
 		if (FIELD_GET(M68060_PCR_REVISION, pcr) <= 5) {
 			pr_warn("Enabling workaround for errata I14\n");
-			asm (".chip 68060; movec %0,%%pcr; .chip 68k"
-			     : : "d" (pcr | M68060_PCR_I14));
+			m68060_set_pcr(pcr | M68060_PCR_I14);
 		}
 	}
 
