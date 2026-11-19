@@ -60,6 +60,20 @@ config ARM_SDEI_NMI
 
 	  If unsure, say N.
 
+config ARM_PFDI
+	tristate "Arm Platform Fault Detection Interface (PFDI)"
+	depends on ARM64 && HAVE_ARM_SMCCC
+	help
+	  Expose the Arm Platform Fault Detection Interface (PFDI)
+	  implemented by platform firmware through per-CPU misc devices.
+
+	  This creates /dev/cpu/<cpu>/pfdi device nodes that allow
+	  privileged userspace to query PFDI test metadata and trigger the
+	  firmware health check.
+
+	  Say M or Y here if your platform firmware implements PFDI and you
+	  need Linux userspace access to it.
+
 config EDD
 	tristate "BIOS Enhanced Disk Drive calls determine boot disk"
 	depends on X86

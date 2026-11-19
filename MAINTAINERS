@@ -14017,6 +14017,7 @@ M:	Ahmed Azeem <ahmed.azeem@arm.com>
 L:	linux-arm-kernel@lists.infradead.org (moderated for non-subscribers)
 S:	Maintained
 F:	Documentation/ABI/testing/dev-cpu-pfdi
+F:	drivers/firmware/arm_pfdi.c
 F:	include/uapi/linux/pfdi.h
 
 IOMMU SUBSYSTEM

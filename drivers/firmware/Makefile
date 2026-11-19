@@ -2,6 +2,7 @@
 #
 # Makefile for the linux kernel.
 #
+obj-$(CONFIG_ARM_PFDI)		+= arm_pfdi.o
 obj-$(CONFIG_ARM_SCPI_PROTOCOL)	+= arm_scpi.o
 obj-$(CONFIG_ARM_SDE_INTERFACE)	+= arm_sdei.o
 obj-$(CONFIG_ARM_SDEI_NMI)	+= arm_sdei_nmi.o
