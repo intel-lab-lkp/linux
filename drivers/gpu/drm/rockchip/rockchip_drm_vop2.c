@@ -1581,6 +1581,11 @@ static enum drm_mode_status vop2_crtc_mode_valid(struct drm_crtc *crtc,
 	if (mode->hdisplay > vp->data->max_output.width)
 		return MODE_BAD_HVALUE;
 
+	/* RK3588 cannot repeat pixels: no CORE_DCLK_DIV, dclk_core at dclk/4 */
+	if (mode->flags & DRM_MODE_FLAG_DBLCLK &&
+	    vp->vop2->version == VOP_VERSION_RK3588)
+		return MODE_H_ILLEGAL;
+
 	return MODE_OK;
 }
 
