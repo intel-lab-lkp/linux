@@ -164,15 +164,15 @@ nfsd4_block_decode_layoutupdate(struct xdr_stream *xdr, struct iomap **iomapp,
 		int *nr_iomapsp, u32 block_size)
 {
 	struct iomap *iomaps;
-	u32 nr_iomaps, expected, len, i;
+	u32 nr_iomaps, len, i;
 	__be32 nfserr;
 
 	if (xdr_stream_decode_u32(xdr, &nr_iomaps))
 		return nfserr_bad_xdr;
 
-	len = sizeof(__be32) + xdr_stream_remaining(xdr);
-	expected = sizeof(__be32) + nr_iomaps * PNFS_BLOCK_EXTENT_SIZE;
-	if (len != expected)
+	len = xdr_stream_remaining(xdr);
+	if (len % PNFS_BLOCK_EXTENT_SIZE ||
+	    nr_iomaps != len / PNFS_BLOCK_EXTENT_SIZE)
 		return nfserr_bad_xdr;
 
 	iomaps = kzalloc_objs(*iomaps, nr_iomaps);
@@ -258,15 +258,15 @@ nfsd4_scsi_decode_layoutupdate(struct xdr_stream *xdr, struct iomap **iomapp,
 		int *nr_iomapsp, u32 block_size)
 {
 	struct iomap *iomaps;
-	u32 nr_iomaps, expected, len, i;
+	u32 nr_iomaps, len, i;
 	__be32 nfserr;
 
 	if (xdr_stream_decode_u32(xdr, &nr_iomaps))
 		return nfserr_bad_xdr;
 
-	len = sizeof(__be32) + xdr_stream_remaining(xdr);
-	expected = sizeof(__be32) + nr_iomaps * PNFS_SCSI_RANGE_SIZE;
-	if (len != expected)
+	len = xdr_stream_remaining(xdr);
+	if (len % PNFS_SCSI_RANGE_SIZE ||
+	    nr_iomaps != len / PNFS_SCSI_RANGE_SIZE)
 		return nfserr_bad_xdr;
 
 	iomaps = kzalloc_objs(*iomaps, nr_iomaps);
