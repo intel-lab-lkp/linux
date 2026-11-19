@@ -8,6 +8,7 @@
 #include <linux/err.h>
 #include <linux/errno.h>
 #include <linux/sizes.h>
+#include <linux/stddef.h>
 #include <linux/string.h>
 
 #include "mali-vpu-firmware.h"
@@ -950,6 +951,33 @@ mali_vpu_convert_buffer_bitstream(struct mali_vpu_fw *fw,
 	return 0;
 }
 
+static int mali_vpu_convert_buffer_param(struct mali_vpu_fw_msg *msg,
+					 struct mve_buffer_param *p,
+					 size_t size)
+{
+	if (size < sizeof(p->type))
+		return -EPROTO;
+
+	switch (p->type) {
+	case MVE_BUFFER_PARAM_TYPE_COLOUR_DESCRIPTION:
+		/* The colour-description payload is currently ignored. */
+		msg->code = MALI_VPU_FW_CODE_COLOR_DESC;
+		break;
+	case MVE_BUFFER_PARAM_TYPE_DPB_HELD_FRAMES:
+		if (size < offsetofend(struct mve_buffer_param, data.arg))
+			return -EPROTO;
+
+		msg->code = MALI_VPU_FW_CODE_DPB_HELD_FRAMES;
+		msg->data.dpb_held_frames = p->data.arg;
+		break;
+	default:
+		msg->code = MALI_VPU_FW_CODE_UNKNOWN;
+		break;
+	}
+
+	return 1;
+}
+
 static int mali_vpu_fw_get_buffer(struct mali_vpu_fw *fw,
 				  struct mali_vpu_fw_proto_page *buf_host_page,
 				  struct mali_vpu_fw_proto_page *buf_mve_page,
@@ -1007,6 +1035,7 @@ int mali_vpu_fw_parse_msg(struct mali_vpu_fw *fw, struct mali_vpu_fw_msg *msg)
 		struct mve_response_state_change state_change;
 		struct mve_response_frame_alloc_parameters alloc_params;
 		struct mve_response_sequence_parameters seq_params;
+		struct mve_buffer_param buffer_param;
 		struct mve_response_error error;
 	} fw_msg = {};
 	size_t size = sizeof(fw_msg);
@@ -1136,6 +1165,9 @@ int mali_vpu_fw_parse_msg(struct mali_vpu_fw *fw, struct mali_vpu_fw_msg *msg)
 			return -EPROTO;
 
 		fw->pending_response_count--;
+		break;
+	case MVE_BUFFER_CODE_PARAM:
+		ret =  mali_vpu_convert_buffer_param(msg, &fw_msg.buffer_param, size);
 		break;
 	case MVE_RESPONSE_CODE_ERROR: {
 		size_t message_offset = offsetof(struct mve_response_error, message);

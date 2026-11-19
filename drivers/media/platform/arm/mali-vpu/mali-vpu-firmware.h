@@ -144,6 +144,8 @@ struct mali_vpu_fw_error {
  * @MALI_VPU_FW_CODE_OUTPUT_FLUSH: Firmware successfully completed a CAPTURE queue flush.
  * @MALI_VPU_FW_CODE_SEQUENCE_PARAMS: Firmware reported new sequence parameters.
  * @MALI_VPU_FW_CODE_ALLOC_PARAM: Firmware reported new frame allocation parameters.
+ * @MALI_VPU_FW_CODE_COLOR_DESC: Firmware reported colour-description metadata.
+ * @MALI_VPU_FW_CODE_DPB_HELD_FRAMES: Firmware reported the number of frames held in the DPB.
  * @MALI_VPU_FW_CODE_UNKNOWN: Unrecognized firmware message.
  * @MALI_VPU_FW_CODE_MAX: Sentinel marking the end of the message-code enum.
  */
@@ -164,6 +166,8 @@ enum mali_vpu_fw_code {
 	MALI_VPU_FW_CODE_OUTPUT_FLUSH,       /* Driver <- Firmware. */
 	MALI_VPU_FW_CODE_SEQUENCE_PARAMS,    /* Driver <- Firmware. */
 	MALI_VPU_FW_CODE_ALLOC_PARAM,        /* Driver <- Firmware. */
+	MALI_VPU_FW_CODE_COLOR_DESC,         /* Driver <- Firmware. */
+	MALI_VPU_FW_CODE_DPB_HELD_FRAMES,    /* Driver <- Firmware. */
 	MALI_VPU_FW_CODE_UNKNOWN,            /* Driver <- Firmware. */
 	MALI_VPU_FW_CODE_MAX
 };
@@ -182,6 +186,7 @@ struct mali_vpu_fw_msg {
 		struct mali_vpu_buffer *vpu_buf;
 		struct mali_vpu_fw_alloc_param alloc_params;
 		struct mali_vpu_fw_seq_param seq_params;
+		u32 dpb_held_frames;
 	} data;
 };
 

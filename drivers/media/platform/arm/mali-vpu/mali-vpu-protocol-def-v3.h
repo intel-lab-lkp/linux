@@ -269,6 +269,8 @@ struct mve_msg_header {
 		#define MVE_BUFFER_CODE_FRAME                 (3001)
 		/* struct mve_buffer_bitstream */
 		#define MVE_BUFFER_CODE_BITSTREAM             (3002)
+		/* struct mve_buffer_param */
+		#define MVE_BUFFER_CODE_PARAM                 (3003)
 
 	u16 size; /* size in bytes of trailing data, 0 if none */
 };
@@ -599,6 +601,23 @@ struct mve_buffer_bitstream {
 	u32 bitstream_buf_addr;
 	/* Pad to force 8-byte alignment */
 	u32 reserved;
+};
+
+/* Parameters that are sent in the same communication channels
+ * as the buffers. A parameter applies to all subsequent buffers.
+ * Some types are only valid for decode, and some only for encode.
+ */
+struct mve_buffer_param {
+	u32 type;                                                   /* Extra data: */
+		#define MVE_BUFFER_PARAM_TYPE_COLOUR_DESCRIPTION        (15)
+		/* arg, number of output buffers that are complete and held by firmware in the
+		 * DPB for reordering purposes. Valid after the next frame is output.
+		 */
+		#define MVE_BUFFER_PARAM_TYPE_DPB_HELD_FRAMES           (19)
+
+	union {
+		u32                                        arg;
+	} data;
 };
 
 #endif /* __MALI_VPU_PROTOCOL_DEF_V3_H__ */

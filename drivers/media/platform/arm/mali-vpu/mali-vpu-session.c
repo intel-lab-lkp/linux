@@ -559,6 +559,15 @@ static int mali_vpu_session_handle_fw_msg(struct mali_vpu_session *sess,
 		 * state update is required.
 		 */
 		return 0;
+	case MALI_VPU_FW_CODE_COLOR_DESC:
+		/* Colour metadata is currently not consumed by the driver. */
+		return 0;
+	case MALI_VPU_FW_CODE_DPB_HELD_FRAMES:
+		/* DPB occupancy is informational. */
+		dev_dbg(sess->vpu_dev->dev,
+			"firmware holds %u frames in the DPB\n",
+			fw_msg->data.dpb_held_frames);
+		return 0;
 	case MALI_VPU_FW_CODE_OUTPUT_FLUSH:
 		dev_dbg(sess->vpu_dev->dev, "fw rsp: Dst queue flushed\n");
 		if (sess->role == MALI_VPU_DECODER && sess->drc_pending)
