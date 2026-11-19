@@ -4381,9 +4381,10 @@ write:
 		if (!compr_blocks)
 			f2fs_unlock_op(sbi, &lc);
 
-		/* The callers drop the submitted count on error. */
-		if (err && local_submitted)
-			f2fs_submit_merged_write_cond(sbi, NULL, folio);
+		/* Let the caller flush the blocks submitted before an error. */
+		if (err && submitted)
+			*submitted = DIV_ROUND_UP(local_submitted,
+						  F2FS_BLKS_PER_PAGE(sbi));
 
 		if (!err)
 			f2fs_ffs_clear_subrange_dirty_and_test(folio, 0,

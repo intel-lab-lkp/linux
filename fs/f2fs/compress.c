@@ -1743,6 +1743,8 @@ continue_unlock:
 		ret = f2fs_write_single_data_page(folio, &submitted,
 						NULL, NULL, wbc, io_type,
 						compr_blocks, false);
+		/* Some blocks can be submitted before an error. */
+		*submitted_p += submitted;
 		if (ret) {
 			if (ret == 1) {
 				ret = 0;
@@ -1760,8 +1762,6 @@ continue_unlock:
 			}
 			goto out;
 		}
-
-		*submitted_p += submitted;
 	}
 
 out:
