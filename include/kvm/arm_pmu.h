@@ -45,6 +45,7 @@ struct kvm_pmu {
 	int irq_num;
 	bool created;
 	bool loaded_on_cpu;
+	bool multiplex_enables;
 	enum vcpu_pmu_register_access access;
 };
 

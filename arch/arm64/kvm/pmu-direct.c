@@ -91,6 +91,82 @@ static u64 kvm_vcpu_pmu_guest_counter_mask(struct kvm_vcpu *vcpu)
 
 static void kvm_pmu_set_guest_owned(struct kvm_vcpu *vcpu);
 
+static u64 kvm_pmu_part_active_cnten_mask(struct kvm_vcpu *vcpu)
+{
+	u64 guest_mask = kvm_vcpu_pmu_guest_counter_mask(vcpu);
+	u64 hyp_mask = kvm_pmu_hyp_counter_mask(vcpu);
+	u64 pmcr = __vcpu_sys_reg(vcpu, PMCR_EL0);
+	u64 mdcr = __vcpu_sys_reg(vcpu, MDCR_EL2);
+	u64 active = 0;
+
+	if (pmcr & ARMV8_PMU_PMCR_E)
+		active |= guest_mask & ~hyp_mask;
+	if (mdcr & MDCR_EL2_HPME)
+		active |= hyp_mask;
+
+	return active;
+}
+
+static void kvm_pmu_part_sync_hw_enables(struct kvm_vcpu *vcpu)
+{
+	u64 guest_mask = kvm_vcpu_pmu_guest_counter_mask(vcpu);
+	u64 cnten = __vcpu_sys_reg(vcpu, PMCNTENSET_EL0) &
+		    kvm_pmu_part_active_cnten_mask(vcpu);
+	u64 pmcr = __vcpu_sys_reg(vcpu, PMCR_EL0);
+	u64 mdcr = __vcpu_sys_reg(vcpu, MDCR_EL2);
+	u64 pmcr_mask = ARMV8_PMU_PMCR_MASK &
+			~(ARMV8_PMU_PMCR_P | ARMV8_PMU_PMCR_C);
+
+	if (!kvm_has_feat(vcpu->kvm, ID_AA64DFR0_EL1, PMUVer, V3P5))
+		pmcr_mask &= ~ARMV8_PMU_PMCR_LP;
+
+	pmcr &= pmcr_mask;
+	if (mdcr & MDCR_EL2_HPME)
+		pmcr |= ARMV8_PMU_PMCR_E;
+
+	write_sysreg(~cnten & guest_mask, pmcntenclr_el0);
+	write_sysreg(cnten & guest_mask, pmcntenset_el0);
+	write_sysreg(pmcr, pmcr_el0);
+}
+
+static void kvm_pmu_direct_cnten_write(struct kvm_vcpu *vcpu, u64 val, bool set)
+{
+	u64 mask = kvm_vcpu_pmu_guest_counter_mask(vcpu);
+
+	lockdep_assert_preemption_disabled();
+
+	val &= mask;
+	if (set) {
+		__vcpu_rmw_sys_reg(vcpu, PMCNTENSET_EL0, |=, val);
+		if (val)
+			kvm_pmu_set_guest_owned(vcpu);
+	} else {
+		__vcpu_rmw_sys_reg(vcpu, PMCNTENSET_EL0, &=, ~val);
+	}
+
+	if (!kvm_pmu_part_on_cpu(vcpu))
+		return;
+
+	if (vcpu->arch.pmu.multiplex_enables)
+		kvm_pmu_part_sync_hw_enables(vcpu);
+	else if (set)
+		write_sysreg(val, pmcntenset_el0);
+	else
+		write_sysreg(val, pmcntenclr_el0);
+}
+
+static u64 kvm_pmu_direct_cnten_read(struct kvm_vcpu *vcpu)
+{
+	u64 mask = kvm_vcpu_pmu_guest_counter_mask(vcpu);
+
+	lockdep_assert_preemption_disabled();
+
+	if (kvm_pmu_part_on_cpu(vcpu) && !vcpu->arch.pmu.multiplex_enables)
+		return read_sysreg(pmcntenset_el0) & mask;
+
+	return __vcpu_sys_reg(vcpu, PMCNTENSET_EL0) & mask;
+}
+
 static void kvm_pmu_direct_pmcr_write(struct kvm_vcpu *vcpu, u64 val)
 {
 	bool reset_p = val & ARMV8_PMU_PMCR_P;
@@ -133,7 +209,11 @@ static void kvm_pmu_direct_pmcr_write(struct kvm_vcpu *vcpu, u64 val)
 			write_pmevcntrn(i, 0);
 	}
 
-	write_sysreg(val & ~(ARMV8_PMU_PMCR_P | ARMV8_PMU_PMCR_C), pmcr_el0);
+	if (vcpu->arch.pmu.multiplex_enables)
+		kvm_pmu_part_sync_hw_enables(vcpu);
+	else
+		write_sysreg(val & ~(ARMV8_PMU_PMCR_P | ARMV8_PMU_PMCR_C),
+			     pmcr_el0);
 }
 
 static u64 kvm_pmu_direct_pmcr_read(struct kvm_vcpu *vcpu)
@@ -147,6 +227,10 @@ static u64 kvm_pmu_direct_pmcr_read(struct kvm_vcpu *vcpu)
 		return kvm_vcpu_read_pmcr(vcpu);
 
 	pmcr = read_sysreg(pmcr_el0);
+	if (vcpu->arch.pmu.multiplex_enables) {
+		pmcr &= ~ARMV8_PMU_PMCR_MASK;
+		pmcr |= __vcpu_sys_reg(vcpu, PMCR_EL0) & ARMV8_PMU_PMCR_MASK;
+	}
 	if (!kvm_has_feat(vcpu->kvm, ID_AA64DFR0_EL1, PMUVer, V3P5))
 		pmcr &= ~ARMV8_PMU_PMCR_LP;
 
@@ -232,6 +316,7 @@ static u64 kvm_pmu_direct_cntr_read(struct kvm_vcpu *vcpu, u8 idx)
 
 	return read_pmevcntrn(idx);
 }
+
 static void kvm_pmu_direct_cntr_write(struct kvm_vcpu *vcpu, u8 idx, u64 val)
 {
 	lockdep_assert_preemption_disabled();
@@ -273,10 +358,7 @@ u64 kvm_pmu_direct_reg_read(struct kvm_vcpu *vcpu, unsigned int reg)
 	case PMEVTYPER0_EL0 ... PMCCFILTR_EL0:
 		return __vcpu_sys_reg(vcpu, reg);
 	case PMCNTENSET_EL0:
-		if (kvm_pmu_part_on_cpu(vcpu))
-			return read_sysreg(pmcntenset_el0) &
-			       kvm_vcpu_pmu_guest_counter_mask(vcpu);
-		return __vcpu_sys_reg(vcpu, reg);
+		return kvm_pmu_direct_cnten_read(vcpu);
 	case PMINTENSET_EL1:
 		if (kvm_pmu_part_on_cpu(vcpu))
 			return read_sysreg(pmintenset_el1) &
@@ -410,18 +492,7 @@ void kvm_pmu_direct_reg_write(struct kvm_vcpu *vcpu, unsigned int reg,
 		kvm_pmu_apply_single_event_filter(vcpu, reg - PMEVTYPER0_EL0);
 		break;
 	case PMCNTENSET_EL0:
-		val &= kvm_vcpu_pmu_guest_counter_mask(vcpu);
-		if (set) {
-			__vcpu_rmw_sys_reg(vcpu, PMCNTENSET_EL0, |=, val);
-			if (val)
-				kvm_pmu_set_guest_owned(vcpu);
-			if (kvm_pmu_part_on_cpu(vcpu))
-				write_sysreg(val, pmcntenset_el0);
-		} else {
-			__vcpu_rmw_sys_reg(vcpu, PMCNTENSET_EL0, &=, ~val);
-			if (kvm_pmu_part_on_cpu(vcpu))
-				write_sysreg(val, pmcntenclr_el0);
-		}
+		kvm_pmu_direct_cnten_write(vcpu, val, set);
 		break;
 	case PMINTENSET_EL1:
 		val &= kvm_vcpu_pmu_guest_counter_mask(vcpu);
@@ -545,6 +616,7 @@ static void __kvm_pmu_load(struct kvm_vcpu *vcpu, bool reserve_counters)
 	isb();
 
 	vcpu->arch.pmu.loaded_on_cpu = true;
+	vcpu->arch.pmu.multiplex_enables = !!kvm_pmu_hyp_counter_mask(vcpu);
 	kvm_arm_setup_mdcr_el2(vcpu);
 	isb();
 
@@ -568,14 +640,6 @@ static void __kvm_pmu_load(struct kvm_vcpu *vcpu, bool reserve_counters)
 		write_sysreg(val, pmuserenr_el0);
 	}
 
-	/* Save only the stateful writable bits. */
-	val = __vcpu_sys_reg(vcpu, PMCR_EL0);
-	mask = ARMV8_PMU_PMCR_MASK &
-		~(ARMV8_PMU_PMCR_P | ARMV8_PMU_PMCR_C);
-	if (!kvm_has_feat(vcpu->kvm, ID_AA64DFR0_EL1, PMUVer, V3P5))
-		mask &= ~ARMV8_PMU_PMCR_LP;
-	write_sysreg(val & mask, pmcr_el0);
-
 	/*
 	 * When handling these:
 	 * 1. Apply only the bits for guest counters (indicated by mask)
@@ -591,9 +655,23 @@ static void __kvm_pmu_load(struct kvm_vcpu *vcpu, bool reserve_counters)
 	write_sysreg(mask, pmovsclr_el0);
 	isb();
 
-	val = __vcpu_sys_reg(vcpu, PMCNTENSET_EL0);
-	write_sysreg(val & mask, pmcntenset_el0);
-	write_sysreg(~val & mask, pmcntenclr_el0);
+	if (vcpu->arch.pmu.multiplex_enables) {
+		kvm_pmu_part_sync_hw_enables(vcpu);
+	} else {
+		u64 pmcr_mask = ARMV8_PMU_PMCR_MASK &
+				~(ARMV8_PMU_PMCR_P | ARMV8_PMU_PMCR_C);
+
+		if (!kvm_has_feat(vcpu->kvm, ID_AA64DFR0_EL1, PMUVer, V3P5))
+			pmcr_mask &= ~ARMV8_PMU_PMCR_LP;
+
+		/* Save only the stateful writable bits. */
+		val = __vcpu_sys_reg(vcpu, PMCR_EL0);
+		write_sysreg(val & pmcr_mask, pmcr_el0);
+
+		val = __vcpu_sys_reg(vcpu, PMCNTENSET_EL0);
+		write_sysreg(val & mask, pmcntenset_el0);
+		write_sysreg(~val & mask, pmcntenclr_el0);
+	}
 
 	val = __vcpu_sys_reg(vcpu, PMINTENSET_EL1);
 	write_sysreg(val & mask, pmintenset_el1);
@@ -657,8 +735,10 @@ static void __kvm_pmu_put(struct kvm_vcpu *vcpu, bool release_counters)
 	daif = local_daif_save();
 
 	/* Mask these to only save the guest relevant bits. */
-	val = read_sysreg(pmcntenset_el0);
-	__vcpu_assign_sys_reg(vcpu, PMCNTENSET_EL0, val & mask);
+	if (!vcpu->arch.pmu.multiplex_enables) {
+		val = read_sysreg(pmcntenset_el0);
+		__vcpu_assign_sys_reg(vcpu, PMCNTENSET_EL0, val & mask);
+	}
 
 	val = read_sysreg(pmintenset_el1);
 	__vcpu_assign_sys_reg(vcpu, PMINTENSET_EL1, val & mask);
@@ -690,12 +770,14 @@ static void __kvm_pmu_put(struct kvm_vcpu *vcpu, bool release_counters)
 		write_sysreg(ARMV8_PMU_USERENR_MASK, pmuserenr_el0);
 	}
 
-	val = read_sysreg(pmcr_el0);
-	pmcr_mask = ARMV8_PMU_PMCR_MASK;
-	if (!kvm_has_feat(vcpu->kvm, ID_AA64DFR0_EL1, PMUVer, V3P5))
-		pmcr_mask &= ~ARMV8_PMU_PMCR_LP;
-	__vcpu_rmw_sys_reg(vcpu, PMCR_EL0, &=, ~ARMV8_PMU_PMCR_MASK);
-	__vcpu_rmw_sys_reg(vcpu, PMCR_EL0, |=, val & pmcr_mask);
+	if (!vcpu->arch.pmu.multiplex_enables) {
+		pmcr_mask = ARMV8_PMU_PMCR_MASK;
+		if (!kvm_has_feat(vcpu->kvm, ID_AA64DFR0_EL1, PMUVer, V3P5))
+			pmcr_mask &= ~ARMV8_PMU_PMCR_LP;
+		val = read_sysreg(pmcr_el0);
+		__vcpu_rmw_sys_reg(vcpu, PMCR_EL0, &=, ~ARMV8_PMU_PMCR_MASK);
+		__vcpu_rmw_sys_reg(vcpu, PMCR_EL0, |=, val & pmcr_mask);
+	}
 
 	val = ARMV8_PMU_PMCR_LC;
 	if (pmu->pmuver >= ID_AA64DFR0_EL1_PMUVer_V3P5)
@@ -710,6 +792,7 @@ static void __kvm_pmu_put(struct kvm_vcpu *vcpu, bool release_counters)
 	write_sysreg(val & mask, pmovsclr_el0);
 
 	vcpu->arch.pmu.loaded_on_cpu = false;
+	vcpu->arch.pmu.multiplex_enables = false;
 	kvm_arm_setup_mdcr_el2(vcpu);
 	isb();
 
@@ -741,9 +824,9 @@ void kvm_pmu_put(struct kvm_vcpu *vcpu)
  * kvm_pmu_reload_part() - Reload partitioned PMU traps, filters, and state
  * @vcpu: Pointer to struct kvm_vcpu
  *
- * Refresh MDCR_EL2 trap bits, event filters, and hardware register state
- * without releasing the host counter reservation when the partitioned PMU is
- * already loaded on the CPU.
+ * Refresh fine-grained traps, MDCR_EL2 trap bits, event filters, and
+ * enable multiplexing without releasing the host counter reservation
+ * when the partitioned PMU is already loaded on the CPU.
  */
 void kvm_pmu_reload_part(struct kvm_vcpu *vcpu)
 {
@@ -864,7 +947,10 @@ bool kvm_pmu_part_overflow_status(struct kvm_vcpu *vcpu)
 			write_sysreg(hw_ovf, pmovsclr_el0);
 		}
 		pmint = read_pmintenset();
-		pmcr = read_pmcr();
+		if (vcpu->arch.pmu.multiplex_enables)
+			pmcr = __vcpu_sys_reg(vcpu, PMCR_EL0);
+		else
+			pmcr = read_pmcr();
 	} else {
 		pmint = __vcpu_sys_reg(vcpu, PMINTENSET_EL1);
 		pmcr = __vcpu_sys_reg(vcpu, PMCR_EL0);

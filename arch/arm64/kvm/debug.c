@@ -80,13 +80,17 @@ void kvm_arm_setup_mdcr_el2(struct kvm_vcpu *vcpu)
 			/*
 			 * Take out the coarse grain traps if we are using
 			 * fine grain traps and enforce counter access with
-			 * HPMN.
+			 * HPMN. Keep TPMCR when L1 sub-partitions its counters
+			 * so PMCR_EL0 reads and writes trap for multiplexing.
 			 */
 			mdcr &= ~MDCR_EL2_HPMN;
 			mdcr |= FIELD_PREP(MDCR_EL2_HPMN, nr_guest_cntr);
 
-			if (cpus_have_final_cap(ARM64_HAS_FGT))
-				mdcr &= ~(MDCR_EL2_TPM | MDCR_EL2_TPMCR);
+			if (cpus_have_final_cap(ARM64_HAS_FGT)) {
+				mdcr &= ~MDCR_EL2_TPM;
+				if (!kvm_pmu_hyp_counter_mask(vcpu))
+					mdcr &= ~MDCR_EL2_TPMCR;
+			}
 		}
 	}
 
