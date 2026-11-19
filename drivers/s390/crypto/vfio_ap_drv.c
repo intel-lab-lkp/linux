@@ -62,6 +62,7 @@ static struct ap_driver vfio_ap_drv = {
 	.on_config_changed = vfio_ap_on_cfg_changed,
 	.on_scan_complete = vfio_ap_on_scan_complete,
 	.ids = ap_queue_ids,
+	.driver.support_driver_override = true,
 };
 
 static void vfio_ap_matrix_dev_release(struct device *dev)

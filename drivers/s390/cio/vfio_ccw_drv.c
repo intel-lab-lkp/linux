@@ -375,6 +375,7 @@ static struct css_driver vfio_ccw_sch_driver = {
 	.drv = {
 		.name = "vfio_ccw",
 		.owner = THIS_MODULE,
+		.support_driver_override = true,
 	},
 	.subchannel_type = vfio_ccw_sch_ids,
 	.irq = vfio_ccw_sch_irq,
