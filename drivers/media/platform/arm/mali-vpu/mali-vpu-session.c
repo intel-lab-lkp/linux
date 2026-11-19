@@ -5,14 +5,12 @@
 
 #include <linux/err.h>
 #include <linux/errno.h>
-#include <linux/minmax.h>
-#include <linux/mm.h>
 #include <linux/string.h>
-#include <media/v4l2-common.h>
 #include <media/v4l2-mem2mem.h>
 
 #include "mali-vpu-session.h"
 #include "mali-vpu-dec.h"
+#include "mali-vpu-formats.h"
 #include "mali-vpu-variant.h"
 #include "mali-vpu-vb2.h"
 
@@ -32,23 +30,9 @@ static int mali_vpu_set_port_fmt(struct mali_vpu_port *port,
 	memset(&port->curr_fmt, 0, sizeof(port->curr_fmt));
 	port->curr_fmt.type = type;
 
-	if (fmt_default->flags & V4L2_FMT_FLAG_COMPRESSED) {
-		pix_mp->pixelformat = fmt_default->fourcc;
-		pix_mp->num_planes = 1;
-		pix_mp->width = width;
-		pix_mp->height = height;
-		pix_mp->plane_fmt[0].bytesperline = 0;
-
-		/*
-		 * Use one byte per pixel as the default compressed sizeimage,
-		 * with a minimum of one page, aligned to a page boundary.
-		 */
-		pix_mp->plane_fmt[0].sizeimage = PAGE_ALIGN(max_t(u32, PAGE_SIZE, width * height));
-	} else {
-		ret = v4l2_fill_pixfmt_mp(pix_mp, fmt_default->fourcc, width, height);
-		if (ret)
-			return ret;
-	}
+	ret = mali_vpu_fill_pixmp_fmt(fmt_default, width, height, pix_mp);
+	if (ret)
+		return ret;
 
 	pix_mp->field = V4L2_FIELD_NONE;
 
