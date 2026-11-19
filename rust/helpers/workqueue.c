@@ -19,3 +19,10 @@ __rust_helper void rust_helper_destroy_work_on_stack(struct work_struct *work)
 {
 	destroy_work_on_stack(work);
 }
+
+__rust_helper
+struct workqueue_struct *rust_helper_alloc_workqueue(const char *fmt, unsigned int flags,
+						     int max_active, const void *data)
+{
+	return alloc_workqueue(fmt, flags, max_active, data);
+}
