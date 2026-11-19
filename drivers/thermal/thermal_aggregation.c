@@ -154,3 +154,8 @@ thermal_zone_aggregate_validate(struct thermal_zone_aggregate *aggregate,
 
 	return 0;
 }
+
+int thermal_zone_get_temp_aggregate(struct thermal_zone_device *tz, int *temp)
+{
+	return -EOPNOTSUPP;
+}

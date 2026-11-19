@@ -74,7 +74,7 @@ EXPORT_SYMBOL_GPL(thermal_trip_is_bound_to_cdev);
  * temperature and fill @temp.
  *
  * Both tz and tz->ops must be valid pointers when calling this function,
- * and the tz->ops.get_temp callback must be provided.
+ * and the tz->ops.get_temp callback must be provided for non-aggregated zones.
  * The function must be called under tz->lock.
  *
  * Return: On success returns 0, an error code otherwise
@@ -87,7 +87,10 @@ int __thermal_zone_get_temp(struct thermal_zone_device *tz, int *temp)
 
 	lockdep_assert_held(&tz->lock);
 
-	ret = tz->ops.get_temp(tz, temp);
+	if (tz->tzp && tz->tzp->aggregate)
+		ret = thermal_zone_get_temp_aggregate(tz, temp);
+	else
+		ret = tz->ops.get_temp(tz, temp);
 
 	if (IS_ENABLED(CONFIG_THERMAL_EMULATION) && tz->emul_temperature) {
 		for_each_trip_desc(tz, td) {

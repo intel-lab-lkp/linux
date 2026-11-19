@@ -313,6 +313,14 @@ void thermal_zone_set_trips(struct thermal_zone_device *tz, int low, int high);
 int thermal_zone_trip_id(const struct thermal_zone_device *tz,
 			 const struct thermal_trip *trip);
 int __thermal_zone_get_temp(struct thermal_zone_device *tz, int *temp);
+#ifdef CONFIG_THERMAL_AGGREGATION
+int thermal_zone_get_temp_aggregate(struct thermal_zone_device *tz, int *temp);
+#else
+static inline int thermal_zone_get_temp_aggregate(struct thermal_zone_device *tz, int *temp)
+{
+	return -EOPNOTSUPP;
+}
+#endif
 void thermal_zone_set_trip_hyst(struct thermal_zone_device *tz,
 				struct thermal_trip *trip, int hyst);
 
