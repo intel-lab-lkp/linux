@@ -4,6 +4,8 @@ config VIDEO_MALI_VPU
 	depends on V4L_MEM2MEM_DRIVERS
 	depends on VIDEO_DEV
 	depends on !CPU_BIG_ENDIAN
+	select V4L2_MEM2MEM_DEV
+	select VIDEOBUF2_DMA_SG
 	help
 	  Enable this to support Arm's Mali Video hardware accelerator.
 	  This is a V4L2 driver.

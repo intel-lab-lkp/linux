@@ -3,15 +3,18 @@
  * Copyright (C) 2026 ARM Limited.
  */
 
+#include <linux/err.h>
 #include <linux/errno.h>
 #include <linux/minmax.h>
 #include <linux/mm.h>
 #include <linux/string.h>
 #include <media/v4l2-common.h>
+#include <media/v4l2-mem2mem.h>
 
 #include "mali-vpu-session.h"
 #include "mali-vpu-dec.h"
 #include "mali-vpu-variant.h"
+#include "mali-vpu-vb2.h"
 
 static int mali_vpu_set_port_fmt(struct mali_vpu_port *port,
 				 enum v4l2_buf_type type,
@@ -70,14 +73,42 @@ int mali_vpu_session_init(struct mali_vpu_session *sess)
 {
 	int ret;
 
-	if (sess->role != MALI_VPU_DECODER)
-		return -EINVAL;
+	mutex_init(&sess->vq_lock);
+
+	if (sess->role != MALI_VPU_DECODER) {
+		ret = -EINVAL;
+		goto err_mutex_destroy;
+	}
 
 	mali_vpu_session_init_dec(sess);
 
 	ret = mali_vpu_set_port_defaults(sess);
 	if (ret)
-		return ret;
+		goto err_mutex_destroy;
+
+	sess->m2m_ctx = v4l2_m2m_ctx_init(sess->vpu_dev->m2m_dev, sess, mali_vpu_queue_init);
+	if (IS_ERR(sess->m2m_ctx)) {
+		ret = PTR_ERR(sess->m2m_ctx);
+		goto err_mutex_destroy;
+	}
 
 	return 0;
+
+err_mutex_destroy:
+	mutex_destroy(&sess->vq_lock);
+	return ret;
+}
+
+void mali_vpu_session_cleanup(struct mali_vpu_session *sess)
+{
+	mutex_lock(&sess->vq_lock);
+
+	if (sess->m2m_ctx) {
+		v4l2_m2m_ctx_release(sess->m2m_ctx);
+		sess->m2m_ctx = NULL;
+		sess->fh.m2m_ctx = NULL;
+	}
+
+	mutex_unlock(&sess->vq_lock);
+	mutex_destroy(&sess->vq_lock);
 }

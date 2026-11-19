@@ -18,6 +18,7 @@
 #include <linux/string.h>
 #include <media/v4l2-dev.h>
 #include <media/v4l2-device.h>
+#include <media/v4l2-mem2mem.h>
 
 #include "mali-vpu-device.h"
 #include "mali-vpu-registers.h"
@@ -218,14 +219,22 @@ static int mali_vpu_probe(struct platform_device *pdev)
 		goto err_rst_clk;
 	}
 
+	vpu_dev->m2m_dev = v4l2_m2m_init(&mali_vpu_m2m_ops);
+	if (IS_ERR(vpu_dev->m2m_dev)) {
+		ret = PTR_ERR(vpu_dev->m2m_dev);
+		goto err_unreg_v4l2;
+	}
+
 	ret = mali_vpu_register_video_device(vpu_dev, MALI_VPU_DECODER);
 	if (ret)
-		goto err_unreg_v4l2;
+		goto err_release_m2m;
 
 	platform_set_drvdata(pdev, vpu_dev);
 
 	return 0;
 
+err_release_m2m:
+	v4l2_m2m_release(vpu_dev->m2m_dev);
 err_unreg_v4l2:
 	v4l2_device_unregister(&vpu_dev->v4l2_dev);
 err_rst_clk:
@@ -241,6 +250,7 @@ static void mali_vpu_remove(struct platform_device *pdev)
 	struct mali_vpu_dev *vpu_dev = platform_get_drvdata(pdev);
 
 	video_unregister_device(vpu_dev->vdev_dec);
+	v4l2_m2m_release(vpu_dev->m2m_dev);
 	v4l2_device_unregister(&vpu_dev->v4l2_dev);
 
 	mali_vpu_assert_reset(vpu_dev);

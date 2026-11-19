@@ -12,6 +12,7 @@
 #define MALI_VPU_DRV_NAME "mali-vpu"
 
 struct clk_bulk_data;
+struct v4l2_m2m_dev;
 struct mali_vpu_variant;
 struct reset_control_bulk_data;
 
@@ -35,6 +36,7 @@ enum mali_vpu_session_role {
  * @variant: Structure describing variant-specific features and capabilities.
  * @v4l2_dev: V4L2 device structure for mali vpu.
  * @vdev_dec: Video device structure for decoder.
+ * @m2m_dev: V4L2 mem2mem device structure for mali vpu.
  */
 struct mali_vpu_dev {
 	struct device			*dev;
@@ -48,6 +50,7 @@ struct mali_vpu_dev {
 	const struct mali_vpu_variant	*variant;
 	struct v4l2_device		v4l2_dev;
 	struct video_device		*vdev_dec;
+	struct v4l2_m2m_dev		*m2m_dev;
 };
 
 #endif /* __MALI_VPU_DEVICE_H__ */
