@@ -515,12 +515,13 @@ u32 cw1200_dpll_from_clk(u16 clk_khz)
 	}
 }
 
-int cw1200_core_probe(const struct hwbus_ops *hwbus_ops,
-		      struct hwbus_priv *hwbus,
-		      struct device *pdev,
-		      struct cw1200_common **core,
-		      int ref_clk, const u8 *macaddr,
-		      const char *sdd_path, bool have_5ghz)
+static int __cw1200_core_probe(const struct hwbus_ops *hwbus_ops,
+			       struct hwbus_priv *hwbus,
+			       struct device *pdev,
+			       struct cw1200_common **core,
+			       int ref_clk, const u8 *macaddr,
+			       const char *sdd_path, bool have_5ghz,
+			       bool is_xr819)
 {
 	int err = -EINVAL;
 	struct ieee80211_hw *dev;
@@ -535,6 +536,7 @@ int cw1200_core_probe(const struct hwbus_ops *hwbus_ops,
 		goto err;
 
 	priv = dev->priv;
+	priv->is_xr819 = is_xr819;
 	priv->hw_refclk = ref_clk;
 	if (cw1200_refclk)
 		priv->hw_refclk = cw1200_refclk;
@@ -590,7 +592,30 @@ err:
 	*core = NULL;
 	return err;
 }
+
+int cw1200_core_probe(const struct hwbus_ops *hwbus_ops,
+		      struct hwbus_priv *hwbus,
+		      struct device *pdev,
+		      struct cw1200_common **core,
+		      int ref_clk, const u8 *macaddr,
+		      const char *sdd_path, bool have_5ghz)
+{
+	return __cw1200_core_probe(hwbus_ops, hwbus, pdev, core, ref_clk,
+				   macaddr, sdd_path, have_5ghz, false);
+}
 EXPORT_SYMBOL_GPL(cw1200_core_probe);
+
+int cw1200_core_probe_xr819(const struct hwbus_ops *hwbus_ops,
+			    struct hwbus_priv *hwbus,
+			    struct device *pdev,
+			    struct cw1200_common **core,
+			    int ref_clk, const u8 *macaddr,
+			    const char *sdd_path)
+{
+	return __cw1200_core_probe(hwbus_ops, hwbus, pdev, core, ref_clk,
+				   macaddr, sdd_path, false, true);
+}
+EXPORT_SYMBOL_GPL(cw1200_core_probe_xr819);
 
 /*
  * Removing the interfaces sends WSM commands, which need the device

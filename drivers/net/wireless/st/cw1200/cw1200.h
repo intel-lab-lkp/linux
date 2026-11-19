@@ -116,7 +116,9 @@ struct cw1200_common {
 		CW1200_HW_REV_CUT20 = 20,
 		CW1200_HW_REV_CUT22 = 22,
 		CW1X60_HW_REV       = 40,
+		XR819_HW_REV        = 41,
 	} hw_revision;
+	bool				is_xr819;
 	int                             hw_refclk;
 	bool				hw_have_5ghz;
 	const struct firmware		*sdd;
@@ -293,6 +295,12 @@ int cw1200_core_probe(const struct hwbus_ops *hwbus_ops,
 		      struct cw1200_common **pself,
 		      int ref_clk, const u8 *macaddr,
 		      const char *sdd_path, bool have_5ghz);
+int cw1200_core_probe_xr819(const struct hwbus_ops *hwbus_ops,
+			    struct hwbus_priv *hwbus,
+			    struct device *pdev,
+			    struct cw1200_common **pself,
+			    int ref_clk, const u8 *macaddr,
+			    const char *sdd_path);
 void cw1200_core_unregister(struct cw1200_common *self);
 void cw1200_core_release(struct cw1200_common *self);
 

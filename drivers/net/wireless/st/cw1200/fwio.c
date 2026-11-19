@@ -14,6 +14,7 @@
 #include <linux/vmalloc.h>
 #include <linux/sched.h>
 #include <linux/firmware.h>
+#include <linux/unaligned.h>
 
 #include "cw1200.h"
 #include "fwio.h"
@@ -116,6 +117,11 @@ static int cw1200_load_firmware_cw1200(struct cw1200_common *priv)
 		if (!priv->sdd_path)
 			priv->sdd_path = SDD_FILE_CW1X60;
 		break;
+	case XR819_HW_REV:
+		fw_path = FIRMWARE_XR819;
+		if (!priv->sdd_path)
+			priv->sdd_path = SDD_FILE_XR819;
+		break;
 	default:
 		pr_err("Invalid silicon revision %d.\n", priv->hw_revision);
 		return -EINVAL;
@@ -128,9 +134,11 @@ static int cw1200_load_firmware_cw1200(struct cw1200_common *priv)
 	APB_WRITE(DOWNLOAD_STATUS_REG, DOWNLOAD_PENDING);
 	APB_WRITE(DOWNLOAD_FLAGS_REG, 0);
 
-	/* Write the NOP Instruction */
-	REG_WRITE(ST90TDS_SRAM_BASE_ADDR_REG_ID, 0xFFF20000);
-	REG_WRITE(ST90TDS_AHB_DPORT_REG_ID, 0xEAFFFFFE);
+	if (!priv->is_xr819) {
+		/* Write the NOP Instruction */
+		REG_WRITE(ST90TDS_SRAM_BASE_ADDR_REG_ID, 0xFFF20000);
+		REG_WRITE(ST90TDS_AHB_DPORT_REG_ID, 0xEAFFFFFE);
+	}
 
 	/* Release CPU from RESET */
 	REG_READ(ST90TDS_CONFIG_REG_ID, val32);
@@ -259,6 +267,45 @@ exit:
 #undef APB_READ
 #undef REG_WRITE
 #undef REG_READ
+}
+
+static int cw1200_load_bootloader_xr819(struct cw1200_common *priv)
+{
+	const struct firmware *bootloader;
+	u32 addr = XR819_BOOT_BASE;
+	size_t i;
+	int ret;
+
+	ret = request_firmware(&bootloader, BOOTLOADER_XR819, priv->pdev);
+	if (ret) {
+		dev_err(priv->pdev, "can't load bootloader file %s\n",
+			BOOTLOADER_XR819);
+		return ret;
+	}
+
+	if (!bootloader->size || bootloader->size > U32_MAX - addr ||
+	    !IS_ALIGNED(bootloader->size, sizeof(u32))) {
+		dev_err(priv->pdev, "invalid bootloader size %zu\n", bootloader->size);
+		ret = -EINVAL;
+		goto release;
+	}
+
+	for (i = 0; i < bootloader->size; i += sizeof(u32), addr += sizeof(u32)) {
+		u32 word = get_unaligned_le32(bootloader->data + i);
+
+		ret = cw1200_reg_write_32(priv, ST90TDS_SRAM_BASE_ADDR_REG_ID,
+					  addr);
+		if (ret)
+			goto release;
+
+		ret = cw1200_reg_write_32(priv, ST90TDS_AHB_DPORT_REG_ID, word);
+		if (ret)
+			goto release;
+	}
+
+release:
+	release_firmware(bootloader);
+	return ret;
 }
 
 
@@ -443,8 +490,13 @@ int cw1200_load_firmware(struct cw1200_common *priv)
 		break;
 	}
 	case 4:
-		pr_info("CW1x60 silicon detected.\n");
-		priv->hw_revision = CW1X60_HW_REV;
+		if (priv->is_xr819) {
+			dev_info(priv->pdev, "XR819 silicon detected\n");
+			priv->hw_revision = XR819_HW_REV;
+		} else {
+			pr_info("CW1x60 silicon detected.\n");
+			priv->hw_revision = CW1X60_HW_REV;
+		}
 		break;
 	default:
 		pr_err("Unsupported silicon major revision %d.\n",
@@ -472,6 +524,11 @@ int cw1200_load_firmware(struct cw1200_common *priv)
 			pr_err("Can't handle CW1160/1260 firmware load yet.\n");
 			ret = -ENOTSUPP;
 			goto out;
+		}
+		if (priv->is_xr819) {
+			ret = cw1200_load_bootloader_xr819(priv);
+			if (ret)
+				goto out;
 		}
 		ret = cw1200_load_firmware_cw1200(priv);
 		break;

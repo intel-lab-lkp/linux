@@ -25,6 +25,9 @@
 #define SDD_FILE_20		"sdd_20.bin"
 #define SDD_FILE_11		"sdd_11.bin"
 #define SDD_FILE_10		"sdd_10.bin"
+#define BOOTLOADER_XR819	"xr819/boot_xr819.bin"
+#define FIRMWARE_XR819		"xr819/fw_xr819.bin"
+#define SDD_FILE_XR819		"xr819/sdd_xr819.bin"
 
 int cw1200_load_firmware(struct cw1200_common *priv);
 
