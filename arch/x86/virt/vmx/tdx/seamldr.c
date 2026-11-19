@@ -24,7 +24,20 @@
 #define P_SEAMLDR_INFO			0x8000000000000000
 #define P_SEAMLDR_INSTALL		0x8000000000000001
 
-#define SEAMLDR_MAX_NR_MODULE_PAGES	496
+/*
+ * 'struct seamldr_params' spans this many pages. The number is somewhat
+ * arbitrary and fits modules of up to about 32MB. Increase it if modules
+ * outgrow that.
+ */
+#define SEAMLDR_PARAMS_NR_PAGES		16
+
+/*
+ * module_pages_pa_list[] fills the rest of 'struct seamldr_params' after
+ * its first 128 bytes. The last entry of each page is reserved to point
+ * to the next page. The last entry of the final page is never used.
+ */
+#define SEAMLDR_NR_MODULE_PA_ENTRIES	((SEAMLDR_PARAMS_NR_PAGES * PAGE_SIZE - 128) / sizeof(u64))
+#define SEAMLDR_MAX_NR_MODULE_PAGES	(SEAMLDR_NR_MODULE_PA_ENTRIES - SEAMLDR_PARAMS_NR_PAGES)
 #define SEAMLDR_MAX_NR_SIG_PAGES	1
 
 /*
@@ -48,10 +61,10 @@ struct seamldr_params {
 	u64	sigstruct_pages_pa_list[SEAMLDR_MAX_NR_SIG_PAGES];
 	u8	reserved[104];
 	u64	module_nr_pages;
-	u64	module_pages_pa_list[SEAMLDR_MAX_NR_MODULE_PAGES];
+	u64	module_pages_pa_list[SEAMLDR_NR_MODULE_PA_ENTRIES];
 } __packed;
 
-static_assert(sizeof(struct seamldr_params) == 4096);
+static_assert(sizeof(struct seamldr_params) == SEAMLDR_PARAMS_NR_PAGES * PAGE_SIZE);
 
 /*
  * Serialize P-SEAMLDR calls since the hardware only allows a single CPU to
@@ -130,16 +143,28 @@ struct tdx_image {
  * Given a vmalloc() allocation, write all of the backing physical
  * addresses to pa_list[]. Caller guarantees that the array is big
  * enough.
+ *
+ * If pa_list[] spans multiple pages, chain them by pointing the last
+ * entry of each page to the next page. Note that a pa_list[] that
+ * does not cross a page boundary, such as sigstruct_pages_pa_list[],
+ * is never chained.
  */
 static void populate_pa_list(u64 *pa_list, const u8 *vmalloc_addr, u32 vmalloc_len_pages)
 {
-	int i;
+	int i, j;
 
-	for (i = 0; i < vmalloc_len_pages; i++) {
+	for (i = 0, j = 0; i < vmalloc_len_pages; i++) {
 		unsigned long offset = i * PAGE_SIZE;
 		unsigned long pfn = vmalloc_to_pfn(&vmalloc_addr[offset]);
 
-		pa_list[i] = pfn << PAGE_SHIFT;
+		/* Point the last entry of a page to the next page. */
+		if (PAGE_ALIGNED(&pa_list[j + 1])) {
+			pa_list[j] = __pa(&pa_list[j + 1]);
+			j++;
+		}
+
+		pa_list[j] = pfn << PAGE_SHIFT;
+		j++;
 	}
 }
 
