@@ -2207,7 +2207,6 @@ void ice_cfg_sw_rx_lldp(struct ice_pf *pf, bool enable)
 {
 	struct ice_vsi *vsi;
 	struct ice_vf *vf;
-	unsigned int bkt;
 
 	vsi = ice_get_main_vsi(pf);
 	ice_vsi_cfg_sw_lldp(vsi, false, enable);
@@ -2215,14 +2214,18 @@ void ice_cfg_sw_rx_lldp(struct ice_pf *pf, bool enable)
 	if (!test_bit(ICE_FLAG_SRIOV_ENA, pf->flags))
 		return;
 
-	ice_for_each_vf(pf, bkt, vf) {
-		vsi = ice_get_vf_vsi(vf);
-
-		if (WARN_ON(!vsi))
+	for (u16 vf_id = 0; vf_id < pf->vfs.num_supported; vf_id++) {
+		vf = ice_get_vf_by_id(pf, vf_id);
+		if (!vf)
 			continue;
 
-		if (ice_vf_is_lldp_ena(vf))
+		mutex_lock(&vf->cfg_lock);
+		vsi = ice_get_vf_vsi(vf);
+		if (vsi && ice_vf_is_lldp_ena(vf))
 			ice_vsi_cfg_sw_lldp(vsi, false, enable);
+		mutex_unlock(&vf->cfg_lock);
+
+		ice_put_vf(vf);
 	}
 }
 
