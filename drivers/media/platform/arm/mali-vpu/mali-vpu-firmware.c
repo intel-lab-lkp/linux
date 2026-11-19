@@ -18,8 +18,8 @@
 #define MALI_VPU_FW_MAX_CORES 8
 #define MALI_VPU_RPC_VA_GRANULE SZ_16M
 
-static int mali_vpu_fw_get_region(enum mali_vpu_fw_region region,
-				  mali_vpu_mmu_va *begin, mali_vpu_mmu_va *end)
+int mali_vpu_fw_get_region(enum mali_vpu_fw_region region,
+			   mali_vpu_mmu_va *begin, mali_vpu_mmu_va *end)
 {
 	switch (region) {
 	case MALI_VPU_FW_REGION_MSG_HOST:

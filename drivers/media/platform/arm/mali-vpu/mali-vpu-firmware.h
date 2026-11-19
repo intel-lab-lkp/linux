@@ -10,6 +10,8 @@
 #include <linux/media/arm/mali-vpu-config.h>
 #include <linux/types.h>
 
+#include "mali-vpu-mmu.h"
+
 #define MALI_VPU_FW_HTABLE_BITS 3
 #define MALI_VPU_FW_TEXT_BASE_ADDR 0x1000u
 
@@ -101,6 +103,7 @@ struct mali_vpu_fw_error {
  * enum mali_vpu_fw_code - Driver representation of firmware messages.
  * @MALI_VPU_FW_CODE_ERROR: Firmware reported fatal error.
  * @MALI_VPU_FW_CODE_JOB: Firmware dequeued a job.
+ * @MALI_VPU_FW_CODE_BUFFER: Send and receive buffer.
  * @MALI_VPU_FW_CODE_PING: Ping request sent to firmware.
  * @MALI_VPU_FW_CODE_PONG: Firmware responded to a ping request.
  * @MALI_VPU_FW_CODE_IDLE: Firmware informs the driver that it's idle.
@@ -115,6 +118,7 @@ struct mali_vpu_fw_error {
 enum mali_vpu_fw_code {
 	MALI_VPU_FW_CODE_ERROR,              /* Driver <- Firmware. */
 	MALI_VPU_FW_CODE_JOB,                /* Driver -> Firmware. */
+	MALI_VPU_FW_CODE_BUFFER,             /* Driver <-> Firmware. */
 	MALI_VPU_FW_CODE_PING,               /* Driver -> Firmware. */
 	MALI_VPU_FW_CODE_PONG,               /* Driver <- Firmware. */
 	MALI_VPU_FW_CODE_IDLE,               /* Driver <- Firmware. */
@@ -138,6 +142,7 @@ struct mali_vpu_fw_msg {
 		enum mali_vpu_fw_state state;
 		struct mali_vpu_fw_job job;
 		struct mali_vpu_fw_error error;
+		struct mali_vpu_buffer *vpu_buf;
 	} data;
 };
 
@@ -246,6 +251,8 @@ int mali_vpu_fw_send_ping(struct mali_vpu_fw *fw);
 int mali_vpu_fw_send_state_change(struct mali_vpu_fw *fw, enum mali_vpu_fw_state state);
 int mali_vpu_fw_send_set_option(struct mali_vpu_fw *fw, struct mali_vpu_fw_set_option *option);
 int mali_vpu_fw_parse_msg(struct mali_vpu_fw *fw, struct mali_vpu_fw_msg *msg);
+int mali_vpu_fw_get_region(enum mali_vpu_fw_region region, mali_vpu_mmu_va *begin,
+			   mali_vpu_mmu_va *end);
 int mali_vpu_fw_handle_rpc(struct mali_vpu_fw *fw, bool *flush_mmu);
 
 #endif /* __MALI_VPU_FIRMWARE_H__ */

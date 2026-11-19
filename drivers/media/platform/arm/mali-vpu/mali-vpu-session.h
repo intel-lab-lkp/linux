@@ -12,6 +12,7 @@
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-fh.h>
 
+#include "mali-vpu-buffer.h"
 #include "mali-vpu-device.h"
 #include "mali-vpu-firmware.h"
 #include "mali-vpu-formats.h"
@@ -51,6 +52,10 @@ struct mali_vpu_port {
  * An asynchronous callback starts firmware if the required ports still request
  * streaming: OUTPUT for a decoder, both ports for an encoder.
  * Binary READY and firmware RUNNING are separate states.
+ *
+ * Buffers received before the firmware confirms RUNNING are deferred. The
+ * RUNNING response submits those buffers. Buffers received afterwards are
+ * submitted directly.
  *
  * Session cleanup waits for an in-flight callback before releasing the
  * session-owned binary reference and callback event. On timeout, it cancels
@@ -128,6 +133,7 @@ int mali_vpu_session_prepare_streaming(struct mali_vpu_session *sess,
 				       enum v4l2_buf_type type);
 int mali_vpu_session_streamoff(struct mali_vpu_session *sess, enum v4l2_buf_type type);
 void mali_vpu_session_irq(struct mali_vpu_session *sess);
+int mali_vpu_session_qbuf(struct mali_vpu_session *sess, struct vb2_buffer *vb2_buf);
 
 static inline struct mali_vpu_session *mali_vpu_get_session(struct file *filp)
 {

@@ -55,8 +55,30 @@ static void mali_vpu_vb2_buffer_queue(struct vb2_buffer *vb2_buf)
 {
 	struct mali_vpu_session *sess = vb2_get_drv_priv(vb2_buf->vb2_queue);
 	struct vb2_v4l2_buffer *v4l2_buf = to_vb2_v4l2_buffer(vb2_buf);
+	int ret;
+
+	/* Update vb2 metadata and payload info onto mali_vpu_buffer. */
+	ret = mali_vpu_buffer_update_info_from_v4l2(vb2_buf);
+	if (ret)
+		goto err_buf_done;
 
 	v4l2_m2m_buf_queue(sess->m2m_ctx, v4l2_buf);
+
+	ret = mali_vpu_session_qbuf(sess, vb2_buf);
+	if (ret)
+		goto err_m2m_buf_remove;
+
+	return;
+
+err_m2m_buf_remove:
+	if (V4L2_TYPE_IS_OUTPUT(vb2_buf->type))
+		v4l2_m2m_src_buf_remove_by_buf(sess->m2m_ctx, v4l2_buf);
+	else
+		v4l2_m2m_dst_buf_remove_by_buf(sess->m2m_ctx, v4l2_buf);
+
+err_buf_done:
+	v4l2_m2m_buf_done(v4l2_buf, VB2_BUF_STATE_ERROR);
+
 }
 
 static int mali_vpu_vb2_prepare_streaming(struct vb2_queue *q)
@@ -123,6 +145,7 @@ static const struct vb2_ops mali_vpu_vb2_ops = {
 	.buf_init		= mali_vpu_vb2_buffer_init,
 	.buf_prepare		= mali_vpu_vb2_buffer_prepare,
 	.buf_queue		= mali_vpu_vb2_buffer_queue,
+	.buf_cleanup		= mali_vpu_vb2_buffer_cleanup,
 	.prepare_streaming	= mali_vpu_vb2_prepare_streaming,
 	.start_streaming	= mali_vpu_vb2_start_streaming,
 	.stop_streaming		= mali_vpu_vb2_stop_streaming,

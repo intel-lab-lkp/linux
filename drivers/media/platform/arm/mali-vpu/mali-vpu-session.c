@@ -150,6 +150,122 @@ int mali_vpu_session_fw_send_set_option(struct mali_vpu_session *sess,
 	return 0;
 }
 
+static int mali_vpu_buffer_map_fw_region(struct mali_vpu_session *sess,
+					 struct mali_vpu_buffer *vpu_buf)
+{
+	mali_vpu_mmu_va begin, end;
+	enum mali_vpu_fw_region region;
+	enum v4l2_buf_type type;
+	int ret;
+
+	type = vpu_buf->m2m_buf.vb.vb2_buf.type;
+
+	if (mali_vpu_is_coded_q(sess, type))
+		region = MALI_VPU_FW_REGION_PROTECTED;
+	else
+		region = MALI_VPU_FW_REGION_FRAMEBUF;
+
+	ret = mali_vpu_fw_get_region(region, &begin, &end);
+	if (ret)
+		return ret;
+
+	return mali_vpu_buffer_map(vpu_buf, begin, end);
+}
+
+static int mali_vpu_queue_buffer(struct mali_vpu_session *sess, struct mali_vpu_buffer *vpu_buf)
+{
+	int ret;
+	enum dma_data_direction dma_dir;
+
+	dma_dir = (vpu_buf->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) ?
+		   DMA_TO_DEVICE : DMA_FROM_DEVICE;
+
+	/* Map MMU buffer pages if it is not already mapped */
+	if (!mali_vpu_is_buffer_mapped(vpu_buf)) {
+		ret = mali_vpu_buffer_map_fw_region(sess, vpu_buf);
+		if (ret)
+			return ret;
+	}
+
+	if (!mali_vpu_is_coded_q(sess, vpu_buf->type) && sess->role == MALI_VPU_DECODER) {
+		ret = mali_vpu_buffer_set_frame_layout(vpu_buf);
+		if (ret)
+			return ret;
+	}
+
+	/* dma sync for cache coherency */
+	ret = mali_vpu_buffer_sync(vpu_buf, dma_dir);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
+static int mali_vpu_submit_deferred_bufs_for_queue(struct mali_vpu_session *sess,
+						   enum v4l2_buf_type type)
+{
+	struct v4l2_m2m_buffer *buffer;
+	struct mali_vpu_buffer *vpu_buf;
+	int ret;
+
+	if (!mali_vpu_session_get_port(sess, type)->stream_requested ||
+	    !mali_vpu_session_can_stream(sess) ||
+	    sess->fw_state != MALI_VPU_FW_STATE_RUNNING)
+		return 0;
+
+	if (V4L2_TYPE_IS_OUTPUT(type)) {
+		v4l2_m2m_for_each_src_buf(sess->m2m_ctx, buffer) {
+			vpu_buf = to_mali_vpu_buffer(&buffer->vb);
+			if (vpu_buf->attr != MALI_VPU_BUF_ATTR_DEFERRED)
+				continue;
+
+			ret = mali_vpu_queue_buffer(sess, vpu_buf);
+			if (ret)
+				return ret;
+
+			vpu_buf->attr = MALI_VPU_BUF_ATTR_QUEUED;
+		}
+	} else if (V4L2_TYPE_IS_CAPTURE(type)) {
+		v4l2_m2m_for_each_dst_buf(sess->m2m_ctx, buffer) {
+			vpu_buf = to_mali_vpu_buffer(&buffer->vb);
+			if (vpu_buf->attr != MALI_VPU_BUF_ATTR_DEFERRED)
+				continue;
+
+			ret = mali_vpu_queue_buffer(sess, vpu_buf);
+			if (ret)
+				return ret;
+
+			vpu_buf->attr = MALI_VPU_BUF_ATTR_QUEUED;
+		}
+	} else {
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int mali_vpu_submit_deferred_bufs(struct mali_vpu_session *sess)
+{
+	int ret;
+
+	ret = mali_vpu_submit_deferred_bufs_for_queue(sess, V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE);
+	if (ret)
+		goto err_submit;
+
+	ret = mali_vpu_submit_deferred_bufs_for_queue(sess,
+						      V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE);
+	if (ret)
+		goto err_submit;
+
+	mali_vpu_sched_send_irq(&sess->sched_sess, &sess->vpu_dev->sched);
+
+	return 0;
+
+err_submit:
+	dev_err(sess->vpu_dev->dev, "failed to queue deferred buffers\n");
+	return ret;
+}
+
 static int mali_vpu_session_sched_activate(struct mali_vpu_session *sess)
 {
 	lockdep_assert_held(&sess->vq_lock);
@@ -180,6 +296,9 @@ static int mali_vpu_session_handle_fw_msg(struct mali_vpu_session *sess,
 		return 0;
 	case MALI_VPU_FW_CODE_STATE_CHANGE:
 		sess->fw_state = fw_msg->data.state;
+
+		if (sess->fw_state == MALI_VPU_FW_STATE_RUNNING)
+			return mali_vpu_submit_deferred_bufs(sess);
 		return 0;
 	case MALI_VPU_FW_CODE_SWITCH_IN:
 		/* Single session policy: the scheduler already tracks the active LSID mapping. */
@@ -388,6 +507,32 @@ static void mali_vpu_session_release_fw_bin(struct mali_vpu_session *sess)
 
 	if (sess->fw_bin_state == MALI_VPU_SESSION_FW_BIN_FAILED)
 		sess->fw_bin_state = MALI_VPU_SESSION_FW_BIN_UNINITIALIZED;
+}
+
+int mali_vpu_session_qbuf(struct mali_vpu_session *sess, struct vb2_buffer *vb2_buf)
+{
+	struct vb2_v4l2_buffer *v4l2_buf = to_vb2_v4l2_buffer(vb2_buf);
+	struct mali_vpu_buffer *vpu_buf = to_mali_vpu_buffer(v4l2_buf);
+	struct mali_vpu_port *port =
+			mali_vpu_session_get_port(sess, vb2_buf->type);
+	int ret;
+
+	if (!port->stream_requested ||
+	    !mali_vpu_session_can_stream(sess) ||
+	    sess->fw_state != MALI_VPU_FW_STATE_RUNNING) {
+		vpu_buf->attr = MALI_VPU_BUF_ATTR_DEFERRED;
+		return 0;
+	}
+
+	ret = mali_vpu_queue_buffer(sess, vpu_buf);
+	if (ret)
+		return ret;
+
+	vpu_buf->attr = MALI_VPU_BUF_ATTR_QUEUED;
+
+	mali_vpu_sched_send_irq(&sess->sched_sess, &sess->vpu_dev->sched);
+
+	return 0;
 }
 
 int mali_vpu_session_cleanup(struct mali_vpu_session *sess)
