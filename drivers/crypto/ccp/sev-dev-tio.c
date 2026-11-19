@@ -639,25 +639,23 @@ static void spdm_ctrl_init(struct spdm_ctrl *ctrl, struct tsm_dsm_tio *dev_data)
 static void spdm_ctrl_free(struct tsm_dsm_tio *dev_data)
 {
 	struct sev_tio_status *tio_status = to_tio_status(dev_data);
-	size_t len = tio_status->spdm_req_size_max -
-		(sla_dobj_id_to_size(SPDM_DOBJ_ID_RESP) +
-		 sizeof(struct sla_buffer_hdr));
 	struct tsm_spdm *spdm = &dev_data->spdm;
 
 	sla_buffer_unmap(dev_data->resp, dev_data->respbuf);
 	sla_buffer_unmap(dev_data->req, dev_data->reqbuf);
 	spdm->rsp = NULL;
 	spdm->req = NULL;
-	sla_free(dev_data->req, len, true);
-	sla_free(dev_data->resp, len, false);
-	sla_free(dev_data->scratch, tio_status->spdm_scratch_size_max, true);
+	sla_free(dev_data->req, tio_status->spdm_req_size_max, true);
+	sla_free(dev_data->resp, tio_status->spdm_req_size_max, false);
+	sla_free(dev_data->scratch, dev_data->scratch_len, true);
 
 	dev_data->req.sla = 0;
 	dev_data->resp.sla = 0;
 	dev_data->scratch.sla = 0;
 	dev_data->respbuf = NULL;
 	dev_data->reqbuf = NULL;
-	sla_free(dev_data->output, tio_status->spdm_out_size_max, true);
+	sla_free(dev_data->output, dev_data->output_len, true);
+	dev_data->output.sla = 0;
 }
 
 static int spdm_ctrl_alloc(struct tsm_dsm_tio *dev_data)
@@ -674,7 +672,7 @@ static int spdm_ctrl_alloc(struct tsm_dsm_tio *dev_data)
 	dev_data->output = sla_alloc(dev_data->output_len, true);
 
 	if (IS_SLA_NULL(dev_data->req) || IS_SLA_NULL(dev_data->resp) ||
-	    IS_SLA_NULL(dev_data->scratch) || IS_SLA_NULL(dev_data->dev_ctx)) {
+	    IS_SLA_NULL(dev_data->scratch) || IS_SLA_NULL(dev_data->output)) {
 		ret = -ENOMEM;
 		goto free_spdm_exit;
 	}
