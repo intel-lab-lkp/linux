@@ -531,6 +531,7 @@ void arch_smp_send_reschedule(int cpu)
 {
 	pcpu_ec_call(per_cpu_ptr(&pcpu_devices, cpu), ec_schedule);
 }
+EXPORT_SYMBOL_GPL(arch_smp_send_reschedule);
 
 #ifdef CONFIG_IRQ_WORK
 void arch_irq_work_raise(void)
