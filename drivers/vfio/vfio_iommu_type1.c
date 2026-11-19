@@ -641,7 +641,7 @@ static long vpfn_pages(struct vfio_dma *dma,
 {
 	dma_addr_t iova_end = iova_start + (nr_pages << PAGE_SHIFT);
 	struct vfio_pfn *top = vfio_find_vpfn_range(dma, iova_start, iova_end);
-	long ret = 1;
+	long ret = 0;
 	struct vfio_pfn *vpfn;
 	struct rb_node *prev;
 	struct rb_node *next;
@@ -649,20 +649,25 @@ static long vpfn_pages(struct vfio_dma *dma,
 	if (likely(!top))
 		return 0;
 
+	if (!is_invalid_reserved_pfn(top->pfn))
+		ret++;
+
 	prev = next = &top->node;
 
 	while ((prev = rb_prev(prev))) {
 		vpfn = rb_entry(prev, struct vfio_pfn, node);
 		if (vpfn->iova < iova_start)
 			break;
-		ret++;
+		if (!is_invalid_reserved_pfn(vpfn->pfn))
+			ret++;
 	}
 
 	while ((next = rb_next(next))) {
 		vpfn = rb_entry(next, struct vfio_pfn, node);
 		if (vpfn->iova >= iova_end)
 			break;
-		ret++;
+		if (!is_invalid_reserved_pfn(vpfn->pfn))
+			ret++;
 	}
 
 	return ret;
