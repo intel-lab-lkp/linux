@@ -2205,6 +2205,30 @@ unsigned int mempolicy_slab_node(void)
 	}
 }
 
+/*
+ * Return the nodes the task's MPOL_BIND policy restricts new slabs allocated
+ * with @gfp to, or NULL if they are not restricted. This follows the checks
+ * of alloc_frozen_pages_noprof() and policy_nodemask(), so that the nodes
+ * are returned only if the page allocator would also apply them.
+ */
+nodemask_t *mempolicy_slab_nodemask(gfp_t gfp)
+{
+	struct mempolicy *policy;
+
+	if (in_interrupt() || (gfp & __GFP_THISNODE))
+		return NULL;
+
+	policy = current->mempolicy;
+	if (!policy || policy->mode != MPOL_BIND)
+		return NULL;
+
+	if (!apply_policy_zone(policy, gfp_zone(current_gfp_context(gfp))) ||
+	    !cpuset_nodemask_valid_mems_allowed(&policy->nodes))
+		return NULL;
+
+	return &policy->nodes;
+}
+
 static unsigned int weighted_interleave_nid(struct mempolicy *pol, pgoff_t ilx)
 {
 	struct weighted_interleave_state *state;

@@ -3986,11 +3986,12 @@ static void *get_from_partial_node(struct kmem_cache *s,
 /*
  * Get an object from somewhere. Search in increasing NUMA distances.
  */
-static void *get_from_any_partial(struct kmem_cache *s, gfp_t gfp_flags,
+static void *get_from_any_partial(struct kmem_cache *s, int node, gfp_t gfp_flags,
 				  const struct slab_alloc_context *ac)
 {
 #ifdef CONFIG_NUMA
 	struct zonelist *zonelist;
+	nodemask_t *nodemask = NULL;
 	struct zoneref *z;
 	struct zone *zone;
 	enum zone_type highest_zoneidx = gfp_zone(gfp_flags);
@@ -4029,8 +4030,19 @@ static void *get_from_any_partial(struct kmem_cache *s, gfp_t gfp_flags,
 		if (allow_spin)
 			cpuset_mems_cookie = read_mems_allowed_begin();
 
+		/*
+		 * Restrict the scan to the nodes of the task's MPOL_BIND
+		 * policy, but only when new slabs are also allocated from
+		 * them. With an explicit node or when spinning is not allowed,
+		 * new slabs ignore the mempolicy. The latter case must also
+		 * avoid mempolicy_slab_nodemask(), which reads
+		 * current->mems_allowed_seq.
+		 */
+		if (allow_spin && node == NUMA_NO_NODE)
+			nodemask = mempolicy_slab_nodemask(gfp_flags | s->allocflags);
+
 		zonelist = node_zonelist(mempolicy_slab_node(), gfp_flags);
-		for_each_zone_zonelist(zone, z, zonelist, highest_zoneidx) {
+		for_each_zone_zonelist_nodemask(zone, z, zonelist, highest_zoneidx, nodemask) {
 			struct kmem_cache_node *n;
 
 			n = get_node(s, zone_to_nid(zone));
@@ -4074,7 +4086,7 @@ static void *get_from_partial(struct kmem_cache *s, int node, gfp_t flags,
 	if (object || (node != NUMA_NO_NODE && (flags & __GFP_THISNODE)))
 		return object;
 
-	return get_from_any_partial(s, flags, ac);
+	return get_from_any_partial(s, node, flags, ac);
 }
 
 static bool has_pcs_used(int cpu, struct kmem_cache *s)
@@ -7470,6 +7482,7 @@ __refill_objects_any(struct kmem_cache *s, void **p, gfp_t gfp, unsigned int min
 		     unsigned int max)
 {
 	struct zonelist *zonelist;
+	nodemask_t *nodemask;
 	struct zoneref *z;
 	struct zone *zone;
 	enum zone_type highest_zoneidx = gfp_zone(gfp);
@@ -7483,8 +7496,12 @@ __refill_objects_any(struct kmem_cache *s, void **p, gfp_t gfp, unsigned int min
 
 	do {
 		cpuset_mems_cookie = read_mems_allowed_begin();
+		nodemask = mempolicy_slab_nodemask(gfp | s->allocflags);
+		/* new slabs for the refill are allocated on the local node */
+		if (nodemask && !node_isset(numa_mem_id(), *nodemask))
+			nodemask = NULL;
 		zonelist = node_zonelist(mempolicy_slab_node(), gfp);
-		for_each_zone_zonelist(zone, z, zonelist, highest_zoneidx) {
+		for_each_zone_zonelist_nodemask(zone, z, zonelist, highest_zoneidx, nodemask) {
 			struct kmem_cache_node *n;
 			unsigned int r;
 

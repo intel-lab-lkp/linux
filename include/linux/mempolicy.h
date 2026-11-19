@@ -148,6 +148,7 @@ extern bool init_nodemask_of_mempolicy(nodemask_t *mask);
 extern bool mempolicy_in_oom_domain(struct task_struct *tsk,
 				const nodemask_t *mask);
 extern unsigned int mempolicy_slab_node(void);
+extern nodemask_t *mempolicy_slab_nodemask(gfp_t gfp);
 
 extern enum zone_type policy_zone;
 
