@@ -44,6 +44,7 @@ int cedrus_engine_enable(struct cedrus_ctx *ctx)
 
 	switch (ctx->src_fmt.pixelformat) {
 	case V4L2_PIX_FMT_MPEG2_SLICE:
+	case V4L2_PIX_FMT_MPEG1_SLICE:
 		reg |= VE_MODE_DEC_MPEG;
 		break;
 

@@ -77,6 +77,26 @@ static int cedrus_try_ctrl(struct v4l2_ctrl *ctrl)
 			ctx->bit_depth = bit_depth;
 			cedrus_reset_cap_format(ctx);
 		}
+	} else if (ctrl->id == V4L2_CID_STATELESS_MPEG2_SEQUENCE) {
+		const struct v4l2_ctrl_mpeg2_sequence *seq =
+			ctrl->p_new.p_mpeg2_sequence;
+		struct cedrus_ctx *ctx = container_of(ctrl->handler,
+						      struct cedrus_ctx, hdl);
+
+		if (seq->flags & V4L2_MPEG2_SEQ_FLAG_MPEG1 &&
+		    ctx->src_fmt.pixelformat != V4L2_PIX_FMT_MPEG1_SLICE)
+			return -EINVAL;
+	} else if (ctrl->id == V4L2_CID_STATELESS_MPEG2_PICTURE) {
+		const struct v4l2_ctrl_mpeg2_picture *pic =
+			ctrl->p_new.p_mpeg2_picture;
+		struct cedrus_ctx *ctx = container_of(ctrl->handler,
+						      struct cedrus_ctx, hdl);
+
+		if (ctx->src_fmt.pixelformat != V4L2_PIX_FMT_MPEG1_SLICE &&
+		    (pic->picture_coding_type == V4L2_MPEG2_PIC_CODING_TYPE_D ||
+		     pic->flags & (V4L2_MPEG2_PIC_FLAG_FULL_PEL_FORWARD |
+				   V4L2_MPEG2_PIC_FLAG_FULL_PEL_BACKWARD)))
+			return -EINVAL;
 	}
 
 	return 0;
@@ -90,12 +110,14 @@ static const struct cedrus_control cedrus_controls[] = {
 	{
 		.cfg = {
 			.id	= V4L2_CID_STATELESS_MPEG2_SEQUENCE,
+			.ops	= &cedrus_ctrl_ops,
 		},
 		.capabilities	= CEDRUS_CAPABILITY_MPEG2_DEC,
 	},
 	{
 		.cfg = {
 			.id	= V4L2_CID_STATELESS_MPEG2_PICTURE,
+			.ops	= &cedrus_ctrl_ops,
 		},
 		.capabilities	= CEDRUS_CAPABILITY_MPEG2_DEC,
 	},

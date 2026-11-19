@@ -48,6 +48,30 @@ static void cedrus_mpeg2_irq_disable(struct cedrus_ctx *ctx)
 	cedrus_write(dev, VE_DEC_MPEG_CTRL, reg);
 }
 
+static bool cedrus_mpeg2_is_mpeg1(struct cedrus_ctx *ctx)
+{
+	return ctx->src_fmt.pixelformat == V4L2_PIX_FMT_MPEG1_SLICE;
+}
+
+static bool
+cedrus_mpeg2_format_matches(struct cedrus_ctx *ctx,
+			    const struct v4l2_ctrl_mpeg2_sequence *seq,
+			    const struct v4l2_ctrl_mpeg2_picture *pic)
+{
+	bool mpeg1 = cedrus_mpeg2_is_mpeg1(ctx);
+
+	/* try_ctrl checked the controls against the format set at that time. */
+	if (mpeg1 != !!(seq->flags & V4L2_MPEG2_SEQ_FLAG_MPEG1))
+		return false;
+
+	if (mpeg1)
+		return pic->picture_structure == V4L2_MPEG2_PIC_FRAME;
+
+	return pic->picture_coding_type != V4L2_MPEG2_PIC_CODING_TYPE_D &&
+	       !(pic->flags & (V4L2_MPEG2_PIC_FLAG_FULL_PEL_FORWARD |
+			       V4L2_MPEG2_PIC_FLAG_FULL_PEL_BACKWARD));
+}
+
 static int cedrus_mpeg2_setup(struct cedrus_ctx *ctx, struct cedrus_run *run)
 {
 	const struct v4l2_ctrl_mpeg2_sequence *seq;
@@ -62,6 +86,9 @@ static int cedrus_mpeg2_setup(struct cedrus_ctx *ctx, struct cedrus_run *run)
 
 	seq = run->mpeg2.sequence;
 	pic = run->mpeg2.picture;
+
+	if (!cedrus_mpeg2_format_matches(ctx, seq, pic))
+		return -EINVAL;
 
 	quantisation = run->mpeg2.quantisation;
 
@@ -101,8 +128,10 @@ static int cedrus_mpeg2_setup(struct cedrus_ctx *ctx, struct cedrus_run *run)
 	reg |= VE_DEC_MPEG_MP12HDR_Q_SCALE_TYPE(pic->flags & V4L2_MPEG2_PIC_FLAG_Q_SCALE_TYPE);
 	reg |= VE_DEC_MPEG_MP12HDR_INTRA_VLC_FORMAT(pic->flags & V4L2_MPEG2_PIC_FLAG_INTRA_VLC);
 	reg |= VE_DEC_MPEG_MP12HDR_ALTERNATE_SCAN(pic->flags & V4L2_MPEG2_PIC_FLAG_ALT_SCAN);
-	reg |= VE_DEC_MPEG_MP12HDR_FULL_PEL_FORWARD_VECTOR(0);
-	reg |= VE_DEC_MPEG_MP12HDR_FULL_PEL_BACKWARD_VECTOR(0);
+	reg |= VE_DEC_MPEG_MP12HDR_FULL_PEL_FORWARD_VECTOR(pic->flags &
+				V4L2_MPEG2_PIC_FLAG_FULL_PEL_FORWARD);
+	reg |= VE_DEC_MPEG_MP12HDR_FULL_PEL_BACKWARD_VECTOR(pic->flags &
+				V4L2_MPEG2_PIC_FLAG_FULL_PEL_BACKWARD);
 
 	cedrus_write(dev, VE_DEC_MPEG_MP12HDR, reg);
 
@@ -183,8 +212,9 @@ static void cedrus_mpeg2_trigger(struct cedrus_ctx *ctx)
 	u32 reg;
 
 	/* Trigger MPEG engine. */
-	reg = VE_DEC_MPEG_TRIGGER_HW_MPEG_VLD | VE_DEC_MPEG_TRIGGER_MPEG2 |
-	      VE_DEC_MPEG_TRIGGER_MB_BOUNDARY;
+	reg = VE_DEC_MPEG_TRIGGER_HW_MPEG_VLD | VE_DEC_MPEG_TRIGGER_MB_BOUNDARY;
+	reg |= cedrus_mpeg2_is_mpeg1(ctx) ? VE_DEC_MPEG_TRIGGER_MPEG1 :
+					    VE_DEC_MPEG_TRIGGER_MPEG2;
 
 	cedrus_write(dev, VE_DEC_MPEG_TRIGGER, reg);
 }

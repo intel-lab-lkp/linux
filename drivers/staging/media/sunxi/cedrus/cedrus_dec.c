@@ -41,6 +41,7 @@ void cedrus_device_run(void *priv)
 
 	switch (ctx->src_fmt.pixelformat) {
 	case V4L2_PIX_FMT_MPEG2_SLICE:
+	case V4L2_PIX_FMT_MPEG1_SLICE:
 		run.mpeg2.sequence = cedrus_find_control_data(ctx,
 			V4L2_CID_STATELESS_MPEG2_SEQUENCE);
 		run.mpeg2.picture = cedrus_find_control_data(ctx,
