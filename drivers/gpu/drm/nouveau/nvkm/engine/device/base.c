@@ -3143,7 +3143,7 @@ nvkm_device_ctor(const struct nvkm_device_func *func,
 		 const struct nvkm_device_quirk *quirk,
 		 struct device *dev, enum nvkm_device_type type, u64 handle,
 		 const char *name, const char *cfg, const char *dbg,
-		 struct nvkm_device *device)
+		 bool bind_gsp, struct nvkm_device *device)
 {
 	struct nvkm_subdev *subdev;
 	u64 mmio_base, mmio_size;
@@ -3377,6 +3377,20 @@ nvkm_device_ctor(const struct nvkm_device_func *func,
 	boot1 = nvkm_rd32(device, 0x0000004);
 	if (device->card_type >= TU100 && (boot1 & 0x00030000)) {
 		nvdev_info(device, "vGPUs are not supported\n");
+		ret = -ENODEV;
+		goto done;
+	}
+
+	/* Unless nouveau is the default NVIDIA driver, leave GSP-capable
+	 * (Turing and later) PCI GPUs to other drivers, such as nova-core.
+	 * Older GPUs are always bound.
+	 *
+	 * Reject before subdevs are constructed, as that would already load
+	 * GSP firmware for GPUs that are not going to be used.
+	 */
+	if (device->func->pci && device->card_type >= TU100 && !bind_gsp) {
+		nvdev_info(device, "leaving GSP-capable GPU to other drivers "
+			   "(bind_gsp=0)\n");
 		ret = -ENODEV;
 		goto done;
 	}

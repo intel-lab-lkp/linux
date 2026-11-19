@@ -329,9 +329,12 @@ nvkm_device_tegra_new(const struct nvkm_device_tegra_func *func,
 
 	tdev->gpu_speedo = tegra_sku_info.gpu_speedo_value;
 	tdev->gpu_speedo_id = tegra_sku_info.gpu_speedo_id;
+	/* Platform devices are always bound, regardless of the bind_gsp
+	 * policy for PCI devices.
+	 */
 	ret = nvkm_device_ctor(&nvkm_device_tegra_func, NULL, &pdev->dev,
 			       NVKM_DEVICE_TEGRA, pdev->id, NULL,
-			       cfg, dbg, &tdev->device);
+			       cfg, dbg, true, &tdev->device);
 	if (ret)
 		goto powerdown;
 
