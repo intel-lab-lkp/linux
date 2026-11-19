@@ -437,6 +437,8 @@ static void cw1200_spi_disconnect(struct spi_device *func)
 	struct hwbus_priv *self = spi_get_drvdata(func);
 
 	if (self) {
+		if (self->core)
+			cw1200_core_unregister(self->core);
 		cw1200_spi_irq_unsubscribe(self);
 		if (self->core) {
 			cw1200_core_release(self->core);

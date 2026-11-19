@@ -456,8 +456,6 @@ static void cw1200_unregister_common(struct ieee80211_hw *dev)
 	struct cw1200_common *priv = dev->priv;
 	int i;
 
-	ieee80211_unregister_hw(dev);
-
 	timer_delete_sync(&priv->mcast_timeout);
 	cw1200_unregister_bh(priv);
 
@@ -593,6 +591,17 @@ err:
 	return err;
 }
 EXPORT_SYMBOL_GPL(cw1200_core_probe);
+
+/*
+ * Removing the interfaces sends WSM commands, which need the device
+ * interrupt for their confirmations, so the bus driver calls this before
+ * it frees its interrupt and calls cw1200_core_release().
+ */
+void cw1200_core_unregister(struct cw1200_common *self)
+{
+	ieee80211_unregister_hw(self->hw);
+}
+EXPORT_SYMBOL_GPL(cw1200_core_unregister);
 
 void cw1200_core_release(struct cw1200_common *self)
 {

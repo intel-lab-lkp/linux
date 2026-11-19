@@ -359,6 +359,8 @@ static void cw1200_sdio_disconnect(struct sdio_func *func)
 	struct hwbus_priv *self = sdio_get_drvdata(func);
 
 	if (self) {
+		if (self->core)
+			cw1200_core_unregister(self->core);
 		cw1200_sdio_irq_unsubscribe(self);
 		if (self->core) {
 			cw1200_core_release(self->core);
