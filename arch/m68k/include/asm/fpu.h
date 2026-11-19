@@ -21,4 +21,10 @@
 #define FPSTATESIZE (0)
 #endif
 
+#ifdef CONFIG_COLDFIRE
+#define FPU_ASM(insns)	insns
+#else
+#define FPU_ASM(insns)	".chip 68k/68881\n\t" insns "\n\t.chip 68k"
+#endif
+
 #endif /* __M68K_FPU_H */

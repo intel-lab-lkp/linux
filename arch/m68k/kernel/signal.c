@@ -45,6 +45,7 @@
 #include <linux/extable.h>
 #include <linux/resume_user_mode.h>
 
+#include <asm/fpu.h>
 #include <asm/setup.h>
 #include <linux/uaccess.h>
 #include <asm/traps.h>
@@ -306,24 +307,15 @@ static inline int restore_fpu_state(struct sigcontext *sc)
 				    "m" (sc->sc_fpcntl[1]),
 				    "m" (sc->sc_fpcntl[2]));
 	    } else {
-		__asm__ volatile (".chip 68k/68881\n\t"
-				  "fmovemx %0,%%fp0-%%fp1\n\t"
-				  "fmoveml %1,%%fpcr/%%fpsr/%%fpiar\n\t"
-				  ".chip 68k"
+		__asm__ volatile (FPU_ASM("fmovemx %0,%%fp0-%%fp1\n\t"
+					  "fmoveml %1,%%fpcr/%%fpsr/%%fpiar")
 				  : /* no outputs */
 				  : "m" (*sc->sc_fpregs),
 				    "m" (*sc->sc_fpcntl));
 	    }
 	}
 
-	if (CPU_IS_COLDFIRE) {
-		__asm__ volatile ("frestore %0" : : "m" (*sc->sc_fpstate));
-	} else {
-		__asm__ volatile (".chip 68k/68881\n\t"
-				  "frestore %0\n\t"
-				  ".chip 68k"
-				  : : "m" (*sc->sc_fpstate));
-	}
+	__asm__ volatile (FPU_ASM("frestore %0") : : "m" (*sc->sc_fpstate));
 	err = 0;
 
 out:
@@ -397,10 +389,8 @@ static inline int rt_restore_fpu_state(struct ucontext __user *uc)
 					    "m" (fpregs.f_fpcntl[1]),
 					    "m" (fpregs.f_fpcntl[2]));
 		} else {
-			__asm__ volatile (".chip 68k/68881\n\t"
-					  "fmovemx %0,%%fp0-%%fp7\n\t"
-					  "fmoveml %1,%%fpcr/%%fpsr/%%fpiar\n\t"
-					  ".chip 68k"
+			__asm__ volatile (FPU_ASM("fmovemx %0,%%fp0-%%fp7\n\t"
+						  "fmoveml %1,%%fpcr/%%fpsr/%%fpiar")
 					  : /* no outputs */
 					  : "m" (*fpregs.f_fpregs),
 					    "m" (*fpregs.f_fpcntl));
@@ -411,14 +401,7 @@ static inline int rt_restore_fpu_state(struct ucontext __user *uc)
 			     context_size))
 		goto out;
 
-	if (CPU_IS_COLDFIRE) {
-		__asm__ volatile ("frestore %0" : : "m" (*fpstate));
-	} else {
-		__asm__ volatile (".chip 68k/68881\n\t"
-				  "frestore %0\n\t"
-				  ".chip 68k"
-				  : : "m" (*fpstate));
-	}
+	__asm__ volatile (FPU_ASM("frestore %0") : : "m" (*fpstate));
 	err = 0;
 
 out:
@@ -437,15 +420,8 @@ static inline void save_fpu_state(struct sigcontext *sc, struct pt_regs *regs)
 		return;
 	}
 
-	if (CPU_IS_COLDFIRE) {
-		__asm__ volatile ("fsave %0"
-				  : : "m" (*sc->sc_fpstate) : "memory");
-	} else {
-		__asm__ volatile (".chip 68k/68881\n\t"
-				  "fsave %0\n\t"
-				  ".chip 68k"
-				  : : "m" (*sc->sc_fpstate) : "memory");
-	}
+	__asm__ volatile (FPU_ASM("fsave %0")
+			  : : "m" (*sc->sc_fpstate) : "memory");
 
 	if (CPU_IS_060 ? sc->sc_fpstate[2] : sc->sc_fpstate[0]) {
 		fpu_version = sc->sc_fpstate[0];
@@ -469,10 +445,8 @@ static inline void save_fpu_state(struct sigcontext *sc, struct pt_regs *regs)
 					  : /* no inputs */
 					  : "memory");
 		} else {
-			__asm__ volatile (".chip 68k/68881\n\t"
-					  "fmovemx %%fp0-%%fp1,%0\n\t"
-					  "fmoveml %%fpcr/%%fpsr/%%fpiar,%1\n\t"
-					  ".chip 68k"
+			__asm__ volatile (FPU_ASM("fmovemx %%fp0-%%fp1,%0\n\t"
+						  "fmoveml %%fpcr/%%fpsr/%%fpiar,%1")
 					  : "=m" (*sc->sc_fpregs),
 					    "=m" (*sc->sc_fpcntl)
 					  : /* no inputs */
@@ -497,14 +471,7 @@ static inline int rt_save_fpu_state(struct ucontext __user *uc, struct pt_regs *
 		return err;
 	}
 
-	if (CPU_IS_COLDFIRE) {
-		__asm__ volatile ("fsave %0" : : "m" (*fpstate) : "memory");
-	} else {
-		__asm__ volatile (".chip 68k/68881\n\t"
-				  "fsave %0\n\t"
-				  ".chip 68k"
-				  : : "m" (*fpstate) : "memory");
-	}
+	__asm__ volatile (FPU_ASM("fsave %0") : : "m" (*fpstate) : "memory");
 
 	err |= __put_user(*(long *)fpstate, (long __user *)&uc->uc_fpstate);
 	if (CPU_IS_060 ? fpstate[2] : fpstate[0]) {
@@ -531,10 +498,8 @@ static inline int rt_save_fpu_state(struct ucontext __user *uc, struct pt_regs *
 					  : /* no inputs */
 					  : "memory");
 		} else {
-			__asm__ volatile (".chip 68k/68881\n\t"
-					  "fmovemx %%fp0-%%fp7,%0\n\t"
-					  "fmoveml %%fpcr/%%fpsr/%%fpiar,%1\n\t"
-					  ".chip 68k"
+			__asm__ volatile (FPU_ASM("fmovemx %%fp0-%%fp7,%0\n\t"
+						  "fmoveml %%fpcr/%%fpsr/%%fpiar,%1")
 					  : "=m" (*fpregs.f_fpregs),
 					    "=m" (*fpregs.f_fpcntl)
 					  : /* no inputs */

@@ -34,6 +34,7 @@
 #include <linux/uaccess.h>
 #include <linux/elfcore.h>
 
+#include <asm/fpu.h>
 #include <asm/traps.h>
 #include <asm/machdep.h>
 #include <asm/setup.h>
@@ -97,7 +98,7 @@ void flush_thread(void)
 #ifdef CONFIG_FPU
 	if (!FPU_IS_EMU) {
 		unsigned long zero = 0;
-		asm volatile("frestore %0": :"m" (zero));
+		asm volatile (FPU_ASM("frestore %0") : : "m" (zero));
 	}
 #endif
 }
@@ -182,7 +183,8 @@ int copy_thread(struct task_struct *p, const struct kernel_clone_args *args)
 #ifdef CONFIG_FPU
 	if (!FPU_IS_EMU) {
 		/* Copy the current fpu state */
-		asm volatile ("fsave %0" : : "m" (p->thread.fpstate[0]) : "memory");
+		asm volatile (FPU_ASM("fsave %0")
+			      : : "m" (p->thread.fpstate[0]) : "memory");
 
 		if (!CPU_IS_060 ? p->thread.fpstate[0] : p->thread.fpstate[2]) {
 			if (CPU_IS_COLDFIRE) {
@@ -197,8 +199,8 @@ int copy_thread(struct task_struct *p, const struct kernel_clone_args *args)
 						"m" (p->thread.fpcntl[2])
 					      : "memory");
 			} else {
-				asm volatile ("fmovemx %/fp0-%/fp7,%0\n\t"
-					      "fmoveml %/fpiar/%/fpcr/%/fpsr,%1"
+				asm volatile (FPU_ASM("fmovemx %/fp0-%/fp7,%0\n\t"
+						      "fmoveml %/fpiar/%/fpcr/%/fpsr,%1")
 					      :
 					      : "m" (p->thread.fp[0]),
 						"m" (p->thread.fpcntl[0])
@@ -207,7 +209,8 @@ int copy_thread(struct task_struct *p, const struct kernel_clone_args *args)
 		}
 
 		/* Restore the state in case the fpu was busy */
-		asm volatile ("frestore %0" : : "m" (p->thread.fpstate[0]));
+		asm volatile (FPU_ASM("frestore %0")
+			      : : "m" (p->thread.fpstate[0]));
 	}
 #endif /* CONFIG_FPU */
 
@@ -235,7 +238,7 @@ int elf_core_copy_task_fpregs(struct task_struct *t, elf_fpregset_t *fpu)
 		char fpustate[216];
 
 		/* First dump the fpu context to avoid protocol violation.  */
-		asm volatile ("fsave %0" :: "m" (fpustate[0]) : "memory");
+		asm volatile (FPU_ASM("fsave %0") : : "m" (fpustate[0]) : "memory");
 		if (!CPU_IS_060 ? !fpustate[0] : !fpustate[2])
 			return 0;
 
@@ -251,11 +254,11 @@ int elf_core_copy_task_fpregs(struct task_struct *t, elf_fpregset_t *fpu)
 					"m" (fpu->fpregs[0])
 				      : "memory");
 		} else {
-			asm volatile ("fmovem %/fpiar/%/fpcr/%/fpsr,%0"
+			asm volatile (FPU_ASM("fmovem %/fpiar/%/fpcr/%/fpsr,%0")
 				      :
 				      : "m" (fpu->fpcntl[0])
 				      : "memory");
-			asm volatile ("fmovemx %/fp0-%/fp7,%0"
+			asm volatile (FPU_ASM("fmovemx %/fp0-%/fp7,%0")
 				      :
 				      : "m" (fpu->fpregs[0])
 				      : "memory");
