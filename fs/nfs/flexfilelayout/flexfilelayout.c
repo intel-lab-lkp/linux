@@ -1203,6 +1203,10 @@ static unsigned int
 ff_layout_pg_get_mirror_count_write(struct nfs_pageio_descriptor *pgio,
 				    struct nfs_page *req)
 {
+	struct inode *inode = pgio->pg_inode;
+	struct pnfs_layout_hdr *lo;
+	bool no_fallback;
+
 	if (!pgio->pg_lseg) {
 		pgio->pg_lseg =
 			pnfs_update_layout(pgio->pg_inode, nfs_req_openctx(req),
@@ -1221,8 +1225,13 @@ ff_layout_pg_get_mirror_count_write(struct nfs_pageio_descriptor *pgio,
 			0, NFS4_MAX_UINT64, IOMODE_RW,
 			NFS_I(pgio->pg_inode)->layout,
 			pgio->pg_lseg);
-	if (NFS_I(pgio->pg_inode)->layout &&
-	    ff_layout_hdr_no_fallback_to_mds(NFS_I(pgio->pg_inode)->layout)) {
+
+	/* No lseg pins the layout hdr, and it is detached under i_lock */
+	spin_lock(&inode->i_lock);
+	lo = NFS_I(inode)->layout;
+	no_fallback = lo && ff_layout_hdr_no_fallback_to_mds(lo);
+	spin_unlock(&inode->i_lock);
+	if (no_fallback) {
 		/*
 		 * FF_FLAGS_NO_IO_THRU_MDS: no current lseg but the server's
 		 * policy forbids MDS fallback.  Surface -EAGAIN so writeback
