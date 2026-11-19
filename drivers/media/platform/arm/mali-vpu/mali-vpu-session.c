@@ -73,6 +73,56 @@ int mali_vpu_session_fw_send_set_option(struct mali_vpu_session *sess,
 	return mali_vpu_fw_send_set_option(&sess->fw, opt);
 }
 
+static int mali_vpu_session_handle_fw_msg(struct mali_vpu_session *sess,
+					  const struct mali_vpu_fw_msg *fw_msg)
+{
+	switch (fw_msg->code) {
+	case MALI_VPU_FW_CODE_ERROR:
+		dev_warn(sess->vpu_dev->dev, "firmware rsp: Error. code=%u, message=%s\n",
+			 fw_msg->data.error.error_code, fw_msg->data.error.message);
+		return -EIO;
+	case MALI_VPU_FW_CODE_JOB:
+		/*
+		 * The session uses an infinite job and does not implement
+		 * switch-out scheduling.
+		 */
+		return 0;
+	case MALI_VPU_FW_CODE_PONG:
+		/* Receiving the responses completes the diagnostic ping. */
+		return 0;
+	case MALI_VPU_FW_CODE_STATE_CHANGE:
+		sess->fw_state = fw_msg->data.state;
+		return 0;
+	case MALI_VPU_FW_CODE_SWITCH_IN:
+		/* Single session policy: the scheduler already tracks the active LSID mapping. */
+		return 0;
+	case MALI_VPU_FW_CODE_SWITCH_OUT:
+		dev_warn(sess->vpu_dev->dev,
+			 "Unexpected fw switch-out response for a single session policy.\n");
+		return 0;
+	case MALI_VPU_FW_CODE_SET_OPTION:
+		/*
+		 * The parser validated the confirmation and decremented the
+		 * pending_response_count.
+		 */
+		return 0;
+	case MALI_VPU_FW_CODE_SET_OPTION_FAIL:
+		/*
+		 * The parser printed the error and decremented the
+		 * pending_response_count.
+		 */
+		return -EINVAL;
+	case MALI_VPU_FW_CODE_IDLE:
+		dev_dbg(sess->vpu_dev->dev, "fw entered Idle/sleeping state.\n");
+		return 0;
+	case MALI_VPU_FW_CODE_UNKNOWN:
+	case MALI_VPU_FW_CODE_MAX:
+	default:
+		dev_warn(sess->vpu_dev->dev, "unknown fw msg code=%u\n", fw_msg->code);
+		return -EPROTO;
+	}
+}
+
 int mali_vpu_session_init(struct mali_vpu_session *sess)
 {
 	int ret;
@@ -120,6 +170,7 @@ int mali_vpu_session_init(struct mali_vpu_session *sess)
 	sess->port_src.stream_requested = false;
 	sess->port_dst.stream_requested = false;
 	init_completion(&sess->fw_load_done);
+	sess->fw_state = MALI_VPU_FW_STATE_STOPPED;
 
 	return 0;
 
@@ -320,4 +371,39 @@ int mali_vpu_session_request_fw_load(struct mali_vpu_session *sess)
 	}
 
 	return 0;
+}
+
+void mali_vpu_session_irq(struct mali_vpu_session *sess)
+{
+	struct mali_vpu_fw_msg msg;
+	bool flush_mmu = false;
+	int ret;
+
+	mutex_lock(&sess->vq_lock);
+
+	ret = mali_vpu_fw_handle_rpc(&sess->fw, &flush_mmu);
+	if (ret) {
+		if (flush_mmu)
+			mali_vpu_sched_flush_mmu(&sess->sched_sess, &sess->vpu_dev->sched);
+		mali_vpu_sched_send_irq(&sess->sched_sess, &sess->vpu_dev->sched);
+
+		if (ret < 0)
+			goto unlock_mutex;
+	}
+
+	do {
+		ret = mali_vpu_fw_parse_msg(&sess->fw, &msg);
+		if (ret < 0)
+			goto unlock_mutex;
+
+		if (!ret)
+			break;
+
+		ret = mali_vpu_session_handle_fw_msg(sess, &msg);
+		if (ret)
+			goto unlock_mutex;
+	} while (ret >= 0);
+
+unlock_mutex:
+	mutex_unlock(&sess->vq_lock);
 }

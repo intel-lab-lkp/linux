@@ -53,5 +53,6 @@ void mali_vpu_sched_flush_mmu(struct mali_vpu_sched_session *sched_sess,
 			      struct mali_vpu_sched *sched);
 int mali_vpu_sched_session_terminate(struct mali_vpu_sched_session *sched_sess,
 				     struct mali_vpu_sched *sched);
+void mali_vpu_sched_handle_lsid_irq(struct mali_vpu_sched *sched, u32 lsid);
 
 #endif /* __MALI_VPU_SCHEDULER_H__ */

@@ -9,6 +9,7 @@
 #include <linux/err.h>
 #include <linux/errno.h>
 #include <linux/io.h>
+#include <linux/interrupt.h>
 #include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/of.h>
@@ -119,6 +120,70 @@ static int mali_vpu_get_resources(struct mali_vpu_dev *vpu_dev)
 	return mali_vpu_get_resets(vpu_dev);
 }
 
+static irqreturn_t mali_vpu_isr_top(int irq, void *data)
+{
+	struct mali_vpu_dev *vpu_dev = data;
+	u32 nlsid, irqve, nlsid_bound;
+	int ret = IRQ_NONE;
+
+	/*
+	 * IRQVE contains one interrupt bit per LSID. Acknowledge each asserted
+	 * source in hard IRQ context and record it for deferred firmware response
+	 * and RPC handling, which may sleep.
+	 */
+	nlsid = mali_vpu_read_reg(vpu_dev->regs_base, MALI_VPU_REG_NLSID);
+	irqve = mali_vpu_read_reg(vpu_dev->regs_base, MALI_VPU_REG_IRQVE);
+	nlsid_bound = min_t(u32, nlsid, vpu_dev->variant->max_lsid);
+
+	while (nlsid_bound-- > 0)
+		if ((irqve >> nlsid_bound) & 0x1) {
+			u32 reg_off = MALI_VPU_LSID_BASE +
+					(MALI_VPU_LSID_STRIDE * nlsid_bound) +
+					MALI_VPU_REG_LSID_IRQVE;
+			mali_vpu_write_reg(vpu_dev->regs_base, reg_off, 0);
+			set_bit(nlsid_bound, &vpu_dev->irqve_mask);
+			ret = IRQ_HANDLED;
+		}
+
+	if (ret == IRQ_HANDLED)
+		queue_work(vpu_dev->irq_wq, &vpu_dev->irq_work);
+
+	return ret;
+}
+
+static void mali_vpu_irq_bottom(struct work_struct *work)
+{
+	struct mali_vpu_dev *vpu_dev = container_of(work, struct mali_vpu_dev, irq_work);
+	u32 i;
+
+	for (i = 0; i < vpu_dev->sched.nlsid; i++) {
+		if (test_and_clear_bit(i, &vpu_dev->irqve_mask))
+			mali_vpu_sched_handle_lsid_irq(&vpu_dev->sched, i);
+	}
+}
+
+static int mali_vpu_irq_work_init(struct mali_vpu_dev *vpu_dev)
+{
+	vpu_dev->irqve_mask = 0;
+
+	vpu_dev->irq_wq = alloc_workqueue("%s-irq", WQ_UNBOUND, 1, dev_name(vpu_dev->dev));
+	if (!vpu_dev->irq_wq)
+		return -ENOMEM;
+
+	INIT_WORK(&vpu_dev->irq_work, mali_vpu_irq_bottom);
+	return 0;
+}
+
+static void mali_vpu_irq_work_cleanup(struct mali_vpu_dev *vpu_dev)
+{
+	if (!vpu_dev->irq_wq)
+		return;
+
+	cancel_work_sync(&vpu_dev->irq_work);
+	destroy_workqueue(vpu_dev->irq_wq);
+	vpu_dev->irq_wq = NULL;
+}
+
 static int mali_vpu_register_video_device(struct mali_vpu_dev *vpu_dev,
 					  enum mali_vpu_session_role role)
 {
@@ -219,10 +284,19 @@ static int mali_vpu_probe(struct platform_device *pdev)
 
 	dma_set_max_seg_size(vpu_dev->dev, SZ_2G);
 
+	ret = mali_vpu_irq_work_init(vpu_dev);
+	if (ret)
+		goto err_cleanup_sched;
+
+	ret = devm_request_irq(&pdev->dev, vpu_dev->irq, mali_vpu_isr_top, 0, pdev->name,
+			       vpu_dev);
+	if (ret)
+		goto err_cleanup_irq_work;
+
 	ret = v4l2_device_register(&pdev->dev, &vpu_dev->v4l2_dev);
 	if (ret) {
 		dev_err(vpu_dev->dev, "failed to register V4L2 device\n");
-		goto err_cleanup_sched;
+		goto err_free_irq;
 	}
 
 	vpu_dev->m2m_dev = v4l2_m2m_init(&mali_vpu_m2m_ops);
@@ -255,6 +329,10 @@ err_release_m2m:
 	v4l2_m2m_release(vpu_dev->m2m_dev);
 err_unreg_v4l2:
 	v4l2_device_unregister(&vpu_dev->v4l2_dev);
+err_free_irq:
+	devm_free_irq(vpu_dev->dev, vpu_dev->irq, vpu_dev);
+err_cleanup_irq_work:
+	mali_vpu_irq_work_cleanup(vpu_dev);
 err_cleanup_sched:
 	mali_vpu_sched_cleanup(&vpu_dev->sched);
 err_rst_clk:
@@ -270,6 +348,10 @@ static void mali_vpu_remove(struct platform_device *pdev)
 	struct mali_vpu_dev *vpu_dev = platform_get_drvdata(pdev);
 
 	video_unregister_device(vpu_dev->vdev_dec);
+
+	devm_free_irq(vpu_dev->dev, vpu_dev->irq, vpu_dev);
+	mali_vpu_irq_work_cleanup(vpu_dev);
+
 	mali_vpu_fw_cache_cleanup(vpu_dev->fw_cache);
 	v4l2_m2m_release(vpu_dev->m2m_dev);
 	v4l2_device_unregister(&vpu_dev->v4l2_dev);

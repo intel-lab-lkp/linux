@@ -7,6 +7,7 @@
 #define __MALI_VPU_DEVICE_H__
 
 #include <linux/device.h>
+#include <linux/workqueue.h>
 #include <media/v4l2-device.h>
 
 #include "mali-vpu-scheduler.h"
@@ -37,6 +38,9 @@ enum mali_vpu_session_role {
  * @rst_count: Number of reset controls in @rst_list.
  * @dma_mask: DMA mask for the device, indicating supported address width.
  * @irq: IRQ number for VPU.
+ * @irqve_mask: Bitmap of pending LSID IRQs.
+ * @irq_wq: Workqueue used to process LSID IRQs outside hard IRQ context.
+ * @irq_work: Work item for deferred LSID IRQ handling.
  * @variant: Structure describing variant-specific features and capabilities.
  * @v4l2_dev: V4L2 device structure for mali vpu.
  * @vdev_dec: Video device structure for decoder.
@@ -53,6 +57,9 @@ struct mali_vpu_dev {
 	unsigned int			rst_count;
 	u64				dma_mask;
 	int				irq;
+	unsigned long			irqve_mask;
+	struct workqueue_struct		*irq_wq;
+	struct work_struct		irq_work;
 
 	const struct mali_vpu_variant	*variant;
 	struct v4l2_device		v4l2_dev;

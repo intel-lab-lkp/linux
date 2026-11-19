@@ -78,6 +78,7 @@ enum mali_vpu_session_fw_bin_state {
  * @fw_event: Firmware binary load event callback structure for this session.
  * @fw_bin_state: Session firmware binary status.
  * @fw_load_done: Completion used to synchronize teardown with an in-flight firmware load.
+ * @fw_state: Last state confirmed by the firmware.
  * @sched_sess: Scheduler state used to map this session to an LSID.
  * @ncores: Number of cores assigned to this session by scheduler.
  */
@@ -103,6 +104,7 @@ struct mali_vpu_session {
 	struct mali_vpu_fw_event		*fw_event;
 	enum mali_vpu_session_fw_bin_state	fw_bin_state;
 	struct completion			fw_load_done;
+	enum mali_vpu_fw_state			fw_state;
 
 	struct mali_vpu_sched_session	sched_sess;
 	u32				ncores;
@@ -113,6 +115,7 @@ int mali_vpu_session_cleanup(struct mali_vpu_session *sess);
 int mali_vpu_session_request_fw_load(struct mali_vpu_session *sess);
 int mali_vpu_session_fw_send_set_option(struct mali_vpu_session *sess,
 					struct mali_vpu_fw_set_option *opt);
+void mali_vpu_session_irq(struct mali_vpu_session *sess);
 
 static inline struct mali_vpu_session *mali_vpu_get_session(struct file *filp)
 {

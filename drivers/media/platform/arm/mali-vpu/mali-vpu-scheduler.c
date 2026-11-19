@@ -222,3 +222,27 @@ unlock:
 
 	return ret;
 }
+
+void mali_vpu_sched_handle_lsid_irq(struct mali_vpu_sched *sched, u32 lsid)
+{
+	struct mali_vpu_session *sess = NULL;
+	struct mali_vpu_sched_session *sched_sess;
+
+	/* Only single active session policy - always mapped to lsid 0 */
+	if (lsid != 0) {
+		dev_warn(sched->vpu_dev->dev,
+			 "unexpected interrupt from LSID %u\n", lsid);
+		return;
+	}
+
+	mutex_lock(&sched->lock);
+	if (sched->nlsid) {
+		sched_sess = sched->lsid_list[lsid].sched_sess;
+		if (sched_sess)
+			sess = container_of(sched_sess, struct mali_vpu_session, sched_sess);
+	}
+	mutex_unlock(&sched->lock);
+
+	if (sess)
+		mali_vpu_session_irq(sess);
+}
