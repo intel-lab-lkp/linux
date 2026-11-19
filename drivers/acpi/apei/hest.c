@@ -185,7 +185,7 @@ static int __init hest_parse_cmc(struct acpi_hest_header *hest_hdr, void *data)
 		return 0;
 
 	if (!acpi_disable_cmcff)
-		return !arch_apei_enable_cmcff(hest_hdr, data);
+		arch_apei_enable_cmcff(hest_hdr, data);
 
 	return 0;
 }
