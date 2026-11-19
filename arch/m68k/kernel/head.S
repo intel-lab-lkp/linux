@@ -264,6 +264,7 @@
 #include <asm/entry.h>
 #include <asm/page.h>
 #include <asm/asm-offsets.h>
+#include <asm/m68060.h>
 #ifdef CONFIG_MAC
 #  include <asm/machw.h>
 #endif
@@ -1484,7 +1485,7 @@ L(cache68060):
 	/* MMU stuff works in copyback mode now, so enable the cache */
 	movec	%d0,%cacr
 	/* enable superscalar dispatch in PCR */
-	moveq	#1,%d0
+	moveq	#M68060_PCR_ESS,%d0
 	.chip	68060
 	movec	%d0,%pcr
 

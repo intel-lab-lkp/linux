@@ -9,6 +9,7 @@
  * This file handles the architecture-dependent parts of system setup
  */
 
+#include <linux/bitfield.h>
 #include <linux/kernel.h>
 #include <linux/cpu.h>
 #include <linux/mm.h>
@@ -35,6 +36,7 @@
 #include <asm/fpu.h>
 #include <asm/irq.h>
 #include <asm/io.h>
+#include <asm/m68060.h>
 #include <asm/machdep.h>
 #ifdef CONFIG_AMIGA
 #include <asm/amigahw.h>
@@ -232,10 +234,10 @@ void __init setup_arch(char **cmdline_p)
 
 		asm (".chip 68060; movec %%pcr,%0; .chip 68k"
 		     : "=d" (pcr));
-		if (((pcr >> 8) & 0xff) <= 5) {
+		if (FIELD_GET(M68060_PCR_REVISION, pcr) <= 5) {
 			pr_warn("Enabling workaround for errata I14\n");
 			asm (".chip 68060; movec %0,%%pcr; .chip 68k"
-			     : : "d" (pcr | 0x20));
+			     : : "d" (pcr | M68060_PCR_I14));
 		}
 	}
 
