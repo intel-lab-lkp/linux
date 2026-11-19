@@ -176,6 +176,7 @@ static int mali_vpu_queue_buffer(struct mali_vpu_session *sess, struct mali_vpu_
 {
 	int ret;
 	enum dma_data_direction dma_dir;
+	struct mali_vpu_fw_msg fw_msg;
 
 	dma_dir = (vpu_buf->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) ?
 		   DMA_TO_DEVICE : DMA_FROM_DEVICE;
@@ -195,6 +196,13 @@ static int mali_vpu_queue_buffer(struct mali_vpu_session *sess, struct mali_vpu_
 
 	/* dma sync for cache coherency */
 	ret = mali_vpu_buffer_sync(vpu_buf, dma_dir);
+	if (ret)
+		return ret;
+
+	/* put buf to fw q */
+	fw_msg.code = MALI_VPU_FW_CODE_BUFFER;
+	fw_msg.data.vpu_buf = vpu_buf;
+	ret = mali_vpu_fw_send_buffer(&sess->fw, &fw_msg);
 	if (ret)
 		return ret;
 
@@ -277,6 +285,28 @@ static int mali_vpu_session_sched_activate(struct mali_vpu_session *sess)
 	return mali_vpu_sched_switch_in(&sess->sched_sess, &sess->vpu_dev->sched);
 }
 
+static void mali_vpu_session_buffer_done(struct mali_vpu_session *sess,
+					 struct mali_vpu_buffer *vpu_buf,
+					 enum vb2_buffer_state state)
+{
+	struct vb2_v4l2_buffer *vbuf = &vpu_buf->m2m_buf.vb;
+	struct vb2_buffer *vb2_buf = &vbuf->vb2_buf;
+
+	if (vb2_buf->state != VB2_BUF_STATE_ACTIVE) {
+		dev_dbg(sess->vpu_dev->dev,
+			"ignore returned buffer. type=%u index=%u vb2_state=%u\n",
+			vpu_buf->type, vb2_buf->index, vb2_buf->state);
+		return;
+	}
+
+	if (V4L2_TYPE_IS_OUTPUT(vpu_buf->type))
+		v4l2_m2m_src_buf_remove_by_buf(sess->m2m_ctx, vbuf);
+	else
+		v4l2_m2m_dst_buf_remove_by_buf(sess->m2m_ctx, vbuf);
+
+	v4l2_m2m_buf_done(vbuf, state);
+}
+
 static int mali_vpu_session_handle_fw_msg(struct mali_vpu_session *sess,
 					  const struct mali_vpu_fw_msg *fw_msg)
 {
@@ -291,6 +321,25 @@ static int mali_vpu_session_handle_fw_msg(struct mali_vpu_session *sess,
 		 * switch-out scheduling.
 		 */
 		return 0;
+	case MALI_VPU_FW_CODE_BUFFER: {
+		struct mali_vpu_buffer *vpu_buf = fw_msg->data.vpu_buf;
+		enum vb2_buffer_state state;
+
+		dev_dbg(sess->vpu_dev->dev,
+			"firmware rsp: Buffer. type=%u, len=[%u, %u, %u], flags=0x%08x, eos=%u",
+			vpu_buf->type, vpu_buf->planes[0].payload_size,
+			vpu_buf->planes[1].payload_size, vpu_buf->planes[2].payload_size,
+			vpu_buf->flags, (vpu_buf->flags & MALI_VPU_BUFFER_EOS) != 0);
+
+		if (vpu_buf->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE)
+			mali_vpu_buffer_sync(vpu_buf, DMA_FROM_DEVICE);
+
+		state = mali_vpu_buffer_update_info_to_v4l2(vpu_buf);
+
+		mali_vpu_session_buffer_done(sess, vpu_buf, state);
+
+		return 0;
+	}
 	case MALI_VPU_FW_CODE_PONG:
 		/* Receiving the responses completes the diagnostic ping. */
 		return 0;

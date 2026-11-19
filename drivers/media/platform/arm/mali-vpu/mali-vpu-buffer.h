@@ -13,6 +13,8 @@
 #define MALI_VPU_BUFFER_MAX_PLANES 3
 
 #define MALI_VPU_BUFFER_EOS                  0x00000001
+#define MALI_VPU_BUFFER_CORRUPT              0x00000004
+#define MALI_VPU_BUFFER_REJECTED             0x00000008
 
 /**
  * enum mali_vpu_buffer_attributes - Buffer submission state.
@@ -44,6 +46,8 @@ struct mali_vpu_buffer_plane {
 	u32 stride;
 };
 
+struct mali_vpu_format_desc;
+
 /**
  * struct mali_vpu_buffer - Buffer descriptor.
  * @m2m_buf: Embedded v4l2-mem2mem buffer.
@@ -53,6 +57,10 @@ struct mali_vpu_buffer_plane {
  * @type: Type of the buffer (output/capture).
  * @user_data: Userdata(timestamp) to be copied to capture buffer.
  * @flags: Buffer Flags.
+ * @width: Frame width in pixels.
+ * @height: Frame height in pixels.
+ * @fw_buffer_id: Non-zero identifier while registered for firmware submission.
+ * @format: Buffer format.
  * @planes: Array of planes.
  * @attr: Firmware Queuing Status Attribute.
  */
@@ -64,6 +72,10 @@ struct mali_vpu_buffer {
 	u32 type;
 	u64 user_data;
 	u32 flags;
+	u32 width;
+	u32 height;
+	u32 fw_buffer_id;
+	const struct mali_vpu_format_desc *format;
 	struct mali_vpu_buffer_plane planes[MALI_VPU_BUFFER_MAX_PLANES];
 	enum mali_vpu_buffer_attributes attr;
 };
@@ -85,11 +97,13 @@ int mali_vpu_buffer_map(struct mali_vpu_buffer *vpu_buf, mali_vpu_mmu_va begin,
 void mali_vpu_buffer_unmap(struct mali_vpu_buffer *vpu_buf);
 int mali_vpu_buffer_sync(struct mali_vpu_buffer *vpu_buf, enum dma_data_direction dir);
 bool mali_vpu_is_buffer_mapped(struct mali_vpu_buffer *vpu_buf);
+mali_vpu_mmu_va mali_vpu_buffer_plane_va(struct mali_vpu_buffer *vpu_buf, u32 plane);
 
 int mali_vpu_buffer_update_info_from_v4l2(struct vb2_buffer *vb2_buf);
 int mali_vpu_buffer_set_plane_payload(struct mali_vpu_buffer *vpu_buf, u32 plane,
 				      u32 bytesused, u32 offset);
 int mali_vpu_buffer_set_frame_layout(struct mali_vpu_buffer *vpu_buf);
 size_t mali_vpu_buffer_plane_size(struct mali_vpu_buffer *vpu_buf, u32 plane);
+enum vb2_buffer_state mali_vpu_buffer_update_info_to_v4l2(struct mali_vpu_buffer *vpu_buf);
 
 #endif /* __MALI_VPU_BUFFER_H__ */

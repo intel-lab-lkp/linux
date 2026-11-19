@@ -241,6 +241,10 @@ struct mve_msg_header {
 		#define MVE_RESPONSE_CODE_SET_OPTION_CONFIRM  (2003)
 		/* struct mve_response_job_dequeued */
 		#define MVE_RESPONSE_CODE_JOB_DEQUEUED        (2004)
+		/* no extra data, but buffer placed in buffer queue */
+		#define MVE_RESPONSE_CODE_INPUT               (2005)
+		/* no extra data, but buffer placed in buffer queue */
+		#define MVE_RESPONSE_CODE_OUTPUT              (2006)
 		#define MVE_RESPONSE_CODE_PONG                (2009)
 		/* struct mve_response_error */
 		#define MVE_RESPONSE_CODE_ERROR               (2010)
@@ -249,6 +253,14 @@ struct mve_msg_header {
 		#define MVE_RESPONSE_CODE_IDLE                (2013)
 		/* struct mve_response_set_option_fail */
 		#define MVE_RESPONSE_CODE_SET_OPTION_FAIL     (2017)
+
+		/* BUFFERs are sent from host to firmware,
+		 * and then return at some time:
+		 */
+		/* struct mve_buffer_frame */
+		#define MVE_BUFFER_CODE_FRAME                 (3001)
+		/* struct mve_buffer_bitstream */
+		#define MVE_BUFFER_CODE_BITSTREAM             (3002)
 
 	u16 size; /* size in bytes of trailing data, 0 if none */
 };
@@ -408,5 +420,121 @@ struct mve_response_set_option_fail {
 				((8 - 8) << MVE_FORMAT_BF_B) | \
 				(2 << MVE_FORMAT_BF_N) | \
 				(1 << MVE_FORMAT_BF_V))
+
+/*********************************************************************
+ *
+ *   BUFFERs are sent both ways, from host to firmware and back again
+ *
+ *   Each MVE_BUFFER_CODE_ code is followed by one of the structs
+ *   below.
+ *
+ *********************************************************************/
+
+/* Flags in mve_buffer_frame::frame_flags:
+ *                                     Set by whom?    Meaning:
+ *                                     DECODE:
+ * MVE_BUFFER_FRAME_FLAG_REJECTED       fw             Buffer was too small, host should re-allocate
+ *
+ * MVE_BUFFER_FRAME_FLAG_CORRUPT        fw             Frame contains visual corruption
+ *
+ * MVE_BUFFER_FRAME_FLAG_EOS            fw             This is the last frame in the stream.
+ */
+
+/* mve_buffer_frame_planar stores uncompressed YUV pictures.
+ *       ________________________________________
+ *      |  ^                          |          |  ^
+ *      |<-:--visible_frame_width---->|          |  :
+ *      |  :                          |          |  :
+ *      |  :                          |          |  :
+ *      | visible_frame_height        |          | max_frame_height
+ *      |  :                          |          |  :
+ *      |  :                          |          |  :
+ *      |__v__________________________|          |  :
+ *      |                                        |  :
+ *      |<-------------max_frame_width---------->|  :
+ *      |________________________________________|  v
+ *
+ */
+struct mve_buffer_frame_planar {
+	/* Y,Cb,Cr top field */
+	u32 plane_top[3];
+
+	/* Y,Cb,Cr bottom field (interlace only) */
+	u32 plane_bot[3];
+
+	/* Stride between rows, in bytes */
+	s32 stride[3];
+
+	/* Size of largest frame allowed to put in this buffer */
+	u16 max_frame_width;
+	u16 max_frame_height;
+};
+
+/* mve_buffer_frame stores PLANAR buffer information. */
+struct mve_buffer_frame {
+	/* For identification of the buffer, this is not changed by
+	 * the firmware.
+	 */
+	u64 host_handle;
+
+	/* For matching input buffer with output buffers, the firmware
+	 * copies these values between frame buffers and bitstream buffers.
+	 */
+	u64 user_data_tag;
+
+	/* Frame buffer flags, see commentary above */
+	u32 frame_flags;
+		#define MVE_BUFFER_FRAME_FLAG_REJECTED		(0x00001000)
+		#define MVE_BUFFER_FRAME_FLAG_CORRUPT		(0x00002000)
+		#define MVE_BUFFER_FRAME_FLAG_EOS		(0x00010000)
+	/* Height (in luma samples) of visible part of frame,
+	 * may be smaller than allocated frame size.
+	 */
+	u16 visible_frame_height;
+
+	/* Width (in luma samples) of visible part of frame,
+	 * may be smaller than allocated frame size.
+	 */
+	u16 visible_frame_width;
+
+	/* Color format of buffer */
+	u16 format;
+
+	u16 reserved0; /* force 'data' to be 4-byte aligned */
+
+	union {
+		struct mve_buffer_frame_planar planar;
+	} data;
+
+	u32 reserved1; /* force size to be multiple of 8 bytes */
+};
+
+/* The bitstream buffer stores a number of bitstream bytes */
+struct mve_buffer_bitstream {
+	/* For identification of the buffer, this is not changed by
+	 * the firmware.
+	 */
+	u64 host_handle;
+
+	/* For matching input buffer with output buffers, the firmware
+	 * copies these values between frame buffers and bitstream buffers.
+	 */
+	u64 user_data_tag;
+
+	/* BufferFlags */
+	u32 bitstream_flags;
+		#define MVE_BUFFER_BITSTREAM_FLAG_EOS              (0x00000001)
+
+	/* Length of allocated buffer */
+	u32 bitstream_alloc_bytes;
+	/* Byte offset from start to first byte */
+	u32 bitstream_offset;
+	/* Number of bytes in the buffer */
+	u32 bitstream_filled_len;
+	/* Pointer to buffer start */
+	u32 bitstream_buf_addr;
+	/* Pad to force 8-byte alignment */
+	u32 reserved;
+};
 
 #endif /* __MALI_VPU_PROTOCOL_DEF_V3_H__ */

@@ -12,6 +12,7 @@
 
 #include "mali-vpu-firmware.h"
 #include "mali-vpu-firmware-cache.h"
+#include "mali-vpu-formats.h"
 #include "mali-vpu-mmu.h"
 #include "mali-vpu-protocol-def-v3.h"
 
@@ -347,6 +348,20 @@ err_unmap:
 	return ret;
 }
 
+static void mali_vpu_fw_clear_buffers(struct mali_vpu_fw *fw)
+{
+	struct mali_vpu_buffer *vpu_buf;
+	unsigned long id;
+
+	xa_for_each(&fw->inflight_buffers, id, vpu_buf) {
+		xa_erase(&fw->inflight_buffers, id);
+		vpu_buf->fw_buffer_id = 0;
+		vpu_buf->attr = MALI_VPU_BUF_ATTR_NONE;
+	}
+
+	xa_destroy(&fw->inflight_buffers);
+}
+
 int mali_vpu_fw_construct(struct mali_vpu_fw *fw, const struct mali_vpu_fw_bin *fw_bin,
 			  struct device *dev, struct mali_vpu_mmu *mmu, u32 ncores)
 {
@@ -362,6 +377,8 @@ int mali_vpu_fw_construct(struct mali_vpu_fw *fw, const struct mali_vpu_fw_bin *
 	fw->dev = dev;
 	fw->mmu = mmu;
 	fw->ncores = ncores;
+	xa_init_flags(&fw->inflight_buffers, XA_FLAGS_ALLOC1);
+	fw->next_buffer_id = 1;
 	hash_init(fw->rpc_mem);
 
 	/* Initialise firmware core and protocol regions */
@@ -392,6 +409,8 @@ void mali_vpu_fw_cleanup(struct mali_vpu_fw *fw)
 
 	if (!fw)
 		return;
+
+	mali_vpu_fw_clear_buffers(fw);
 
 	mali_vpu_fw_unmap_protocol(fw);
 	mali_vpu_fw_unmap_core_regions(fw);
@@ -781,6 +800,153 @@ int mali_vpu_fw_send_set_option(struct mali_vpu_fw *fw,
 	return ret;
 }
 
+static struct mali_vpu_buffer *
+mali_vpu_fw_resolve_returned_buffer(struct mali_vpu_fw *fw,
+				    u64 host_handle,
+				    enum v4l2_buf_type expected_type)
+{
+	struct mali_vpu_buffer *vpu_buf;
+	u32 id;
+
+	if (!host_handle || host_handle > UINT_MAX)
+		return ERR_PTR(-EPROTO);
+
+	id = host_handle;
+
+	vpu_buf = xa_load(&fw->inflight_buffers, id);
+	if (!vpu_buf)
+		return ERR_PTR(-EPROTO);
+
+	if (vpu_buf->fw_buffer_id != id ||
+	    vpu_buf->type != expected_type ||
+	    vpu_buf->attr != MALI_VPU_BUF_ATTR_QUEUED)
+		return ERR_PTR(-EPROTO);
+
+	if (xa_erase(&fw->inflight_buffers, id) != vpu_buf)
+		return ERR_PTR(-EPROTO);
+
+	vpu_buf->fw_buffer_id = 0;
+	vpu_buf->attr = MALI_VPU_BUF_ATTR_NONE;
+
+	return vpu_buf;
+}
+
+static int
+mali_vpu_convert_buffer_frame(struct mali_vpu_fw *fw,
+			      struct mali_vpu_fw_msg *msg,
+			      u32 buf_type,
+			      struct mve_buffer_frame *mve_frame_buf)
+{
+	struct mali_vpu_buffer *vpu_buf;
+	unsigned int i;
+
+	vpu_buf = mali_vpu_fw_resolve_returned_buffer(fw,
+						      mve_frame_buf->host_handle,
+						      buf_type);
+	if (IS_ERR(vpu_buf))
+		return PTR_ERR(vpu_buf);
+
+	msg->code = MALI_VPU_FW_CODE_BUFFER;
+	msg->data.vpu_buf = vpu_buf;
+
+	if (buf_type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
+		vpu_buf->width = mve_frame_buf->visible_frame_width;
+		vpu_buf->height = mve_frame_buf->visible_frame_height;
+
+		if (vpu_buf->width == 0 || vpu_buf->height == 0) {
+			for (i = 0; i < vpu_buf->nplanes; i++)
+				(void)mali_vpu_buffer_set_plane_payload(vpu_buf, i, 0, 0);
+		}
+	}
+
+	vpu_buf->user_data = mve_frame_buf->user_data_tag;
+	vpu_buf->flags = 0;
+
+	if (mve_frame_buf->frame_flags & MVE_BUFFER_FRAME_FLAG_EOS)
+		vpu_buf->flags |=  MALI_VPU_BUFFER_EOS;
+
+	if (mve_frame_buf->frame_flags & MVE_BUFFER_FRAME_FLAG_REJECTED)
+		vpu_buf->flags |=  MALI_VPU_BUFFER_REJECTED;
+
+	if (mve_frame_buf->frame_flags & MVE_BUFFER_FRAME_FLAG_CORRUPT)
+		vpu_buf->flags |=  MALI_VPU_BUFFER_CORRUPT;
+
+	return 0;
+}
+
+static int
+mali_vpu_convert_buffer_bitstream(struct mali_vpu_fw *fw,
+				  struct mali_vpu_fw_msg *msg,
+				  u32 buf_type,
+				  struct mve_buffer_bitstream *mve_stream_buf)
+{
+	struct mali_vpu_buffer *vpu_buf =
+		mali_vpu_fw_resolve_returned_buffer(fw,
+						    mve_stream_buf->host_handle,
+						    buf_type);
+	if (IS_ERR(vpu_buf))
+		return PTR_ERR(vpu_buf);
+
+	msg->code = MALI_VPU_FW_CODE_BUFFER;
+	msg->data.vpu_buf = vpu_buf;
+
+	vpu_buf->user_data = mve_stream_buf->user_data_tag;
+	vpu_buf->flags = 0;
+
+	if (mve_stream_buf->bitstream_flags & MVE_BUFFER_BITSTREAM_FLAG_EOS)
+		vpu_buf->flags |= MALI_VPU_BUFFER_EOS;
+
+	return 0;
+}
+
+static int mali_vpu_fw_get_buffer(struct mali_vpu_fw *fw,
+				  struct mali_vpu_fw_proto_page *buf_host_page,
+				  struct mali_vpu_fw_proto_page *buf_mve_page,
+				  struct mali_vpu_fw_msg *msg, u32 buf_type)
+{
+	u16 code;
+	union {
+		struct mve_buffer_frame frame;
+		struct mve_buffer_bitstream bitstream;
+	} fw_msg;
+	size_t size = sizeof(fw_msg);
+	int ret;
+
+	ret = mali_vpu_fw_read_msg(fw, buf_host_page, buf_mve_page, &code,
+				   &fw_msg, &size);
+	if (ret <= 0)
+		return ret;
+
+	switch (code) {
+	case MVE_BUFFER_CODE_FRAME:
+		if (size != sizeof(fw_msg.frame) ||
+		    (!fw_msg.frame.host_handle &&
+		     !(fw_msg.frame.frame_flags & MVE_BUFFER_FRAME_FLAG_EOS)))
+			return -EPROTO;
+
+		ret = mali_vpu_convert_buffer_frame(fw, msg, buf_type, &fw_msg.frame);
+		if (ret)
+			return ret;
+		break;
+	case MVE_BUFFER_CODE_BITSTREAM:
+		if (size != sizeof(fw_msg.bitstream) ||
+		    (!fw_msg.bitstream.host_handle &&
+		     !(fw_msg.bitstream.bitstream_flags & MVE_BUFFER_BITSTREAM_FLAG_EOS)))
+			return -EPROTO;
+
+		ret = mali_vpu_convert_buffer_bitstream(fw, msg, buf_type,
+							&fw_msg.bitstream);
+		if (ret)
+			return ret;
+		break;
+	default:
+		dev_dbg(fw->dev, "unknown buf code. code: %u.\n", code);
+		break;
+	}
+
+	return 1;
+}
+
 int mali_vpu_fw_parse_msg(struct mali_vpu_fw *fw, struct mali_vpu_fw_msg *msg)
 {
 	u16 code;
@@ -791,6 +957,8 @@ int mali_vpu_fw_parse_msg(struct mali_vpu_fw *fw, struct mali_vpu_fw_msg *msg)
 		struct mve_response_error error;
 	} fw_msg = {};
 	size_t size = sizeof(fw_msg);
+	struct mali_vpu_fw_proto_page *buf_host_page;
+	struct mali_vpu_fw_proto_page *buf_mve_page;
 	int ret;
 
 	if (!fw || !msg)
@@ -871,6 +1039,20 @@ int mali_vpu_fw_parse_msg(struct mali_vpu_fw *fw, struct mali_vpu_fw_msg *msg)
 		fw->pending_response_count--;
 		break;
 	}
+	case MVE_RESPONSE_CODE_INPUT:
+		buf_host_page = &fw->buf_in_host;
+		buf_mve_page = &fw->buf_in_mve;
+
+		ret = mali_vpu_fw_get_buffer(fw, buf_host_page, buf_mve_page, msg,
+					     V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE);
+		break;
+	case MVE_RESPONSE_CODE_OUTPUT:
+		buf_host_page = &fw->buf_out_host;
+		buf_mve_page = &fw->buf_out_mve;
+
+		ret = mali_vpu_fw_get_buffer(fw, buf_host_page, buf_mve_page, msg,
+					     V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE);
+		break;
 	case MVE_RESPONSE_CODE_ERROR: {
 		size_t message_offset = offsetof(struct mve_response_error, message);
 		size_t message_size;
@@ -926,6 +1108,124 @@ int mali_vpu_fw_parse_msg(struct mali_vpu_fw *fw, struct mali_vpu_fw_msg *msg)
 		mali_vpu_fw_print_debug(fw);
 		break;
 	}
+
+	return ret;
+}
+
+static int mali_vpu_fw_track_buffer(struct mali_vpu_fw *fw,
+				    struct mali_vpu_buffer *vpu_buf)
+{
+	u32 id;
+	int ret;
+
+	if (vpu_buf->fw_buffer_id)
+		return -EBUSY;
+
+	ret = xa_alloc_cyclic(&fw->inflight_buffers, &id, vpu_buf,
+			      XA_LIMIT(1, UINT_MAX),
+			      &fw->next_buffer_id, GFP_KERNEL);
+	if (ret)
+		return ret;
+
+	vpu_buf->fw_buffer_id = id;
+
+	return 0;
+}
+
+static void mali_vpu_fw_untrack_buffer(struct mali_vpu_fw *fw,
+				       struct mali_vpu_buffer *vpu_buf)
+{
+	void *entry;
+
+	if (!vpu_buf->fw_buffer_id)
+		return;
+
+	entry = xa_erase(&fw->inflight_buffers, vpu_buf->fw_buffer_id);
+	WARN_ON_ONCE(entry && entry != vpu_buf);
+
+	vpu_buf->fw_buffer_id = 0;
+}
+
+static int mali_vpu_fw_put_buffer_frame(struct mali_vpu_fw *fw,
+					struct mali_vpu_fw_msg *fw_msg,
+					struct mali_vpu_fw_proto_page *host_page,
+					struct mali_vpu_fw_proto_page *mve_page)
+{
+	struct mve_buffer_frame mve_frame_buf = { 0 };
+	struct mali_vpu_buffer *vpu_buf = fw_msg->data.vpu_buf;
+	struct mve_buffer_frame_planar *planar;
+	u32 i;
+
+	mve_frame_buf.host_handle = vpu_buf->fw_buffer_id;
+
+	mve_frame_buf.format = vpu_buf->format->mve_frame_fmt;
+	planar = &mve_frame_buf.data.planar;
+
+	for (i = 0; i < vpu_buf->nplanes; i++) {
+		struct mali_vpu_buffer_plane *plane = &vpu_buf->planes[i];
+
+		if (plane->stride > 0)
+			planar->plane_top[i] = mali_vpu_buffer_plane_va(vpu_buf, i);
+
+		planar->stride[i] = plane->stride;
+		planar->max_frame_width = vpu_buf->width;
+		planar->max_frame_height = vpu_buf->height;
+	}
+
+	return mali_vpu_fw_write_msg(fw, host_page, mve_page, MVE_BUFFER_CODE_FRAME,
+				     &mve_frame_buf, sizeof(mve_frame_buf));
+}
+
+static int mali_vpu_fw_put_buffer_bitstream(struct mali_vpu_fw *fw,
+					    struct mali_vpu_fw_msg *fw_msg,
+					    struct mali_vpu_fw_proto_page *host_page,
+					    struct mali_vpu_fw_proto_page *mve_page)
+{
+	struct mve_buffer_bitstream mve_stream_buf = { 0 };
+	struct mali_vpu_buffer *vpu_buf = fw_msg->data.vpu_buf;
+
+	if (V4L2_TYPE_IS_OUTPUT(vpu_buf->type))
+		mve_stream_buf.bitstream_filled_len = vpu_buf->planes[0].payload_size;
+
+	mve_stream_buf.host_handle = vpu_buf->fw_buffer_id;
+	mve_stream_buf.user_data_tag = vpu_buf->user_data;
+	mve_stream_buf.bitstream_alloc_bytes = mali_vpu_buffer_plane_size(vpu_buf, 0);
+	mve_stream_buf.bitstream_offset = vpu_buf->planes[0].offset;
+	mve_stream_buf.bitstream_buf_addr = mali_vpu_buffer_plane_va(vpu_buf, 0);
+
+	if (vpu_buf->flags & MALI_VPU_BUFFER_EOS)
+		mve_stream_buf.bitstream_flags |= MVE_BUFFER_BITSTREAM_FLAG_EOS;
+
+	return mali_vpu_fw_write_msg(fw, host_page, mve_page, MVE_BUFFER_CODE_BITSTREAM,
+				     &mve_stream_buf, sizeof(mve_stream_buf));
+}
+
+int mali_vpu_fw_send_buffer(struct mali_vpu_fw *fw, struct mali_vpu_fw_msg *fw_msg)
+{
+	struct mali_vpu_buffer *vpu_buf = fw_msg->data.vpu_buf;
+	struct mali_vpu_fw_proto_page *host;
+	struct mali_vpu_fw_proto_page *mve;
+	int ret;
+
+	if (V4L2_TYPE_IS_OUTPUT(fw_msg->data.vpu_buf->type)) {
+		host = &fw->buf_in_host;
+		mve = &fw->buf_in_mve;
+	} else {
+		host = &fw->buf_out_host;
+		mve = &fw->buf_out_mve;
+	}
+
+	ret = mali_vpu_fw_track_buffer(fw, vpu_buf);
+	if (ret)
+		return ret;
+
+	if (V4L2_TYPE_IS_OUTPUT(fw_msg->data.vpu_buf->type))
+		ret = mali_vpu_fw_put_buffer_bitstream(fw, fw_msg, host, mve);
+	else
+		ret = mali_vpu_fw_put_buffer_frame(fw, fw_msg, host, mve);
+
+	if (ret)
+		mali_vpu_fw_untrack_buffer(fw, vpu_buf);
 
 	return ret;
 }

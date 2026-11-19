@@ -53,6 +53,7 @@ int mali_vpu_vb2_buffer_init(struct vb2_buffer *vb2_buf)
 	vpu_buf->dev = sess->vpu_dev->dev;
 	vpu_buf->mmu = &sess->mmu;
 	vpu_buf->nplanes = vb2_buf->num_planes;
+	vpu_buf->fw_buffer_id = 0;
 	vpu_buf->attr = MALI_VPU_BUF_ATTR_NONE;
 
 	for (i = 0; i < vb2_buf->num_planes; ++i) {
@@ -86,6 +87,40 @@ static size_t mali_vpu_buffer_get_bytesused(struct vb2_buffer *b)
 	return size;
 }
 
+static int mali_vpu_buffer_clear_bytesused(struct mali_vpu_buffer *vpu_buf)
+{
+	struct vb2_buffer *vb2_buf = &vpu_buf->m2m_buf.vb.vb2_buf;
+	u32 i;
+
+	for (i = 0; i < vb2_buf->num_planes; i++) {
+		vb2_set_plane_payload(vb2_buf, i, 0);
+		vb2_buf->planes[i].data_offset = 0;
+	}
+
+	return 0;
+}
+
+static int mali_vpu_buffer_update_bytesused_to_v4l2(struct mali_vpu_buffer *vpu_buf)
+{
+	struct vb2_buffer *vb2_buf = &vpu_buf->m2m_buf.vb.vb2_buf;
+	u32 i;
+
+	if (vpu_buf->nplanes != vb2_buf->num_planes) {
+		dev_dbg(vpu_buf->dev,
+			"mali VPU buf and vb2 buf have different num_planes. vpu_buf=%u vb2_buf=%u.\n",
+			vpu_buf->nplanes, vb2_buf->num_planes);
+		return -EINVAL;
+	}
+
+	for (i = 0; i < vpu_buf->nplanes; i++) {
+		vb2_buf->planes[i].bytesused =
+			vpu_buf->planes[i].payload_size + vpu_buf->planes[i].offset;
+		vb2_buf->planes[i].data_offset = vpu_buf->planes[i].offset;
+	}
+
+	return 0;
+}
+
 static void mali_vpu_buffer_update_flags_from_v4l2(struct vb2_buffer *vb2_buf)
 {
 	struct vb2_v4l2_buffer *v4l2_buf = to_vb2_v4l2_buffer(vb2_buf);
@@ -100,6 +135,27 @@ static void mali_vpu_buffer_update_flags_from_v4l2(struct vb2_buffer *vb2_buf)
 
 	if (flags & V4L2_BUF_FLAG_LAST)
 		vpu_buf->flags |= MALI_VPU_BUFFER_EOS;
+}
+
+static void mali_vpu_buffer_update_flags_to_v4l2(struct mali_vpu_buffer *vpu_buf)
+{
+	struct vb2_v4l2_buffer *v4l2_buf = &vpu_buf->m2m_buf.vb;
+
+	v4l2_buf->flags &= ~(V4L2_BUF_FLAG_ERROR |
+			     V4L2_BUF_FLAG_KEYFRAME |
+			     V4L2_BUF_FLAG_LAST);
+
+	if (vpu_buf->flags & MALI_VPU_BUFFER_EOS ||
+	    (V4L2_TYPE_IS_CAPTURE(vpu_buf->type) &&
+	     mali_vpu_buffer_get_bytesused(&vpu_buf->m2m_buf.vb.vb2_buf) == 0))
+		v4l2_buf->flags |= V4L2_BUF_FLAG_LAST;
+
+	if (vpu_buf->flags & MALI_VPU_BUFFER_CORRUPT)
+		v4l2_buf->flags |= V4L2_BUF_FLAG_ERROR;
+
+	if (V4L2_TYPE_IS_CAPTURE(vpu_buf->type) &&
+	    vpu_buf->flags & MALI_VPU_BUFFER_REJECTED)
+		mali_vpu_buffer_clear_bytesused(vpu_buf);
 }
 
 int mali_vpu_buffer_update_info_from_v4l2(struct vb2_buffer *vb2_buf)
@@ -129,6 +185,30 @@ int mali_vpu_buffer_update_info_from_v4l2(struct vb2_buffer *vb2_buf)
 	return 0;
 }
 
+enum vb2_buffer_state mali_vpu_buffer_update_info_to_v4l2(struct mali_vpu_buffer *vpu_buf)
+{
+	struct vb2_v4l2_buffer *v4l2_buf = &vpu_buf->m2m_buf.vb;
+	struct vb2_buffer *vb2_buf = &v4l2_buf->vb2_buf;
+	int ret;
+
+	vb2_buf->timestamp = vpu_buf->user_data;
+
+	if (V4L2_TYPE_IS_CAPTURE(vpu_buf->type)) {
+		ret = mali_vpu_buffer_update_bytesused_to_v4l2(vpu_buf);
+		if (ret)
+			goto error;
+	}
+
+	mali_vpu_buffer_update_flags_to_v4l2(vpu_buf);
+	if ((v4l2_buf->flags & V4L2_BUF_FLAG_ERROR) != 0)
+		goto error;
+
+	return VB2_BUF_STATE_DONE;
+
+error:
+	return VB2_BUF_STATE_ERROR;
+}
+
 int mali_vpu_vb2_buffer_prepare(struct vb2_buffer *vb2_buf)
 {
 	struct mali_vpu_session *sess = vb2_get_drv_priv(vb2_buf->vb2_queue);
@@ -155,6 +235,20 @@ int mali_vpu_vb2_buffer_out_validate(struct vb2_buffer *vb2_buf)
 	v4l2_buf->field = V4L2_FIELD_NONE;
 
 	return 0;
+}
+
+mali_vpu_mmu_va mali_vpu_buffer_plane_va(struct mali_vpu_buffer *vpu_buf, u32 plane)
+{
+	struct mali_vpu_buffer_plane *vpu_buf_plane;
+
+	if (plane >= vpu_buf->nplanes)
+		return 0;
+
+	vpu_buf_plane = &vpu_buf->planes[plane];
+	if (!vpu_buf_plane->pages)
+		return 0;
+
+	return vpu_buf_plane->pages->va + vpu_buf_plane->pages->offset;
 }
 
 static int mali_vpu_buffer_plane_map(struct mali_vpu_buffer *vpu_buf, mali_vpu_mmu_va begin,
@@ -282,6 +376,12 @@ int mali_vpu_buffer_set_frame_layout(struct mali_vpu_buffer *vpu_buf)
 							       &sess->port_dst;
 
 	pix_mp = &port->curr_fmt.fmt.pix_mp;
+
+	vpu_buf->width = pix_mp->width;
+	vpu_buf->height = pix_mp->height;
+	vpu_buf->format = mali_vpu_find_format(sess, pix_mp->pixelformat, vpu_buf->type);
+	if (!vpu_buf->format)
+		return -EINVAL;
 
 	if (vpu_buf->nplanes != pix_mp->num_planes)
 		return -EINVAL;
