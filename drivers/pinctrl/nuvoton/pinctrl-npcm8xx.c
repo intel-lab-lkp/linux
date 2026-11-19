@@ -7,6 +7,7 @@
 #include <linux/gpio/driver.h>
 #include <linux/gpio/generic.h>
 #include <linux/interrupt.h>
+#include <linux/io.h>
 #include <linux/irq.h>
 #include <linux/mfd/syscon.h>
 #include <linux/module.h>
@@ -2453,6 +2454,13 @@ static int npcmgpio_add_pin_ranges(struct gpio_chip *chip)
 				      bank->chip.gc.ngpio);
 }
 
+static void npcm8xx_gpio_iounmap(void *data)
+{
+	struct npcm8xx_gpio *bank = data;
+
+	iounmap(bank->base);
+}
+
 static int npcm8xx_gpio_fw(struct npcm8xx_pinctrl *pctrl)
 {
 	struct gpio_generic_chip_config config;
@@ -2466,6 +2474,11 @@ static int npcm8xx_gpio_fw(struct npcm8xx_pinctrl *pctrl)
 		pctrl->gpio_bank[id].base = fwnode_iomap(child, 0);
 		if (!pctrl->gpio_bank[id].base)
 			return dev_err_probe(dev, -ENXIO, "fwnode_iomap id %d failed\n", id);
+
+		ret = devm_add_action_or_reset(dev, npcm8xx_gpio_iounmap,
+					       &pctrl->gpio_bank[id]);
+		if (ret)
+			return ret;
 
 		config = (struct gpio_generic_chip_config) {
 			.dev = dev,
