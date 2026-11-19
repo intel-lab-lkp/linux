@@ -409,6 +409,8 @@ enum dst_factor_mode {
 #define RK3588_GRF_SOC_CON1			0x0304
 #define RK3588_GRF_VOP_CON2			0x08
 #define RK3588_GRF_VO1_CON0			0x00
+#define RK3588_HDMI_VSYNC_INVERT		BIT(0)
+#define RK3588_HDMI_HSYNC_INVERT		BIT(1)
 
 /* System registers definition */
 #define RK3568_REG_CFG_DONE			0x000
