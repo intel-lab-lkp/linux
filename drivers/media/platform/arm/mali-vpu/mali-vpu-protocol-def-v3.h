@@ -28,6 +28,100 @@
 #define MALI_VPU_HOST_PROTOCOL_MAJOR 3
 #define MALI_VPU_HOST_PROTOCOL_MINOR 1
 
+/*****************************************************************************
+ *
+ * Virtual memory regions
+ *
+ * ..._ADDR_BEGIN gives the starting virtual address of the region,
+ * and ..._ADDR_END the (non-inclusive) ending address, such that
+ * the size of the region is obtained with the subtraction
+ * (..._ADDR_END - ..._ADDR_BEGIN).
+ *
+ ****************************************************************************/
+
+/* Memory region for first firmware instance */
+#define MVE_MEM_REGION_FW_INSTANCE0_ADDR_BEGIN	(0x00000000u)
+#define MVE_MEM_REGION_FW_INSTANCE0_ADDR_END	(0x000FFFFFu + 1)
+
+/* Memory regions for other firmware instances */
+#define MVE_MEM_REGION_FW_INSTANCE1_ADDR_BEGIN	(0x01000000u)
+#define MVE_MEM_REGION_FW_INSTANCE1_ADDR_END \
+	(MVE_MEM_REGION_FW_INSTANCE1_ADDR_BEGIN + MVE_MEM_REGION_FW_INSTANCE0_ADDR_END)
+
+#define MVE_MEM_REGION_FW_INSTANCE2_ADDR_BEGIN (0x02000000u)
+#define MVE_MEM_REGION_FW_INSTANCE2_ADDR_END \
+	(MVE_MEM_REGION_FW_INSTANCE2_ADDR_BEGIN + MVE_MEM_REGION_FW_INSTANCE0_ADDR_END)
+
+#define MVE_MEM_REGION_FW_INSTANCE3_ADDR_BEGIN (0x03000000u)
+#define MVE_MEM_REGION_FW_INSTANCE3_ADDR_END \
+	(MVE_MEM_REGION_FW_INSTANCE3_ADDR_BEGIN + MVE_MEM_REGION_FW_INSTANCE0_ADDR_END)
+
+#define MVE_MEM_REGION_FW_INSTANCE4_ADDR_BEGIN (0x04000000u)
+#define MVE_MEM_REGION_FW_INSTANCE4_ADDR_END \
+	(MVE_MEM_REGION_FW_INSTANCE4_ADDR_BEGIN + MVE_MEM_REGION_FW_INSTANCE0_ADDR_END)
+
+#define MVE_MEM_REGION_FW_INSTANCE5_ADDR_BEGIN (0x05000000u)
+#define MVE_MEM_REGION_FW_INSTANCE5_ADDR_END \
+	(MVE_MEM_REGION_FW_INSTANCE5_ADDR_BEGIN + MVE_MEM_REGION_FW_INSTANCE0_ADDR_END)
+
+#define MVE_MEM_REGION_FW_INSTANCE6_ADDR_BEGIN (0x06000000u)
+#define MVE_MEM_REGION_FW_INSTANCE6_ADDR_END \
+	(MVE_MEM_REGION_FW_INSTANCE6_ADDR_BEGIN + MVE_MEM_REGION_FW_INSTANCE0_ADDR_END)
+
+#define MVE_MEM_REGION_FW_INSTANCE7_ADDR_BEGIN (0x07000000u)
+#define MVE_MEM_REGION_FW_INSTANCE7_ADDR_END \
+	(MVE_MEM_REGION_FW_INSTANCE7_ADDR_BEGIN + MVE_MEM_REGION_FW_INSTANCE0_ADDR_END)
+
+/*
+ * Areas for communication between host and MVE are placed in the interval
+ * 0x10079000 - 0x1007FFFF, see special defines further down.
+ */
+
+/*****************************************************************************
+ *
+ * Communication queues between HOST/DRIVER and MVE
+ *
+ ****************************************************************************/
+
+/*
+ * Address for queue for messages in to MVE,
+ * one struct mve_comm_area_host located here
+ */
+#define MVE_COMM_MSG_INQ_ADDR	(0x10079000u)
+
+/*
+ * Address for queue for messages out from MVE,
+ * one struct mve_comm_area_mve located here
+ */
+#define MVE_COMM_MSG_OUTQ_ADDR	(0x1007A000u)
+
+/*
+ * Address for queue for input buffers in to MVE,
+ * one struct mve_comm_area_host located here
+ */
+#define MVE_COMM_BUF_INQ_ADDR	(0x1007B000u)
+
+/*
+ * Address for queue for input buffers returned from MVE,
+ * one struct mve_comm_area_mve located here
+ */
+#define MVE_COMM_BUF_INRQ_ADDR	(0x1007C000u)
+
+/*
+ * Address for queue for output buffers in to MVE,
+ * one struct mve_comm_area_host located here
+ */
+#define MVE_COMM_BUF_OUTQ_ADDR	(0x1007D000u)
+
+/*
+ * Address for queue for output buffers returned from MVE,
+ * one struct mve_comm_area_mve located here
+ */
+#define MVE_COMM_BUF_OUTRQ_ADDR	(0x1007E000u)
+
+/* One struct mve_rpc_communication_area located here */
+#define MVE_COMM_RPC_ADDR	(0x1007F000u)
+
  #define MVE_CHROMA_FORMAT_420 (0x1)
 
 /* format bitfield: */

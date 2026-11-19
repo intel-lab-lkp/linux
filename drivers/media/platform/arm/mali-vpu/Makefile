@@ -10,6 +10,7 @@ mali-vpu-objs := mali-vpu-probe.o \
 		mali-vpu-formats.o \
 		mali-vpu-controls.o \
 		mali-vpu-mmu.o \
-		mali-vpu-firmware-cache.o
+		mali-vpu-firmware-cache.o \
+		mali-vpu-firmware.o
 
 obj-$(CONFIG_VIDEO_MALI_VPU) += mali-vpu.o

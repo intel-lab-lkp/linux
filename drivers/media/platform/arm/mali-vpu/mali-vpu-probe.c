@@ -26,12 +26,6 @@
 #include "mali-vpu-variant.h"
 #include "mali-vpu-vidioc.h"
 
-/* VPU register access helpers */
-static u32 mali_vpu_read_reg(void __iomem *regs_base, u32 off)
-{
-	return readl(regs_base + off);
-}
-
 static void mali_vpu_read_version(struct mali_vpu_dev *vpu_dev, u32 *product_id, u32 *rev,
 				  u32 *patch)
 {

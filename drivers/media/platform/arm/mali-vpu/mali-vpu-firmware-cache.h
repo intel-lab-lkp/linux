@@ -7,6 +7,7 @@
 #define __MALI_VPU_FIRMWARE_CACHE_H__
 
 #include <asm/byteorder.h>
+#include <linux/bits.h>
 #include <linux/firmware.h>
 #include <linux/kref.h>
 #include <linux/list.h>
@@ -170,5 +171,10 @@ int mali_vpu_fw_cache_get(struct mali_vpu_fw_cache *cache,
 void mali_vpu_fw_cache_put(struct mali_vpu_fw_bin *bin);
 bool mali_vpu_fw_cache_cancel_waiter(struct mali_vpu_fw_cache *cache,
 				     struct mali_vpu_fw_event *event);
+
+static inline bool mali_vpu_test_bit_le32(u32 bit, const __le32 *addr)
+{
+	return !!(le32_to_cpu(addr[bit >> 5]) & BIT(bit & 0x1F));
+}
 
 #endif /* __MALI_VPU_FIRMWARE_CACHE_H__ */

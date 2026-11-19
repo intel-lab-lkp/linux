@@ -13,6 +13,7 @@
 #include <media/v4l2-fh.h>
 
 #include "mali-vpu-device.h"
+#include "mali-vpu-firmware.h"
 #include "mali-vpu-formats.h"
 #include "mali-vpu-mmu.h"
 
@@ -41,8 +42,9 @@ struct mali_vpu_port {
  * loading to complete. READY and LOADING requests are reused.
  *
  * A cache hit may invoke the callback synchronously. An asynchronous callback
- * discards its result if neither port requests streaming. A successfully
- * loaded binary is retained until session cleanup.
+ * discards its result if neither port requests streaming. Successful callbacks
+ * construct the firmware address space before making the binary READY. The
+ * session retains its binary reference until cleanup.
  *
  * Session cleanup waits for an in-flight callback before releasing the
  * session-owned binary reference and callback event. On timeout, it cancels
@@ -71,6 +73,7 @@ enum mali_vpu_session_fw_bin_state {
  * @ctrl_handler: V4L2 control handler bound to this session.
  * @fh: V4L2 file handle for this session.
  * @m2m_ctx: V4L2 mem2mem context for this session.
+ * @fw: Per-session firmware address space object.
  * @fw_bin: Pointer to firmware binary loaded for this session.
  * @fw_event: Firmware binary load event callback structure for this session.
  * @fw_bin_state: Session firmware binary status.
@@ -94,6 +97,7 @@ struct mali_vpu_session {
 	struct v4l2_fh		fh;
 	struct v4l2_m2m_ctx	*m2m_ctx;
 
+	struct mali_vpu_fw			fw;
 	struct mali_vpu_fw_bin			*fw_bin;
 	struct mali_vpu_fw_event		*fw_event;
 	enum mali_vpu_session_fw_bin_state	fw_bin_state;

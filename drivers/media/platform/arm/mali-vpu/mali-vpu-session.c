@@ -13,8 +13,10 @@
 #include "mali-vpu-session.h"
 #include "mali-vpu-controls.h"
 #include "mali-vpu-dec.h"
+#include "mali-vpu-firmware.h"
 #include "mali-vpu-firmware-cache.h"
 #include "mali-vpu-formats.h"
+#include "mali-vpu-registers.h"
 #include "mali-vpu-variant.h"
 #include "mali-vpu-vb2.h"
 
@@ -136,6 +138,7 @@ static void mali_vpu_session_release_fw_bin(struct mali_vpu_session *sess)
 	lockdep_assert_held(&sess->vq_lock);
 
 	if (sess->fw_bin_state == MALI_VPU_SESSION_FW_BIN_READY) {
+		mali_vpu_fw_cleanup(&sess->fw);
 		mali_vpu_fw_cache_put(sess->fw_bin);
 		sess->fw_bin = NULL;
 		sess->fw_bin_state = MALI_VPU_SESSION_FW_BIN_UNINITIALIZED;
@@ -208,6 +211,8 @@ static void mali_vpu_session_fw_bin_ready(struct mali_vpu_fw_bin *vpu_fw_bin,
 					  bool same_thread)
 {
 	struct mali_vpu_session *sess = arg;
+	u32 ncores;
+	int ret;
 
 	if (!same_thread)
 		mutex_lock(&sess->vq_lock);
@@ -227,6 +232,21 @@ static void mali_vpu_session_fw_bin_ready(struct mali_vpu_fw_bin *vpu_fw_bin,
 	}
 
 	sess->fw_bin = vpu_fw_bin;
+
+	/*
+	 * Get total number of cores on VPU element.
+	 * This will be scheduler decision in subsequent patches.
+	 */
+	ncores = mali_vpu_read_reg(sess->vpu_dev->regs_base, MALI_VPU_REG_NCORES);
+
+	ret = mali_vpu_fw_construct(&sess->fw, sess->fw_bin, sess->vpu_dev->dev,
+				    &sess->mmu, ncores);
+	if (ret) {
+		dev_err(sess->vpu_dev->dev,
+			"failed to initialise firmware: %d\n", ret);
+		sess->fw_bin_state = MALI_VPU_SESSION_FW_BIN_FAILED;
+		goto err_cache_put;
+	}
 
 	sess->fw_bin_state = MALI_VPU_SESSION_FW_BIN_READY;
 

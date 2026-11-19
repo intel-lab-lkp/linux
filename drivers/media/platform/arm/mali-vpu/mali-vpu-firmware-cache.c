@@ -7,6 +7,7 @@
 #include <linux/kthread.h>
 
 #include "mali-vpu-device.h"
+#include "mali-vpu-firmware.h"
 #include "mali-vpu-firmware-cache.h"
 #include "mali-vpu-mmu.h"
 #include "mali-vpu-protocol-def-v3.h"
@@ -14,11 +15,6 @@
 #define MALI_VPU_FW_CACHE_CLEANUP_INTERVAL_MS 30000
 
 #define MALI_VPU_GET_MAJOR_VERSION(ver) (((ver) >> 16) & 0xFF)
-
-static inline bool mali_vpu_test_bit_le32(u32 bit, const __le32 *addr)
-{
-	return !!(le32_to_cpu(addr[bit >> 5]) & BIT(bit & 0x1F));
-}
 
 static void mali_vpu_fw_bin_release(struct kref *ref)
 {
@@ -71,8 +67,12 @@ static int mali_vpu_fw_parse_header(const struct firmware *fw,
 	u32 header_fw_ver_major;
 	u32 fw_version, text_length, bss_start, bss_bitmap_size;
 	u32 master_rw_start, master_rw_size;
+	u64 text_end, bss_end, master_rw_end;
 	mali_vpu_mmu_va va;
 	u32 i;
+
+	u32 region_size = MVE_MEM_REGION_FW_INSTANCE0_ADDR_END -
+				MVE_MEM_REGION_FW_INSTANCE0_ADDR_BEGIN;
 
 	/* Validate the fw binary */
 	if (fw->size < sizeof(*header)) {
@@ -91,8 +91,15 @@ static int mali_vpu_fw_parse_header(const struct firmware *fw,
 	master_rw_start	= le32_to_cpu(header->master_rw_start_address);
 	master_rw_size	= le32_to_cpu(header->master_rw_size);
 
+	/*
+	 * text_length includes header and is measured from file offset zero.
+	 * The image is mapped at MALI_VPU_FW_TEXT_BASE_ADDR.
+	 */
+	text_end = (u64)MALI_VPU_FW_TEXT_BASE_ADDR + text_length;
+
 	if (text_length < sizeof(*header) ||
-	    text_length > fw->size) {
+	    text_length > fw->size ||
+	    text_end > region_size) {
 		dev_err(vpu_fw_bin->cache->dev,
 			"invalid firmware text length: %u\n",
 			text_length);
@@ -103,6 +110,42 @@ static int mali_vpu_fw_parse_header(const struct firmware *fw,
 		dev_err(vpu_fw_bin->cache->dev,
 			"invalid firmware BSS bitmap size: %u (max %zu)\n",
 			bss_bitmap_size, ARRAY_SIZE(header->bss_bitmap) * 32UL);
+		return -EBADMSG;
+	}
+
+	/*
+	 * BSS addresses are relative to a firmware instance's base, not offsets
+	 * into the file. Each bitmap bit describes one VPU page,
+	 *
+	 * The BSS span must fit within the instance and must not overlap the
+	 * text mapping. Since bss_start is page-aligned, comparing it against
+	 * text_end also prevents overlap with the final text page.
+	 */
+	bss_end = (u64)bss_start +
+		(u64)bss_bitmap_size * MALI_VPU_PAGE_SIZE;
+
+	if ((bss_start & MALI_VPU_PAGE_MASK) ||
+	    bss_start < text_end ||
+	    bss_end > region_size) {
+		dev_err(vpu_fw_bin->cache->dev,
+			"invalid firmware BSS layout: start=%#x, pages=%u\n",
+			bss_start, bss_bitmap_size);
+		return -EBADMSG;
+	}
+
+	/*
+	 * The shared region must lie within the BSS span. Its start must be
+	 * page-aligned, but its size need not be: the final page may be only
+	 * partially used.
+	 */
+	master_rw_end = (u64)master_rw_start + master_rw_size;
+
+	if ((master_rw_start & MALI_VPU_PAGE_MASK) ||
+	    master_rw_start < bss_start ||
+	    master_rw_end > bss_end) {
+		dev_err(vpu_fw_bin->cache->dev,
+			"invalid firmware shared region: start=%#x, size=%#x\n",
+			master_rw_start, master_rw_size);
 		return -EBADMSG;
 	}
 
