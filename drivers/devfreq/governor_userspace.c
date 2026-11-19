@@ -27,7 +27,8 @@ static int devfreq_userspace_func(struct devfreq *df, unsigned long *freq)
 	if (data->valid)
 		*freq = data->user_frequency;
 	else
-		*freq = df->previous_freq; /* No user freq specified yet */
+		/* No user freq specified yet: keep the one from before suspend */
+		*freq = df->resume_freq ?: df->previous_freq;
 
 	return 0;
 }

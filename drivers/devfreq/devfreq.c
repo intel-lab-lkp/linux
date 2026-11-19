@@ -407,6 +407,16 @@ int devfreq_update_target(struct devfreq *devfreq, unsigned long freq)
 	if (!devfreq->governor)
 		return -EINVAL;
 
+	/*
+	 * The device may be powered down while it is suspended. Leave it
+	 * alone, devfreq_resume_device() does the update. A passive device
+	 * (freq set) still follows its parent, as exynos-bus needs.
+	 */
+	if (devfreq->suspend_count > 0 && !freq) {
+		devfreq->update_pending = true;
+		return 0;
+	}
+
 	/* Reevaluate the proper frequency */
 	err = devfreq->governor->get_target_freq(devfreq, &freq);
 	if (err)
@@ -871,7 +881,7 @@ struct devfreq *devfreq_add_device(struct device *dev,
 	if (IS_ERR(devfreq->opp_table))
 		devfreq->opp_table = NULL;
 
-	atomic_set(&devfreq->suspend_count, 0);
+	devfreq->suspend_count = 0;
 
 	dev_set_name(&devfreq->dev, "%s", dev_name(dev));
 	err = device_register(&devfreq->dev);
@@ -1140,17 +1150,26 @@ EXPORT_SYMBOL(devm_devfreq_remove_device);
  *
  * This function is intended to be called by the pm callbacks
  * (e.g., runtime_suspend, suspend) of the device driver that
- * holds the devfreq.
+ * holds the devfreq. On error, devfreq stays suspended.
  */
 int devfreq_suspend_device(struct devfreq *devfreq)
 {
 	unsigned long resume_freq;
-	int ret;
+	int ret, count;
 
 	if (!devfreq)
 		return -EINVAL;
 
-	if (atomic_inc_return(&devfreq->suspend_count) > 1)
+	mutex_lock(&devfreq->lock);
+	/* A failed resume left the count raised: this suspend takes it over */
+	if (devfreq->resume_failed) {
+		devfreq->resume_failed = false;
+		mutex_unlock(&devfreq->lock);
+		return 0;
+	}
+	count = ++devfreq->suspend_count;
+	mutex_unlock(&devfreq->lock);
+	if (count > 1)
 		return 0;
 
 	if (devfreq->governor) {
@@ -1181,34 +1200,63 @@ EXPORT_SYMBOL(devfreq_suspend_device);
  *
  * This function is intended to be called by the pm callbacks
  * (e.g., runtime_resume, resume) of the device driver that
- * holds the devfreq.
+ * holds the devfreq. If the frequency cannot be set, devfreq stays
+ * suspended.
  */
 int devfreq_resume_device(struct devfreq *devfreq)
 {
-	int ret;
+	unsigned long min_freq, max_freq, freq;
+	int ret = 0;
+	u32 flags;
 
 	if (!devfreq)
 		return -EINVAL;
 
-	if (atomic_dec_return(&devfreq->suspend_count) >= 1)
-		return 0;
-
-	if (devfreq->resume_freq) {
-		mutex_lock(&devfreq->lock);
-		ret = devfreq_set_target(devfreq, devfreq->resume_freq, 0);
+	mutex_lock(&devfreq->lock);
+	/* Count 0: no suspend to resume from */
+	if (devfreq->suspend_count <= 0 || --devfreq->suspend_count > 0) {
 		mutex_unlock(&devfreq->lock);
-		if (ret)
-			return ret;
+		return 0;
 	}
 
-	if (devfreq->governor) {
+	/*
+	 * Run the update deferred while suspended, except for polling
+	 * governors, which re-evaluate on fresh load data after
+	 * DEVFREQ_GOV_RESUME, and the passive governor, which follows its
+	 * parent. These resume within the current limits.
+	 */
+	if (devfreq->update_pending && devfreq->governor &&
+	    !IS_SUPPORTED_ATTR(devfreq->governor->attrs, POLLING_INTERVAL) &&
+	    strncmp(devfreq->governor->name, DEVFREQ_GOV_PASSIVE,
+		    DEVFREQ_NAME_LEN)) {
+		ret = devfreq_update_target(devfreq, 0);
+	} else {
+		freq = devfreq->resume_freq;
+		if (!freq && devfreq->update_pending)
+			freq = devfreq->previous_freq;
+		if (freq) {
+			devfreq_get_freq_range(devfreq, &min_freq, &max_freq);
+			freq = clamp(freq, min_freq, max_freq);
+			flags = freq == max_freq ? DEVFREQ_FLAG_LEAST_UPPER_BOUND : 0;
+			ret = devfreq_set_target(devfreq, freq, flags);
+		}
+	}
+	if (ret) {
+		/* The caller may keep the device powered down */
+		devfreq->suspend_count++;
+		devfreq->resume_failed = true;
+		mutex_unlock(&devfreq->lock);
+		return ret;
+	}
+	devfreq->update_pending = false;
+	devfreq->resume_failed = false;
+	mutex_unlock(&devfreq->lock);
+
+	if (devfreq->governor)
 		ret = devfreq->governor->event_handler(devfreq,
 					DEVFREQ_GOV_RESUME, NULL);
-		if (ret)
-			return ret;
-	}
 
-	return 0;
+	return ret;
 }
 EXPORT_SYMBOL(devfreq_resume_device);
 
