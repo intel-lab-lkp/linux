@@ -481,7 +481,7 @@ pub trait WorkItem<const ID: u64 = 0> {
 /// This is a helper type used to associate a `work_struct` with the [`WorkItem`] that uses it.
 ///
 /// [`run`]: WorkItemPointer::run
-#[pin_data]
+#[pin_data(PinnedDrop)]
 #[repr(transparent)]
 pub struct Work<T: ?Sized, const ID: u64 = 0> {
     #[pin]
@@ -513,7 +513,6 @@ impl<T: ?Sized, const ID: u64> Work<T, ID> {
                     bindings::init_work_with_key(
                         slot,
                         Some(T::Pointer::run),
-                        false,
                         name.as_char_ptr(),
                         key.as_ptr(),
                     )
@@ -536,6 +535,15 @@ impl<T: ?Sized, const ID: u64> Work<T, ID> {
         // A pointer cast would also be ok due to `#[repr(transparent)]`. We use `addr_of!` so that
         // the compiler does not complain that the `work` field is unused.
         unsafe { Opaque::cast_into(core::ptr::addr_of!((*ptr).work)) }
+    }
+}
+
+#[pinned_drop]
+impl<T: ?Sized, const ID: u64> PinnedDrop for Work<T, ID> {
+    fn drop(self: Pin<&mut Self>) {
+        // SAFETY: `self.work.get()` points to a valid `work_struct` initialized in `Work::new`,
+        // and the work item is not currently queued because `Self` is being dropped.
+        unsafe { bindings::destroy_work_on_stack(self.work.get()) }
     }
 }
 
@@ -686,7 +694,6 @@ impl<T: ?Sized, const ID: u64> DelayedWork<T, ID> {
                     bindings::init_work_with_key(
                         core::ptr::addr_of_mut!((*slot).work),
                         Some(T::Pointer::run),
-                        false,
                         work_name.as_char_ptr(),
                         work_key.as_ptr(),
                     )
