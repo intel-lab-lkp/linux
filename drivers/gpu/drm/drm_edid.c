@@ -4215,6 +4215,7 @@ static int add_detailed_modes(struct drm_connector *connector,
 #define CTA_EXT_DB_HDR_STATIC_METADATA	6
 #define CTA_EXT_DB_420_VIDEO_DATA	14
 #define CTA_EXT_DB_420_VIDEO_CAP_MAP	15
+#define CTA_EXT_DB_T7VTDB		0x22
 #define CTA_EXT_DB_HF_EEODB		0x78
 #define CTA_EXT_DB_HF_SCDB		0x79
 
@@ -7206,6 +7207,38 @@ static int add_displayid_detailed_modes(struct drm_connector *connector,
 	return num_modes;
 }
 
+/* CTA-861-H T7VTDB: a revision byte, then one DisplayID Type VII timing */
+static int add_cta_t7vtdb_modes(struct drm_connector *connector,
+				const struct drm_edid *drm_edid)
+{
+	const struct displayid_detailed_timings_1 *timings;
+	struct drm_display_mode *newmode;
+	const struct cea_db *db;
+	struct cea_db_iter iter;
+	int num_modes = 0;
+
+	cea_db_iter_edid_begin(drm_edid, &iter);
+	cea_db_iter_for_each(db, &iter) {
+		if (!cea_db_is_extended_tag(db, CTA_EXT_DB_T7VTDB) ||
+		    cea_db_payload_len(db) < 2 + sizeof(*timings))
+			continue;
+
+		timings = (const void *)(cea_db_data(db) + 2);
+		newmode = drm_mode_displayid_detailed(connector->dev, timings, true);
+		if (!newmode)
+			continue;
+
+		/* Bit 7 of the flags is YCbCr 4:2:0 support here, not preferred */
+		newmode->type &= ~DRM_MODE_TYPE_PREFERRED;
+
+		drm_mode_probed_add(connector, newmode);
+		num_modes++;
+	}
+	cea_db_iter_end(&iter);
+
+	return num_modes;
+}
+
 static int _drm_edid_connector_add_modes(struct drm_connector *connector,
 					 const struct drm_edid *drm_edid)
 {
@@ -7235,6 +7268,7 @@ static int _drm_edid_connector_add_modes(struct drm_connector *connector,
 	num_modes += add_cea_modes(connector, drm_edid);
 	num_modes += add_alternate_cea_modes(connector, drm_edid);
 	num_modes += add_displayid_detailed_modes(connector, drm_edid);
+	num_modes += add_cta_t7vtdb_modes(connector, drm_edid);
 	if (drm_edid->edid->features & DRM_EDID_FEATURE_CONTINUOUS_FREQ)
 		num_modes += add_inferred_modes(connector, drm_edid);
 
