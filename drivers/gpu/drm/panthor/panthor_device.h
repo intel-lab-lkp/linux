@@ -19,6 +19,8 @@
 #include <drm/gpu_scheduler.h>
 #include <drm/panthor_drm.h>
 
+struct reset_control;
+
 struct panthor_csf;
 struct panthor_csf_ctx;
 struct panthor_device;
@@ -137,6 +139,9 @@ struct panthor_device {
 
 	/** @soc_data: Optional SoC data. */
 	const struct panthor_soc_data *soc_data;
+
+	/** @reset_control: Optional external GPU reset. */
+	struct reset_control *reset_control;
 
 	/** @phys_addr: Physical address of the iomem region. */
 	phys_addr_t phys_addr;
