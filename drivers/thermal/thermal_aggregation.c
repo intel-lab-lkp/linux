@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0
 
 #include <linux/errno.h>
+#include <linux/math64.h>
+#include <linux/overflow.h>
 #include <linux/units.h>
 
 #include "thermal_core.h"
@@ -155,7 +157,70 @@ thermal_zone_aggregate_validate(struct thermal_zone_aggregate *aggregate,
 	return 0;
 }
 
+/**
+ * thermal_zone_get_temp_aggregate() - read an aggregated zone temperature
+ * @tz: aggregate zone with a previously validated aggregation description
+ * @temp: output temperature in millicelsius, unchanged on failure
+ *
+ * The caller must hold @tz->lock and keep the aggregation description and each
+ * source zone alive and stable throughout the call. Source references must be
+ * acquired under appropriate lifetime protection before publishing the entries;
+ * the aggregate lock alone does not protect source lifetime or detachment.
+ * The description must have passed thermal_zone_aggregate_validate() before
+ * publication. Aggregations of aggregated zones are not supported yet, and
+ * sources must remain non-aggregated. The destination cannot be a source.
+ *
+ * Source readings are acquired sequentially, not as a simultaneous snapshot.
+ * Each source callback runs under its zone lock, including the usual emulation
+ * handling. Source callbacks must not re-enter a held thermal zone lock.
+ *
+ * Return: 0 on success, a source read error, -EAGAIN for a busy source, -ENODEV
+ * for an exiting source, -ENODATA for an invalid source temperature, or -ERANGE
+ * for arithmetic overflow or a result outside the int range.
+ */
 int thermal_zone_get_temp_aggregate(struct thermal_zone_device *tz, int *temp)
 {
-	return -EOPNOTSUPP;
+	struct thermal_zone_aggregate *aggregate = tz->tzp->aggregate;
+	s64 sum = 0, product;
+	unsigned int i;
+	int source_temp, ret;
+
+	lockdep_assert_held(&tz->lock);
+
+	for (i = 0; i < aggregate->num_entries; i++) {
+		const struct thermal_zone_aggregate_entry *entry = &aggregate->entries[i];
+		struct thermal_zone_device *source = entry->tz;
+
+		/*
+		 * The aggregate lock is already held. Do not wait for another
+		 * zone lock: return -EAGAIN so the normal update path can retry.
+		 */
+		if (!mutex_trylock(&source->lock))
+			return -EAGAIN;
+
+		if (source->state & TZ_STATE_FLAG_EXIT)
+			ret = -ENODEV;
+		else
+			ret = __thermal_zone_get_temp(source, &source_temp);
+
+		mutex_unlock(&source->lock);
+		if (ret)
+			return ret;
+		if (source_temp <= THERMAL_TEMP_INVALID)
+			return -ENODATA;
+
+		/* Cast before multiplying and retain fractional terms until summation. */
+		if (check_mul_overflow((s64)entry->coefficient, (s64)source_temp, &product) ||
+		    check_add_overflow(sum, product, &sum))
+			return -ERANGE;
+	}
+
+	/* Divide once, truncating toward zero, then apply the unscaled offset. */
+	sum = div_s64(sum, PERMILLE);
+	if (check_add_overflow(sum, (s64)tz->tzp->offset, &sum) ||
+	    sum < INT_MIN || sum > INT_MAX)
+		return -ERANGE;
+
+	*temp = sum;
+	return 0;
 }
