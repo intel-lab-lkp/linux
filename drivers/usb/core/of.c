@@ -91,6 +91,38 @@ static bool usb_of_has_devices_or_graph(const struct usb_device *hub)
 }
 
 /**
+ * usb_of_port_is_hotplug() - check for a hotplug port in the OF graph
+ * @hub: hub to which port is for @port1
+ * @port1: graph port of the port
+ *
+ * Hotplug ports are connected to an available remote node, e.g.
+ * usb-a-connector compatible node, in the OF graph.
+ *
+ * Return: true if @port1 leads to an available node in the graph.
+ */
+bool usb_of_port_is_hotplug(struct usb_device *hub, int port1)
+{
+	struct device_node *np = hub->dev.of_node;
+	struct device_node *ep, *remote_np;
+	bool ret;
+
+	if (!of_graph_is_present(np))
+		return false;
+
+	ep = of_graph_get_endpoint_by_regs(np, port1, -1);
+	if (!ep)
+		return false;
+
+	remote_np = of_graph_get_remote_port_parent(ep);
+	of_node_put(ep);
+	ret = of_device_is_available(remote_np);
+	of_node_put(remote_np);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(usb_of_port_is_hotplug);
+
+/**
  * usb_of_get_connect_type() - get a USB hub's port connect_type
  * @hub: hub to which port is for @port1
  * @port1: one-based index of port
@@ -106,7 +138,7 @@ static bool usb_of_has_devices_or_graph(const struct usb_device *hub)
  */
 enum usb_port_connect_type usb_of_get_connect_type(struct usb_device *hub, int port1)
 {
-	struct device_node *np, *child, *ep, *remote_np;
+	struct device_node *child;
 	enum usb_port_connect_type connect_type;
 
 	/* Only set connect_type if binding has ports/hardwired devices. */
@@ -116,21 +148,8 @@ enum usb_port_connect_type usb_of_get_connect_type(struct usb_device *hub, int p
 	/* Assume port is unused if there's a graph or a child node. */
 	connect_type = USB_PORT_NOT_USED;
 
-	np = hub->dev.of_node;
-	/*
-	 * Hotplug ports are connected to an available remote node, e.g.
-	 * usb-a-connector compatible node, in the OF graph.
-	 */
-	if (of_graph_is_present(np)) {
-		ep = of_graph_get_endpoint_by_regs(np, port1, -1);
-		if (ep) {
-			remote_np = of_graph_get_remote_port_parent(ep);
-			of_node_put(ep);
-			if (of_device_is_available(remote_np))
-				connect_type = USB_PORT_CONNECT_TYPE_HOT_PLUG;
-			of_node_put(remote_np);
-		}
-	}
+	if (usb_of_port_is_hotplug(hub, port1))
+		connect_type = USB_PORT_CONNECT_TYPE_HOT_PLUG;
 
 	/*
 	 * Hard-wired ports are child nodes with a reg property corresponding

@@ -836,9 +836,11 @@ int usb_hub_create_port_device(struct usb_hub *hub, int port1)
 
 	graph_id = usb_port_graph_id(hdev, port1);
 	port_dev->connect_type = usb_of_get_connect_type(hdev, graph_id);
-	/* dwc3 graphs give the SuperSpeed port port@1 */
+	/* dwc3: port@1 is the SuperSpeed port, child reg 1 the USB 2.0 one */
 	if (port_dev->connect_type == USB_PORT_NOT_USED && graph_id != port1)
-		port_dev->connect_type = usb_of_get_connect_type(hdev, port1);
+		port_dev->connect_type = usb_of_port_is_hotplug(hdev, port1) ?
+					 USB_PORT_CONNECT_TYPE_HOT_PLUG :
+					 usb_of_get_connect_type(hdev, port1);
 	hub->ports[port1 - 1] = port_dev;
 	port_dev->portnum = port1;
 	set_bit(port1, hub->power_bits);
