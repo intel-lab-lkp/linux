@@ -1937,7 +1937,6 @@ ice_vc_fdir_set_irq_ctx(struct ice_vf *vf, struct virtchnl_fdir_fltr_conf *conf,
 	ctx->conf = conf;
 	ctx->v_opcode = v_opcode;
 	ctx->stat = ICE_FDIR_CTX_READY;
-	timer_setup(&ctx->rx_tmr, ice_vf_fdir_timer, 0);
 
 	mod_timer(&ctx->rx_tmr, round_jiffies(msecs_to_jiffies(10) + jiffies));
 
@@ -2454,6 +2453,7 @@ void ice_vf_fdir_init(struct ice_vf *vf)
 	INIT_LIST_HEAD(&fdir->fdir_rule_list);
 
 	spin_lock_init(&fdir->ctx_lock);
+	timer_setup(&fdir->ctx_irq.rx_tmr, ice_vf_fdir_timer, 0);
 	fdir->ctx_irq.flags = 0;
 	fdir->ctx_done.flags = 0;
 	ice_vc_fdir_reset_cnt_all(fdir);
@@ -2465,6 +2465,14 @@ void ice_vf_fdir_init(struct ice_vf *vf)
  */
 void ice_vf_fdir_exit(struct ice_vf *vf)
 {
+	unsigned long flags;
+
+	timer_delete_sync(&vf->fdir.ctx_irq.rx_tmr);
+
+	spin_lock_irqsave(&vf->fdir.ctx_lock, flags);
+	vf->fdir.ctx_irq.flags &= ~ICE_VF_FDIR_CTX_VALID;
+	spin_unlock_irqrestore(&vf->fdir.ctx_lock, flags);
+
 	ice_vc_fdir_flush_entry(vf);
 	idr_destroy(&vf->fdir.fdir_rule_idr);
 	ice_vc_fdir_rem_prof_all(vf);
