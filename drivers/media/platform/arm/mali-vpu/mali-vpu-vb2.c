@@ -59,12 +59,40 @@ static void mali_vpu_vb2_buffer_queue(struct vb2_buffer *vb2_buf)
 	v4l2_m2m_buf_queue(sess->m2m_ctx, v4l2_buf);
 }
 
+static int mali_vpu_vb2_prepare_streaming(struct vb2_queue *q)
+{
+	struct mali_vpu_session *sess = vb2_get_drv_priv(q);
+	struct mali_vpu_port *port = V4L2_TYPE_IS_OUTPUT(q->type) ?
+					&sess->port_src : &sess->port_dst;
+	int ret;
+
+	if (mali_vpu_is_coded_q(sess, q->type)) {
+		ret = mali_vpu_session_request_fw_load(sess);
+		if (ret)
+			return ret;
+	}
+
+	port->stream_requested = true;
+	return 0;
+}
+
+static void mali_vpu_vb2_unprepare_streaming(struct vb2_queue *q)
+{
+	struct mali_vpu_session *sess = vb2_get_drv_priv(q);
+	struct mali_vpu_port *port = V4L2_TYPE_IS_OUTPUT(q->type) ?
+					&sess->port_src : &sess->port_dst;
+
+	port->stream_requested = false;
+}
+
 static const struct vb2_ops mali_vpu_vb2_ops = {
 	.queue_setup		= mali_vpu_vb2_queue_setup,
 	.buf_out_validate	= mali_vpu_vb2_buffer_out_validate,
 	.buf_init		= mali_vpu_vb2_buffer_init,
 	.buf_prepare		= mali_vpu_vb2_buffer_prepare,
 	.buf_queue		= mali_vpu_vb2_buffer_queue,
+	.prepare_streaming	= mali_vpu_vb2_prepare_streaming,
+	.unprepare_streaming	= mali_vpu_vb2_unprepare_streaming,
 };
 
 static void mali_vpu_queue_init_type(struct mali_vpu_session *sess,

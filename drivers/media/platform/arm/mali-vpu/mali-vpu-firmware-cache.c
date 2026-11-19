@@ -390,6 +390,51 @@ void mali_vpu_fw_cache_put(struct mali_vpu_fw_bin *bin)
 	kref_put(&bin->refcount, mali_vpu_fw_bin_release);
 }
 
+bool mali_vpu_fw_cache_cancel_waiter(struct mali_vpu_fw_cache *cache,
+				     struct mali_vpu_fw_event *event)
+{
+	struct mali_vpu_fw_bin *cancelled_bin = NULL;
+	struct mali_vpu_fw_event *waiter;
+	struct mali_vpu_fw_bin *bin;
+
+	if (!cache || !event)
+		return false;
+
+	mutex_lock(&cache->lock);
+
+	list_for_each_entry(bin, &cache->fw_bins, cache_link) {
+		mutex_lock(&bin->lock);
+
+		list_for_each_entry(waiter, &bin->event_list, link) {
+			if (waiter != event)
+				continue;
+
+			list_del_init(&event->link);
+			cancelled_bin = bin;
+			break;
+		}
+
+		mutex_unlock(&bin->lock);
+
+		if (cancelled_bin)
+			break;
+	}
+
+	mutex_unlock(&cache->lock);
+
+	if (!cancelled_bin)
+		return false;
+
+	/*
+	 * Every successful cache_get() owns one caller reference. Since the
+	 * callback will no longer run for this waiter, release that reference
+	 * here.
+	 */
+	mali_vpu_fw_cache_put(cancelled_bin);
+
+	return true;
+}
+
 static void mali_vpu_fw_cache_prune(struct mali_vpu_fw_cache *cache)
 {
 	LIST_HEAD(prune_list);

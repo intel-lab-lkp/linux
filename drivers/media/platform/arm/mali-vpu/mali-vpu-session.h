@@ -6,6 +6,7 @@
 #ifndef __MALI_VPU_SESSION_H__
 #define __MALI_VPU_SESSION_H__
 
+#include <linux/completion.h>
 #include <linux/mutex.h>
 #include <linux/videodev2.h>
 #include <media/v4l2-ctrls.h>
@@ -16,15 +17,42 @@
 #include "mali-vpu-mmu.h"
 
 struct v4l2_m2m_ctx;
+struct mali_vpu_fw_bin;
+struct mali_vpu_fw_event;
 
 /**
  * struct mali_vpu_port - format state of a src/dst queue in a session.
  * @curr_fmt: V4L2 format currently configured for the port
  * @supported_fmts: List of format descriptors supported by the queue.
+ * @stream_requested: Port/Queue is being prepared for streaming or has
+ *                    successfully completed preparation. Protected by vq_lock.
  */
 struct mali_vpu_port {
 	struct v4l2_format		curr_fmt;
 	struct mali_vpu_format_list	supported_fmts;
+	bool				stream_requested;
+};
+
+/*
+ * Firmware binary load lifecycle
+ *
+ * Preparing the coded queue starts an asynchronous firmware request.
+ * The binary request does not require queued buffers and does not wait for
+ * loading to complete. READY and LOADING requests are reused.
+ *
+ * A cache hit may invoke the callback synchronously. An asynchronous callback
+ * discards its result if neither port requests streaming. A successfully
+ * loaded binary is retained until session cleanup.
+ *
+ * Session cleanup waits for an in-flight callback before releasing the
+ * session-owned binary reference and callback event. On timeout, it cancels
+ * the pending cache waiter or waits for an already claimed callback.
+ */
+enum mali_vpu_session_fw_bin_state {
+	MALI_VPU_SESSION_FW_BIN_UNINITIALIZED = 0,
+	MALI_VPU_SESSION_FW_BIN_LOADING,
+	MALI_VPU_SESSION_FW_BIN_READY,
+	MALI_VPU_SESSION_FW_BIN_FAILED,
 };
 
 /**
@@ -43,6 +71,10 @@ struct mali_vpu_port {
  * @ctrl_handler: V4L2 control handler bound to this session.
  * @fh: V4L2 file handle for this session.
  * @m2m_ctx: V4L2 mem2mem context for this session.
+ * @fw_bin: Pointer to firmware binary loaded for this session.
+ * @fw_event: Firmware binary load event callback structure for this session.
+ * @fw_bin_state: Session firmware binary status.
+ * @fw_load_done: Completion used to synchronize teardown with an in-flight firmware load.
  */
 struct mali_vpu_session {
 	struct mali_vpu_dev		*vpu_dev;
@@ -61,10 +93,16 @@ struct mali_vpu_session {
 
 	struct v4l2_fh		fh;
 	struct v4l2_m2m_ctx	*m2m_ctx;
+
+	struct mali_vpu_fw_bin			*fw_bin;
+	struct mali_vpu_fw_event		*fw_event;
+	enum mali_vpu_session_fw_bin_state	fw_bin_state;
+	struct completion			fw_load_done;
 };
 
 int mali_vpu_session_init(struct mali_vpu_session *sess);
-void mali_vpu_session_cleanup(struct mali_vpu_session *sess);
+int mali_vpu_session_cleanup(struct mali_vpu_session *sess);
+int mali_vpu_session_request_fw_load(struct mali_vpu_session *sess);
 
 static inline struct mali_vpu_session *mali_vpu_get_session(struct file *filp)
 {

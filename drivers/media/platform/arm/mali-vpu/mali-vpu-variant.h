@@ -50,6 +50,7 @@ struct mali_vpu_control_caps {
  * @num_rsts: Number of reset controls for this variant.
  * @expected_hw_pid: Expected hardware product ID read from the version register.
  * @dma_mask: DMA addressing capability mask.
+ * @fw_ver_major: Major firmware version compatible with this variant.
  * @fmt_caps: Format capability tables for encode/decode paths.
  * @frmsz_caps: Frame dimension limits and defaults.
  * @ctrl_caps:  Control capability tables for encode/decode paths.
@@ -59,6 +60,7 @@ struct mali_vpu_variant {
 	unsigned int num_rsts;
 	u32 expected_hw_pid;
 	u64 dma_mask;
+	u32 fw_ver_major;
 
 	struct mali_vpu_format_caps	fmt_caps;
 	struct mali_vpu_framesize_caps	frmsz_caps;

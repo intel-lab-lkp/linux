@@ -62,12 +62,13 @@ err_free_sess:
 static int mali_vpu_release(struct file *filp)
 {
 	struct mali_vpu_session *sess = mali_vpu_get_session(filp);
+	int ret = 0;
 
-	mali_vpu_session_cleanup(sess);
+	ret = mali_vpu_session_cleanup(sess);
 	v4l2_fh_del(&sess->fh, filp);
 	v4l2_fh_exit(&sess->fh);
 	kfree(sess);
-	return 0;
+	return ret;
 }
 
 const struct v4l2_file_operations mali_vpu_fops = {

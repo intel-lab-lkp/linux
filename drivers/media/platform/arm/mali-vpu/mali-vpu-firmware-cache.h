@@ -168,5 +168,7 @@ int mali_vpu_fw_cache_get(struct mali_vpu_fw_cache *cache,
 			  const struct mali_vpu_fw_key *key,
 			  struct mali_vpu_fw_event *event);
 void mali_vpu_fw_cache_put(struct mali_vpu_fw_bin *bin);
+bool mali_vpu_fw_cache_cancel_waiter(struct mali_vpu_fw_cache *cache,
+				     struct mali_vpu_fw_event *event);
 
 #endif /* __MALI_VPU_FIRMWARE_CACHE_H__ */

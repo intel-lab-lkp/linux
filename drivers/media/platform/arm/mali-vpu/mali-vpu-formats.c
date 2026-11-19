@@ -13,6 +13,13 @@
 #include "mali-vpu-formats.h"
 #include "mali-vpu-session.h"
 
+bool mali_vpu_is_coded_q(const struct mali_vpu_session *sess, enum v4l2_buf_type type)
+{
+	if (sess->role == MALI_VPU_DECODER)
+		return V4L2_TYPE_IS_OUTPUT(type);
+	return V4L2_TYPE_IS_CAPTURE(type);
+}
+
 const struct mali_vpu_format_desc *
 mali_vpu_find_format(struct mali_vpu_session *sess, u32 pixfmt,
 		     enum v4l2_buf_type type)
