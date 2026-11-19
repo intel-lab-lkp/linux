@@ -1320,6 +1320,7 @@ M:	Ben Levinsky <ben.levinsky@amd.com>
 L:	linux-kernel@vger.kernel.org
 S:	Maintained
 F:	Documentation/devicetree/bindings/mailbox/amd,pl-mailbox-2.1.yaml
+F:	drivers/mailbox/amd-pl-mailbox.c
 
 AMD PSTATE DRIVER
 M:	Huang Rui <ray.huang@amd.com>
