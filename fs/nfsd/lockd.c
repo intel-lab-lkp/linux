@@ -41,8 +41,8 @@ static int nlm_fopen(struct svc_rqst *rqstp, struct nfs_fh *f,
 	fh.fh_export = NULL;
 
 	/*
-	 * Allow BYPASS_GSS as some client implementations use AUTH_SYS
-	 * for NLM even when GSS is used for NFS.
+	 * Allow BYPASS_GSS for AUTH_SYS as some client implementations use
+	 * AUTH_SYS for NLM even when GSS is used for NFS.
 	 * Allow OWNER_OVERRIDE as permission might have been changed
 	 * after the file was opened.
 	 * Pass MAY_NLM so that authentication can be completely bypassed
@@ -50,7 +50,9 @@ static int nlm_fopen(struct svc_rqst *rqstp, struct nfs_fh *f,
 	 * for NLM requests.
 	 */
 	access = (flags == O_WRONLY) ? NFSD_MAY_WRITE : NFSD_MAY_READ;
-	access |= NFSD_MAY_NLM | NFSD_MAY_OWNER_OVERRIDE | NFSD_MAY_BYPASS_GSS;
+	access |= NFSD_MAY_NLM | NFSD_MAY_OWNER_OVERRIDE;
+	if (rqstp->rq_cred.cr_flavor == RPC_AUTH_UNIX)
+		access |= NFSD_MAY_BYPASS_GSS;
 	nfserr = nfsd_open(rqstp, &fh, S_IFREG, access, filp);
 	fh_put(&fh);
 
