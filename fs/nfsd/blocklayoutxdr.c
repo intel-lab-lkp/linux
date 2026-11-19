@@ -175,7 +175,7 @@ nfsd4_block_decode_layoutupdate(struct xdr_stream *xdr, struct iomap **iomapp,
 	    nr_iomaps != len / PNFS_BLOCK_EXTENT_SIZE)
 		return nfserr_bad_xdr;
 
-	iomaps = kzalloc_objs(*iomaps, nr_iomaps);
+	iomaps = kvzalloc_objs(*iomaps, nr_iomaps);
 	if (!iomaps)
 		return nfserr_delay;
 
@@ -231,7 +231,7 @@ nfsd4_block_decode_layoutupdate(struct xdr_stream *xdr, struct iomap **iomapp,
 	*nr_iomapsp = nr_iomaps;
 	return nfs_ok;
 fail:
-	kfree(iomaps);
+	kvfree(iomaps);
 	return nfserr;
 }
 
@@ -269,7 +269,7 @@ nfsd4_scsi_decode_layoutupdate(struct xdr_stream *xdr, struct iomap **iomapp,
 	    nr_iomaps != len / PNFS_SCSI_RANGE_SIZE)
 		return nfserr_bad_xdr;
 
-	iomaps = kzalloc_objs(*iomaps, nr_iomaps);
+	iomaps = kvzalloc_objs(*iomaps, nr_iomaps);
 	if (!iomaps)
 		return nfserr_delay;
 
@@ -301,6 +301,6 @@ nfsd4_scsi_decode_layoutupdate(struct xdr_stream *xdr, struct iomap **iomapp,
 	*nr_iomapsp = nr_iomaps;
 	return nfs_ok;
 fail:
-	kfree(iomaps);
+	kvfree(iomaps);
 	return nfserr;
 }
