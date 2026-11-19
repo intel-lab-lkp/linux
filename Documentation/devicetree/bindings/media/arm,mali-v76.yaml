@@ -1,0 +1,70 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/media/arm,mali-v76.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: ARM Mali-V76 Video Processing Unit
+
+maintainers:
+  - Charvi Mehta <charvi.mehta@arm.com>
+
+description:
+  The ARM Mali-V76 VPU is a hardware accelerator for video encoding and
+  decoding present on ARM platforms.
+
+properties:
+  compatible:
+    const: arm,mali-v76
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+
+  clocks:
+    items:
+      - description: VPU core clock
+
+  clock-names:
+    items:
+      - const: core
+
+  resets:
+    description:
+      Optional VPU warm reset control. Platforms without this control must
+      ensure that the VPU is released from external reset before the driver
+      accesses it. The driver performs initialization and recovery resets
+      through the VPU's software reset register.
+    items:
+      - description: VPU warm reset
+
+  reset-names:
+    items:
+      - const: warm
+
+required:
+  - compatible
+  - reg
+  - interrupts
+  - clocks
+  - clock-names
+
+dependencies:
+  resets: [ reset-names ]
+  reset-names: [ resets ]
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+
+    mali_v76: video-codec@6f030000 {
+        compatible = "arm,mali-v76";
+        reg = <0x6f030000 0x300>;
+        interrupts = <GIC_SPI 168 IRQ_TYPE_LEVEL_HIGH>;
+        clocks = <&clock 0>;
+        clock-names = "core";
+    };
