@@ -59,6 +59,19 @@ static struct panthor_hw_entry panthor_hw_match[] = {
 	},
 };
 
+/**
+ * panthor_hw_l2_power_on() - Restore cache policies and power on L2
+ * @ptdev: Device.
+ *
+ * Return: 0 on success, a negative error code otherwise.
+ */
+int panthor_hw_l2_power_on(struct panthor_device *ptdev)
+{
+	panthor_gpu_sysc_config_set(ptdev);
+
+	return ptdev->hw->ops.l2_power_on(ptdev);
+}
+
 static int panthor_hw_set_power_tracing(struct device *dev, void *data)
 {
 	struct panthor_device *ptdev = dev_get_drvdata(dev);

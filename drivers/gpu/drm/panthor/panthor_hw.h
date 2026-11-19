@@ -46,10 +46,7 @@ static inline int panthor_hw_soft_reset(struct panthor_device *ptdev)
 	return ptdev->hw->ops.soft_reset(ptdev);
 }
 
-static inline int panthor_hw_l2_power_on(struct panthor_device *ptdev)
-{
-	return ptdev->hw->ops.l2_power_on(ptdev);
-}
+int panthor_hw_l2_power_on(struct panthor_device *ptdev);
 
 static inline void panthor_hw_l2_power_off(struct panthor_device *ptdev)
 {

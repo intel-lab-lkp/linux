@@ -13,6 +13,8 @@
 #include <linux/iopoll.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
+#include <linux/property.h>
+#include <linux/string.h>
 
 #include <drm/drm_drv.h>
 #include <drm/drm_managed.h>
@@ -47,6 +49,15 @@ struct panthor_gpu {
 
 	/** @cache_flush_lock: Lock to serialize cache flushes */
 	struct mutex cache_flush_lock;
+
+	/**
+	 * @sysc_alloc: System-cache allocation policies for GPU architecture
+	 * 11.0.3 and later.
+	 */
+	u32 sysc_alloc[GPU_SYSC_ALLOC_COUNT];
+
+	/** @sysc_alloc_enabled: Apply the system-cache allocation policies. */
+	bool sysc_alloc_enabled;
 };
 
 #define GPU_INTERRUPTS_MASK	\
@@ -62,6 +73,178 @@ static void panthor_gpu_coherency_set(struct panthor_device *ptdev)
 {
 	gpu_write(ptdev->gpu->iomem, GPU_COHERENCY_PROTOCOL,
 		  ptdev->gpu_info.selected_coherency);
+}
+
+enum panthor_sysc_alloc_cell {
+	PANTHOR_SYSC_ALLOC_SOURCE,
+	PANTHOR_SYSC_ALLOC_READ,
+	PANTHOR_SYSC_ALLOC_WRITE,
+	PANTHOR_SYSC_ALLOC_CELLS,
+};
+
+static bool panthor_gpu_has_sysc_alloc(u32 gpu_id)
+{
+	/* SYSC_ALLOC is available from GPU architecture 11.0.3. */
+	return GPU_ARCH_MAJOR(gpu_id) > 11 ||
+	       (GPU_ARCH_MAJOR(gpu_id) == 11 &&
+		(GPU_ARCH_MINOR(gpu_id) > 0 || GPU_ARCH_REV(gpu_id) >= 3));
+}
+
+static bool panthor_gpu_sysc_alloc_policy_valid(u32 policy)
+{
+	switch (policy) {
+	case GPU_SYSC_ALLOC_L2_ALLOC:
+	case GPU_SYSC_ALLOC_NEVER_ALLOC:
+	case GPU_SYSC_ALLOC_ALWAYS_ALLOC:
+	case GPU_SYSC_ALLOC_PARTIAL_ALLOC:
+	case GPU_SYSC_ALLOC_L2_PARTIAL_ALLOC:
+		return true;
+	default:
+		return false;
+	}
+}
+
+static bool panthor_gpu_sysc_alloc_read_supported(u32 gpu_id, u32 source)
+{
+	switch (source) {
+	case GPU_SYSC_ALLOC_R_OTHER:
+	case GPU_SYSC_ALLOC_R_CSF:
+	case GPU_SYSC_ALLOC_R_MMU:
+	case GPU_SYSC_ALLOC_R_TILER_VERT:
+	case GPU_SYSC_ALLOC_R_TILER_PTR:
+	case GPU_SYSC_ALLOC_R_TILER_INDEX:
+	case GPU_SYSC_ALLOC_R_TILER_OTHER:
+	case GPU_SYSC_ALLOC_R_IC:
+	case GPU_SYSC_ALLOC_R_ATTR:
+	case GPU_SYSC_ALLOC_R_SCM:
+	case GPU_SYSC_ALLOC_R_FSDC:
+	case GPU_SYSC_ALLOC_R_PLR:
+	case GPU_SYSC_ALLOC_R_TEX:
+	case GPU_SYSC_ALLOC_R_LSC:
+		return true;
+	case GPU_SYSC_ALLOC_R_VL:
+		/* TTIX (architecture 12, product 0) has no VL read policy. */
+		if (GPU_ARCH_MAJOR(gpu_id) == 12 && GPU_PROD_MAJOR(gpu_id) == 0)
+			return false;
+		return true;
+	case GPU_SYSC_ALLOC_R_RT:
+	case GPU_SYSC_ALLOC_R_NE_A:
+	case GPU_SYSC_ALLOC_R_NE_N:
+		if (GPU_ARCH_MAJOR(gpu_id) < 14)
+			return false;
+		return true;
+	default:
+		return false;
+	}
+}
+
+static bool panthor_gpu_sysc_alloc_write_supported(u32 gpu_id, u32 source)
+{
+	switch (source) {
+	case GPU_SYSC_ALLOC_W_OTHER:
+	case GPU_SYSC_ALLOC_W_CSF:
+	case GPU_SYSC_ALLOC_W_PCB:
+	case GPU_SYSC_ALLOC_W_TILER_PTR:
+	case GPU_SYSC_ALLOC_W_TILER_VERT_PLIST:
+	case GPU_SYSC_ALLOC_W_TILER_OTHER:
+	case GPU_SYSC_ALLOC_W_L2_EVICT:
+	case GPU_SYSC_ALLOC_W_L2_FLUSH:
+	case GPU_SYSC_ALLOC_W_TIB_COLOR:
+	case GPU_SYSC_ALLOC_W_TIB_COLOR_AFBCH:
+	case GPU_SYSC_ALLOC_W_TIB_COLOR_AFBCB:
+	case GPU_SYSC_ALLOC_W_TIB_CRC:
+	case GPU_SYSC_ALLOC_W_TIB_DS:
+	case GPU_SYSC_ALLOC_W_TIB_DS_AFBCH:
+	case GPU_SYSC_ALLOC_W_TIB_DS_AFBCB:
+	case GPU_SYSC_ALLOC_W_LSC:
+		return true;
+	case GPU_SYSC_ALLOC_W_RT:
+	case GPU_SYSC_ALLOC_W_NE_A:
+	case GPU_SYSC_ALLOC_W_NE_N:
+		if (GPU_ARCH_MAJOR(gpu_id) < 14)
+			return false;
+		return true;
+	default:
+		return false;
+	}
+}
+
+void panthor_gpu_sysc_config_set(struct panthor_device *ptdev)
+{
+	struct panthor_gpu *gpu = ptdev->gpu;
+	unsigned int i;
+
+	if (!gpu->sysc_alloc_enabled)
+		return;
+
+	for (i = 0; i < ARRAY_SIZE(gpu->sysc_alloc); i++)
+		gpu_write(gpu->iomem, GPU_SYSC_ALLOC(i), gpu->sysc_alloc[i]);
+}
+
+static int panthor_gpu_sysc_config_init(struct panthor_device *ptdev)
+{
+	struct device *dev = ptdev->base.dev;
+	struct panthor_gpu *gpu = ptdev->gpu;
+	u32 entries[GPU_SYSC_ALLOC_SOURCE_COUNT][PANTHOR_SYSC_ALLOC_CELLS];
+	u32 config[GPU_SYSC_ALLOC_COUNT] = {};
+	u32 gpu_id = ptdev->gpu_info.gpu_id;
+	u32 sources = 0;
+	unsigned int i;
+	int count;
+	int ret;
+
+	if (!device_property_present(dev, "arm,sysc-alloc"))
+		return 0;
+
+	if (!panthor_gpu_has_sysc_alloc(gpu_id))
+		return dev_err_probe(dev, -EOPNOTSUPP,
+				     "SYSC_ALLOC requires GPU architecture 11.0.3 or later\n");
+
+	count = device_property_count_u32(dev, "arm,sysc-alloc");
+	if (count < 0)
+		return dev_err_probe(dev, count, "Failed to count SYSC_ALLOC cells\n");
+	if (!count || count > ARRAY_SIZE(entries) * PANTHOR_SYSC_ALLOC_CELLS ||
+	    count % PANTHOR_SYSC_ALLOC_CELLS)
+		return dev_err_probe(dev, -EINVAL, "Invalid SYSC_ALLOC entry count\n");
+
+	ret = device_property_read_u32_array(dev, "arm,sysc-alloc", &entries[0][0], count);
+	if (ret)
+		return dev_err_probe(dev, ret, "Failed to read SYSC_ALLOC entries\n");
+
+	for (i = 0; i < count / PANTHOR_SYSC_ALLOC_CELLS; i++) {
+		u32 source = entries[i][PANTHOR_SYSC_ALLOC_SOURCE];
+		u32 read = entries[i][PANTHOR_SYSC_ALLOC_READ];
+		u32 write = entries[i][PANTHOR_SYSC_ALLOC_WRITE];
+
+		if (source >= GPU_SYSC_ALLOC_SOURCE_COUNT)
+			return dev_err_probe(dev, -EINVAL,
+					     "Invalid SYSC_ALLOC source %u\n", source);
+		if (sources & BIT(source))
+			return dev_err_probe(dev, -EINVAL,
+					     "Duplicate SYSC_ALLOC source %u\n", source);
+		sources |= BIT(source);
+
+		if (!panthor_gpu_sysc_alloc_policy_valid(read) ||
+		    !panthor_gpu_sysc_alloc_policy_valid(write))
+			return dev_err_probe(dev, -EINVAL,
+					     "Invalid SYSC_ALLOC policies <%u %u %u>\n",
+					     source, read, write);
+
+		if ((read != GPU_SYSC_ALLOC_L2_ALLOC &&
+		     !panthor_gpu_sysc_alloc_read_supported(gpu_id, source)) ||
+		    (write != GPU_SYSC_ALLOC_L2_ALLOC &&
+		     !panthor_gpu_sysc_alloc_write_supported(gpu_id, source)))
+			return dev_err_probe(dev, -EINVAL,
+					     "Unsupported SYSC_ALLOC policies <%u %u %u>\n",
+					     source, read, write);
+
+		config[source / GPU_SYSC_ALLOC_SOURCES_PER_REG] |=
+			GPU_SYSC_ALLOC_POLICY(source, read, write);
+	}
+
+	memcpy(gpu->sysc_alloc, config, sizeof(config));
+	gpu->sysc_alloc_enabled = true;
+	return 0;
 }
 
 static void panthor_gpu_l2_config_set(struct panthor_device *ptdev)
@@ -164,6 +347,10 @@ int panthor_gpu_init(struct panthor_device *ptdev)
 	init_waitqueue_head(&gpu->reqs_acked);
 	mutex_init(&gpu->cache_flush_lock);
 	ptdev->gpu = gpu;
+
+	ret = panthor_gpu_sysc_config_init(ptdev);
+	if (ret)
+		return ret;
 
 	dma_set_max_seg_size(ptdev->base.dev, UINT_MAX);
 	pa_bits = GPU_MMU_FEATURES_PA_BITS(ptdev->gpu_info.mmu_features);

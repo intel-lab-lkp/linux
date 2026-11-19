@@ -13,6 +13,7 @@ int panthor_gpu_init(struct panthor_device *ptdev);
 void panthor_gpu_unplug(struct panthor_device *ptdev);
 void panthor_gpu_suspend(struct panthor_device *ptdev);
 void panthor_gpu_resume(struct panthor_device *ptdev);
+void panthor_gpu_sysc_config_set(struct panthor_device *ptdev);
 
 int panthor_gpu_block_power_on(struct panthor_device *ptdev,
 			       const char *blk_name,
