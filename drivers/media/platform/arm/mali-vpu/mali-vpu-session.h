@@ -20,6 +20,7 @@
 struct v4l2_m2m_ctx;
 struct mali_vpu_fw_bin;
 struct mali_vpu_fw_event;
+struct mali_vpu_sched_session;
 
 /**
  * struct mali_vpu_port - format state of a src/dst queue in a session.
@@ -77,6 +78,8 @@ enum mali_vpu_session_fw_bin_state {
  * @fw_event: Firmware binary load event callback structure for this session.
  * @fw_bin_state: Session firmware binary status.
  * @fw_load_done: Completion used to synchronize teardown with an in-flight firmware load.
+ * @sched_sess: Scheduler state used to map this session to an LSID.
+ * @ncores: Number of cores assigned to this session by scheduler.
  */
 struct mali_vpu_session {
 	struct mali_vpu_dev		*vpu_dev;
@@ -100,6 +103,9 @@ struct mali_vpu_session {
 	struct mali_vpu_fw_event		*fw_event;
 	enum mali_vpu_session_fw_bin_state	fw_bin_state;
 	struct completion			fw_load_done;
+
+	struct mali_vpu_sched_session	sched_sess;
+	u32				ncores;
 };
 
 int mali_vpu_session_init(struct mali_vpu_session *sess);

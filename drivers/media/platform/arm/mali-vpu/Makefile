@@ -12,6 +12,7 @@ mali-vpu-objs := mali-vpu-probe.o \
 		mali-vpu-mmu.o \
 		mali-vpu-firmware-cache.o \
 		mali-vpu-firmware.o \
-		mali-vpu-lsid.o
+		mali-vpu-lsid.o \
+		mali-vpu-scheduler.o
 
 obj-$(CONFIG_VIDEO_MALI_VPU) += mali-vpu.o

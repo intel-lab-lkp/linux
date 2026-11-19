@@ -18,6 +18,7 @@
 
 #define MALI_VPU_HW_PID_V76 0x56627
 #define MALI_VPU_FW_VER_MAJOR_V76 1
+#define MALI_VPU_MAX_LSID_V76 4
 
 #define MALI_V76_MAX_FRAME_WIDTH 8192
 #define MALI_V76_MAX_FRAME_HEIGHT 8192
@@ -153,6 +154,7 @@ const struct mali_vpu_variant mali_vpu_v76_variant = {
 	.dma_mask = DMA_BIT_MASK(40),
 	.expected_hw_pid = MALI_VPU_HW_PID_V76,
 	.fw_ver_major = MALI_VPU_FW_VER_MAJOR_V76,
+	.max_lsid = MALI_VPU_MAX_LSID_V76,
 
 	.rst_names = mali_v76_rst_names,
 	.num_rsts = ARRAY_SIZE(mali_v76_rst_names),

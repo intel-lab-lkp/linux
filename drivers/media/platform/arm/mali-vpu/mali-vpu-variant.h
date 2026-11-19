@@ -51,6 +51,7 @@ struct mali_vpu_control_caps {
  * @expected_hw_pid: Expected hardware product ID read from the version register.
  * @dma_mask: DMA addressing capability mask.
  * @fw_ver_major: Major firmware version compatible with this variant.
+ * @max_lsid: Maximum number of hardware LSID slots in a VPU element.
  * @fmt_caps: Format capability tables for encode/decode paths.
  * @frmsz_caps: Frame dimension limits and defaults.
  * @ctrl_caps:  Control capability tables for encode/decode paths.
@@ -61,6 +62,7 @@ struct mali_vpu_variant {
 	u32 expected_hw_pid;
 	u64 dma_mask;
 	u32 fw_ver_major;
+	u32 max_lsid;
 
 	struct mali_vpu_format_caps	fmt_caps;
 	struct mali_vpu_framesize_caps	frmsz_caps;

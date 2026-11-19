@@ -149,4 +149,6 @@ int mali_vpu_mmu_map_dma(struct mali_vpu_mmu *mmu,
 void mali_vpu_mmu_unmap_va(struct mali_vpu_mmu *mmu, mali_vpu_mmu_va va, size_t size);
 int mali_vpu_mmu_write(struct mali_vpu_mmu_pages *pages, const void *data, size_t size);
 
+mali_vpu_mmu_pte mali_vpu_mmu_get_root_pte(const struct mali_vpu_mmu *mmu);
+
 #endif /* __MALI_VPU_MMU_H__ */

@@ -9,6 +9,8 @@
 #include <linux/device.h>
 #include <media/v4l2-device.h>
 
+#include "mali-vpu-scheduler.h"
+
 #define MALI_VPU_DRV_NAME "mali-vpu"
 
 struct clk_bulk_data;
@@ -40,6 +42,7 @@ enum mali_vpu_session_role {
  * @vdev_dec: Video device structure for decoder.
  * @m2m_dev: V4L2 mem2mem device structure for mali vpu.
  * @fw_cache: Firmware cache for sharing or reusing firmware blobs.
+ * @sched: Mali VPU hardware scheduler state.
  */
 struct mali_vpu_dev {
 	struct device			*dev;
@@ -56,6 +59,7 @@ struct mali_vpu_dev {
 	struct video_device		*vdev_dec;
 	struct v4l2_m2m_dev		*m2m_dev;
 	struct mali_vpu_fw_cache	*fw_cache;
+	struct mali_vpu_sched		sched;
 };
 
 #endif /* __MALI_VPU_DEVICE_H__ */

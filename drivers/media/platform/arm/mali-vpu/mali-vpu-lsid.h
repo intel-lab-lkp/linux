@@ -9,6 +9,7 @@
 #include <linux/types.h>
 
 struct mali_vpu_dev;
+struct mali_vpu_sched_session;
 
 /*
  * A local session identifier (LSID) represents a hardware execution
@@ -36,10 +37,12 @@ struct mali_vpu_lsid_pcb {
 /**
  * struct mali_vpu_lsid - Hardware LSID instance.
  * @vpu_dev: Back pointer to parent Mali VPU device.
+ * @sched_sess: Scheduler session currently mapped to this LSID, if any.
  * @id: Hardware LSID instance.
  */
 struct mali_vpu_lsid {
 	struct mali_vpu_dev *vpu_dev;
+	struct mali_vpu_sched_session *sched_sess;
 	u32 id;
 };
 

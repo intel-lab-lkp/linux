@@ -208,17 +208,21 @@ static int mali_vpu_probe(struct platform_device *pdev)
 		goto err_rst_clk;
 	}
 
+	ret = mali_vpu_sched_init(&vpu_dev->sched, vpu_dev);
+	if (ret)
+		goto err_rst_clk;
+
 	vpu_dev->dma_mask = vpu_dev->variant->dma_mask;
 	ret = dma_set_mask_and_coherent(vpu_dev->dev, vpu_dev->dma_mask);
 	if (ret)
-		goto err_rst_clk;
+		goto err_cleanup_sched;
 
 	dma_set_max_seg_size(vpu_dev->dev, SZ_2G);
 
 	ret = v4l2_device_register(&pdev->dev, &vpu_dev->v4l2_dev);
 	if (ret) {
 		dev_err(vpu_dev->dev, "failed to register V4L2 device\n");
-		goto err_rst_clk;
+		goto err_cleanup_sched;
 	}
 
 	vpu_dev->m2m_dev = v4l2_m2m_init(&mali_vpu_m2m_ops);
@@ -251,6 +255,8 @@ err_release_m2m:
 	v4l2_m2m_release(vpu_dev->m2m_dev);
 err_unreg_v4l2:
 	v4l2_device_unregister(&vpu_dev->v4l2_dev);
+err_cleanup_sched:
+	mali_vpu_sched_cleanup(&vpu_dev->sched);
 err_rst_clk:
 	mali_vpu_assert_reset(vpu_dev);
 err_clk:
@@ -268,6 +274,7 @@ static void mali_vpu_remove(struct platform_device *pdev)
 	v4l2_m2m_release(vpu_dev->m2m_dev);
 	v4l2_device_unregister(&vpu_dev->v4l2_dev);
 
+	mali_vpu_sched_cleanup(&vpu_dev->sched);
 	mali_vpu_assert_reset(vpu_dev);
 	mali_vpu_disable_clk(vpu_dev);
 

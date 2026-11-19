@@ -691,3 +691,9 @@ int mali_vpu_mmu_write(struct mali_vpu_mmu_pages *pages,
 
 	return 0;
 }
+
+mali_vpu_mmu_pte mali_vpu_mmu_get_root_pte(const struct mali_vpu_mmu *mmu)
+{
+	return mali_vpu_mmu_set_pte(MALI_VPU_ATTR_PRIVATE, mmu->root.dma,
+				    MALI_VPU_ACCESS_READ_WRITE);
+}
