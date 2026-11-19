@@ -932,6 +932,40 @@ void kvm_pmu_put(struct kvm_vcpu *vcpu)
 }
 
 /**
+ * kvm_pmu_direct_swinc() - Emulate trapped PMSWINC_EL0 writes
+ * @vcpu: Pointer to vcpu struct
+ * @val: Accessible counter bitmask written to PMSWINC_EL0
+ *
+ * Executing MSR PMSWINC_EL0 at physical EL2 is ignored by hardware because
+ * physical MDCR_EL2.HPMD is set and guest PMEVTYPER<n>_EL0.NSH is cleared.
+ * Flush live hardware state if loaded, apply kvm_pmu_software_increment(),
+ * and reload hardware.
+ */
+void kvm_pmu_direct_swinc(struct kvm_vcpu *vcpu, u64 val)
+{
+	bool was_loaded;
+
+	guard(preempt)();
+
+	val &= kvm_vcpu_pmu_guest_counter_mask(vcpu) &
+	       ~BIT_ULL(ARMV8_PMU_CYCLE_IDX);
+	if (!val)
+		return;
+
+	was_loaded = kvm_pmu_part_on_cpu(vcpu);
+	if (was_loaded)
+		__kvm_pmu_put(vcpu, false);
+
+	kvm_pmu_software_increment(vcpu, val);
+
+	if (was_loaded)
+		__kvm_pmu_load(vcpu, false);
+
+	if (kvm_pmu_part_overflow_status(vcpu))
+		kvm_make_request(KVM_REQ_IRQ_PENDING, vcpu);
+}
+
+/**
  * kvm_pmu_reload_part() - Reload partitioned PMU traps, filters, and state
  * @vcpu: Pointer to struct kvm_vcpu
  *

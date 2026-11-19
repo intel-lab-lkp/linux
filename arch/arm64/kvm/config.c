@@ -1826,7 +1826,7 @@ static void __compute_hdfgwtr(struct kvm_vcpu *vcpu)
 			set |= HDFGWTR_EL2_PMUSERENR_EL0;
 
 		if (kvm_pmu_hyp_counter_mask(vcpu))
-			set |= HDFGWTR_EL2_PMCNTEN;
+			set |= HDFGWTR_EL2_PMCNTEN | HDFGWTR_EL2_PMSWINC_EL0;
 		if (kvm_pmu_part_ovf32_mask(vcpu))
 			set |= HDFGWTR_EL2_PMEVCNTRn_EL0;
 

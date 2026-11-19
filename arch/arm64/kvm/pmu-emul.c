@@ -19,7 +19,6 @@
 
 static void kvm_pmu_create_perf_event(struct kvm_pmc *pmc);
 static void kvm_pmu_release_perf_event(struct kvm_pmc *pmc);
-static bool kvm_pmu_counter_is_enabled(struct kvm_pmc *pmc);
 
 static struct kvm_vcpu *kvm_pmc_to_vcpu(const struct kvm_pmc *pmc)
 {
@@ -48,6 +47,9 @@ static bool kvm_pmc_has_64bit_overflow(struct kvm_pmc *pmc)
 	struct kvm_vcpu *vcpu = kvm_pmc_to_vcpu(pmc);
 	u64 val = kvm_vcpu_read_pmcr(vcpu);
 
+	if (!kvm_pmc_is_64bit(pmc))
+		return false;
+
 	if (kvm_pmu_counter_is_hyp(vcpu, pmc->idx))
 		return __vcpu_sys_reg(vcpu, MDCR_EL2) & MDCR_EL2_HLP;
 
@@ -57,8 +59,13 @@ static bool kvm_pmc_has_64bit_overflow(struct kvm_pmc *pmc)
 
 static bool kvm_pmu_counter_can_chain(struct kvm_pmc *pmc)
 {
-	return (!(pmc->idx & 1) && (pmc->idx + 1) < ARMV8_PMU_CYCLE_IDX &&
-		!kvm_pmc_has_64bit_overflow(pmc));
+	struct kvm_vcpu *vcpu = kvm_pmc_to_vcpu(pmc);
+
+	return !(pmc->idx & 1) &&
+	       (pmc->idx + 1) < vcpu->kvm->arch.nr_pmu_counters &&
+	       kvm_pmu_counter_is_hyp(vcpu, pmc->idx) ==
+	       kvm_pmu_counter_is_hyp(vcpu, pmc->idx + 1) &&
+	       !kvm_pmc_has_64bit_overflow(pmc);
 }
 
 static u32 counter_index_to_reg(u64 idx)
@@ -74,6 +81,60 @@ static u32 counter_index_to_evtreg(u64 idx)
 static u64 kvm_pmc_read_evtreg(const struct kvm_pmc *pmc)
 {
 	return __vcpu_sys_reg(kvm_pmc_to_vcpu(pmc), counter_index_to_evtreg(pmc->idx));
+}
+
+static bool kvm_pmu_counter_is_enabled(struct kvm_pmc *pmc)
+{
+	struct kvm_vcpu *vcpu = kvm_pmc_to_vcpu(pmc);
+	unsigned int mdcr = __vcpu_sys_reg(vcpu, MDCR_EL2);
+
+	if (!(__vcpu_sys_reg(vcpu, PMCNTENSET_EL0) & BIT(pmc->idx)))
+		return false;
+
+	if (kvm_pmu_counter_is_hyp(vcpu, pmc->idx))
+		return mdcr & MDCR_EL2_HPME;
+
+	return kvm_vcpu_read_pmcr(vcpu) & ARMV8_PMU_PMCR_E;
+}
+
+static bool kvm_pmc_counts_at_el0(struct kvm_pmc *pmc)
+{
+	u64 evtreg = kvm_pmc_read_evtreg(pmc);
+	bool nsu = evtreg & ARMV8_PMU_EXCLUDE_NS_EL0;
+	bool u = evtreg & ARMV8_PMU_EXCLUDE_EL0;
+
+	return u == nsu;
+}
+
+static bool kvm_pmc_counts_at_el1(struct kvm_pmc *pmc)
+{
+	u64 evtreg = kvm_pmc_read_evtreg(pmc);
+	bool nsk = evtreg & ARMV8_PMU_EXCLUDE_NS_EL1;
+	bool p = evtreg & ARMV8_PMU_EXCLUDE_EL1;
+
+	return p == nsk;
+}
+
+static bool kvm_pmc_counts_at_el2(struct kvm_pmc *pmc)
+{
+	struct kvm_vcpu *vcpu = kvm_pmc_to_vcpu(pmc);
+	u64 mdcr = __vcpu_sys_reg(vcpu, MDCR_EL2);
+
+	if (!kvm_pmu_counter_is_hyp(vcpu, pmc->idx) && (mdcr & MDCR_EL2_HPMD))
+		return false;
+
+	return kvm_pmc_read_evtreg(pmc) & ARMV8_PMU_INCLUDE_EL2;
+}
+
+static bool kvm_pmc_counts_at_current_el(struct kvm_pmc *pmc)
+{
+	struct kvm_vcpu *vcpu = kvm_pmc_to_vcpu(pmc);
+
+	if (!vcpu_mode_priv(vcpu))
+		return kvm_pmc_counts_at_el0(pmc);
+	if (unlikely(is_hyp_ctxt(vcpu)))
+		return kvm_pmc_counts_at_el2(pmc);
+	return kvm_pmc_counts_at_el1(pmc);
 }
 
 static u64 kvm_pmu_get_pmc_value(struct kvm_pmc *pmc)
@@ -321,9 +382,6 @@ static void kvm_pmu_counter_increment(struct kvm_vcpu *vcpu,
 {
 	int i;
 
-	if (!(kvm_vcpu_read_pmcr(vcpu) & ARMV8_PMU_PMCR_E))
-		return;
-
 	/* Weed out disabled counters */
 	mask &= __vcpu_sys_reg(vcpu, PMCNTENSET_EL0);
 
@@ -331,10 +389,17 @@ static void kvm_pmu_counter_increment(struct kvm_vcpu *vcpu,
 		struct kvm_pmc *pmc = kvm_vcpu_idx_to_pmc(vcpu, i);
 		u64 type, reg;
 
+		if (!kvm_pmu_counter_is_enabled(pmc))
+			continue;
+
 		/* Filter on event type */
 		type = __vcpu_sys_reg(vcpu, counter_index_to_evtreg(i));
 		type &= kvm_pmu_event_mask(vcpu->kvm);
 		if (type != event)
+			continue;
+
+		if (event == ARMV8_PMUV3_PERFCTR_SW_INCR &&
+		    !kvm_pmc_counts_at_current_el(pmc))
 			continue;
 
 		/* Increment this counter */
@@ -452,49 +517,6 @@ void kvm_pmu_handle_pmcr(struct kvm_vcpu *vcpu, u64 val)
 		for_each_set_bit(i, &mask, 32)
 			kvm_pmu_set_pmc_value(kvm_vcpu_idx_to_pmc(vcpu, i), 0, true);
 	}
-}
-
-static bool kvm_pmu_counter_is_enabled(struct kvm_pmc *pmc)
-{
-	struct kvm_vcpu *vcpu = kvm_pmc_to_vcpu(pmc);
-	unsigned int mdcr = __vcpu_sys_reg(vcpu, MDCR_EL2);
-
-	if (!(__vcpu_sys_reg(vcpu, PMCNTENSET_EL0) & BIT(pmc->idx)))
-		return false;
-
-	if (kvm_pmu_counter_is_hyp(vcpu, pmc->idx))
-		return mdcr & MDCR_EL2_HPME;
-
-	return kvm_vcpu_read_pmcr(vcpu) & ARMV8_PMU_PMCR_E;
-}
-
-static bool kvm_pmc_counts_at_el0(struct kvm_pmc *pmc)
-{
-	u64 evtreg = kvm_pmc_read_evtreg(pmc);
-	bool nsu = evtreg & ARMV8_PMU_EXCLUDE_NS_EL0;
-	bool u = evtreg & ARMV8_PMU_EXCLUDE_EL0;
-
-	return u == nsu;
-}
-
-static bool kvm_pmc_counts_at_el1(struct kvm_pmc *pmc)
-{
-	u64 evtreg = kvm_pmc_read_evtreg(pmc);
-	bool nsk = evtreg & ARMV8_PMU_EXCLUDE_NS_EL1;
-	bool p = evtreg & ARMV8_PMU_EXCLUDE_EL1;
-
-	return p == nsk;
-}
-
-static bool kvm_pmc_counts_at_el2(struct kvm_pmc *pmc)
-{
-	struct kvm_vcpu *vcpu = kvm_pmc_to_vcpu(pmc);
-	u64 mdcr = __vcpu_sys_reg(vcpu, MDCR_EL2);
-
-	if (!kvm_pmu_counter_is_hyp(vcpu, pmc->idx) && (mdcr & MDCR_EL2_HPMD))
-		return false;
-
-	return kvm_pmc_read_evtreg(pmc) & ARMV8_PMU_INCLUDE_EL2;
 }
 
 static int kvm_map_pmu_event(struct kvm *kvm, unsigned int eventsel)

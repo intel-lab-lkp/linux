@@ -1543,7 +1543,10 @@ static bool access_pmswinc(struct kvm_vcpu *vcpu, struct sys_reg_params *p,
 		return false;
 
 	mask = kvm_pmu_accessible_counter_mask(vcpu);
-	kvm_pmu_software_increment(vcpu, p->regval & mask);
+	if (kvm_pmu_is_partitioned(vcpu->kvm))
+		kvm_pmu_direct_swinc(vcpu, p->regval & mask);
+	else
+		kvm_pmu_software_increment(vcpu, p->regval & mask);
 	return true;
 }
 

@@ -110,6 +110,7 @@ u64 kvm_pmu_direct_reg_read(struct kvm_vcpu *vcpu, unsigned int reg);
 void kvm_pmu_direct_reg_write(struct kvm_vcpu *vcpu, unsigned int reg,
 			      u64 val, bool set);
 u64 kvm_pmu_part_ovf32_mask(struct kvm_vcpu *vcpu);
+void kvm_pmu_direct_swinc(struct kvm_vcpu *vcpu, u64 val);
 void kvm_pmu_reload_part(struct kvm_vcpu *vcpu);
 u64 kvm_pmu_guest_counter_mask(void);
 void kvm_pmu_load(struct kvm_vcpu *vcpu);
@@ -179,6 +180,8 @@ static inline u64 kvm_pmu_part_ovf32_mask(struct kvm_vcpu *vcpu)
 {
 	return 0;
 }
+
+static inline void kvm_pmu_direct_swinc(struct kvm_vcpu *vcpu, u64 val) {}
 static inline void kvm_pmu_reload_part(struct kvm_vcpu *vcpu) {}
 static inline void kvm_pmu_load(struct kvm_vcpu *vcpu) {}
 static inline void kvm_pmu_put(struct kvm_vcpu *vcpu) {}
