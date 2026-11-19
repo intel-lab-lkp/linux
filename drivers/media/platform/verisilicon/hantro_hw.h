@@ -287,7 +287,6 @@ struct hantro_av1_frame_ref {
 	bool used;
 	u32 order_hint;
 	u32 order_hints[V4L2_AV1_TOTAL_REFS_PER_FRAME];
-	struct vb2_v4l2_buffer *vb2_ref;
 };
 
 /**
@@ -314,7 +313,6 @@ struct hantro_av1_frame_ref {
  * @default_cdfs_ndvc:	default mv probabilties structure
  * @cdfs_last:		stored probabilities structures
  * @cdfs_last_ndvc:	stored mv probabilities structures
- * @current_frame_index: index of the current in frame_refs array
  */
 struct hantro_av1_dec_hw_ctx {
 	struct hantro_aux_buf db_data_col;
@@ -339,7 +337,6 @@ struct hantro_av1_dec_hw_ctx {
 	struct mvcdfs  default_cdfs_ndvc;
 	struct av1cdfs cdfs_last[NUM_REF_FRAMES];
 	struct mvcdfs  cdfs_last_ndvc[NUM_REF_FRAMES];
-	int current_frame_index;
 };
 /**
  * struct hantro_postproc_ctx

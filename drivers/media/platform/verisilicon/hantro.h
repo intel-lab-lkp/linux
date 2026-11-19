@@ -342,6 +342,8 @@ struct hantro_av1_decoded_buffer_info {
 	/* Info needed when the decoded frame serves as a reference frame. */
 	size_t chroma_offset;
 	size_t mv_offset;
+	int width;
+	int height;
 };
 
 struct hantro_decoded_buffer {
