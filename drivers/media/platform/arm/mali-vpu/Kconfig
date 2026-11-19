@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: GPL-2.0-only
+config VIDEO_MALI_VPU
+	tristate "ARM Mali VPU driver"
+	depends on VIDEO_DEV
+	depends on !CPU_BIG_ENDIAN
+	help
+	  Enable this to support Arm's Mali Video hardware accelerator.
+	  This is a V4L2 driver.
+
+	  Only little-endian kernels are supported. The firmware interface
+	  uses little-endian shared-memory structures.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called mali-vpu.
