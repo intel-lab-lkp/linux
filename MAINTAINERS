@@ -7209,8 +7209,9 @@ S:	Maintained
 F:	Documentation/process/cve.rst
 
 CW1200 WLAN driver
-S:	Orphan
+M:	Arthur Heymans <arthur@aheymans.xyz>
 L:	linux-wireless@vger.kernel.org
+S:	Odd Fixes
 F:	Documentation/devicetree/bindings/net/wireless/xradio,xr819.yaml
 F:	drivers/net/wireless/st/
 F:	include/linux/platform_data/net-cw1200.h
