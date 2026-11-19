@@ -311,10 +311,12 @@ static void pcs_pin_dbg_show(struct pinctrl_dev *pctldev,
 static void pcs_dt_free_map(struct pinctrl_dev *pctldev,
 				struct pinctrl_map *map, unsigned num_maps)
 {
-	struct pcs_device *pcs;
+	for (unsigned int i = 0; i < num_maps; i++) {
+		if (map[i].type == PIN_MAP_TYPE_CONFIGS_GROUP)
+			kfree(map[i].data.configs.configs);
+	}
 
-	pcs = pinctrl_dev_get_drvdata(pctldev);
-	devm_kfree(pcs->dev, map);
+	kfree(map);
 }
 
 static int pcs_dt_node_to_map(struct pinctrl_dev *pctldev,
@@ -964,8 +966,7 @@ static int pcs_parse_pinconf(struct pcs_device *pcs, struct device_node *np,
 	func->nconfs = nconfs;
 	conf = &(func->conf[0]);
 	m++;
-	settings = devm_kcalloc(pcs->dev, nconfs, sizeof(unsigned long),
-				GFP_KERNEL);
+	settings = kcalloc(nconfs, sizeof(unsigned long), GFP_KERNEL);
 	if (!settings)
 		return -ENOMEM;
 	s = &settings[0];
@@ -1289,7 +1290,7 @@ static int pcs_dt_node_to_map(struct pinctrl_dev *pctldev,
 	pcs = pinctrl_dev_get_drvdata(pctldev);
 
 	/* create 2 maps. One is for pinmux, and the other is for pinconf. */
-	*map = devm_kcalloc(pcs->dev, 2, sizeof(**map), GFP_KERNEL);
+	*map = kcalloc(2, sizeof(**map), GFP_KERNEL);
 	if (!*map)
 		return -ENOMEM;
 
@@ -1324,7 +1325,7 @@ static int pcs_dt_node_to_map(struct pinctrl_dev *pctldev,
 free_pgnames:
 	devm_kfree(pcs->dev, pgnames);
 free_map:
-	devm_kfree(pcs->dev, *map);
+	kfree(*map);
 
 	return ret;
 }
