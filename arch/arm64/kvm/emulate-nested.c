@@ -562,11 +562,18 @@ static enum trap_behaviour check_cptr_tta(struct kvm_vcpu *vcpu)
 	return BEHAVE_HANDLE_LOCALLY;
 }
 
+static u64 kvm_pmu_get_pmselr(struct kvm_vcpu *vcpu)
+{
+	if (kvm_pmu_is_partitioned(vcpu->kvm))
+		return kvm_pmu_direct_reg_read(vcpu, PMSELR_EL0);
+
+	return __vcpu_sys_reg(vcpu, PMSELR_EL0);
+}
+
 static enum trap_behaviour check_mdcr_hpmn(struct kvm_vcpu *vcpu)
 {
 	u32 sysreg = esr_sys64_to_sysreg(kvm_vcpu_get_esr(vcpu));
 	unsigned int idx;
-
 
 	switch (sysreg) {
 	case SYS_PMEVTYPERn_EL0(0) ... SYS_PMEVTYPERn_EL0(30):
@@ -575,8 +582,7 @@ static enum trap_behaviour check_mdcr_hpmn(struct kvm_vcpu *vcpu)
 		break;
 	case SYS_PMXEVTYPER_EL0:
 	case SYS_PMXEVCNTR_EL0:
-		idx = SYS_FIELD_GET(PMSELR_EL0, SEL,
-				    __vcpu_sys_reg(vcpu, PMSELR_EL0));
+		idx = SYS_FIELD_GET(PMSELR_EL0, SEL, kvm_pmu_get_pmselr(vcpu));
 		break;
 	default:
 		/* Someone used this trap helper for something else... */

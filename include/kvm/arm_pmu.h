@@ -98,6 +98,9 @@ void kvm_vcpu_pmu_resync_el0(void);
 bool has_kvm_pmu_partition_support(void);
 void kvm_pmu_partition_enable(struct kvm *kvm, bool enable);
 bool kvm_pmu_is_partitioned(struct kvm *kvm);
+u64 kvm_pmu_direct_reg_read(struct kvm_vcpu *vcpu, unsigned int reg);
+void kvm_pmu_direct_reg_write(struct kvm_vcpu *vcpu, unsigned int reg,
+			      u64 val, bool set);
 u64 kvm_pmu_guest_counter_mask(void);
 /*
  * Updates the vcpu's view of the pmu events for this cpu.
@@ -137,6 +140,16 @@ static inline bool kvm_pmu_is_partitioned(struct kvm *kvm)
 {
 	return false;
 }
+
+static inline u64 kvm_pmu_direct_reg_read(struct kvm_vcpu *vcpu,
+					  unsigned int reg)
+{
+	return 0;
+}
+
+static inline void kvm_pmu_direct_reg_write(struct kvm_vcpu *vcpu,
+					    unsigned int reg, u64 val,
+					    bool set) {}
 static inline void kvm_pmu_set_counter_value(struct kvm_vcpu *vcpu,
 					     u64 select_idx, u64 val) {}
 static inline void kvm_pmu_set_counter_value_user(struct kvm_vcpu *vcpu,
