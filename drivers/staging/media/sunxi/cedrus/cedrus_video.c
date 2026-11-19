@@ -511,8 +511,15 @@ static int cedrus_buf_prepare(struct vb2_buffer *vb)
 	 * (for OUTPUT buffers, if userspace passes 0 bytesused, v4l2-core sets
 	 * it to buffer length).
 	 */
-	if (V4L2_TYPE_IS_CAPTURE(vq->type))
-		vb2_set_plane_payload(vb, 0, pix_fmt->sizeimage);
+	if (V4L2_TYPE_IS_CAPTURE(vq->type)) {
+		unsigned int payload = pix_fmt->sizeimage;
+
+		if (ctx->current_codec->extra_cap_size)
+			payload -= ctx->current_codec->extra_cap_size(ctx,
+								     pix_fmt);
+
+		vb2_set_plane_payload(vb, 0, payload);
+	}
 
 	return 0;
 }
