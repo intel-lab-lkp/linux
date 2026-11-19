@@ -445,22 +445,15 @@ static void mts_command_done( struct urb *transfer )
 		return;
 	}
 
-	if (context->srb->cmnd[0] == REQUEST_SENSE) {
+	if (context->data) {
 		mts_int_submit_urb(transfer,
 				   context->data_pipe,
-				   context->srb->sense_buffer,
+				   context->data,
 				   context->data_length,
-				   mts_data_done);
-	} else { if ( context->data ) {
-			mts_int_submit_urb(transfer,
-					   context->data_pipe,
-					   context->data,
-					   context->data_length,
-					   scsi_sg_count(context->srb) > 1 ?
-					           mts_do_sg : mts_data_done);
-		} else {
-			mts_get_status(transfer);
-		}
+				   scsi_sg_count(context->srb) > 1 ?
+				   mts_do_sg : mts_data_done);
+	} else {
+		mts_get_status(transfer);
 	}
 }
 
