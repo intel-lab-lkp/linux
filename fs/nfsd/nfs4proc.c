@@ -1413,7 +1413,15 @@ nfsd4_setattr(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	if (deleg_attrs || (setattr->sa_iattr.ia_valid & ATTR_SIZE)) {
 		int flags = WR_STATE;
 
-		if (setattr->sa_bmval[2] & FATTR4_WORD2_TIME_DELEG_ACCESS)
+		/*
+		 * Only allow a read delegation stateid when setting
+		 * TIME_DELEG_ACCESS alone. Any other attribute requires
+		 * write state (and must not carry ATTR_DELEG under a read
+		 * delegation, which would suppress delegation recall in
+		 * notify_change()).
+		 */
+		if (!setattr->sa_bmval[0] && !setattr->sa_bmval[1] &&
+		    setattr->sa_bmval[2] == FATTR4_WORD2_TIME_DELEG_ACCESS)
 			flags |= RD_STATE;
 
 		status = nfs4_preprocess_stateid_op(rqstp, cstate,
