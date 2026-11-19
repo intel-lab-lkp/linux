@@ -3133,7 +3133,7 @@ nfsd4_layoutcommit(struct svc_rqst *rqstp,
 		mutex_unlock(&ls->ls_mutex);
 	}
 
-	nfserr = ops->proc_layoutcommit(inode, rqstp, lcp);
+	nfserr = ops->proc_layoutcommit(inode, lcp);
 
 	if (!lcp->lc_reclaim) {
 		nfsd4_file_mark_deleg_written(ls->ls_stid.sc_file);

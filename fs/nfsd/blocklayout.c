@@ -266,8 +266,8 @@ nfsd4_block_proc_getdeviceinfo(struct super_block *sb,
 }
 
 static __be32
-nfsd4_block_proc_layoutcommit(struct inode *inode, struct svc_rqst *rqstp,
-		struct nfsd4_layoutcommit *lcp)
+nfsd4_block_proc_layoutcommit(struct inode *inode,
+			      struct nfsd4_layoutcommit *lcp)
 {
 	__be32 scratch[XDR_QUADLEN(NFS4_DEVICEID4_SIZE)];
 	struct xdr_stream xdr;
@@ -461,8 +461,8 @@ nfsd4_scsi_proc_getdeviceinfo(struct super_block *sb,
 	return nfserrno(nfsd4_block_get_device_info_scsi(sb, clp, gdp));
 }
 static __be32
-nfsd4_scsi_proc_layoutcommit(struct inode *inode, struct svc_rqst *rqstp,
-		struct nfsd4_layoutcommit *lcp)
+nfsd4_scsi_proc_layoutcommit(struct inode *inode,
+			     struct nfsd4_layoutcommit *lcp)
 {
 	__be32 scratch[XDR_QUADLEN(NFS4_DEVICEID4_SIZE)];
 	struct xdr_stream xdr;
