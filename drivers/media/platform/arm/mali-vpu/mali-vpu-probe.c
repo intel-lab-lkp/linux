@@ -21,6 +21,7 @@
 #include <media/v4l2-mem2mem.h>
 
 #include "mali-vpu-device.h"
+#include "mali-vpu-firmware-cache.h"
 #include "mali-vpu-registers.h"
 #include "mali-vpu-variant.h"
 #include "mali-vpu-vidioc.h"
@@ -232,14 +233,26 @@ static int mali_vpu_probe(struct platform_device *pdev)
 		goto err_unreg_v4l2;
 	}
 
-	ret = mali_vpu_register_video_device(vpu_dev, MALI_VPU_DECODER);
+	vpu_dev->fw_cache = devm_kzalloc(&pdev->dev, sizeof(*vpu_dev->fw_cache), GFP_KERNEL);
+	if (!vpu_dev->fw_cache) {
+		ret = -ENOMEM;
+		goto err_release_m2m;
+	}
+
+	ret = mali_vpu_fw_cache_init(vpu_dev->fw_cache, vpu_dev->dev);
 	if (ret)
 		goto err_release_m2m;
+
+	ret = mali_vpu_register_video_device(vpu_dev, MALI_VPU_DECODER);
+	if (ret)
+		goto err_cleanup_fw_cache;
 
 	platform_set_drvdata(pdev, vpu_dev);
 
 	return 0;
 
+err_cleanup_fw_cache:
+	mali_vpu_fw_cache_cleanup(vpu_dev->fw_cache);
 err_release_m2m:
 	v4l2_m2m_release(vpu_dev->m2m_dev);
 err_unreg_v4l2:
@@ -257,6 +270,7 @@ static void mali_vpu_remove(struct platform_device *pdev)
 	struct mali_vpu_dev *vpu_dev = platform_get_drvdata(pdev);
 
 	video_unregister_device(vpu_dev->vdev_dec);
+	mali_vpu_fw_cache_cleanup(vpu_dev->fw_cache);
 	v4l2_m2m_release(vpu_dev->m2m_dev);
 	v4l2_device_unregister(&vpu_dev->v4l2_dev);
 

@@ -14,6 +14,7 @@
 struct clk_bulk_data;
 struct v4l2_m2m_dev;
 struct mali_vpu_variant;
+struct mali_vpu_fw_cache;
 struct reset_control_bulk_data;
 
 /**
@@ -38,6 +39,7 @@ enum mali_vpu_session_role {
  * @v4l2_dev: V4L2 device structure for mali vpu.
  * @vdev_dec: Video device structure for decoder.
  * @m2m_dev: V4L2 mem2mem device structure for mali vpu.
+ * @fw_cache: Firmware cache for sharing or reusing firmware blobs.
  */
 struct mali_vpu_dev {
 	struct device			*dev;
@@ -53,6 +55,7 @@ struct mali_vpu_dev {
 	struct v4l2_device		v4l2_dev;
 	struct video_device		*vdev_dec;
 	struct v4l2_m2m_dev		*m2m_dev;
+	struct mali_vpu_fw_cache	*fw_cache;
 };
 
 #endif /* __MALI_VPU_DEVICE_H__ */

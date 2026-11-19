@@ -25,6 +25,9 @@
  *
  ****************************************************************************/
 
+#define MALI_VPU_HOST_PROTOCOL_MAJOR 3
+#define MALI_VPU_HOST_PROTOCOL_MINOR 1
+
  #define MVE_CHROMA_FORMAT_420 (0x1)
 
 /* format bitfield: */
