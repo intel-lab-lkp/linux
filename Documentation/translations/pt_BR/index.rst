@@ -68,6 +68,17 @@ kernel e sobre como ver seu trabalho integrado.
 
    process/index
 
+Ferramentas e processos de desenvolvimento
+==========================================
+
+Vários outros manuais com informações úteis para todos os desenvolvedores
+do kernel.
+
+.. toctree::
+   :maxdepth: 1
+
+   doc-guide/index
+
 Guias do usuário e do administrador
 ===================================
 
