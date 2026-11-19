@@ -18,6 +18,9 @@
 #include <linux/mmc/card.h>
 #include <linux/mmc/sdio.h>
 #include <linux/mmc/sdio_ids.h>
+#include <linux/of.h>
+#include <linux/of_irq.h>
+#include <linux/of_net.h>
 #include <net/mac80211.h>
 
 #include "cw1200.h"
@@ -50,13 +53,27 @@ struct hwbus_priv {
 	struct sdio_func	*func;
 	struct cw1200_common	*core;
 	const struct cw1200_platform_data_sdio *pdata;
+	struct cw1200_platform_data_sdio pdata_storage;
+	u8 macaddr[ETH_ALEN];
+	bool is_xr819;
 };
 
 static const struct sdio_device_id cw1200_sdio_ids[] = {
 	{ SDIO_DEVICE(SDIO_VENDOR_ID_STE, SDIO_DEVICE_ID_STE_CW1200) },
+	{ SDIO_DEVICE(SDIO_VENDOR_ID_STE, SDIO_DEVICE_ID_STE_XR819) },
 	{ /* end: all zeroes */			},
 };
 MODULE_DEVICE_TABLE(sdio, cw1200_sdio_ids);
+
+static const struct of_device_id cw1200_sdio_of_match[] = {
+	{ .compatible = "xradio,xr819" },
+	{ }
+};
+MODULE_DEVICE_TABLE(of, cw1200_sdio_of_match);
+
+MODULE_FIRMWARE("xr819/boot_xr819.bin");
+MODULE_FIRMWARE("xr819/fw_xr819.bin");
+MODULE_FIRMWARE("xr819/sdd_xr819.bin");
 
 /* hwbus_ops implemetation */
 
@@ -142,6 +159,7 @@ static irqreturn_t cw1200_gpio_irq(int irq, void *dev_id)
 
 static int cw1200_request_irq(struct hwbus_priv *self)
 {
+	unsigned long trigger = irq_get_trigger_type(self->pdata->irq);
 	int ret;
 	int err;
 	u8 ien;
@@ -160,10 +178,10 @@ static int cw1200_request_irq(struct hwbus_priv *self)
 		goto restore_ien;
 
 	/* Request the IRQ */
-	ret =  request_threaded_irq(self->pdata->irq, cw1200_gpio_hardirq,
-				    cw1200_gpio_irq,
-				    IRQF_TRIGGER_HIGH | IRQF_ONESHOT,
-				    "cw1200_wlan_irq", self);
+	ret = request_threaded_irq(self->pdata->irq, cw1200_gpio_hardirq,
+				   cw1200_gpio_irq, IRQF_ONESHOT |
+				   (trigger ?: IRQF_TRIGGER_HIGH),
+				   "cw1200_wlan_irq", self);
 	if (!ret)
 		return 0;
 
@@ -303,11 +321,28 @@ static const struct hwbus_ops cw1200_sdio_hwbus_ops = {
 	.power_mgmt		= cw1200_sdio_pm,
 };
 
+static int cw1200_sdio_core_probe(struct hwbus_priv *self,
+				  struct sdio_func *func)
+{
+	if (self->is_xr819)
+		return cw1200_core_probe_xr819(&cw1200_sdio_hwbus_ops, self,
+						&func->dev, &self->core,
+						self->pdata->ref_clk,
+						self->pdata->macaddr,
+						self->pdata->sdd_file);
+
+	return cw1200_core_probe(&cw1200_sdio_hwbus_ops, self, &func->dev,
+				 &self->core, self->pdata->ref_clk,
+				 self->pdata->macaddr, self->pdata->sdd_file,
+				 self->pdata->have_5ghz);
+}
+
 /* Probe Function to be called by SDIO stack when device is discovered */
 static int cw1200_sdio_probe(struct sdio_func *func,
 			     const struct sdio_device_id *id)
 {
 	struct hwbus_priv *self;
+	int irq;
 	int status;
 
 	pr_info("cw1200_wlan_sdio: Probe called\n");
@@ -324,30 +359,75 @@ static int cw1200_sdio_probe(struct sdio_func *func,
 
 	func->card->quirks |= MMC_QUIRK_LENIENT_FN0;
 
-	self->pdata = global_plat_data; /* FIXME */
+	self->pdata_storage = *global_plat_data;
+	self->pdata = &self->pdata_storage;
+	self->is_xr819 = id->device == SDIO_DEVICE_ID_STE_XR819;
+	if (self->is_xr819) {
+		func->card->quirks |= MMC_QUIRK_BROKEN_BYTE_MODE_512;
+		self->pdata_storage.ref_clk = 24000;
+		self->pdata_storage.have_5ghz = false;
+		self->pdata_storage.sdd_file = "xr819/sdd_xr819.bin";
+
+		if (of_property_present(func->dev.of_node, "interrupts") ||
+		    of_property_present(func->dev.of_node, "interrupts-extended")) {
+			irq = of_irq_get(func->dev.of_node, 0);
+			if (irq <= 0) {
+				status = dev_err_probe(&func->dev, irq ?: -EINVAL,
+						       "cannot map GPIO interrupt\n");
+				goto free_self;
+			}
+			self->pdata_storage.irq = irq;
+		}
+
+		status = of_get_mac_address(func->dev.of_node, self->macaddr);
+		if (status == -EPROBE_DEFER)
+			goto free_self;
+		if (!status)
+			self->pdata_storage.macaddr = self->macaddr;
+	}
 	self->func = func;
+	if (self->is_xr819) {
+		/* Disabling the function leaves the HIF in queue mode. Reset
+		 * the single-function XR819 before starting another download.
+		 */
+		sdio_claim_host(func);
+		status = mmc_hw_reset(func->card);
+		sdio_release_host(func);
+		if (status)
+			goto free_self;
+	}
 	sdio_set_drvdata(func, self);
 	sdio_claim_host(func);
-	sdio_enable_func(func);
+	status = sdio_enable_func(func);
 	sdio_release_host(func);
+	if (status)
+		goto clear_drvdata;
 
-	status = cw1200_sdio_irq_subscribe(self);
-
-	status = cw1200_core_probe(&cw1200_sdio_hwbus_ops,
-				   self, &func->dev, &self->core,
-				   self->pdata->ref_clk,
-				   self->pdata->macaddr,
-				   self->pdata->sdd_file,
-				   self->pdata->have_5ghz);
-	if (status) {
-		cw1200_sdio_irq_unsubscribe(self);
+	if (self->is_xr819) {
 		sdio_claim_host(func);
-		sdio_disable_func(func);
+		status = sdio_set_block_size(func, SDIO_BLOCK_SIZE);
 		sdio_release_host(func);
-		sdio_set_drvdata(func, NULL);
-		kfree(self);
+		if (status)
+			goto disable_func;
 	}
 
+	status = cw1200_sdio_irq_subscribe(self);
+	if (status)
+		goto disable_func;
+
+	status = cw1200_sdio_core_probe(self, func);
+	if (!status)
+		return 0;
+
+	cw1200_sdio_irq_unsubscribe(self);
+disable_func:
+	sdio_claim_host(func);
+	sdio_disable_func(func);
+	sdio_release_host(func);
+clear_drvdata:
+	sdio_set_drvdata(func, NULL);
+free_self:
+	kfree(self);
 	return status;
 }
 
@@ -408,11 +488,12 @@ static struct sdio_driver sdio_driver = {
 	.id_table	= cw1200_sdio_ids,
 	.probe		= cw1200_sdio_probe,
 	.remove		= cw1200_sdio_disconnect,
-#ifdef CONFIG_PM
 	.drv = {
+#ifdef CONFIG_PM
 		.pm = &cw1200_pm_ops,
-	}
 #endif
+		.of_match_table = cw1200_sdio_of_match,
+	},
 };
 
 /* Init Module function -> Called by insmod */
