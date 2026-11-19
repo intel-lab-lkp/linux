@@ -29,11 +29,27 @@ struct mali_vpu_sched_session;
  * @supported_fmts: List of format descriptors supported by the queue.
  * @stream_requested: Port/Queue is being prepared for streaming or has
  *                    successfully completed preparation. Protected by vq_lock.
+ * @sequence: Sequence number assigned to the next completed buffer.
  */
 struct mali_vpu_port {
 	struct v4l2_format		curr_fmt;
 	struct mali_vpu_format_list	supported_fmts;
 	bool				stream_requested;
+	u32				sequence;
+};
+
+/**
+ * struct mali_vpu_ts_metadata - OUTPUT metadata propagated to CAPTURE.
+ * @timestamp: Timestamp used as the firmware association tag.
+ * @flags: Timestamp-source and timecode-presence flags.
+ * @valid: Whether this cache entry has been populated.
+ * @timecode: Timecode associated with @timestamp.
+ */
+struct mali_vpu_ts_metadata {
+	u64 timestamp;
+	u32 flags;
+	bool valid;
+	struct v4l2_timecode timecode;
 };
 
 /*
@@ -80,6 +96,8 @@ enum mali_vpu_session_fw_bin_state {
  * @mmu: MMU handle for this session
  * @vq_lock: Mutex lock to serialise per-session queue related ioctls.
  * @min_buffers_required: Driver-reported minimum buffers for role-specific queue.
+ * @ts_metadata: OUTPUT metadata indexed by timestamp for CAPTURE propagation.
+ * @ts_metadata_idx: Next timestamp metadata slot to use.
  * @ctrls_caps: Variant-provided immutable control capability table.
  * @num_ctrls_caps: Number of entries in @ctrls_caps.
  * @ctrls_state: Per-session control cache and staging state.
@@ -106,6 +124,8 @@ struct mali_vpu_session {
 	struct mali_vpu_mmu		mmu;
 	struct mutex			vq_lock; /* lock to serialise per-session ioctls */
 	u32				min_buffers_required;
+	struct mali_vpu_ts_metadata	ts_metadata[VIDEO_MAX_FRAME];
+	u32				ts_metadata_idx;
 
 	const struct mali_vpu_ctrl_desc *ctrls_caps;
 	u32				num_ctrls_caps;
@@ -139,6 +159,7 @@ int mali_vpu_session_prepare_streaming(struct mali_vpu_session *sess,
 int mali_vpu_session_streamoff(struct mali_vpu_session *sess, enum v4l2_buf_type type);
 void mali_vpu_session_irq(struct mali_vpu_session *sess);
 int mali_vpu_session_qbuf(struct mali_vpu_session *sess, struct vb2_buffer *vb2_buf);
+void mali_vpu_session_reset_ts_metadata(struct mali_vpu_session *sess);
 
 static inline struct mali_vpu_session *mali_vpu_get_session(struct file *filp)
 {

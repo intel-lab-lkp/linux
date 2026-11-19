@@ -3,6 +3,7 @@
  * Copyright (C) 2026 ARM Limited.
  */
 
+#include <linux/array_size.h>
 #include <linux/device.h>
 #include <linux/err.h>
 #include <linux/errno.h>
@@ -18,6 +19,9 @@
 #include "mali-vpu-formats.h"
 #include "mali-vpu-variant.h"
 #include "mali-vpu-vb2.h"
+
+#define MALI_VPU_TS_METADATA_FLAGS \
+	(V4L2_BUF_FLAG_TIMECODE | V4L2_BUF_FLAG_TSTAMP_SRC_MASK)
 
 static const unsigned int mali_vpu_fw_response_timeout_ms = 10000;
 static const unsigned int mali_vpu_fw_load_timeout_ms     = 10000;
@@ -288,18 +292,79 @@ static int mali_vpu_session_sched_activate(struct mali_vpu_session *sess)
 	return mali_vpu_sched_switch_in(&sess->sched_sess, &sess->vpu_dev->sched);
 }
 
+static void mali_vpu_session_store_ts_metadata(struct mali_vpu_session *sess,
+					       const struct vb2_v4l2_buffer *vbuf)
+{
+	struct mali_vpu_ts_metadata *metadata;
+
+	if (sess->ts_metadata_idx >= ARRAY_SIZE(sess->ts_metadata))
+		sess->ts_metadata_idx = 0;
+
+	metadata = &sess->ts_metadata[sess->ts_metadata_idx++];
+	metadata->timestamp = vbuf->vb2_buf.timestamp;
+	metadata->flags = vbuf->flags & MALI_VPU_TS_METADATA_FLAGS;
+	metadata->valid = true;
+	metadata->timecode = vbuf->timecode;
+}
+
+static void mali_vpu_session_restore_ts_metadata(struct mali_vpu_session *sess,
+						 struct vb2_v4l2_buffer *vbuf)
+{
+	u64 timestamp = vbuf->vb2_buf.timestamp;
+	u32 i;
+
+	/*
+	 * Matching the auxiliary metadata by timestamp is ambiguous when
+	 * OUTPUT buffers have duplicate timestamps: timecode and timestamp-
+	 * source flags may be restored from a different OUTPUT buffer.
+	 *
+	 * The timestamp itself is returned independently through firmware.
+	 * Unique association tags require reliable metadata lifetime tracking.
+	 */
+
+	vbuf->flags &= ~MALI_VPU_TS_METADATA_FLAGS;
+
+	for (i = 0; i < ARRAY_SIZE(sess->ts_metadata); i++) {
+		struct mali_vpu_ts_metadata *metadata = &sess->ts_metadata[i];
+
+		if (!metadata->valid || metadata->timestamp != timestamp)
+			continue;
+
+		vbuf->flags |= metadata->flags;
+		if (metadata->flags & V4L2_BUF_FLAG_TIMECODE)
+			vbuf->timecode = metadata->timecode;
+
+		return;
+	}
+}
+
+void mali_vpu_session_reset_ts_metadata(struct mali_vpu_session *sess)
+{
+	memset(sess->ts_metadata, 0, sizeof(sess->ts_metadata));
+	sess->ts_metadata_idx = 0;
+}
+
 static void mali_vpu_session_buffer_done(struct mali_vpu_session *sess,
 					 struct mali_vpu_buffer *vpu_buf,
 					 enum vb2_buffer_state state)
 {
 	struct vb2_v4l2_buffer *vbuf = &vpu_buf->m2m_buf.vb;
 	struct vb2_buffer *vb2_buf = &vbuf->vb2_buf;
+	struct mali_vpu_port *port;
 
 	if (vb2_buf->state != VB2_BUF_STATE_ACTIVE) {
 		dev_dbg(sess->vpu_dev->dev,
 			"ignore returned buffer. type=%u index=%u vb2_state=%u\n",
 			vpu_buf->type, vb2_buf->index, vb2_buf->state);
 		return;
+	}
+
+	port = V4L2_TYPE_IS_OUTPUT(vpu_buf->type) ? &sess->port_src : &sess->port_dst;
+
+	vbuf->sequence = port->sequence++;
+	if (V4L2_TYPE_IS_CAPTURE(vpu_buf->type)) {
+		vbuf->field = port->curr_fmt.fmt.pix_mp.field;
+		mali_vpu_session_restore_ts_metadata(sess, vbuf);
 	}
 
 	if (V4L2_TYPE_IS_OUTPUT(vpu_buf->type))
@@ -607,6 +672,10 @@ int mali_vpu_session_qbuf(struct mali_vpu_session *sess, struct vb2_buffer *vb2_
 	    !mali_vpu_session_can_stream(sess) ||
 	    sess->fw_state != MALI_VPU_FW_STATE_RUNNING) {
 		vpu_buf->attr = MALI_VPU_BUF_ATTR_DEFERRED;
+
+		if (V4L2_TYPE_IS_OUTPUT(vb2_buf->type))
+			mali_vpu_session_store_ts_metadata(sess, v4l2_buf);
+
 		return 0;
 	}
 
@@ -615,6 +684,9 @@ int mali_vpu_session_qbuf(struct mali_vpu_session *sess, struct vb2_buffer *vb2_
 		return ret;
 
 	vpu_buf->attr = MALI_VPU_BUF_ATTR_QUEUED;
+
+	if (V4L2_TYPE_IS_OUTPUT(vb2_buf->type))
+		mali_vpu_session_store_ts_metadata(sess, v4l2_buf);
 
 	mali_vpu_sched_send_irq(&sess->sched_sess, &sess->vpu_dev->sched);
 
@@ -732,6 +804,8 @@ int mali_vpu_session_prepare_streaming(struct mali_vpu_session *sess,
 			goto err_rollback;
 		}
 	}
+
+	port->sequence = 0;
 
 	return 0;
 

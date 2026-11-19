@@ -137,6 +137,9 @@ static void mali_vpu_vb2_unprepare_streaming(struct vb2_queue *q)
 
 	if (!vb2_start_streaming_called(q))
 		v4l2_m2m_update_stop_streaming_state(sess->m2m_ctx, q);
+
+	if (!sess->port_src.stream_requested && !sess->port_dst.stream_requested)
+		mali_vpu_session_reset_ts_metadata(sess);
 }
 
 static const struct vb2_ops mali_vpu_vb2_ops = {
