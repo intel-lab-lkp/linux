@@ -225,15 +225,17 @@ static __always_inline struct kvm_cpu_kick kvm_init_cpu_kick(unsigned int req)
 
 	kick.me = get_cpu();
 
-	kick.cpus = this_cpu_cpumask_var_ptr(cpu_kick_mask);
-	cpumask_clear(kick.cpus);
+	if (req & KVM_REQUEST_WAIT) {
+		kick.cpus = this_cpu_cpumask_var_ptr(cpu_kick_mask);
+		cpumask_clear(kick.cpus);
+	}
 
 	return kick;
 }
 
 static bool kvm_finish_cpu_kick(struct kvm_cpu_kick *kick)
 {
-	if (kick->need_kick)
+	if (kick->need_kick && kick->cpus)
 		smp_call_function_many(kick->cpus, ack_kick, NULL,
 				       !!(kick->req & KVM_REQUEST_WAIT));
 
@@ -260,13 +262,22 @@ static void kvm_make_vcpu_request(struct kvm_vcpu *vcpu,
 	 * satisfied if the vCPU migrates. Entering READING_SHADOW_PAGE_TABLES
 	 * after this point is also OK, as the requirement is only that KVM wait
 	 * for vCPUs that were reading SPTEs _before_ any changes were
-	 * finalized. See kvm_vcpu_kick() for more details on handling requests.
+	 * finalized.
+	 *
+	 * See kvm_vcpu_kick() for more details on handling requests, including
+	 * the use of a reschedule IPI for non-waiting requests.  If waiting is
+	 * required (kick->cpus is non-NULL), batch the SMP function call until
+	 * after all to-be-kicked CPUs are gathered, to avoid waiting multiple
+	 * times.
 	 */
 	if (kvm_request_needs_ipi(vcpu, kick->req)) {
 		cpu = READ_ONCE(vcpu->cpu);
 		if (cpu != -1 && cpu != kick->me && cpu_online(cpu)) {
 			kick->need_kick = true;
-			__cpumask_set_cpu(cpu, kick->cpus);
+			if (kick->cpus)
+				__cpumask_set_cpu(cpu, kick->cpus);
+			else
+				smp_send_reschedule(cpu);
 		}
 	}
 }
