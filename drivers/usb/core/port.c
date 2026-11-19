@@ -649,12 +649,70 @@ static int match_location(struct usb_device *peer_hdev, void *p)
 	return 0;
 }
 
+static u32 usb_port_graph_id(struct usb_device *hdev, int port1)
+{
+	if (hdev->parent)
+		return port1;
+	return usb_hcd_find_raw_port_number(bus_to_hcd(hdev->bus), port1);
+}
+
+struct usb_connector_peer {
+	struct usb_port *port_dev;
+	struct usb_port *peer;
+	struct device_node *np;
+	u32 port;
+};
+
+static int match_connector_peer(struct usb_device *peer_hdev, void *p)
+{
+	struct usb_connector_peer *cp = p;
+	struct usb_hub *peer_hub = usb_hub_to_struct_hub(peer_hdev);
+	int port1;
+
+	if (!peer_hub || !peer_hdev->maxchild ||
+	    peer_hdev->dev.of_node != cp->np ||
+	    hub_is_superspeed(peer_hdev) == cp->port_dev->is_superspeed)
+		return 0;
+
+	for (port1 = 1; port1 <= peer_hdev->maxchild; port1++) {
+		if (usb_port_graph_id(peer_hdev, port1) == cp->port) {
+			cp->peer = peer_hub->ports[port1 - 1];
+			break;
+		}
+	}
+	return 1;
+}
+
+/* Set before device_register(): sysfs stores write the same word */
+static struct usb_port *find_connector_peer(struct usb_hub *hub, int port1)
+{
+	struct usb_port *port_dev = hub->ports[port1 - 1];
+	struct usb_device *hdev = hub->hdev;
+	struct usb_connector_peer cp;
+	bool found;
+
+	cp.np = usb_of_get_connector_peer(hdev, usb_port_graph_id(hdev, port1),
+					  port_dev->is_superspeed, &cp.port);
+	if (!cp.np)
+		return NULL;
+
+	cp.port_dev = port_dev;
+	cp.peer = NULL;
+	found = usb_for_each_dev(&cp, match_connector_peer);
+	of_node_put(cp.np);
+	/* Without the peer hub yet, wait for it */
+	if (cp.peer || !found)
+		port_dev->connector_peer = 1;
+	return cp.peer;
+}
+
 /*
  * Find the peer port either via explicit platform firmware "location"
- * data, the peer hcd for root hubs, or the upstream peer relationship
- * for all other hubs.
+ * data, a DT connector, the peer hcd for root hubs, or the upstream peer
+ * relationship for all other hubs.
  */
-static void find_and_link_peer(struct usb_hub *hub, int port1)
+static void find_and_link_peer(struct usb_hub *hub, int port1,
+			       struct usb_port *con_peer)
 {
 	struct usb_port *port_dev = hub->ports[port1 - 1], *peer;
 	struct usb_device *hdev = hub->hdev;
@@ -671,7 +729,15 @@ static void find_and_link_peer(struct usb_hub *hub, int port1)
 		/* we link the peer in match_location() if found */
 		usb_for_each_dev(port_dev, match_location);
 		return;
-	} else if (!hdev->parent) {
+	}
+
+	if (port_dev->connector_peer) {
+		if (con_peer)
+			link_peers_report(port_dev, con_peer);
+		return;
+	}
+
+	if (!hdev->parent) {
 		struct usb_hcd *hcd = bus_to_hcd(hdev->bus);
 		struct usb_hcd *peer_hcd = hcd->shared_hcd;
 
@@ -703,7 +769,7 @@ static void find_and_link_peer(struct usb_hub *hub, int port1)
 	 * does not have location data
 	 */
 	peer = peer_hub->ports[port1 - 1];
-	if (peer && peer->location == 0)
+	if (peer && peer->location == 0 && !peer->connector_peer)
 		link_peers_report(port_dev, peer);
 }
 
@@ -754,6 +820,8 @@ int usb_hub_create_port_device(struct usb_hub *hub, int port1)
 {
 	struct usb_port *port_dev;
 	struct usb_device *hdev = hub->hdev;
+	struct usb_port *con_peer;
+	u32 graph_id;
 	int retval;
 
 	port_dev = kzalloc_obj(*port_dev);
@@ -766,7 +834,11 @@ int usb_hub_create_port_device(struct usb_hub *hub, int port1)
 		return -ENOMEM;
 	}
 
-	port_dev->connect_type = usb_of_get_connect_type(hdev, port1);
+	graph_id = usb_port_graph_id(hdev, port1);
+	port_dev->connect_type = usb_of_get_connect_type(hdev, graph_id);
+	/* dwc3 graphs give the SuperSpeed port port@1 */
+	if (port_dev->connect_type == USB_PORT_NOT_USED && graph_id != port1)
+		port_dev->connect_type = usb_of_get_connect_type(hdev, port1);
 	hub->ports[port1 - 1] = port_dev;
 	port_dev->portnum = port1;
 	set_bit(port1, hub->power_bits);
@@ -778,6 +850,7 @@ int usb_hub_create_port_device(struct usb_hub *hub, int port1)
 		port_dev->dev.groups = port_dev_usb3_group;
 	} else
 		port_dev->dev.groups = port_dev_group;
+	con_peer = find_connector_peer(hub, port1);
 	port_dev->dev.type = &usb_port_device_type;
 	port_dev->dev.driver = &usb_port_driver;
 	dev_set_name(&port_dev->dev, "%s-port%d", dev_name(&hub->hdev->dev),
@@ -809,7 +882,7 @@ int usb_hub_create_port_device(struct usb_hub *hub, int port1)
 		goto err_put_kn;
 	}
 
-	find_and_link_peer(hub, port1);
+	find_and_link_peer(hub, port1, con_peer);
 
 	/*
 	 * Enable runtime pm and hold a refernce that hub_configure()
