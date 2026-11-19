@@ -1192,6 +1192,17 @@ ice_vc_fdir_parse_action(struct ice_vf *vf, struct virtchnl_fdir_add *fltr,
 			break;
 		case VIRTCHNL_ACTION_Q_REGION:
 			dest_num++;
+			if (action->act_conf.queue.region >
+			    FIELD_MAX(ICE_FXD_FLTR_QW0_TO_Q_M) ||
+			    action->act_conf.queue.index +
+			    BIT(action->act_conf.queue.region) > vsi->num_rxq) {
+				dev_dbg(dev,
+					"Invalid queue region %u/%u for VF %d\n",
+					action->act_conf.queue.index,
+					action->act_conf.queue.region,
+					vf->vf_id);
+				return -EINVAL;
+			}
 			input->dest_ctl = ICE_FLTR_PRGM_DESC_DEST_DIRECT_PKT_QGROUP;
 			input->q_index = action->act_conf.queue.index;
 			input->q_region = action->act_conf.queue.region;
