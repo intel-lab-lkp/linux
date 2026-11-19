@@ -10,6 +10,9 @@
 #include <linux/interrupt.h>
 #include <linux/gpio/consumer.h>
 #include <linux/delay.h>
+#include <linux/mm.h>
+#include <linux/slab.h>
+#include <linux/sched/task_stack.h>
 #include <linux/mmc/host.h>
 #include <linux/mmc/sdio_func.h>
 #include <linux/mmc/card.h>
@@ -61,14 +64,42 @@ static int cw1200_sdio_memcpy_fromio(struct hwbus_priv *self,
 				     unsigned int addr,
 				     void *dst, int count)
 {
-	return sdio_memcpy_fromio(self->func, dst, addr, count);
+	void *bounce;
+	int ret;
+
+	if (virt_addr_valid(dst) && !object_is_on_stack(dst))
+		return sdio_memcpy_fromio(self->func, dst, addr, count);
+
+	bounce = kmalloc(count, GFP_KERNEL);
+	if (!bounce)
+		return -ENOMEM;
+
+	ret = sdio_memcpy_fromio(self->func, bounce, addr, count);
+	if (!ret)
+		memcpy(dst, bounce, count);
+	kfree(bounce);
+
+	return ret;
 }
 
 static int cw1200_sdio_memcpy_toio(struct hwbus_priv *self,
 				   unsigned int addr,
 				   const void *src, int count)
 {
-	return sdio_memcpy_toio(self->func, addr, (void *)src, count);
+	void *bounce;
+	int ret;
+
+	if (virt_addr_valid(src) && !object_is_on_stack(src))
+		return sdio_memcpy_toio(self->func, addr, (void *)src, count);
+
+	bounce = kmemdup(src, count, GFP_KERNEL);
+	if (!bounce)
+		return -ENOMEM;
+
+	ret = sdio_memcpy_toio(self->func, addr, bounce, count);
+	kfree(bounce);
+
+	return ret;
 }
 
 static void cw1200_sdio_lock(struct hwbus_priv *self)
