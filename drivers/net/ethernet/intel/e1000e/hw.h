@@ -604,6 +604,7 @@ struct e1000_mac_info {
 	bool autoneg;
 	bool autoneg_failed;
 	bool get_link_status;
+	bool dmoff_at_lsc;
 	bool in_ifs_mode;
 	bool serdes_has_link;
 	bool tx_pkt_filtering;

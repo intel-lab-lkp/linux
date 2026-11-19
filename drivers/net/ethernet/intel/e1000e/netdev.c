@@ -1785,6 +1785,7 @@ static irqreturn_t e1000_intr_msi(int __always_unused irq, void *data)
 	/* read ICR disables interrupts using IAM */
 	if (icr & E1000_ICR_LSC) {
 		hw->mac.get_link_status = true;
+		hw->mac.dmoff_at_lsc = er32(STATUS) & E1000_STATUS_PCIM_STATE;
 		/* ICH8 workaround-- Call gig speed drop workaround on cable
 		 * disconnect (LSC) before accessing any PHY registers
 		 */
@@ -1864,6 +1865,7 @@ static irqreturn_t e1000_intr(int __always_unused irq, void *data)
 
 	if (icr & E1000_ICR_LSC) {
 		hw->mac.get_link_status = true;
+		hw->mac.dmoff_at_lsc = er32(STATUS) & E1000_STATUS_PCIM_STATE;
 		/* ICH8 workaround-- Call gig speed drop workaround on cable
 		 * disconnect (LSC) before accessing any PHY registers
 		 */
@@ -5302,6 +5304,9 @@ static void e1000_watchdog_task(struct work_struct *work)
 			/* Checking if MAC is in DMoff state*/
 			if (er32(FWSM) & E1000_ICH_FWSM_FW_VALID) {
 				pcim_state = er32(STATUS);
+				/* DMoff may have ended since the LSC */
+				if (mac->dmoff_at_lsc)
+					pcim_state |= E1000_STATUS_PCIM_STATE;
 				while (pcim_state & E1000_STATUS_PCIM_STATE) {
 					if (tries++ == dmoff_exit_timeout) {
 						e_dbg("Error in exiting dmoff\n");
