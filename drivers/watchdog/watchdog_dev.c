@@ -201,6 +201,9 @@ static int watchdog_ping(struct watchdog_device *wdd)
 	if (!watchdog_hw_running(wdd))
 		return 0;
 
+	if (system_state > SYSTEM_RUNNING)
+		return 0;
+
 	set_bit(_WDOG_KEEPALIVE, &wd_data->status);
 
 	wd_data->last_keepalive = ktime_get();
