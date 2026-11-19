@@ -32,6 +32,7 @@ enum mali_vpu_session_role {
  * @clk_count: Number of clocks in @clk_list.
  * @rst_list: List of reset controls.
  * @rst_count: Number of reset controls in @rst_list.
+ * @dma_mask: DMA mask for the device, indicating supported address width.
  * @irq: IRQ number for VPU.
  * @variant: Structure describing variant-specific features and capabilities.
  * @v4l2_dev: V4L2 device structure for mali vpu.
@@ -45,6 +46,7 @@ struct mali_vpu_dev {
 	unsigned int			clk_count;
 	struct reset_control_bulk_data	*rst_list;
 	unsigned int			rst_count;
+	u64				dma_mask;
 	int				irq;
 
 	const struct mali_vpu_variant	*variant;

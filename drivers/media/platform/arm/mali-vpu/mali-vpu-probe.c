@@ -213,6 +213,13 @@ static int mali_vpu_probe(struct platform_device *pdev)
 		goto err_rst_clk;
 	}
 
+	vpu_dev->dma_mask = vpu_dev->variant->dma_mask;
+	ret = dma_set_mask_and_coherent(vpu_dev->dev, vpu_dev->dma_mask);
+	if (ret)
+		goto err_rst_clk;
+
+	dma_set_max_seg_size(vpu_dev->dev, SZ_2G);
+
 	ret = v4l2_device_register(&pdev->dev, &vpu_dev->v4l2_dev);
 	if (ret) {
 		dev_err(vpu_dev->dev, "failed to register V4L2 device\n");
@@ -280,3 +287,4 @@ static struct platform_driver mali_vpu_driver = {
 module_platform_driver(mali_vpu_driver);
 MODULE_DESCRIPTION("Arm Mali VPU driver");
 MODULE_LICENSE("GPL");
+MODULE_IMPORT_NS("DMA_BUF");

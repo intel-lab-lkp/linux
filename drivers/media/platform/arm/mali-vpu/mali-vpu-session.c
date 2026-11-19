@@ -86,7 +86,16 @@ int mali_vpu_session_init(struct mali_vpu_session *sess)
 		goto err_m2m_ctx_release;
 	}
 
+	ret = mali_vpu_mmu_init(&sess->mmu, sess->vpu_dev->dev);
+	if (ret) {
+		dev_err(sess->vpu_dev->dev, "failed to initialise MMU: %d\n", ret);
+		goto err_ctrls_cleanup;
+	}
+
 	return 0;
+
+err_ctrls_cleanup:
+	mali_vpu_ctrls_cleanup(sess);
 
 err_m2m_ctx_release:
 	v4l2_m2m_ctx_release(sess->m2m_ctx);
@@ -108,6 +117,7 @@ void mali_vpu_session_cleanup(struct mali_vpu_session *sess)
 
 	mutex_unlock(&sess->vq_lock);
 
+	mali_vpu_mmu_cleanup(&sess->mmu);
 	mali_vpu_ctrls_cleanup(sess);
 	mutex_destroy(&sess->vq_lock);
 }

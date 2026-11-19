@@ -13,6 +13,7 @@
 
 #include "mali-vpu-device.h"
 #include "mali-vpu-formats.h"
+#include "mali-vpu-mmu.h"
 
 struct v4l2_m2m_ctx;
 
@@ -32,6 +33,7 @@ struct mali_vpu_port {
  * @role: Role of this session.
  * @port_src: Source (OUTPUT) port for this session.
  * @port_dst: Destination (CAPTURE) port for this session.
+ * @mmu: MMU handle for this session
  * @vq_lock: Mutex lock to serialise per-session queue related ioctls.
  * @is_fw_ready: True if the firmware is loaded and ready to accept commands.
  * @min_buffers_required: Driver-reported minimum buffers for role-specific queue.
@@ -47,6 +49,7 @@ struct mali_vpu_session {
 	enum mali_vpu_session_role	role;
 	struct mali_vpu_port		port_src;
 	struct mali_vpu_port		port_dst;
+	struct mali_vpu_mmu		mmu;
 	struct mutex			vq_lock; /* lock to serialise per-session ioctls */
 	bool				is_fw_ready;
 	u32				min_buffers_required;

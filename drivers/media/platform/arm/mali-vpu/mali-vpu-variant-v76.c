@@ -149,6 +149,7 @@ static const struct mali_vpu_ctrl_desc mali_v76_dec_ctrls[] = {
 };
 
 const struct mali_vpu_variant mali_vpu_v76_variant = {
+	.dma_mask = DMA_BIT_MASK(40),
 	.expected_hw_pid = MALI_VPU_HW_PID_V76,
 
 	.rst_names = mali_v76_rst_names,
