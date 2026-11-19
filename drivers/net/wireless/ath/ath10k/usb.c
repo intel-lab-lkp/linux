@@ -299,8 +299,18 @@ static void ath10k_usb_rx_complete(struct ath10k *ar, struct sk_buff *skb)
 	u8 *trailer;
 	int ret;
 
+	if (skb->len < sizeof(*htc_hdr)) {
+		ath10k_warn(ar, "short frame received: %u\n", skb->len);
+		goto out_free_skb;
+	}
+
 	htc_hdr = (struct ath10k_htc_hdr *)skb->data;
 	eid = eid_from_htc_hdr(htc_hdr);
+	if (eid >= ATH10K_HTC_EP_COUNT) {
+		ath10k_warn(ar, "invalid eid %d\n", eid);
+		goto out_free_skb;
+	}
+
 	ep = &ar->htc.endpoint[eid];
 
 	if (ep->service_id == 0) {
@@ -311,6 +321,12 @@ static void ath10k_usb_rx_complete(struct ath10k *ar, struct sk_buff *skb)
 	payload_len = le16_to_cpu(htc_hdr->len);
 	if (!payload_len) {
 		ath10k_warn(ar, "zero length frame received, firmware crashed?\n");
+		goto out_free_skb;
+	}
+
+	if (payload_len > skb->len - sizeof(*htc_hdr)) {
+		ath10k_warn(ar, "truncated frame received: payload %u len %u\n",
+			    payload_len, skb->len);
 		goto out_free_skb;
 	}
 
