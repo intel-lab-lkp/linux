@@ -1347,6 +1347,13 @@ static void ff_layout_reset_read(struct nfs_pgio_header *hdr)
 	}
 }
 
+/* LOCALIO completes I/O without ever running the rpc_task */
+static void ff_layout_rpc_delay(struct rpc_task *task, unsigned long delay)
+{
+	if (RPC_IS_ACTIVATED(task))
+		rpc_delay(task, delay);
+}
+
 static int ff_layout_async_handle_error_v4(struct rpc_task *task,
 					   u32 op_status,
 					   struct nfs4_state *state,
@@ -1384,7 +1391,7 @@ static int ff_layout_async_handle_error_v4(struct rpc_task *task,
 		nfs_inc_stats(lseg->pls_layout->plh_inode, NFSIOS_DELAY);
 		fallthrough;
 	case NFS4ERR_GRACE:
-		rpc_delay(task, FF_LAYOUT_POLL_RETRY_MAX);
+		ff_layout_rpc_delay(task, FF_LAYOUT_POLL_RETRY_MAX);
 		goto out_retry;
 	case NFS4ERR_RETRY_UNCACHED_REP:
 		goto out_retry;
@@ -1528,7 +1535,7 @@ out_reset_to_pnfs:
 out_retry:
 	task->tk_status = 0;
 	rpc_restart_call_prepare(task);
-	rpc_delay(task, NFS_JUKEBOX_RETRY_TIME);
+	ff_layout_rpc_delay(task, NFS_JUKEBOX_RETRY_TIME);
 	return -EAGAIN;
 }
 
@@ -1963,6 +1970,11 @@ static int ff_layout_commit_done_cb(struct rpc_task *task,
 		pnfs_generic_prepare_to_resend_writes(data);
 		return -EAGAIN;
 	case -EAGAIN:
+		/* A LOCALIO commit can't be restarted */
+		if (!RPC_IS_ACTIVATED(task)) {
+			pnfs_generic_prepare_to_resend_writes(data);
+			return -EAGAIN;
+		}
 		rpc_restart_call_prepare(task);
 		return -EAGAIN;
 	case -NFS4ERR_FATAL_IOERROR:
