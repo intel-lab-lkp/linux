@@ -96,6 +96,8 @@ enum {
 	KVM_ARCH_FLAG_EXIT_SEA,
 	/* No further ID register changes possible */
 	KVM_ARCH_FLAG_ID_REGS_FINAL,
+	/* Partitioned PMU Enabled */
+	KVM_ARCH_FLAG_PARTITION_PMU_ENABLED,
 };
 
 struct vcpu_reset_state {
