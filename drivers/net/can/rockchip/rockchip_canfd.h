@@ -487,10 +487,13 @@ struct rkcanfd_priv {
 
 	bool tx_enabled;
 	bool irq_suspended;
+	bool tx_retry_enabled;
+	bool tx_retry_pending;
 
 	struct cyclecounter cc;
 	struct timecounter tc;
 	struct delayed_work timestamp;
+	struct delayed_work tx_retry_work;
 	unsigned long work_delay_jiffies;
 
 	struct can_berr_counter bec;
@@ -564,6 +567,10 @@ void rkcanfd_timestamp_stop(struct rkcanfd_priv *priv);
 void rkcanfd_timestamp_stop_sync(struct rkcanfd_priv *priv);
 
 unsigned int rkcanfd_get_effective_tx_free(const struct rkcanfd_priv *priv);
+void rkcanfd_tx_retry_init(struct rkcanfd_priv *priv);
+void rkcanfd_tx_retry_start(struct rkcanfd_priv *priv);
+void rkcanfd_tx_retry_stop(struct rkcanfd_priv *priv);
+void rkcanfd_tx_retry_stop_sync(struct rkcanfd_priv *priv);
 void rkcanfd_xmit_retry(struct rkcanfd_priv *priv);
 netdev_tx_t rkcanfd_start_xmit(struct sk_buff *skb, struct net_device *ndev);
 void rkcanfd_handle_tx_done_one(struct rkcanfd_priv *priv, const u32 ts,

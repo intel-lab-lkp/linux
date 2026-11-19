@@ -39,11 +39,77 @@ unsigned int rkcanfd_get_effective_tx_free(const struct rkcanfd_priv *priv)
 {
 	lockdep_assert_held(&priv->tx_lock);
 
+	/* The original echo can precede completion of a retry. */
+	if (!priv->tx_retry_enabled || priv->tx_retry_pending)
+		return 0;
+
 	if (priv->devtype_data.quirks & RKCANFD_QUIRK_RK3568_ERRATUM_6 &&
 	    rkcanfd_tx_tail_is_eff(priv))
 		return 0;
 
 	return rkcanfd_get_tx_free(priv);
+}
+
+static void rkcanfd_tx_retry_work(struct work_struct *work)
+{
+	struct rkcanfd_priv *priv = container_of(to_delayed_work(work),
+						 struct rkcanfd_priv, tx_retry_work);
+	const u32 tx_req = RKCANFD_REG_CMD_TX0_REQ | RKCANFD_REG_CMD_TX1_REQ;
+	unsigned long flags;
+	u32 reg_cmd;
+
+	spin_lock_irqsave(&priv->tx_lock, flags);
+	if (!priv->tx_retry_enabled || !priv->tx_retry_pending)
+		goto out_unlock;
+
+	reg_cmd = rkcanfd_read(priv, RKCANFD_REG_CMD);
+
+	if (reg_cmd & tx_req) {
+		schedule_delayed_work(&priv->tx_retry_work, 1);
+		goto out_unlock;
+	}
+
+	priv->tx_retry_pending = false;
+
+	if (rkcanfd_get_effective_tx_free(priv) >= RKCANFD_TX_START_THRESHOLD)
+		netif_wake_queue(priv->ndev);
+
+out_unlock:
+	spin_unlock_irqrestore(&priv->tx_lock, flags);
+}
+
+void rkcanfd_tx_retry_init(struct rkcanfd_priv *priv)
+{
+	INIT_DELAYED_WORK(&priv->tx_retry_work, rkcanfd_tx_retry_work);
+}
+
+void rkcanfd_tx_retry_start(struct rkcanfd_priv *priv)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&priv->tx_lock, flags);
+	priv->tx_retry_enabled = netif_running(priv->ndev);
+	priv->tx_retry_pending = false;
+	spin_unlock_irqrestore(&priv->tx_lock, flags);
+}
+
+void rkcanfd_tx_retry_stop(struct rkcanfd_priv *priv)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&priv->tx_lock, flags);
+	priv->tx_retry_enabled = false;
+	priv->tx_retry_pending = false;
+	netif_stop_queue(priv->ndev);
+	spin_unlock_irqrestore(&priv->tx_lock, flags);
+
+	cancel_delayed_work(&priv->tx_retry_work);
+}
+
+void rkcanfd_tx_retry_stop_sync(struct rkcanfd_priv *priv)
+{
+	rkcanfd_tx_retry_stop(priv);
+	cancel_delayed_work_sync(&priv->tx_retry_work);
 }
 
 static void rkcanfd_start_xmit_write_cmd(const struct rkcanfd_priv *priv,
@@ -63,12 +129,19 @@ static void rkcanfd_start_xmit_write_cmd(const struct rkcanfd_priv *priv,
 
 void rkcanfd_xmit_retry(struct rkcanfd_priv *priv)
 {
-	const unsigned int tx_head = rkcanfd_get_tx_head(priv);
-	const u32 reg_cmd = RKCANFD_REG_CMD_TX_REQ(tx_head);
+	const unsigned int tx_tail = rkcanfd_get_tx_tail(priv);
+	const u32 reg_cmd = RKCANFD_REG_CMD_TX_REQ(tx_tail);
 
 	lockdep_assert_held(&priv->tx_lock);
 
+	if (!priv->tx_retry_enabled)
+		return;
+
+	priv->tx_retry_pending = true;
+	netif_stop_queue(priv->ndev);
+
 	rkcanfd_start_xmit_write_cmd(priv, reg_cmd);
+	schedule_delayed_work(&priv->tx_retry_work, 1);
 }
 
 netdev_tx_t rkcanfd_start_xmit(struct sk_buff *skb, struct net_device *ndev)

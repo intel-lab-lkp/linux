@@ -270,6 +270,8 @@ static void rkcanfd_chip_start(struct rkcanfd_priv *priv)
 {
 	u32 reg;
 
+	rkcanfd_tx_retry_stop_sync(priv);
+
 	rkcanfd_chip_set_reset_mode(priv);
 
 	/* Receiving Filter: accept all */
@@ -329,11 +331,14 @@ static void rkcanfd_chip_start(struct rkcanfd_priv *priv)
 
 	netdev_dbg(priv->ndev, "%s: reg_mode=0x%08x\n", __func__,
 		   rkcanfd_read(priv, RKCANFD_REG_MODE));
+	rkcanfd_tx_retry_start(priv);
 }
 
 static void rkcanfd_tx_disable(struct rkcanfd_priv *priv)
 {
 	unsigned long flags;
+
+	rkcanfd_tx_retry_stop(priv);
 
 	spin_lock_irqsave(&priv->tx_lock, flags);
 	priv->tx_enabled = false;
@@ -377,6 +382,8 @@ static void rkcanfd_chip_stop(struct rkcanfd_priv *priv, const enum can_state st
 
 static void rkcanfd_chip_stop_sync(struct rkcanfd_priv *priv, const enum can_state state)
 {
+	rkcanfd_tx_retry_stop_sync(priv);
+
 	priv->can.state = state;
 
 	rkcanfd_timestamp_stop_sync(priv);
@@ -811,6 +818,8 @@ static int rkcanfd_stop(struct net_device *ndev)
 {
 	struct rkcanfd_priv *priv = netdev_priv(ndev);
 
+	rkcanfd_tx_retry_stop(priv);
+
 	close_candev_cancel_restart_sync(ndev);
 	rkcanfd_tx_disable(priv);
 
@@ -976,6 +985,7 @@ static int rkcanfd_probe(struct platform_device *pdev)
 	priv->can.do_get_berr_counter = rkcanfd_get_berr_counter;
 	priv->ndev = ndev;
 	spin_lock_init(&priv->tx_lock);
+	rkcanfd_tx_retry_init(priv);
 
 	match = device_get_match_data(&pdev->dev);
 	if (match) {
