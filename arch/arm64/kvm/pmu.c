@@ -852,7 +852,7 @@ u8 kvm_arm_pmu_get_pmuver_limit(void)
 
 u64 kvm_pmu_implemented_counter_mask(struct kvm_vcpu *vcpu)
 {
-	u64 val = FIELD_GET(ARMV8_PMU_PMCR_N, kvm_vcpu_read_pmcr(vcpu));
+	u64 val = vcpu->kvm->arch.nr_pmu_counters;
 
 	if (val == 0)
 		return BIT(ARMV8_PMU_CYCLE_IDX);
