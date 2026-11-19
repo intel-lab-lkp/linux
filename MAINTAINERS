@@ -14012,6 +14012,13 @@ F:	drivers/iommu/iova.c
 F:	include/linux/iommu-dma.h
 F:	include/linux/iova.h
 
+Platform Fault Detection Interface - ARM PFDI
+M:	Ahmed Azeem <ahmed.azeem@arm.com>
+L:	linux-arm-kernel@lists.infradead.org (moderated for non-subscribers)
+S:	Maintained
+F:	Documentation/ABI/testing/dev-cpu-pfdi
+F:	include/uapi/linux/pfdi.h
+
 IOMMU SUBSYSTEM
 M:	Joerg Roedel (AMD) <joro@8bytes.org>
 M:	Will Deacon <will@kernel.org>

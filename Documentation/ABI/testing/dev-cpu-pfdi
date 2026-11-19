@@ -1,0 +1,103 @@
+What:		/dev/cpu/<cpu>/pfdi
+Date:		May 2026
+KernelVersion:	6.18
+Contact:	Linux ARM Kernel Mailing list <linux-arm-kernel@lists.infradead.org>
+Reference:	Arm Platform Fault Detection Interface, document 110468,
+		version 1.0 ALP0
+Description:	Per-CPU Arm Platform Fault Detection Interface (PFDI) misc
+		device nodes. Each node targets the CPU encoded in its
+		path and exposes the PFDI service implemented by firmware.
+		PFDI uses the Arm SMCCC SMC64 calling convention and is
+		PE-local. Userspace is therefore expected to bind itself to
+		the target CPU before opening or issuing ioctls on the
+		matching device node. Each node is single-open: only one
+		userspace owner at a time may hold /dev/cpu/<cpu>/pfdi for a
+		given CPU. Additional open attempts fail with -EBUSY while the
+		device is already open.
+
+		The ABI is defined in <linux/pfdi.h>. The following ioctls
+		are supported:
+
+		* PFDI_IOCTL_VERSION
+		  Read the PFDI version for the target CPU. On success the
+		  ioctl returns 0 and copies a 32-bit version value to
+		  userspace with the following layout:
+		  Bits[30:16] PFDI major version
+		  Bits[15:0] PFDI minor version
+
+		* PFDI_IOCTL_FEATURES
+		  Query whether a PFDI function ID is supported on the
+		  target CPU. Userspace passes a 32-bit PFDI function ID.
+		  The ioctl returns 0 when the function is supported,
+		  and -EOPNOTSUPP when it is not supported on the target
+		  CPU, reserved by the specification, or otherwise not
+		  recognized by firmware.
+
+		* PFDI_IOCTL_PE_TEST_ID
+		  Read the test engine identifier for the target CPU.
+		  On success the ioctl returns 0 and copies a 64-bit value to
+		  userspace with the following layout:
+		  Bits[63:32] reserved and zero
+		  Bits[31:24] vendor ID
+		  Bits[23:20] reserved and zero
+		  Bits[19:16] vendor-defined implementation ID
+		  Bits[15:8] major version
+		  Bits[7:0] minor version
+
+		* PFDI_IOCTL_PE_TEST_PART_COUNT
+		  Read the number of available test parts for the target
+		  CPU. On success the ioctl returns 0 and copies a signed
+		  64-bit count to userspace. The smallest schedulable unit is
+		  a test part, and valid test part indices are in the range 0
+		  to count - 1.
+
+		* PFDI_IOCTL_PE_TEST_RUN
+		  Run a requested inclusive test part range on the target
+		  CPU. struct pfdi_test_run.range.start and .end are signed
+		  64-bit values.
+		  Passing start = -1 and end = -1 requests execution of all
+		  available test parts on the target CPU. Any mixed use of
+		  -1, reversed ranges, out-of-range indices, or non-zero
+		  reserved arguments is rejected with -EINVAL, either by the
+		  kernel before the request is issued or by firmware.
+		  If firmware reports PFDI_RET_FAULT_FOUND, the ioctl returns
+		  -EFAULT and copies a signed 64-bit failing test part
+		  identifier to struct pfdi_test_run.ft_id. If the failing
+		  part cannot be identified, ft_id is set to
+		  PFDI_RET_UNKNOWN.
+
+		* PFDI_IOCTL_PE_TEST_RESULT
+		  Fetch the stored out-of-reset test result for the target CPU.
+		  If firmware reports PFDI_RET_FAULT_FOUND, the ioctl returns
+		  -EFAULT and copies a signed 64-bit failing test part
+		  identifier to userspace. If the failing part cannot be
+		  identified, the copied value is PFDI_RET_UNKNOWN. If no
+		  power-on tests were executed on the target CPU, the ioctl
+		  returns -EAGAIN.
+
+		* PFDI_IOCTL_FW_CHECK
+		  Ask firmware to execute platform firmware resident software
+		  integrity checks. The ioctl returns 0 when no fault is
+		  detected. It returns -EFAULT when firmware reports a fault.
+		  Platforms that do not implement firmware integrity checks
+		  still report success.
+
+		* PFDI_IOCTL_FORCE_ERROR
+		  Schedule injection of a specific PFDI return value for the
+		  next invocation of a selected PFDI function on the same
+		  CPU. The requested function ID must be a supported PFDI
+		  function IDs. Only one pending injected error is permitted
+		  per CPU and function, and a new request replaces any older
+		  undelivered request for the same pair. When the injection
+		  is delivered, firmware returns the injected value in x0 and
+		  zeros x1 to x4.
+
+		These device nodes reflect the PFDI 1.0 ALP0 specification.
+		PFDI state is not persistent across reset or firmware update;
+		userspace must rediscover capabilities and any test state
+		after such events.
+
+		These nodes are intended for platform bring-up and validation.
+		Access should therefore be restricted to privileged software.
+
+Users:		Platform validation and manufacturing test tools
