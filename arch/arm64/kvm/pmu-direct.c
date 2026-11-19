@@ -91,6 +91,41 @@ static u64 kvm_vcpu_pmu_guest_counter_mask(struct kvm_vcpu *vcpu)
 
 static void kvm_pmu_set_guest_owned(struct kvm_vcpu *vcpu);
 
+/**
+ * kvm_pmu_part_ovf32_mask() - Counters requiring 32-bit overflow emulation
+ * @vcpu: Pointer to vcpu struct
+ *
+ * When L1 sub-partitions its counters (vHPMN < N_L1) on FEAT_PMUv3p5 and
+ * configures mismatched overflow widths (vPMCR_EL0.LP != vMDCR_EL2.HLP),
+ * physical PMCR_EL0.LP is forced to 1 and the 32-bit sub-range is biased
+ * 2^32 events below 64-bit overflow.
+ *
+ * Return: Bitmask of general-purpose counters requiring 32-bit overflow bias
+ */
+u64 kvm_pmu_part_ovf32_mask(struct kvm_vcpu *vcpu)
+{
+	u64 hyp_mask = kvm_pmu_hyp_counter_mask(vcpu);
+	u64 pmcr, mdcr, ev_mask;
+	bool lp, hlp;
+
+	if (!hyp_mask ||
+	    !kvm_has_feat(vcpu->kvm, ID_AA64DFR0_EL1, PMUVer, V3P5))
+		return 0;
+
+	pmcr = __vcpu_sys_reg(vcpu, PMCR_EL0);
+	mdcr = __vcpu_sys_reg(vcpu, MDCR_EL2);
+	lp = !!(pmcr & ARMV8_PMU_PMCR_LP);
+	hlp = !!(mdcr & MDCR_EL2_HLP);
+	if (lp == hlp)
+		return 0;
+
+	ev_mask = kvm_vcpu_pmu_guest_counter_mask(vcpu) &
+		  ~BIT_ULL(ARMV8_PMU_CYCLE_IDX);
+	if (!(ev_mask & ~hyp_mask))
+		return 0;
+
+	return lp ? hyp_mask : (ev_mask & ~hyp_mask);
+}
 static u64 kvm_pmu_part_active_cnten_mask(struct kvm_vcpu *vcpu)
 {
 	u64 guest_mask = kvm_vcpu_pmu_guest_counter_mask(vcpu);
@@ -110,6 +145,8 @@ static u64 kvm_pmu_part_active_cnten_mask(struct kvm_vcpu *vcpu)
 static void kvm_pmu_part_sync_hw_enables(struct kvm_vcpu *vcpu)
 {
 	u64 guest_mask = kvm_vcpu_pmu_guest_counter_mask(vcpu);
+	u64 ev_mask = guest_mask & ~BIT_ULL(ARMV8_PMU_CYCLE_IDX);
+	u64 hyp_mask = kvm_pmu_hyp_counter_mask(vcpu);
 	u64 cnten = __vcpu_sys_reg(vcpu, PMCNTENSET_EL0) &
 		    kvm_pmu_part_active_cnten_mask(vcpu);
 	u64 pmcr = __vcpu_sys_reg(vcpu, PMCR_EL0);
@@ -123,10 +160,107 @@ static void kvm_pmu_part_sync_hw_enables(struct kvm_vcpu *vcpu)
 	pmcr &= pmcr_mask;
 	if (mdcr & MDCR_EL2_HPME)
 		pmcr |= ARMV8_PMU_PMCR_E;
+	if (kvm_has_feat(vcpu->kvm, ID_AA64DFR0_EL1, PMUVer, V3P5)) {
+		if (ev_mask && !(ev_mask & ~hyp_mask)) {
+			if (mdcr & MDCR_EL2_HLP)
+				pmcr |= ARMV8_PMU_PMCR_LP;
+			else
+				pmcr &= ~ARMV8_PMU_PMCR_LP;
+		} else if (vcpu->arch.pmu.ovf32_mask) {
+			pmcr |= ARMV8_PMU_PMCR_LP;
+		}
+	}
 
 	write_sysreg(~cnten & guest_mask, pmcntenclr_el0);
 	write_sysreg(cnten & guest_mask, pmcntenset_el0);
 	write_sysreg(pmcr, pmcr_el0);
+}
+
+static void kvm_pmu_part_write_hw_cntr(struct kvm_vcpu *vcpu, u8 idx, u64 val)
+{
+	if (idx == ARMV8_PMU_CYCLE_IDX) {
+		write_pmccntr(val);
+		return;
+	}
+
+	if (vcpu->arch.pmu.ovf32_mask & BIT_ULL(idx)) {
+		vcpu->arch.pmu.ovf32_offset[idx] =
+			(val & GENMASK_ULL(63, 32)) + BIT_ULL(32);
+		val = GENMASK_ULL(63, 32) | lower_32_bits(val);
+	}
+
+	write_pmevcntrn(idx, val);
+}
+
+static void kvm_pmu_part_rebias_single(struct kvm_vcpu *vcpu, u8 idx)
+{
+	u64 phys_val, arch_val, cnten;
+
+	phys_val = read_pmevcntrn(idx);
+	if (upper_32_bits(phys_val) == U32_MAX)
+		return;
+
+	cnten = read_sysreg(pmcntenset_el0) & BIT_ULL(idx);
+	if (cnten) {
+		write_sysreg(cnten, pmcntenclr_el0);
+		isb();
+	}
+
+	if (read_sysreg(pmovsset_el0) & BIT_ULL(idx)) {
+		__vcpu_rmw_sys_reg(vcpu, PMOVSSET_EL0, |=, BIT_ULL(idx));
+		write_sysreg(BIT_ULL(idx), pmovsclr_el0);
+	}
+
+	phys_val = read_pmevcntrn(idx);
+	arch_val = phys_val + vcpu->arch.pmu.ovf32_offset[idx];
+	kvm_pmu_part_write_hw_cntr(vcpu, idx, arch_val);
+
+	if (cnten) {
+		isb();
+		write_sysreg(cnten, pmcntenset_el0);
+	}
+}
+
+static void kvm_pmu_part_rebias_ovf32(struct kvm_vcpu *vcpu)
+{
+	unsigned long mask = vcpu->arch.pmu.ovf32_mask;
+	u8 i;
+
+	for_each_set_bit(i, &mask, ARMV8_PMU_MAX_GENERAL_COUNTERS)
+		kvm_pmu_part_rebias_single(vcpu, i);
+}
+
+static void kvm_pmu_direct_cntr_write(struct kvm_vcpu *vcpu, u8 idx, u64 val)
+{
+	lockdep_assert_preemption_disabled();
+
+	__vcpu_assign_sys_reg(vcpu, PMEVCNTR0_EL0 + idx, val);
+	if (kvm_pmu_part_on_cpu(vcpu))
+		kvm_pmu_part_write_hw_cntr(vcpu, idx, val);
+}
+
+static u64 kvm_pmu_direct_cntr_read(struct kvm_vcpu *vcpu, u8 idx)
+{
+	lockdep_assert_preemption_disabled();
+
+	if (!kvm_pmu_part_on_cpu(vcpu))
+		return __vcpu_sys_reg(vcpu, PMEVCNTR0_EL0 + idx);
+
+	if (idx == ARMV8_PMU_CYCLE_IDX)
+		return read_pmccntr();
+
+	if (vcpu->arch.pmu.ovf32_mask & BIT_ULL(idx)) {
+		unsigned long flags;
+		u64 val;
+
+		local_irq_save(flags);
+		kvm_pmu_part_rebias_single(vcpu, idx);
+		val = read_pmevcntrn(idx) + vcpu->arch.pmu.ovf32_offset[idx];
+		local_irq_restore(flags);
+		return val;
+	}
+
+	return read_pmevcntrn(idx);
 }
 
 static void kvm_pmu_direct_cnten_write(struct kvm_vcpu *vcpu, u64 val, bool set)
@@ -172,11 +306,12 @@ static void kvm_pmu_direct_pmcr_write(struct kvm_vcpu *vcpu, u64 val)
 	bool reset_p = val & ARMV8_PMU_PMCR_P;
 	bool reset_c = val & ARMV8_PMU_PMCR_C;
 	unsigned long mask;
-	u64 pmcr_mask;
+	u64 old, pmcr_mask;
 	int i;
 
 	lockdep_assert_preemption_disabled();
 
+	old = __vcpu_sys_reg(vcpu, PMCR_EL0);
 	if (!kvm_has_feat(vcpu->kvm, ID_AA64DFR0_EL1, PMUVer, V3P5))
 		val &= ~ARMV8_PMU_PMCR_LP;
 
@@ -195,6 +330,9 @@ static void kvm_pmu_direct_pmcr_write(struct kvm_vcpu *vcpu, u64 val)
 			__vcpu_assign_sys_reg(vcpu, PMEVCNTR0_EL0 + i, 0);
 	}
 
+	if (((old ^ val) & ARMV8_PMU_PMCR_LP) && kvm_pmu_hyp_counter_mask(vcpu))
+		kvm_make_request(KVM_REQ_RELOAD_PMU, vcpu);
+
 	if (val & ARMV8_PMU_PMCR_E)
 		kvm_pmu_set_guest_owned(vcpu);
 
@@ -206,7 +344,7 @@ static void kvm_pmu_direct_pmcr_write(struct kvm_vcpu *vcpu, u64 val)
 
 	if (reset_p) {
 		for_each_set_bit(i, &mask, ARMV8_PMU_MAX_GENERAL_COUNTERS)
-			write_pmevcntrn(i, 0);
+			kvm_pmu_part_write_hw_cntr(vcpu, i, 0);
 	}
 
 	if (vcpu->arch.pmu.multiplex_enables)
@@ -302,33 +440,6 @@ static void kvm_pmu_set_guest_counters(struct arm_pmu *cpu_pmu, u64 guest_mask)
 		/* Host was never using guest counters anyway */
 		bitmap_copy(cpuc->cntr_mask, new_mask, ARMPMU_MAX_HWEVENTS);
 	local_irq_restore(flags);
-}
-
-static u64 kvm_pmu_direct_cntr_read(struct kvm_vcpu *vcpu, u8 idx)
-{
-	lockdep_assert_preemption_disabled();
-
-	if (!kvm_pmu_part_on_cpu(vcpu))
-		return __vcpu_sys_reg(vcpu, PMEVCNTR0_EL0 + idx);
-
-	if (idx == ARMV8_PMU_CYCLE_IDX)
-		return read_pmccntr();
-
-	return read_pmevcntrn(idx);
-}
-
-static void kvm_pmu_direct_cntr_write(struct kvm_vcpu *vcpu, u8 idx, u64 val)
-{
-	lockdep_assert_preemption_disabled();
-
-	__vcpu_assign_sys_reg(vcpu, PMEVCNTR0_EL0 + idx, val);
-	if (!kvm_pmu_part_on_cpu(vcpu))
-		return;
-
-	if (idx == ARMV8_PMU_CYCLE_IDX)
-		write_pmccntr(val);
-	else
-		write_pmevcntrn(idx, val);
 }
 
 /**
@@ -617,6 +728,7 @@ static void __kvm_pmu_load(struct kvm_vcpu *vcpu, bool reserve_counters)
 
 	vcpu->arch.pmu.loaded_on_cpu = true;
 	vcpu->arch.pmu.multiplex_enables = !!kvm_pmu_hyp_counter_mask(vcpu);
+	vcpu->arch.pmu.ovf32_mask = kvm_pmu_part_ovf32_mask(vcpu);
 	kvm_arm_setup_mdcr_el2(vcpu);
 	isb();
 
@@ -624,11 +736,7 @@ static void __kvm_pmu_load(struct kvm_vcpu *vcpu, bool reserve_counters)
 
 	for_each_set_bit(i, &guest_counters, ARMPMU_MAX_HWEVENTS) {
 		val = __vcpu_sys_reg(vcpu, PMEVCNTR0_EL0 + i);
-
-		if (i == ARMV8_PMU_CYCLE_IDX)
-			write_pmccntr(val);
-		else
-			write_pmevcntrn(i, val);
+		kvm_pmu_part_write_hw_cntr(vcpu, i, val);
 	}
 
 	if (!(vcpu->arch.mdcr_el2 & MDCR_EL2_TPM)) {
@@ -754,6 +862,8 @@ static void __kvm_pmu_put(struct kvm_vcpu *vcpu, bool release_counters)
 			write_pmccntr(0);
 		} else {
 			val = read_pmevcntrn(i);
+			if (vcpu->arch.pmu.ovf32_mask & BIT_ULL(i))
+				val += vcpu->arch.pmu.ovf32_offset[i];
 			write_pmevcntrn(i, 0);
 		}
 
@@ -793,6 +903,7 @@ static void __kvm_pmu_put(struct kvm_vcpu *vcpu, bool release_counters)
 
 	vcpu->arch.pmu.loaded_on_cpu = false;
 	vcpu->arch.pmu.multiplex_enables = false;
+	vcpu->arch.pmu.ovf32_mask = 0;
 	kvm_arm_setup_mdcr_el2(vcpu);
 	isb();
 
@@ -824,9 +935,9 @@ void kvm_pmu_put(struct kvm_vcpu *vcpu)
  * kvm_pmu_reload_part() - Reload partitioned PMU traps, filters, and state
  * @vcpu: Pointer to struct kvm_vcpu
  *
- * Refresh fine-grained traps, MDCR_EL2 trap bits, event filters, and
- * enable multiplexing without releasing the host counter reservation
- * when the partitioned PMU is already loaded on the CPU.
+ * Refresh fine-grained traps, MDCR_EL2 trap bits, event filters, enable
+ * multiplexing, and 32-bit overflow bias without releasing the host counter
+ * reservation when the partitioned PMU is already loaded on the CPU.
  */
 void kvm_pmu_reload_part(struct kvm_vcpu *vcpu)
 {
@@ -946,6 +1057,8 @@ bool kvm_pmu_part_overflow_status(struct kvm_vcpu *vcpu)
 			__vcpu_rmw_sys_reg(vcpu, PMOVSSET_EL0, |=, hw_ovf);
 			write_sysreg(hw_ovf, pmovsclr_el0);
 		}
+		if (!in_interrupt() && vcpu->arch.pmu.ovf32_mask)
+			kvm_pmu_part_rebias_ovf32(vcpu);
 		pmint = read_pmintenset();
 		if (vcpu->arch.pmu.multiplex_enables)
 			pmcr = __vcpu_sys_reg(vcpu, PMCR_EL0);

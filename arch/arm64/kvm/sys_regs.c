@@ -3185,7 +3185,8 @@ static bool access_mdcr(struct kvm_vcpu *vcpu,
 	 * affected by MDCR_EL2.
 	 */
 	if ((old ^ val) & (MDCR_EL2_HPME | MDCR_EL2_HPMN | MDCR_EL2_HPMD |
-			   MDCR_EL2_HCCD | MDCR_EL2_TPM | MDCR_EL2_TPMCR))
+			   MDCR_EL2_HCCD | MDCR_EL2_HLP | MDCR_EL2_TPM |
+			   MDCR_EL2_TPMCR))
 		kvm_make_request(KVM_REQ_RELOAD_PMU, vcpu);
 
 	return true;

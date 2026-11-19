@@ -1803,6 +1803,8 @@ static void __compute_hdfgrtr(struct kvm_vcpu *vcpu)
 
 		if (kvm_pmu_hyp_counter_mask(vcpu))
 			set |= HDFGRTR_EL2_PMCNTEN;
+		if (kvm_pmu_part_ovf32_mask(vcpu))
+			set |= HDFGRTR_EL2_PMEVCNTRn_EL0;
 
 		*vcpu_fgt(vcpu, HDFGRTR_EL2) |= set & ~hdfgrtr_masks.res0;
 	}
@@ -1825,6 +1827,8 @@ static void __compute_hdfgwtr(struct kvm_vcpu *vcpu)
 
 		if (kvm_pmu_hyp_counter_mask(vcpu))
 			set |= HDFGWTR_EL2_PMCNTEN;
+		if (kvm_pmu_part_ovf32_mask(vcpu))
+			set |= HDFGWTR_EL2_PMEVCNTRn_EL0;
 
 		*vcpu_fgt(vcpu, HDFGWTR_EL2) |= set & ~hdfgwtr_masks.res0;
 	}
