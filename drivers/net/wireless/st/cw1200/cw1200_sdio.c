@@ -143,37 +143,35 @@ static irqreturn_t cw1200_gpio_irq(int irq, void *dev_id)
 static int cw1200_request_irq(struct hwbus_priv *self)
 {
 	int ret;
-	u8 cccr;
+	int err;
+	u8 ien;
 
-	cccr = sdio_f0_readb(self->func, SDIO_CCCR_IENx, &ret);
-	if (WARN_ON(ret))
-		goto err;
+	ien = sdio_f0_readb(self->func, SDIO_CCCR_IENx, &ret);
+	if (ret)
+		return ret;
 
-	/* Master interrupt enable ... */
-	cccr |= BIT(0);
-
-	/* ... for our function */
-	cccr |= BIT(self->func->num);
-
-	sdio_f0_writeb(self->func, cccr, SDIO_CCCR_IENx, &ret);
-	if (WARN_ON(ret))
-		goto err;
+	sdio_f0_writeb(self->func, ien | BIT(0) | BIT(self->func->num),
+		       SDIO_CCCR_IENx, &ret);
+	if (ret)
+		return ret;
 
 	ret = enable_irq_wake(self->pdata->irq);
-	if (WARN_ON(ret))
-		goto err;
+	if (ret)
+		goto restore_ien;
 
 	/* Request the IRQ */
 	ret =  request_threaded_irq(self->pdata->irq, cw1200_gpio_hardirq,
 				    cw1200_gpio_irq,
 				    IRQF_TRIGGER_HIGH | IRQF_ONESHOT,
 				    "cw1200_wlan_irq", self);
-	if (WARN_ON(ret))
-		goto err;
+	if (!ret)
+		return 0;
 
-	return 0;
-
-err:
+	disable_irq_wake(self->pdata->irq);
+restore_ien:
+	sdio_f0_writeb(self->func, ien, SDIO_CCCR_IENx, &err);
+	if (err)
+		dev_warn(&self->func->dev, "cannot restore interrupt enables: %d\n", err);
 	return ret;
 }
 
