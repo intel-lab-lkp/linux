@@ -846,7 +846,7 @@ unsigned long bitmap_read(const unsigned long *map, unsigned long start, unsigne
 	if (unlikely(!nbits || nbits > BITS_PER_LONG))
 		return 0;
 
-	if (space >= nbits)
+	if (space >= nbits || offset == 0)
 		return (map[index] >> offset) & BITMAP_LAST_WORD_MASK(nbits);
 
 	value_low = map[index] & BITMAP_FIRST_WORD_MASK(start);
@@ -874,25 +874,23 @@ void bitmap_write(unsigned long *map, unsigned long value,
 		  unsigned long start, unsigned long nbits)
 {
 	size_t index;
-	unsigned long offset;
-	unsigned long space;
-	unsigned long mask;
-	bool fit;
+	unsigned long offset = start % BITS_PER_LONG;
+	unsigned long space = BITS_PER_LONG - offset;
 
 	if (unlikely(!nbits || nbits > BITS_PER_LONG))
 		return;
 
-	mask = BITMAP_LAST_WORD_MASK(nbits);
-	value &= mask;
-	offset = start % BITS_PER_LONG;
-	space = BITS_PER_LONG - offset;
-	fit = space >= nbits;
+	value &= BITMAP_LAST_WORD_MASK(nbits);
 	index = BIT_WORD(start);
 
-	map[index] &= (fit ? (~(mask << offset)) : ~BITMAP_FIRST_WORD_MASK(start));
-	map[index] |= value << offset;
-	if (fit)
+	if (space >= nbits || offset == 0) {
+		map[index] &= ~(BITMAP_LAST_WORD_MASK(nbits) << offset);
+		map[index] |= value << offset;
 		return;
+	}
+
+	map[index] &= ~BITMAP_FIRST_WORD_MASK(start);
+	map[index] |= value << offset;
 
 	map[index + 1] &= BITMAP_FIRST_WORD_MASK(start + nbits);
 	map[index + 1] |= (value >> space);
