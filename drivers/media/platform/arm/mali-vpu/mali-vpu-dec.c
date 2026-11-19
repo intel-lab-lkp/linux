@@ -28,6 +28,8 @@ void mali_vpu_session_init_dec(struct mali_vpu_session *sess)
 int mali_vpu_ctrl_set_ignore_stream_headers(struct mali_vpu_session *sess,
 					    u32 cid, s64 value)
 {
+	struct mali_vpu_fw_set_option option;
+
 	if (cid != V4L2_CID_MALI_VPU_IGNORE_STREAM_HEADERS)
 		return -EINVAL;
 
@@ -37,14 +39,17 @@ int mali_vpu_ctrl_set_ignore_stream_headers(struct mali_vpu_session *sess,
 	if (value != 0 && value != 1)
 		return -EINVAL;
 
-	(void)sess;
-	(void)value;
-	return 0;
+	option.code = MALI_VPU_FW_SET_IGNORE_STREAM_HEADERS;
+	option.ignore_stream_headers = value;
+
+	return mali_vpu_session_fw_send_set_option(sess, &option);
 }
 
 int mali_vpu_ctrl_set_frame_reordering(struct mali_vpu_session *sess, u32 cid,
 				       s64 value)
 {
+	struct mali_vpu_fw_set_option option;
+
 	if (cid != V4L2_CID_MALI_VPU_FRAME_REORDERING)
 		return -EINVAL;
 
@@ -54,7 +59,8 @@ int mali_vpu_ctrl_set_frame_reordering(struct mali_vpu_session *sess, u32 cid,
 	if (value != 0 && value != 1)
 		return -EINVAL;
 
-	(void)sess;
-	(void)value;
-	return 0;
+	option.code = MALI_VPU_FW_SET_FRAME_REORDERING;
+	option.frame_reordering = value;
+
+	return mali_vpu_session_fw_send_set_option(sess, &option);
 }

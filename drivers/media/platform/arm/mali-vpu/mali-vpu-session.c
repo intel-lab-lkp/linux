@@ -68,6 +68,12 @@ mali_vpu_both_ports_unrequested(struct mali_vpu_session *sess)
 	       !sess->port_dst.stream_requested;
 }
 
+int mali_vpu_session_fw_send_set_option(struct mali_vpu_session *sess,
+					struct mali_vpu_fw_set_option *opt)
+{
+	return mali_vpu_fw_send_set_option(&sess->fw, opt);
+}
+
 int mali_vpu_session_init(struct mali_vpu_session *sess)
 {
 	int ret;
@@ -91,7 +97,6 @@ int mali_vpu_session_init(struct mali_vpu_session *sess)
 		goto err_mutex_destroy;
 	}
 
-	sess->is_fw_ready = false;
 	sess->fw_bin_state = MALI_VPU_SESSION_FW_BIN_UNINITIALIZED;
 
 	ret = mali_vpu_ctrls_init(sess);

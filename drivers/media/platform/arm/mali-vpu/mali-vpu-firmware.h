@@ -6,6 +6,7 @@
 #ifndef __MALI_VPU_FIRMWARE_H__
 #define __MALI_VPU_FIRMWARE_H__
 
+#include <linux/media/arm/mali-vpu-config.h>
 #include <linux/types.h>
 
 #define MALI_VPU_FW_TEXT_BASE_ADDR 0x1000u
@@ -36,6 +37,46 @@ struct mali_vpu_fw_job {
 };
 
 /**
+ * enum mali_vpu_fw_set_option_code - Firmware option selectors
+ * @MALI_VPU_FW_SET_NALU_FORMAT: Set the NAL-unit format.
+ * @MALI_VPU_FW_SET_STREAM_ESCAPING: Configure stream escaping.
+ * @MALI_VPU_FW_SET_HOST_PROTOCOL_PRINTS: Configure firmware logging.
+ * @MALI_VPU_FW_SET_IGNORE_STREAM_HEADERS: Configure stream-header handling.
+ * @MALI_VPU_FW_SET_FRAME_REORDERING: Configure frame reordering.
+ * @MALI_VPU_FW_SET_INTBUF_SIZE: Set the suggested intermediate-buffer size.
+ */
+enum mali_vpu_fw_set_option_code {
+	MALI_VPU_FW_SET_NALU_FORMAT,
+	MALI_VPU_FW_SET_STREAM_ESCAPING,
+	MALI_VPU_FW_SET_HOST_PROTOCOL_PRINTS,
+	MALI_VPU_FW_SET_IGNORE_STREAM_HEADERS,
+	MALI_VPU_FW_SET_FRAME_REORDERING,
+	MALI_VPU_FW_SET_INTBUF_SIZE,
+};
+
+/**
+ * struct mali_vpu_fw_set_option - Set firmware options.
+ * @code: Code for the option to set.
+ * @nalu_format: NAL-unit encapsulation format.
+ * @stream_escaping: Whether stream escaping is enabled.
+ * @host_protocol_prints: Whether firmware protocol logging is enabled.
+ * @ignore_stream_headers: Whether firmware ignores stream headers.
+ * @frame_reordering: Whether frame reordering is enabled.
+ * @intbuf_size: Suggested intermediate-buffer size.
+ */
+struct mali_vpu_fw_set_option {
+	enum mali_vpu_fw_set_option_code code;
+	union {
+		enum mali_vpu_nalu_format nalu_format;
+		bool stream_escaping;
+		bool host_protocol_prints;
+		bool ignore_stream_headers;
+		bool frame_reordering;
+		u32 intbuf_size;
+	};
+};
+
+/**
  * struct mali_vpu_fw_error - Firmware error message.
  * @error_code: What kind of error that was reported.
  * @message: Error message string.
@@ -61,6 +102,8 @@ struct mali_vpu_fw_error {
  * @MALI_VPU_FW_CODE_PING: Ping request sent to firmware.
  * @MALI_VPU_FW_CODE_PONG: Firmware responded to a ping request.
  * @MALI_VPU_FW_CODE_IDLE: Firmware informs the driver that it's idle.
+ * @MALI_VPU_FW_CODE_SET_OPTION: Firmware set option request or success response.
+ * @MALI_VPU_FW_CODE_SET_OPTION_FAIL: Firmware set option failure response.
  * @MALI_VPU_FW_CODE_STATE_CHANGE: Firmware state-change request or response.
  * @MALI_VPU_FW_CODE_SWITCH_IN: Firmware was booted on a Core in a session.
  * @MALI_VPU_FW_CODE_SWITCH_OUT: The last core in a session was switched out.
@@ -68,15 +111,17 @@ struct mali_vpu_fw_error {
  * @MALI_VPU_FW_CODE_MAX: Sentinel marking the end of the message-code enum.
  */
 enum mali_vpu_fw_code {
-	MALI_VPU_FW_CODE_ERROR,        /* Driver <- Firmware. */
-	MALI_VPU_FW_CODE_JOB,          /* Driver -> Firmware. */
-	MALI_VPU_FW_CODE_PING,         /* Driver -> Firmware. */
-	MALI_VPU_FW_CODE_PONG,         /* Driver <- Firmware. */
-	MALI_VPU_FW_CODE_IDLE,         /* Driver <- Firmware. */
-	MALI_VPU_FW_CODE_STATE_CHANGE, /* Driver <-> Firmware. */
-	MALI_VPU_FW_CODE_SWITCH_IN,    /* Driver <- Firmware. */
-	MALI_VPU_FW_CODE_SWITCH_OUT,   /* Driver <-> Firmware. */
-	MALI_VPU_FW_CODE_UNKNOWN,      /* Driver <- Firmware. */
+	MALI_VPU_FW_CODE_ERROR,              /* Driver <- Firmware. */
+	MALI_VPU_FW_CODE_JOB,                /* Driver -> Firmware. */
+	MALI_VPU_FW_CODE_PING,               /* Driver -> Firmware. */
+	MALI_VPU_FW_CODE_PONG,               /* Driver <- Firmware. */
+	MALI_VPU_FW_CODE_IDLE,               /* Driver <- Firmware. */
+	MALI_VPU_FW_CODE_SET_OPTION,         /* Driver <-> Firmware. */
+	MALI_VPU_FW_CODE_SET_OPTION_FAIL,    /* Driver <- Firmware. */
+	MALI_VPU_FW_CODE_STATE_CHANGE,       /* Driver <-> Firmware. */
+	MALI_VPU_FW_CODE_SWITCH_IN,          /* Driver <- Firmware. */
+	MALI_VPU_FW_CODE_SWITCH_OUT,         /* Driver <-> Firmware. */
+	MALI_VPU_FW_CODE_UNKNOWN,            /* Driver <- Firmware. */
 	MALI_VPU_FW_CODE_MAX
 };
 
@@ -161,6 +206,7 @@ struct mali_vpu_fw_proto_page {
  * @bss_pages: Private BSS pages allocated separately for each core instance.
  * @shared_bss_pages: Shared BSS pages mapped into every core instance.
  * @ncores: Number of firmware core-instance regions constructed.
+ * @pending_response_count: Number of requests awaiting a firmware response.
  */
 struct mali_vpu_fw {
 	struct device *dev;
@@ -178,6 +224,7 @@ struct mali_vpu_fw {
 	struct mali_vpu_mmu_pages *bss_pages;
 	struct mali_vpu_mmu_pages *shared_bss_pages;
 	u32 ncores;
+	u32 pending_response_count;
 };
 
 int mali_vpu_fw_construct(struct mali_vpu_fw *fw, const struct mali_vpu_fw_bin *fw_bin,
@@ -186,6 +233,7 @@ void mali_vpu_fw_cleanup(struct mali_vpu_fw *fw);
 int mali_vpu_fw_send_job(struct mali_vpu_fw *fw, u16 cores, u16 frames);
 int mali_vpu_fw_send_ping(struct mali_vpu_fw *fw);
 int mali_vpu_fw_send_state_change(struct mali_vpu_fw *fw, enum mali_vpu_fw_state state);
+int mali_vpu_fw_send_set_option(struct mali_vpu_fw *fw, struct mali_vpu_fw_set_option *option);
 int mali_vpu_fw_parse_msg(struct mali_vpu_fw *fw, struct mali_vpu_fw_msg *msg);
 
 #endif /* __MALI_VPU_FIRMWARE_H__ */

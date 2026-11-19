@@ -65,7 +65,6 @@ enum mali_vpu_session_fw_bin_state {
  * @port_dst: Destination (CAPTURE) port for this session.
  * @mmu: MMU handle for this session
  * @vq_lock: Mutex lock to serialise per-session queue related ioctls.
- * @is_fw_ready: True if the firmware is loaded and ready to accept commands.
  * @min_buffers_required: Driver-reported minimum buffers for role-specific queue.
  * @ctrls_caps: Variant-provided immutable control capability table.
  * @num_ctrls_caps: Number of entries in @ctrls_caps.
@@ -86,7 +85,6 @@ struct mali_vpu_session {
 	struct mali_vpu_port		port_dst;
 	struct mali_vpu_mmu		mmu;
 	struct mutex			vq_lock; /* lock to serialise per-session ioctls */
-	bool				is_fw_ready;
 	u32				min_buffers_required;
 
 	const struct mali_vpu_ctrl_desc *ctrls_caps;
@@ -107,6 +105,8 @@ struct mali_vpu_session {
 int mali_vpu_session_init(struct mali_vpu_session *sess);
 int mali_vpu_session_cleanup(struct mali_vpu_session *sess);
 int mali_vpu_session_request_fw_load(struct mali_vpu_session *sess);
+int mali_vpu_session_fw_send_set_option(struct mali_vpu_session *sess,
+					struct mali_vpu_fw_set_option *opt);
 
 static inline struct mali_vpu_session *mali_vpu_get_session(struct file *filp)
 {

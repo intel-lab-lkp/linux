@@ -173,7 +173,10 @@ struct mve_msg_header {
 		#define MVE_REQUEST_CODE_STOP                 (1002) /* no extra data */
 		#define MVE_REQUEST_CODE_PING                 (1006) /* no extra data */
 		#define MVE_REQUEST_CODE_JOB                  (1009) /* struct mve_request_job */
-
+		#define MVE_REQUEST_CODE_SET_OPTION           (1010) /* struct
+								      * mve_request_set_option
+								      * (variable size)
+								      */
 		/*
 		 * RESPONSEs are messages from
 		 * the firmware to the host:
@@ -182,6 +185,7 @@ struct mve_msg_header {
 		#define MVE_RESPONSE_CODE_SWITCHED_IN         (2001)
 		/* struct mve_response_switched_out */
 		#define MVE_RESPONSE_CODE_SWITCHED_OUT        (2002)
+		#define MVE_RESPONSE_CODE_SET_OPTION_CONFIRM  (2003)
 		/* struct mve_response_job_dequeued */
 		#define MVE_RESPONSE_CODE_JOB_DEQUEUED        (2004)
 		#define MVE_RESPONSE_CODE_PONG                (2009)
@@ -190,6 +194,8 @@ struct mve_msg_header {
 		/* struct mve_response_state_change */
 		#define MVE_RESPONSE_CODE_STATE_CHANGE        (2011)
 		#define MVE_RESPONSE_CODE_IDLE                (2013)
+		/* struct mve_response_set_option_fail */
+		#define MVE_RESPONSE_CODE_SET_OPTION_FAIL     (2017)
 
 	u16 size; /* size in bytes of trailing data, 0 if none */
 };
@@ -208,6 +214,42 @@ struct mve_request_job {
 	u16 frames; /* number of frames to process, zero means infinite */
 	u32 flags; /* can be zero */
 		#define MVE_JOB_FLAG_DISABLE_BNDMGR (0x01)
+};
+
+struct mve_request_set_option {
+	u32 index;
+		#define MVE_SET_OPT_INDEX_NALU_FORMAT              (1)  /* see arg,
+									 * MVE_OPT_NALU_FORMAT_
+									 */
+		#define MVE_SET_OPT_INDEX_STREAM_ESCAPING          (2)  /* arg=1 to enable (def),
+									 * arg=0 to disable
+									 */
+		#define MVE_SET_OPT_INDEX_HOST_PROTOCOL_PRINTS     (4)  /* arg=1 to enable,
+									 * arg=0 to disable (def)
+									 */
+		#define MVE_SET_OPT_INDEX_IGNORE_STREAM_HEADERS    (7)  /* decode, arg=1 to enable,
+									 * arg=0 to disable (def)
+									 */
+		#define MVE_SET_OPT_INDEX_FRAME_REORDERING         (8)  /* decode arg=1 enable(def),
+									 * arg=0 to disable
+									 */
+		#define MVE_SET_OPT_INDEX_INTBUF_SIZE              (9)  /* decode, arg = suggested
+									 * limit of intermediate
+									 * buffer allocation
+									 */
+	union {
+		u32 arg; /* Most options only need a u32 as argument */
+		/*
+		 * For option MVE_SET_OPT_INDEX_NALU_FORMAT, arg should
+		 * be one of these:
+		 */
+		#define MVE_OPT_NALU_FORMAT_START_CODES             (1)
+		#define MVE_OPT_NALU_FORMAT_ONE_NALU_PER_BUFFER     (2)
+		#define MVE_OPT_NALU_FORMAT_ONE_BYTE_LENGTH_FIELD   (4)
+		#define MVE_OPT_NALU_FORMAT_TWO_BYTE_LENGTH_FIELD   (8)
+		#define MVE_OPT_NALU_FORMAT_FOUR_BYTE_LENGTH_FIELD  (16)
+		#define MVE_OPT_NALU_FORMAT_MBINFO                  (32) /* debugging only */
+	} data;
 };
 
 /*********************************************************************
@@ -264,6 +306,30 @@ struct mve_response_error {
 		#define MVE_ERROR_WATCHDOG       (9)
 
 		#define MVE_MAX_ERROR_MESSAGE_SIZE  (128)
+	char message[MVE_MAX_ERROR_MESSAGE_SIZE];
+};
+
+/*
+ * When a set-option succeeds, a confirmation message is
+ * sent, including the index-code for that particular option.
+ */
+struct mve_response_set_option_confirm {
+	u32 index; /* Same as 'index' in struct mve_request_set_option */
+};
+
+/*
+ * If a set-option request fails, this message is returned.
+ * This is not a fatal error. The set-option had no effect,
+ * and the session is still alive.
+ * For example, trying to set an option with a too large
+ * or small parameter would result in this message.
+ * The included text string is meant for development and
+ * debugging purposes only.
+ * (When a set-option succeeds the set-option-confirm
+ * message code is sent instead.)
+ */
+struct mve_response_set_option_fail {
+	u32 index; /* Same as 'index' in struct mve_request_set_option */
 	char message[MVE_MAX_ERROR_MESSAGE_SIZE];
 };
 

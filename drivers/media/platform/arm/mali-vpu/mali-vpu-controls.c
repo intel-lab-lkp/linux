@@ -56,7 +56,7 @@ static int mali_vpu_apply_or_stage_ctrl(struct mali_vpu_session *sess,
 	bool staged;
 	int ret;
 
-	staged = !sess->is_fw_ready;
+	staged = sess->fw_bin_state != MALI_VPU_SESSION_FW_BIN_READY;
 
 	if (!staged) {
 		ret = desc->set(sess, state->cid, value);
@@ -267,7 +267,7 @@ int mali_vpu_apply_staged_controls(struct mali_vpu_session *sess)
 	u32 i;
 	int ret;
 
-	if (!sess->is_fw_ready)
+	if (sess->fw_bin_state != MALI_VPU_SESSION_FW_BIN_READY)
 		return -EINVAL;
 
 	for (i = 0; i < sess->num_ctrls_caps; i++) {
@@ -288,28 +288,36 @@ int mali_vpu_apply_staged_controls(struct mali_vpu_session *sess)
 int mali_vpu_ctrl_set_nalu_format(struct mali_vpu_session *sess, u32 cid,
 				  s64 value)
 {
+	struct mali_vpu_fw_set_option option;
+
 	if (cid != V4L2_CID_MALI_VPU_NALU_FORMAT)
 		return -EINVAL;
 
-	(void)sess;
-	(void)value;
-	return 0;
+	option.code = MALI_VPU_FW_SET_NALU_FORMAT;
+	option.nalu_format = value;
+
+	return mali_vpu_session_fw_send_set_option(sess, &option);
 }
 
 int mali_vpu_ctrl_set_intbuf_size(struct mali_vpu_session *sess, u32 cid,
 				  s64 value)
 {
+	struct mali_vpu_fw_set_option option;
+
 	if (cid != V4L2_CID_MALI_VPU_INTBUF_SIZE || value < 0 || value > INT_MAX)
 		return -EINVAL;
 
-	(void)sess;
-	(void)value;
-	return 0;
+	option.code = MALI_VPU_FW_SET_INTBUF_SIZE;
+	option.intbuf_size = value;
+
+	return mali_vpu_session_fw_send_set_option(sess, &option);
 }
 
 int mali_vpu_ctrl_set_stream_escaping(struct mali_vpu_session *sess, u32 cid,
 				      s64 value)
 {
+	struct mali_vpu_fw_set_option option;
+
 	if (cid != V4L2_CID_MALI_VPU_STREAM_ESCAPING)
 		return -EINVAL;
 
@@ -319,21 +327,25 @@ int mali_vpu_ctrl_set_stream_escaping(struct mali_vpu_session *sess, u32 cid,
 	if (value != 0 && value != 1)
 		return -EINVAL;
 
-	(void)sess;
-	(void)value;
-	return 0;
+	option.code = MALI_VPU_FW_SET_STREAM_ESCAPING;
+	option.stream_escaping = value;
+
+	return mali_vpu_session_fw_send_set_option(sess, &option);
 }
 
 int mali_vpu_ctrl_set_host_print_enable(struct mali_vpu_session *sess, u32 cid,
 					s64 value)
 {
+	struct mali_vpu_fw_set_option option;
+
 	if (cid != V4L2_CID_MALI_VPU_HOST_PRINT_ENABLE)
 		return -EINVAL;
 
 	if (value != 0 && value != 1)
 		return -EINVAL;
 
-	(void)sess;
-	(void)value;
-	return 0;
+	option.code = MALI_VPU_FW_SET_HOST_PROTOCOL_PRINTS;
+	option.host_protocol_prints = value;
+
+	return mali_vpu_session_fw_send_set_option(sess, &option);
 }

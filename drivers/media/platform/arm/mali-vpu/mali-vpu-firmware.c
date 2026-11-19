@@ -624,6 +624,7 @@ int mali_vpu_fw_send_ping(struct mali_vpu_fw *fw)
 int mali_vpu_fw_send_state_change(struct mali_vpu_fw *fw, enum mali_vpu_fw_state state)
 {
 	u16 code;
+	int ret;
 
 	switch (state) {
 	case MALI_VPU_FW_STATE_STOPPED:
@@ -636,13 +637,135 @@ int mali_vpu_fw_send_state_change(struct mali_vpu_fw *fw, enum mali_vpu_fw_state
 		return -EINVAL;
 	}
 
-	return mali_vpu_fw_write_msg(fw, &fw->msg_host, &fw->msg_mve, code, NULL, 0);
+	ret = mali_vpu_fw_write_msg(fw, &fw->msg_host, &fw->msg_mve, code, NULL, 0);
+	if (!ret)
+		fw->pending_response_count++;
+
+	return ret;
+}
+
+static int mali_vpu_to_mve_nalu_format(s64 nalu_format, u32 *mve_nalu_format)
+{
+	switch (nalu_format) {
+	case MALI_VPU_NALU_FORMAT_START_CODES:
+		*mve_nalu_format = MVE_OPT_NALU_FORMAT_START_CODES;
+		break;
+	case MALI_VPU_NALU_FORMAT_ONE_NALU_PER_BUFFER:
+		*mve_nalu_format = MVE_OPT_NALU_FORMAT_ONE_NALU_PER_BUFFER;
+		break;
+	case MALI_VPU_NALU_FORMAT_ONE_BYTE_LENGTH_FIELD:
+		*mve_nalu_format = MVE_OPT_NALU_FORMAT_ONE_BYTE_LENGTH_FIELD;
+		break;
+	case MALI_VPU_NALU_FORMAT_TWO_BYTE_LENGTH_FIELD:
+		*mve_nalu_format = MVE_OPT_NALU_FORMAT_TWO_BYTE_LENGTH_FIELD;
+		break;
+	case MALI_VPU_NALU_FORMAT_FOUR_BYTE_LENGTH_FIELD:
+		*mve_nalu_format = MVE_OPT_NALU_FORMAT_FOUR_BYTE_LENGTH_FIELD;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int mali_vpu_fw_send_option(struct mali_vpu_fw *fw,
+				   struct mve_request_set_option *mve_opt,
+				   size_t size)
+{
+	int ret;
+
+	ret = mali_vpu_fw_write_msg(fw, &fw->msg_host, &fw->msg_mve,
+				    MVE_REQUEST_CODE_SET_OPTION, mve_opt,
+				    offsetof(typeof(*mve_opt), data) + size);
+	if (!ret)
+		fw->pending_response_count++;
+
+	return ret;
+}
+
+int mali_vpu_fw_send_set_option(struct mali_vpu_fw *fw,
+				struct mali_vpu_fw_set_option *option)
+{
+	int ret;
+
+	switch (option->code) {
+	case MALI_VPU_FW_SET_NALU_FORMAT: {
+		struct mve_request_set_option mve_opt;
+
+		mve_opt.index = MVE_SET_OPT_INDEX_NALU_FORMAT;
+
+		ret = mali_vpu_to_mve_nalu_format(option->nalu_format,
+						  &mve_opt.data.arg);
+		if (!ret)
+			ret = mali_vpu_fw_send_option(fw, &mve_opt,
+						      sizeof(mve_opt.data.arg));
+
+		break;
+	}
+	case MALI_VPU_FW_SET_STREAM_ESCAPING: {
+		struct mve_request_set_option mve_opt;
+
+		mve_opt.index = MVE_SET_OPT_INDEX_STREAM_ESCAPING;
+		mve_opt.data.arg = option->stream_escaping ? 1 : 0;
+
+		ret = mali_vpu_fw_send_option(fw, &mve_opt,
+					      sizeof(mve_opt.data.arg));
+		break;
+	}
+	case MALI_VPU_FW_SET_HOST_PROTOCOL_PRINTS: {
+		struct mve_request_set_option mve_opt;
+
+		mve_opt.index = MVE_SET_OPT_INDEX_HOST_PROTOCOL_PRINTS;
+		mve_opt.data.arg = option->host_protocol_prints ? 1 : 0;
+
+		ret = mali_vpu_fw_send_option(fw, &mve_opt,
+					      sizeof(mve_opt.data.arg));
+		break;
+	}
+	case MALI_VPU_FW_SET_IGNORE_STREAM_HEADERS: {
+		struct mve_request_set_option mve_opt;
+
+		mve_opt.index = MVE_SET_OPT_INDEX_IGNORE_STREAM_HEADERS;
+		mve_opt.data.arg = option->ignore_stream_headers ? 1 : 0;
+
+		ret = mali_vpu_fw_send_option(fw, &mve_opt,
+					      sizeof(mve_opt.data.arg));
+		break;
+	}
+	case MALI_VPU_FW_SET_FRAME_REORDERING: {
+		struct mve_request_set_option mve_opt;
+
+		mve_opt.index = MVE_SET_OPT_INDEX_FRAME_REORDERING;
+		mve_opt.data.arg = option->frame_reordering ? 1 : 0;
+
+		ret = mali_vpu_fw_send_option(fw, &mve_opt,
+					      sizeof(mve_opt.data.arg));
+		break;
+	}
+	case MALI_VPU_FW_SET_INTBUF_SIZE: {
+		struct mve_request_set_option mve_opt;
+
+		mve_opt.index = MVE_SET_OPT_INDEX_INTBUF_SIZE;
+		mve_opt.data.arg = option->intbuf_size;
+
+		ret = mali_vpu_fw_send_option(fw, &mve_opt,
+					      sizeof(mve_opt.data.arg));
+		break;
+	}
+	default:
+		ret = -EINVAL;
+	}
+
+	return ret;
 }
 
 int mali_vpu_fw_parse_msg(struct mali_vpu_fw *fw, struct mali_vpu_fw_msg *msg)
 {
 	u16 code;
 	union {
+		struct mve_response_set_option_confirm set_option_confirm;
+		struct mve_response_set_option_fail set_option_fail;
 		struct mve_response_state_change state_change;
 		struct mve_response_error error;
 	} fw_msg = {};
@@ -691,6 +814,40 @@ int mali_vpu_fw_parse_msg(struct mali_vpu_fw *fw, struct mali_vpu_fw_msg *msg)
 		default:
 			return -EPROTO;
 		}
+
+		if (fw->pending_response_count == 0)
+			return -EPROTO;
+
+		fw->pending_response_count--;
+		break;
+	}
+	case MVE_RESPONSE_CODE_SET_OPTION_CONFIRM:
+		if (size != sizeof(fw_msg.set_option_confirm))
+			return -EPROTO;
+
+		msg->code = MALI_VPU_FW_CODE_SET_OPTION;
+
+		if (fw->pending_response_count == 0)
+			return -EPROTO;
+
+		fw->pending_response_count--;
+		break;
+	case MVE_RESPONSE_CODE_SET_OPTION_FAIL: {
+		if (size != sizeof(fw_msg.set_option_fail))
+			return -EPROTO;
+
+		dev_err(fw->dev,
+			"firmware set option failed. index=%u, msg=%.*s.\n",
+			fw_msg.set_option_fail.index,
+			(int)sizeof(fw_msg.set_option_fail.message),
+			fw_msg.set_option_fail.message);
+
+		msg->code = MALI_VPU_FW_CODE_SET_OPTION_FAIL;
+
+		if (fw->pending_response_count == 0)
+			return -EPROTO;
+
+		fw->pending_response_count--;
 		break;
 	}
 	case MVE_RESPONSE_CODE_ERROR: {
