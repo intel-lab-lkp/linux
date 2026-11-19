@@ -6,6 +6,7 @@
 #include <linux/devfreq_cooling.h>
 #include <linux/platform_device.h>
 #include <linux/pm_opp.h>
+#include <linux/property.h>
 
 #include <drm/drm_managed.h>
 #include <drm/drm_print.h>
@@ -172,6 +173,16 @@ int panthor_devfreq_init(struct panthor_device *ptdev)
 		}
 
 		ret = devm_pm_opp_of_add_table(dev);
+		if (ret == -ENODEV) {
+			if (device_property_present(dev, "mali-supply") ||
+			    device_property_present(dev, "sram-supply"))
+				return dev_err_probe(dev, -ENODEV,
+						     "GPU supplies require an OPP table\n");
+
+			/* Keep the clock provider's rate when no OPP table is present. */
+			ptdev->fast_rate = clk_get_rate(ptdev->clks.core);
+			return 0;
+		}
 		if (ret)
 			return ret;
 	} else {
@@ -324,7 +335,7 @@ unsigned long panthor_devfreq_get_freq(struct panthor_device *ptdev)
 	int ret;
 
 	if (!pdevfreq->devfreq)
-		return 0;
+		return clk_get_rate(ptdev->clks.core);
 
 	ret = pdevfreq->devfreq->profile->get_cur_freq(ptdev->base.dev, &freq);
 	if (ret)

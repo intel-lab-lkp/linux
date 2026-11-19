@@ -328,7 +328,7 @@ struct panthor_device {
 	/** @profile_mask: User-set profiling flags for job accounting. */
 	u32 profile_mask;
 
-	/** @fast_rate: Maximum device clock frequency. Set by DVFS */
+	/** @fast_rate: Maximum OPP frequency, or the clock rate without OPPs. */
 	unsigned long fast_rate;
 
 #ifdef CONFIG_DEBUG_FS
