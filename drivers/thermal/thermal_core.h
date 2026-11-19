@@ -66,7 +66,7 @@ struct thermal_governor {
 /**
  * struct thermal_zone_aggregate_entry - source zone and its coefficient
  * @tz: source thermal zone
- * @coefficient: signed multiplier for the source zone temperature
+ * @coefficient: signed multiplier in thousandths, zero when uninitialized
  */
 struct thermal_zone_aggregate_entry {
 	struct thermal_zone_device *tz;
@@ -79,7 +79,8 @@ struct thermal_zone_aggregate_entry {
  * @num_entries: number of entries in the array
  *
  * Represents the sum of each source zone temperature multiplied by its
- * coefficient. The constant offset is stored in struct thermal_zone_params.
+ * coefficient in thousandths, divided by 1000. The constant offset is
+ * stored in struct thermal_zone_params.
  */
 struct thermal_zone_aggregate {
 	struct thermal_zone_aggregate_entry *entries;

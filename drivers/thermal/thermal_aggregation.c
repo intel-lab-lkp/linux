@@ -1,8 +1,88 @@
 // SPDX-License-Identifier: GPL-2.0
 
 #include <linux/errno.h>
+#include <linux/units.h>
 
 #include "thermal_core.h"
+
+/**
+ * thermal_zone_aggregate_init_coefficients() - initialize aggregation multipliers
+ * @aggregate: aggregation description to initialize before publication
+ *
+ * The description must be validated before calling this helper. Before
+ * initialization, zero denotes an unspecified coefficient. If all are zero,
+ * generate approximately equal contributions summing to
+ * PERMILLE, distributing the remainder in source order.
+ * If all coefficients are nonzero, leave them unchanged without normalization.
+ * Partial specification is rejected by thermal_zone_aggregate_validate().
+ *
+ * The zone parameters' offset and source pointers are not modified.
+ *
+ * Return: 0 on success or -EINVAL for invalid arguments. Entries are unchanged
+ * on failure.
+ */
+static int __maybe_unused
+thermal_zone_aggregate_init_coefficients(struct thermal_zone_aggregate *aggregate)
+{
+	unsigned int initialized = 0;
+	unsigned int base, remainder, i;
+
+	if (!aggregate || !aggregate->entries || !aggregate->num_entries)
+		return -EINVAL;
+
+	for (i = 0; i < aggregate->num_entries; i++)
+		initialized += aggregate->entries[i].coefficient != 0;
+
+	/*
+	 * Validation has rejected partial specification. If coefficients are
+	 * supplied, preserve the explicit affine combination without normalization.
+	 */
+	if (initialized)
+		return 0;
+
+	/*
+	 * Current systems are far from aggregating 1000 sources, but enforce
+	 * this limit for unlikely yet possible configurations. More sources
+	 * than the scale would produce zero default coefficients, which denote
+	 * uninitialized entries.
+	 */
+	if (aggregate->num_entries > PERMILLE)
+		return -EINVAL;
+
+	/*
+	 * With no coefficients supplied, approximate the arithmetic mean of
+	 * the source temperatures:
+	 *
+	 *     T = sum(coefficient[i] * temperature[i]) / 1000 + offset
+	 *
+	 * Each source should contribute equally, so its ideal coefficient is
+	 * PERMILLE / num_entries. Integer division rounds this
+	 * down, leaving a remainder that must be distributed to keep the total
+	 * coefficient sum exactly equal to PERMILLE.
+	 *
+	 * Assign one additional unit to each of the first 'remainder' sources.
+	 * This makes the distribution deterministic in source order, with any
+	 * two coefficients differing by at most one. For example:
+	 *
+	 *     2 sources: 500, 500
+	 *     3 sources: 334, 333, 333
+	 *     6 sources: 167, 167, 167, 167, 166, 166
+	 *
+	 * Equal source temperatures therefore retain unity gain. For unequal
+	 * temperatures, the result approximates their arithmetic mean with a
+	 * small bias from coefficient rounding. The signed offset in the zone
+	 * parameters remains independent and is applied after division.
+	 *
+	 * These defaults apply only when every coefficient is uninitialized;
+	 * explicitly supplied coefficients are never normalized.
+	 */
+	base = PERMILLE / aggregate->num_entries;
+	remainder = PERMILLE % aggregate->num_entries;
+	for (i = 0; i < aggregate->num_entries; i++)
+		aggregate->entries[i].coefficient = base + (i < remainder);
+
+	return 0;
+}
 
 /**
  * thermal_zone_aggregate_validate() - check an aggregation before initialization
