@@ -396,6 +396,15 @@ static bool rockchip_vop2_mod_supported(struct drm_plane *plane, u32 format,
 		return false;
 	}
 
+	/* AFBC YTR on 3588 is for 8bpc RGB only */
+	if (vop2->version == VOP_VERSION_RK3588 && drm_is_afbc(modifier) &&
+	    (modifier & AFBC_FORMAT_MOD_YTR) &&
+	    vop2_convert_afbc_format(format) != VOP2_AFBC_FMT_ARGB8888 &&
+	    vop2_convert_afbc_format(format) != VOP2_AFBC_FMT_RGB888) {
+		drm_dbg_kms(vop2->drm, "Only support YTR with 8bpc RGB formats\n");
+		return false;
+	}
+
 	/* Linear is otherwise supported everywhere */
 	if (modifier == DRM_FORMAT_MOD_LINEAR)
 		return true;
