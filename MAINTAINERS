@@ -1315,6 +1315,12 @@ S:	Supported
 T:	git https://gitlab.freedesktop.org/agd5f/linux.git
 F:	drivers/gpu/drm/amd/pm/
 
+AMD PROGRAMMABLE LOGIC MAILBOX DRIVER
+M:	Ben Levinsky <ben.levinsky@amd.com>
+L:	linux-kernel@vger.kernel.org
+S:	Maintained
+F:	Documentation/devicetree/bindings/mailbox/amd,pl-mailbox-2.1.yaml
+
 AMD PSTATE DRIVER
 M:	Huang Rui <ray.huang@amd.com>
 M:	Mario Limonciello <mario.limonciello@amd.com>

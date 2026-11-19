@@ -1,0 +1,71 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/mailbox/amd,pl-mailbox-2.1.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: AMD Programmable Logic Mailbox IP
+
+maintainers:
+  - Ben Levinsky <ben.levinsky@amd.com>
+
+description: |
+  The AMD Programmable Logic Mailbox IP passes messages between two
+  processors through a pair of FIFOs. Each side of the IP has its own
+  registers, interrupt and clock, and is described by its own node.
+  Channel 0 is used to transmit and channel 1 to receive.
+
+  The Mailbox is a soft IP core instantiated in programmable logic, not a
+  SoC block, so the compatible names the IP core and its version (2.1).
+  The "pl" part distinguishes it from the IPI hardware that can also be
+  used as a mailbox.
+
+properties:
+  compatible:
+    const: amd,pl-mailbox-2.1
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+
+  clocks:
+    maxItems: 1
+
+  amd,pl-mailbox-depth:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    minimum: 16
+    maximum: 8192
+    default: 16
+    description:
+      Depth of the send and receive FIFOs in 32-bit words. The depth is the
+      C_MAILBOX_DEPTH parameter chosen for each IP instance when the design
+      is synthesized, so instances in one design can differ, and it cannot
+      be read from the registers. Must match the synthesized depth.
+
+  '#mbox-cells':
+    const: 1
+
+required:
+  - compatible
+  - reg
+  - interrupts
+  - clocks
+  - '#mbox-cells'
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+
+    mailbox@b2060000 {
+        compatible = "amd,pl-mailbox-2.1";
+        reg = <0xb2060000 0x10000>;
+        interrupts = <GIC_SPI 106 IRQ_TYPE_LEVEL_HIGH>;
+        clocks = <&pl_clk>;
+        amd,pl-mailbox-depth = <16>;
+        #mbox-cells = <1>;
+    };
+...
