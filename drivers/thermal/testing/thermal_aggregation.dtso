@@ -1,0 +1,53 @@
+// SPDX-License-Identifier: GPL-2.0
+/dts-v1/;
+/plugin/;
+
+&{/} {
+	thermal-kunit {
+		provider: sensor {
+			#thermal-sensor-cells = <1>;
+		};
+		provider_zero: sensor-zero {
+			#thermal-sensor-cells = <0>;
+		};
+		zero-cells {
+			thermal-sensors = <&provider_zero>, <&provider 1>;
+			polling-delay = <0>;
+			polling-delay-passive = <0>;
+		};
+
+		average {
+			thermal-sensors = <&provider 0>, <&provider 1>;
+			polling-delay = <0>;
+			polling-delay-passive = <0>;
+		};
+
+		explicit {
+			thermal-sensors = <&provider 0>, <&provider 1>;
+			coefficients = <2 (-1) (-1000)>;
+			polling-delay = <0>;
+			polling-delay-passive = <0>;
+		};
+
+		partial {
+			thermal-sensors = <&provider 0>, <&provider 1>;
+			coefficients = <1>;
+		};
+
+		zero {
+			thermal-sensors = <&provider 0>, <&provider 1>;
+			coefficients = <1 0>;
+		};
+
+		overflow {
+			thermal-sensors = <&provider 0>, <&provider 1>;
+			coefficients = <2147483647 1>;
+		};
+
+		bad-delay {
+			thermal-sensors = <&provider 0>, <&provider 1>;
+			polling-delay = <100>;
+			polling-delay-passive = <200>;
+		};
+	};
+};

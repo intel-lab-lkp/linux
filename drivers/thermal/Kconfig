@@ -57,6 +57,29 @@ config THERMAL_CORE_TESTING
 	  with trip points in order to exercise the thermal core
 	  functionality in a controlled way.
 
+config THERMAL_AGGREGATION_KUNIT_TEST
+	bool "KUnit tests for thermal zone aggregation" if !KUNIT_ALL_TESTS
+	depends on KUNIT=y && THERMAL_AGGREGATION
+	default KUNIT_ALL_TESTS
+	help
+	  Test coefficient initialization, validation, temperature arithmetic,
+	  and registration of aggregated thermal zones with synthetic sources.
+	  No thermal hardware is required.
+	  If unsure, say N.
+
+config THERMAL_OF_AGGREGATION_KUNIT_TEST
+	bool "KUnit tests for OF thermal aggregation" if !KUNIT_ALL_TESTS
+	depends on KUNIT=y && THERMAL_AGGREGATION
+	depends on THERMAL_OF && OF_OVERLAY && OF_EARLY_FLATTREE
+	default KUNIT_ALL_TESTS
+	help
+	  Test OF aggregation with a test-managed device tree overlay.
+	  Verify source lookup and deferred aggregate creation.
+	  Cover coefficient parsing, source removal and recreation.
+	  These tests use synthetic sources without thermal hardware.
+	  Run these tests with KUnit's OF overlay support enabled.
+	  If unsure, say N.
+
 config THERMAL_EMERGENCY_POWEROFF_DELAY_MS
 	int "Emergency poweroff delay in milli-seconds"
 	default 0

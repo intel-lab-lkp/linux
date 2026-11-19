@@ -246,3 +246,7 @@ int thermal_zone_get_temp_aggregate(struct thermal_zone_device *tz, int *temp)
 	*temp = sum;
 	return 0;
 }
+
+#if IS_ENABLED(CONFIG_THERMAL_AGGREGATION_KUNIT_TEST)
+#include "testing/thermal_aggregation_test.c"
+#endif

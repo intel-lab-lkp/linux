@@ -8,6 +8,7 @@ thermal_sys-y			+= thermal_core.o thermal_sysfs.o
 thermal_sys-y			+= thermal_trip.o thermal_helpers.o
 thermal_sys-y			+= thermal_thresholds.o
 thermal_sys-$(CONFIG_THERMAL_AGGREGATION) += thermal_aggregation.o
+thermal_sys-$(CONFIG_THERMAL_OF_AGGREGATION_KUNIT_TEST) += testing/thermal_aggregation.dtbo.o
 
 # netlink interface to manage the thermal framework
 thermal_sys-$(CONFIG_THERMAL_NETLINK)		+= thermal_netlink.o

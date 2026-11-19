@@ -741,6 +741,10 @@ static int __init thermal_of_aggregate_init(void)
 	return 0;
 }
 late_initcall(thermal_of_aggregate_init);
+
+#if IS_ENABLED(CONFIG_THERMAL_OF_AGGREGATION_KUNIT_TEST)
+#include "testing/thermal_of_aggregation_test.c"
+#endif
 #endif /* CONFIG_THERMAL_AGGREGATION */
 
 static void devm_thermal_of_zone_release(struct device *dev, void *res)
