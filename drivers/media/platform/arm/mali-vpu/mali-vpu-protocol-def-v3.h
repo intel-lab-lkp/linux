@@ -77,6 +77,16 @@
  * 0x10079000 - 0x1007FFFF, see special defines further down.
  */
 
+/* PROTECTED virtual memory region */
+#define MVE_MEM_REGION_PROTECTED_ADDR_BEGIN	(0x20000000u)
+#define MVE_MEM_REGION_PROTECTED_ADDR_END	(0x6FFFFFFFu + 1)
+
+/* FRAMEBUF virtual memory region */
+#define MVE_MEM_REGION_FRAMEBUF_ADDR_BEGIN	(0x70000000u)
+#define MVE_MEM_REGION_FRAMEBUF_ADDR_END	(0xEFFFFFFFu + 1)
+
+/* 0xF0000000 - 0xFFFFFFFF is used internally in MVE */
+
 /*****************************************************************************
  *
  * Communication queues between HOST/DRIVER and MVE
@@ -151,6 +161,49 @@ struct mve_comm_area_mve {
 	 * a mve_msg_header
 	 */
 	u32 out_data[MVE_COMM_QUEUE_SIZE_IN_WORDS];
+};
+
+#define MVE_RPC_AREA_SIZE_IN_WORDS 256
+#define MVE_RPC_DATA_SIZE_IN_WORDS (MVE_RPC_AREA_SIZE_IN_WORDS - 3)
+union mve_rpc_params {
+	u32 data[MVE_RPC_DATA_SIZE_IN_WORDS];
+	struct {
+		char string[MVE_RPC_DATA_SIZE_IN_WORDS * 4];
+	} debug_print;
+	struct {
+		u32 size;
+		u32 max_size;
+		u8 region; /* Memory region selection */
+			#define MVE_MEM_REGION_PROTECTED (0)
+			#define MVE_MEM_REGION_OUTBUF    (1)
+			#define MVE_MEM_REGION_FRAMEBUF  (MVE_MEM_REGION_OUTBUF)
+
+		/* The newly allocated memory must be placed
+		 * on (at least) a 2^(log2_alignment) boundary
+		 */
+		u8 log2_alignment;
+	} mem_alloc;
+	struct {
+		u32 ve_pointer;
+		u32 new_size;
+	} mem_resize;
+	struct {
+		u32 ve_pointer;
+	} mem_free;
+};
+
+struct mve_rpc_communication_area {
+	u32 state;
+		#define MVE_RPC_STATE_FREE   (0)
+		#define MVE_RPC_STATE_PARAM  (1)
+		#define MVE_RPC_STATE_RETURN (2)
+	u32 call_id;
+		#define MVE_RPC_FUNCTION_DEBUG_PRINTF (1)
+		#define MVE_RPC_FUNCTION_MEM_ALLOC    (2)
+		#define MVE_RPC_FUNCTION_MEM_RESIZE   (3)
+		#define MVE_RPC_FUNCTION_MEM_FREE     (4)
+	u32 size;
+	union mve_rpc_params params;
 };
 
 /*********************************************************************
