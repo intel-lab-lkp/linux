@@ -3,12 +3,14 @@
  * Copyright (C) 2026 ARM Limited.
  */
 
+#include <linux/device.h>
 #include <linux/err.h>
 #include <linux/errno.h>
 #include <linux/string.h>
 #include <media/v4l2-mem2mem.h>
 
 #include "mali-vpu-session.h"
+#include "mali-vpu-controls.h"
 #include "mali-vpu-dec.h"
 #include "mali-vpu-formats.h"
 #include "mali-vpu-variant.h"
@@ -76,7 +78,18 @@ int mali_vpu_session_init(struct mali_vpu_session *sess)
 		goto err_mutex_destroy;
 	}
 
+	sess->is_fw_ready = false;
+
+	ret = mali_vpu_ctrls_init(sess);
+	if (ret) {
+		dev_err(sess->vpu_dev->dev, "failed to initialise controls: %d\n", ret);
+		goto err_m2m_ctx_release;
+	}
+
 	return 0;
+
+err_m2m_ctx_release:
+	v4l2_m2m_ctx_release(sess->m2m_ctx);
 
 err_mutex_destroy:
 	mutex_destroy(&sess->vq_lock);
@@ -94,5 +107,7 @@ void mali_vpu_session_cleanup(struct mali_vpu_session *sess)
 	}
 
 	mutex_unlock(&sess->vq_lock);
+
+	mali_vpu_ctrls_cleanup(sess);
 	mutex_destroy(&sess->vq_lock);
 }

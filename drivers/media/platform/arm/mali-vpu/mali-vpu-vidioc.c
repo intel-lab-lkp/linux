@@ -8,7 +8,9 @@
 #include <linux/slab.h>
 #include <linux/string.h>
 #include <media/v4l2-common.h>
+#include <media/v4l2-ctrls.h>
 #include <media/v4l2-dev.h>
+#include <media/v4l2-event.h>
 #include <media/v4l2-fh.h>
 #include <media/v4l2-ioctl.h>
 #include <media/v4l2-mem2mem.h>
@@ -318,6 +320,21 @@ static int mali_vpu_enum_framesizes(struct file *filp, void *fh,
 	return 0;
 }
 
+static int mali_vpu_subscribe_event(struct v4l2_fh *fh, const struct v4l2_event_subscription *sub)
+{
+	switch (sub->type) {
+	case V4L2_EVENT_CTRL:
+		return v4l2_ctrl_subscribe_event(fh, sub);
+	case V4L2_EVENT_EOS:
+		return v4l2_event_subscribe(fh, sub, 2, NULL);
+	case V4L2_EVENT_SOURCE_CHANGE:
+		return v4l2_event_subscribe(fh, sub, 2, NULL);
+
+	default:
+		return -EINVAL;
+	}
+}
+
 const struct v4l2_ioctl_ops mali_vpu_ioctl_ops_dec = {
 	.vidioc_querycap		= mali_vpu_querycap,
 	.vidioc_enum_fmt_vid_out	= mali_vpu_enum_fmt,
@@ -337,4 +354,6 @@ const struct v4l2_ioctl_ops mali_vpu_ioctl_ops_dec = {
 	.vidioc_dqbuf			= v4l2_m2m_ioctl_dqbuf,
 	.vidioc_remove_bufs		= v4l2_m2m_ioctl_remove_bufs,
 	.vidioc_enum_framesizes		= mali_vpu_enum_framesizes,
+	.vidioc_subscribe_event		= mali_vpu_subscribe_event,
+	.vidioc_unsubscribe_event	= v4l2_event_unsubscribe,
 };

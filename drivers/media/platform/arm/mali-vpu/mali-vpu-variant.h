@@ -9,6 +9,7 @@
 #include <linux/types.h>
 #include <linux/videodev2.h>
 
+#include "mali-vpu-controls.h"
 #include "mali-vpu-formats.h"
 
 /**
@@ -34,12 +35,23 @@ struct mali_vpu_format_caps {
 };
 
 /**
+ * struct mali_vpu_control_caps - Control capability tables per role.
+ * @dec_ctrls: Array of controls supported by the decoder.
+ * @num_dec_ctrls: Number of entries in @dec_ctrls.
+ */
+struct mali_vpu_control_caps {
+	const struct mali_vpu_ctrl_desc *dec_ctrls;
+	u32 num_dec_ctrls;
+};
+
+/**
  * struct mali_vpu_variant - Variant-specific hardware capability descriptor.
  * @rst_names: Array of reset control names for this variant.
  * @num_rsts: Number of reset controls for this variant.
  * @expected_hw_pid: Expected hardware product ID read from the version register.
  * @fmt_caps: Format capability tables for encode/decode paths.
  * @frmsz_caps: Frame dimension limits and defaults.
+ * @ctrl_caps:  Control capability tables for encode/decode paths.
  */
 struct mali_vpu_variant {
 	const char * const *rst_names;
@@ -48,6 +60,7 @@ struct mali_vpu_variant {
 
 	struct mali_vpu_format_caps	fmt_caps;
 	struct mali_vpu_framesize_caps	frmsz_caps;
+	struct mali_vpu_control_caps	ctrl_caps;
 };
 
 extern const struct mali_vpu_variant mali_vpu_v76_variant;

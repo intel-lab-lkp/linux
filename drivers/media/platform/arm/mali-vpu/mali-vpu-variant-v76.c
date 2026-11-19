@@ -4,8 +4,14 @@
  */
 
 #include <linux/array_size.h>
+#include <linux/bits.h>
+#include <linux/limits.h>
 #include <linux/videodev2.h>
 
+#include <linux/media/arm/mali-vpu-config.h>
+
+#include "mali-vpu-controls.h"
+#include "mali-vpu-dec.h"
 #include "mali-vpu-formats.h"
 #include "mali-vpu-protocol-def-v3.h"
 #include "mali-vpu-variant.h"
@@ -53,6 +59,95 @@ static const struct mali_vpu_format_desc mali_v76_dec_dst_fmts[] = {
 	},
 };
 
+static const char *const mali_v76_nalu_format_qmenu[] = {
+	"Start Codes",
+	"One NALU Per Buffer",
+	"One Byte Length Field",
+	"Two Byte Length Field",
+	"Four Byte Length Field",
+	NULL,
+};
+
+static const struct mali_vpu_ctrl_desc mali_v76_dec_ctrls[] = {
+	{
+		.cid = V4L2_CID_MALI_VPU_NALU_FORMAT,
+		.type = V4L2_CTRL_TYPE_MENU,
+		.name = "NALU format",
+		.qmenu = mali_v76_nalu_format_qmenu,
+		.min_val = MALI_VPU_NALU_FORMAT_START_CODES,
+		.max_val = MALI_VPU_NALU_FORMAT_FOUR_BYTE_LENGTH_FIELD,
+		.default_val = MALI_VPU_NALU_FORMAT_START_CODES,
+		.step_or_mask = BIT(MALI_VPU_NALU_FORMAT_START_CODES) |
+				BIT(MALI_VPU_NALU_FORMAT_ONE_NALU_PER_BUFFER) |
+				BIT(MALI_VPU_NALU_FORMAT_ONE_BYTE_LENGTH_FIELD) |
+				BIT(MALI_VPU_NALU_FORMAT_TWO_BYTE_LENGTH_FIELD) |
+				BIT(MALI_VPU_NALU_FORMAT_FOUR_BYTE_LENGTH_FIELD),
+		.is_custom = true,
+		.flags = 0,
+		.set = mali_vpu_ctrl_set_nalu_format,
+	},
+	{
+		.cid = V4L2_CID_MALI_VPU_INTBUF_SIZE,
+		.type = V4L2_CTRL_TYPE_INTEGER,
+		.name = "Internal buffer size",
+		.min_val = 0,
+		.max_val = INT_MAX,
+		.default_val = 0,
+		.step_or_mask = 1,
+		.is_custom = true,
+		.flags = 0,
+		.set = mali_vpu_ctrl_set_intbuf_size,
+	},
+	{
+		.cid = V4L2_CID_MALI_VPU_STREAM_ESCAPING,
+		.type = V4L2_CTRL_TYPE_INTEGER,
+		.name = "Stream Escaping",
+		.min_val = -1,
+		.max_val = 1,
+		.default_val = -1,
+		.step_or_mask = 1,
+		.is_custom = true,
+		.flags = 0,
+		.set = mali_vpu_ctrl_set_stream_escaping,
+	},
+	{
+		.cid = V4L2_CID_MALI_VPU_HOST_PRINT_ENABLE,
+		.type = V4L2_CTRL_TYPE_BOOLEAN,
+		.name = "Firmware debug prints",
+		.min_val = false,
+		.max_val = true,
+		.default_val = false,
+		.step_or_mask = 1,
+		.is_custom = true,
+		.flags = MALI_VPU_CTRL_FLAG_DYNAMIC,
+		.set = mali_vpu_ctrl_set_host_print_enable,
+	},
+	{
+		.cid = V4L2_CID_MALI_VPU_IGNORE_STREAM_HEADERS,
+		.type = V4L2_CTRL_TYPE_INTEGER,
+		.name = "Ignore Stream Headers",
+		.min_val = -1,
+		.max_val = 1,
+		.default_val = -1,
+		.step_or_mask = 1,
+		.is_custom = true,
+		.flags = 0,
+		.set = mali_vpu_ctrl_set_ignore_stream_headers,
+	},
+	{
+		.cid = V4L2_CID_MALI_VPU_FRAME_REORDERING,
+		.type = V4L2_CTRL_TYPE_INTEGER,
+		.name = "Frame Reordering",
+		.min_val = -1,
+		.max_val = 1,
+		.default_val = -1,
+		.step_or_mask = 1,
+		.is_custom = true,
+		.flags = 0,
+		.set = mali_vpu_ctrl_set_frame_reordering,
+	},
+};
+
 const struct mali_vpu_variant mali_vpu_v76_variant = {
 	.expected_hw_pid = MALI_VPU_HW_PID_V76,
 
@@ -80,5 +175,9 @@ const struct mali_vpu_variant mali_vpu_v76_variant = {
 		},
 		.width_default = MALI_V76_DEFAULT_FRAME_WIDTH,
 		.height_default = MALI_V76_DEFAULT_FRAME_HEIGHT,
+	},
+	.ctrl_caps = {
+		.dec_ctrls = mali_v76_dec_ctrls,
+		.num_dec_ctrls = ARRAY_SIZE(mali_v76_dec_ctrls),
 	},
 };
