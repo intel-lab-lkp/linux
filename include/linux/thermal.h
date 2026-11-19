@@ -30,6 +30,7 @@
 #define THERMAL_TEMP_INVALID	-274000
 
 struct thermal_zone_device;
+struct thermal_zone_aggregate;
 struct thermal_cooling_device;
 struct thermal_instance;
 struct thermal_debugfs;
@@ -192,6 +193,9 @@ struct thermal_zone_params {
 	 * 		Used by thermal zone drivers (default 0).
 	 */
 	int offset;
+
+	/* Core-private aggregation data, or NULL for a non-aggregated zone. */
+	struct thermal_zone_aggregate *aggregate;
 };
 
 /* Function declarations */

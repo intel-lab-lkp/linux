@@ -63,6 +63,29 @@ struct thermal_governor {
 	struct list_head	governor_list;
 };
 
+/**
+ * struct thermal_zone_aggregate_entry - source zone and its coefficient
+ * @tz: source thermal zone
+ * @coefficient: signed multiplier for the source zone temperature
+ */
+struct thermal_zone_aggregate_entry {
+	struct thermal_zone_device *tz;
+	s32 coefficient;
+};
+
+/**
+ * struct thermal_zone_aggregate - linear combination of source zone temperatures
+ * @entries: array of source thermal zones and their coefficients
+ * @num_entries: number of entries in the array
+ *
+ * Represents the sum of each source zone temperature multiplied by its
+ * coefficient. The constant offset is stored in struct thermal_zone_params.
+ */
+struct thermal_zone_aggregate {
+	struct thermal_zone_aggregate_entry *entries;
+	unsigned int num_entries;
+};
+
 #define	TZ_STATE_FLAG_SUSPENDED	BIT(0)
 #define	TZ_STATE_FLAG_RESUMING	BIT(1)
 #define	TZ_STATE_FLAG_INIT	BIT(2)
