@@ -2109,9 +2109,23 @@ nfsd4_setup_intra_ssc(struct svc_rqst *rqstp,
 		      struct nfsd4_compound_state *cstate,
 		      struct nfsd4_copy *copy)
 {
-	return nfsd4_verify_copy(rqstp, cstate, &copy->cp_src_stateid,
-				 &copy->nf_src, &copy->cp_dst_stateid,
-				 &copy->nf_dst);
+	__be32 status;
+
+	status = nfsd4_verify_copy(rqstp, cstate, &copy->cp_src_stateid,
+				   &copy->nf_src, &copy->cp_dst_stateid,
+				   &copy->nf_dst);
+	if (status)
+		return status;
+
+	/*
+	 * RFC 7862 Section 15.2.3: COPY MUST fail with NFS4ERR_INVAL when
+	 * SAVED_FH and CURRENT_FH refer to the same file, whether or not the
+	 * ranges overlap. The caller releases nf_src and nf_dst.
+	 */
+	if (file_inode(copy->nf_src->nf_file) ==
+	    file_inode(copy->nf_dst->nf_file))
+		return nfserr_inval;
+	return nfs_ok;
 }
 
 static void nfsd4_cb_offload_release(struct nfsd4_callback *cb)
