@@ -122,6 +122,151 @@
 /* One struct mve_rpc_communication_area located here */
 #define MVE_COMM_RPC_ADDR	(0x1007F000u)
 
+/*
+ * One page of memory (4 kB) is used for each queue,
+ * so maximum 1024 words, but need room for some counters as well,
+ * see structs mve_comm_area_mve and mve_comm_area_host below.
+ */
+#define MVE_COMM_QUEUE_SIZE_IN_WORDS 1020
+
+/* This is the part of the message area that is written by host. */
+struct mve_comm_area_host {
+	u16 out_rpos;
+	u16 in_wpos;
+	u32 reserved[3];
+	/*
+	 * Queue of messages to MVE, each block of data prefixed with
+	 * a mve_msg_header
+	 */
+	u32 in_data[MVE_COMM_QUEUE_SIZE_IN_WORDS];
+};
+
+/* This is the part of the message area that is written by MVE. */
+struct mve_comm_area_mve {
+	u16 out_wpos;
+	u16 in_rpos;
+	u32 reserved[3];
+	/*
+	 * Queue of messages to host, each block of data prefixed with
+	 * a mve_msg_header
+	 */
+	u32 out_data[MVE_COMM_QUEUE_SIZE_IN_WORDS];
+};
+
+/*********************************************************************
+ *
+ *   Message codes
+ *
+ *********************************************************************/
+
+/*
+ * Messages consist of one struct mve_msg_header, possibly followed
+ * by extra data.
+ */
+struct mve_msg_header {
+	u16 code;
+		/*
+		 * REQUESTs are messages from the
+		 * host/driver to the firmware:               Code:     Extra data in message:
+		 */
+		#define MVE_REQUEST_CODE_GO                   (1001) /* no extra data */
+		#define MVE_REQUEST_CODE_STOP                 (1002) /* no extra data */
+		#define MVE_REQUEST_CODE_PING                 (1006) /* no extra data */
+		#define MVE_REQUEST_CODE_JOB                  (1009) /* struct mve_request_job */
+
+		/*
+		 * RESPONSEs are messages from
+		 * the firmware to the host:
+		 */
+		/* struct mve_response_switched_in */
+		#define MVE_RESPONSE_CODE_SWITCHED_IN         (2001)
+		/* struct mve_response_switched_out */
+		#define MVE_RESPONSE_CODE_SWITCHED_OUT        (2002)
+		/* struct mve_response_job_dequeued */
+		#define MVE_RESPONSE_CODE_JOB_DEQUEUED        (2004)
+		#define MVE_RESPONSE_CODE_PONG                (2009)
+		/* struct mve_response_error */
+		#define MVE_RESPONSE_CODE_ERROR               (2010)
+		/* struct mve_response_state_change */
+		#define MVE_RESPONSE_CODE_STATE_CHANGE        (2011)
+		#define MVE_RESPONSE_CODE_IDLE                (2013)
+
+	u16 size; /* size in bytes of trailing data, 0 if none */
+};
+
+/*********************************************************************
+ *
+ *   REQUESTs are messages from the host to the firmware
+ *
+ *   Some of the MVE_REQUEST_CODE_ codes are followed by one of the
+ *   structs below.
+ *
+ *********************************************************************/
+
+struct mve_request_job {
+	u16 cores; /* >= 1, number of cores to use, must match request to HW scheduler */
+	u16 frames; /* number of frames to process, zero means infinite */
+	u32 flags; /* can be zero */
+		#define MVE_JOB_FLAG_DISABLE_BNDMGR (0x01)
+};
+
+/*********************************************************************
+ *
+ *   RESPONSEs are messages from the firmware to the host
+ *
+ *   Some of the MVE_RESPONSE_CODE_ codes are followed by one of the
+ *   structs below.
+ *
+ *********************************************************************/
+
+/* Sent when firmware has booted. */
+struct mve_response_switched_in {
+	u32 core;
+};
+
+/* Sent when last core in a session has switched out. */
+struct mve_response_switched_out {
+	u32 core;
+	u32 reason;
+	u32 sub_reason;
+};
+
+/*
+ * Response confirming state transition after either GO or STOP
+ * command from host.
+ */
+struct mve_response_state_change {
+	u32 new_state;
+		#define MVE_STATE_STOPPED (0)
+		#define MVE_STATE_RUNNING (2)
+};
+
+/*
+ * Message sent when all cores in the session have dequeued a
+ * job from the firmware job queue.
+ */
+struct mve_response_job_dequeued {
+	u32 valid_job;
+};
+
+/*
+ * Fatal error message from firmware, if sent then no further
+ * operation is possible.
+ */
+struct mve_response_error {
+	u32 error_code;
+		#define MVE_ERROR_ABORT          (1)
+		#define MVE_ERROR_OUT_OF_MEMORY  (2)
+		#define MVE_ERROR_ASSERT         (3)
+		#define MVE_ERROR_UNSUPPORTED    (4)
+		#define MVE_ERROR_INVALID_BUFFER (6)
+		#define MVE_ERROR_INVALID_STATE  (8)
+		#define MVE_ERROR_WATCHDOG       (9)
+
+		#define MVE_MAX_ERROR_MESSAGE_SIZE  (128)
+	char message[MVE_MAX_ERROR_MESSAGE_SIZE];
+};
+
  #define MVE_CHROMA_FORMAT_420 (0x1)
 
 /* format bitfield: */

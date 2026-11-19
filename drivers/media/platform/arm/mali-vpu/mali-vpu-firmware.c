@@ -4,6 +4,7 @@
  */
 
 #include <linux/device.h>
+#include <linux/dma-mapping.h>
 #include <linux/err.h>
 #include <linux/errno.h>
 #include <linux/string.h>
@@ -380,4 +381,373 @@ void mali_vpu_fw_cleanup(struct mali_vpu_fw *fw)
 	mali_vpu_fw_unmap_protocol(fw);
 	mali_vpu_fw_unmap_core_regions(fw);
 	memset(fw, 0, sizeof(*fw));
+}
+
+/*
+ * Read arbitrary byte count from circular u32 queue payload area.
+ * Return new read position in the queue.
+ */
+static u16 mali_vpu_fw_read32n(u32 *src, u16 offset, u32 *dst, size_t size)
+{
+	u32 v;
+
+	for (; size >= sizeof(u32); size -= sizeof(u32)) {
+		*dst++ = READ_ONCE(src[offset]);
+		offset = (offset + 1) % MVE_COMM_QUEUE_SIZE_IN_WORDS;
+	}
+
+	if (size) {
+		v = READ_ONCE(src[offset]);
+		memcpy(dst, &v, size);
+		offset = (offset + 1) % MVE_COMM_QUEUE_SIZE_IN_WORDS;
+	}
+
+	return offset;
+}
+
+static int mali_vpu_fw_read_msg(struct mali_vpu_fw *fw,
+				struct mali_vpu_fw_proto_page *host_page,
+				struct mali_vpu_fw_proto_page *mve_page,
+				u16 *code, void *payload, size_t *size)
+{
+	struct mve_comm_area_host *host = host_page->cpu;
+	struct mve_comm_area_mve *mve = mve_page->cpu;
+	struct mve_msg_header hdr;
+	u16 rpos, out_wpos;
+	ssize_t capacity;
+
+	if (!host || !mve)
+		return -EINVAL;
+
+	dma_sync_single_for_cpu(fw->dev, mve_page->dma, MALI_VPU_PAGE_SIZE,
+				DMA_FROM_DEVICE);
+
+	rpos = READ_ONCE(host->out_rpos);
+	out_wpos = READ_ONCE(mve->out_wpos);
+
+	if (rpos >= MVE_COMM_QUEUE_SIZE_IN_WORDS ||
+	    out_wpos >= MVE_COMM_QUEUE_SIZE_IN_WORDS)
+		return -EPROTO;
+
+	/* Calculate how much data that is available in the buffer. */
+	capacity = out_wpos - rpos;
+	if (capacity < 0)
+		capacity += MVE_COMM_QUEUE_SIZE_IN_WORDS;
+
+	if (capacity <= 0)
+		return 0;
+
+	/* Firmware publishes out_wpos after writing the message. */
+	dma_rmb();
+
+	rpos = mali_vpu_fw_read32n(mve->out_data, rpos, (u32 *)&hdr, sizeof(hdr));
+
+	/* Make sure there is enough space for both header and message. */
+	capacity -= DIV_ROUND_UP(sizeof(hdr) + hdr.size, sizeof(u32));
+	if (capacity < 0) {
+		dev_err(fw->dev,
+			"fw msg larger than capacity code=%u size=%u, wpos=%u, rpos=%u\n",
+			hdr.code, hdr.size, out_wpos, rpos);
+		return -EPROTO;
+	}
+
+	if (hdr.size > *size)
+		return -EMSGSIZE;
+
+	rpos = mali_vpu_fw_read32n(mve->out_data, rpos,
+				   (u32 *)payload, hdr.size);
+
+	/*
+	 * Finish reading the message before publishing updated consumed queue
+	 * positions to the firmware.
+	 */
+	dma_mb();
+	WRITE_ONCE(host->out_rpos, rpos);
+
+	dma_sync_single_for_device(fw->dev,
+				   host_page->dma + offsetof(struct mve_comm_area_host, out_rpos),
+				   sizeof(host->out_rpos), DMA_TO_DEVICE);
+
+	*code = hdr.code;
+	*size = hdr.size;
+
+	return 1;
+}
+
+/*
+ * Write arbitrary byte count to circular u32 queue payload area.
+ * Return new write position in the queue.
+ */
+static u16 mali_vpu_fw_write32n(u32 *dst, u16 offset, const u32 *src, size_t size)
+{
+	u32 v;
+
+	for (; size >= sizeof(u32); size -= sizeof(u32)) {
+		WRITE_ONCE(dst[offset], *src++);
+		offset = (offset + 1) % MVE_COMM_QUEUE_SIZE_IN_WORDS;
+	}
+
+	if (size) {
+		v = 0;
+		memcpy(&v, src, size);
+		WRITE_ONCE(dst[offset], v);
+		offset = (offset + 1) % MVE_COMM_QUEUE_SIZE_IN_WORDS;
+	}
+
+	return offset;
+}
+
+static int mali_vpu_fw_write_msg(struct mali_vpu_fw *fw,
+				 struct mali_vpu_fw_proto_page *host_page,
+				 struct mali_vpu_fw_proto_page *mve_page,
+				 u16 code, const void *payload, size_t size)
+{
+	struct mve_comm_area_host *host = host_page->cpu;
+	struct mve_comm_area_mve *mve = mve_page->cpu;
+	struct mve_msg_header hdr = { .code = code, .size = size};
+	u16 wpos, in_rpos;
+	int capacity;
+
+	if (!host || !mve)
+		return -EINVAL;
+
+	dma_sync_single_for_cpu(fw->dev,
+				mve_page->dma + offsetof(struct mve_comm_area_mve, in_rpos),
+				sizeof(mve->in_rpos), DMA_FROM_DEVICE);
+
+	wpos = READ_ONCE(host->in_wpos);
+	in_rpos = READ_ONCE(mve->in_rpos);
+
+	if (wpos >= MVE_COMM_QUEUE_SIZE_IN_WORDS || in_rpos >= MVE_COMM_QUEUE_SIZE_IN_WORDS)
+		return -EPROTO;
+
+	/* Calculate how much space that is available in the buffer. */
+	capacity = in_rpos - wpos;
+	if (capacity <= 0)
+		capacity += MVE_COMM_QUEUE_SIZE_IN_WORDS;
+
+	/* Make sure there is enough space for both header and message. */
+	capacity -= DIV_ROUND_UP(sizeof(hdr) + size, sizeof(u32));
+	if (capacity <= 0)
+		return -ENOMEM;
+
+	wpos = mali_vpu_fw_write32n(host->in_data, wpos, (const u32 *)&hdr, sizeof(hdr));
+	wpos = mali_vpu_fw_write32n(host->in_data, wpos, (const u32 *)payload, size);
+
+	/*
+	 * Publish the producer position only after the complete message has
+	 * been written.
+	 */
+	dma_wmb();
+	WRITE_ONCE(host->in_wpos, wpos);
+
+	dma_sync_single_for_device(fw->dev, host_page->dma, sizeof(*host), DMA_TO_DEVICE);
+
+	return 0;
+}
+
+static size_t mali_vpu_get_capacity_bytes(int rpos, int wpos)
+{
+	ssize_t capacity;
+
+	capacity = wpos - rpos;
+	if (capacity < 0)
+		capacity += MVE_COMM_QUEUE_SIZE_IN_WORDS;
+
+	return capacity * sizeof(u32);
+}
+
+static void mali_vpu_fw_print_debug(struct mali_vpu_fw *fw)
+{
+	struct mve_comm_area_host *host = fw->msg_host.cpu;
+	struct mve_comm_area_mve *mve = fw->msg_mve.cpu;
+	struct mve_msg_header hdr;
+	u16 rpos, wpos;
+	size_t capacity;
+
+	dma_sync_single_for_cpu(fw->dev, fw->msg_mve.dma, MALI_VPU_PAGE_SIZE,
+				DMA_FROM_DEVICE);
+
+	dev_dbg(fw->dev,
+		"dump message q. host={out_rpos=%u, in_wpos=%u}, mve={out_wpos=%u, in_rpos=%u}\n",
+		host->out_rpos, host->in_wpos, mve->out_wpos, mve->in_rpos);
+
+	rpos = READ_ONCE(host->out_rpos);
+	wpos = READ_ONCE(mve->out_wpos);
+
+	if (rpos >= MVE_COMM_QUEUE_SIZE_IN_WORDS ||
+	    wpos >= MVE_COMM_QUEUE_SIZE_IN_WORDS)
+		return;
+
+	/* Firmware publishes out_wpos after writing the message. */
+	dma_rmb();
+
+	while ((capacity = mali_vpu_get_capacity_bytes(rpos, wpos)) >= sizeof(hdr)) {
+		unsigned int pos;
+
+		pos = mali_vpu_fw_read32n(mve->out_data, rpos, (u32 *)&hdr, sizeof(hdr));
+
+		dev_dbg(fw->dev,
+			"queue={rpos=%u, wpos=%u, capacity=%zu}, msg={code=%u, size=%u}\n",
+			rpos, wpos, capacity, hdr.code, hdr.size);
+
+		capacity = mali_vpu_get_capacity_bytes(pos, wpos);
+		if (hdr.size > capacity) {
+			dev_dbg(fw->dev,
+				"size is larger than capacity. capacity=%zu, size=%u.\n",
+				capacity, hdr.size);
+			return;
+		}
+
+		rpos = (pos + DIV_ROUND_UP(hdr.size, sizeof(u32))) % MVE_COMM_QUEUE_SIZE_IN_WORDS;
+	}
+}
+
+int mali_vpu_fw_send_job(struct mali_vpu_fw *fw, u16 cores, u16 frames)
+{
+	struct mve_request_job job = {
+		.cores = cores,
+		.frames = frames,
+		.flags = 0,
+	};
+
+	return mali_vpu_fw_write_msg(fw, &fw->msg_host, &fw->msg_mve,
+				     MVE_REQUEST_CODE_JOB, &job, sizeof(job));
+}
+
+int mali_vpu_fw_send_ping(struct mali_vpu_fw *fw)
+{
+	return mali_vpu_fw_write_msg(fw, &fw->msg_host, &fw->msg_mve,
+				     MVE_REQUEST_CODE_PING, NULL, 0);
+}
+
+int mali_vpu_fw_send_state_change(struct mali_vpu_fw *fw, enum mali_vpu_fw_state state)
+{
+	u16 code;
+
+	switch (state) {
+	case MALI_VPU_FW_STATE_STOPPED:
+		code = MVE_REQUEST_CODE_STOP;
+		break;
+	case MALI_VPU_FW_STATE_RUNNING:
+		code = MVE_REQUEST_CODE_GO;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return mali_vpu_fw_write_msg(fw, &fw->msg_host, &fw->msg_mve, code, NULL, 0);
+}
+
+int mali_vpu_fw_parse_msg(struct mali_vpu_fw *fw, struct mali_vpu_fw_msg *msg)
+{
+	u16 code;
+	union {
+		struct mve_response_state_change state_change;
+		struct mve_response_error error;
+	} fw_msg = {};
+	size_t size = sizeof(fw_msg);
+	int ret;
+
+	if (!fw || !msg)
+		return -EINVAL;
+
+	ret = mali_vpu_fw_read_msg(fw, &fw->msg_host, &fw->msg_mve, &code,
+				   &fw_msg, &size);
+	if (ret <= 0)
+		return ret; /* 0 = no msg, <0 = error */
+
+	memset(msg, 0, sizeof(*msg));
+
+	switch (code) {
+	case MVE_RESPONSE_CODE_SWITCHED_IN:
+		msg->code = MALI_VPU_FW_CODE_SWITCH_IN;
+		break;
+	case MVE_RESPONSE_CODE_SWITCHED_OUT:
+		msg->code = MALI_VPU_FW_CODE_SWITCH_OUT;
+		break;
+	case MVE_RESPONSE_CODE_JOB_DEQUEUED:
+		msg->code = MALI_VPU_FW_CODE_JOB;
+		break;
+	case MVE_RESPONSE_CODE_PONG:
+		msg->code = MALI_VPU_FW_CODE_PONG;
+		break;
+	case MVE_RESPONSE_CODE_IDLE:
+		msg->code = MALI_VPU_FW_CODE_IDLE;
+		break;
+	case MVE_RESPONSE_CODE_STATE_CHANGE: {
+		if (size != sizeof(fw_msg.state_change))
+			return -EPROTO;
+
+		msg->code = MALI_VPU_FW_CODE_STATE_CHANGE;
+
+		switch (fw_msg.state_change.new_state) {
+		case MVE_STATE_STOPPED:
+			msg->data.state = MALI_VPU_FW_STATE_STOPPED;
+			break;
+		case MVE_STATE_RUNNING:
+			msg->data.state = MALI_VPU_FW_STATE_RUNNING;
+			break;
+		default:
+			return -EPROTO;
+		}
+		break;
+	}
+	case MVE_RESPONSE_CODE_ERROR: {
+		size_t message_offset = offsetof(struct mve_response_error, message);
+		size_t message_size;
+
+		if (size < message_offset + 1 || size > sizeof(fw_msg.error))
+			return -EPROTO;
+
+		message_size = size - message_offset;
+		if (fw_msg.error.message[message_size - 1] != '\0')
+			return -EPROTO;
+
+		msg->code = MALI_VPU_FW_CODE_ERROR;
+
+		switch (fw_msg.error.error_code) {
+		case MVE_ERROR_ABORT:
+			msg->data.error.error_code = MALI_VPU_FW_ERROR_ABORT;
+			break;
+		case MVE_ERROR_OUT_OF_MEMORY:
+			msg->data.error.error_code = MALI_VPU_FW_ERROR_OUT_OF_MEMORY;
+			break;
+		case MVE_ERROR_ASSERT:
+			msg->data.error.error_code = MALI_VPU_FW_ERROR_ASSERT;
+			break;
+		case MVE_ERROR_UNSUPPORTED:
+			msg->data.error.error_code = MALI_VPU_FW_ERROR_UNSUPPORTED;
+			break;
+		case MVE_ERROR_INVALID_BUFFER:
+			msg->data.error.error_code = MALI_VPU_FW_ERROR_INVALID_BUFFER;
+			break;
+		case MVE_ERROR_INVALID_STATE:
+			msg->data.error.error_code = MALI_VPU_FW_ERROR_INVALID_STATE;
+			break;
+		case MVE_ERROR_WATCHDOG:
+			msg->data.error.error_code = MALI_VPU_FW_ERROR_WATCHDOG;
+			break;
+		default:
+			msg->data.error.error_code = MALI_VPU_FW_ERROR_UNKNOWN;
+			dev_warn(fw->dev, "unsupported fw error code. code=%u.\n",
+				 fw_msg.error.error_code);
+			break;
+		}
+
+		strscpy(msg->data.error.message, fw_msg.error.message,
+			min(sizeof(msg->data.error.message), sizeof(fw_msg.error.message)));
+
+		break;
+	}
+	default:
+		dev_warn(fw->dev,
+			 "unknown fw message code. code=%u, size=%zu.\n",
+			 code, size);
+		msg->code = MALI_VPU_FW_CODE_UNKNOWN;
+		mali_vpu_fw_print_debug(fw);
+		break;
+	}
+
+	return ret;
 }
