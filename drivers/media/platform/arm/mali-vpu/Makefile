@@ -2,6 +2,8 @@
 
 mali-vpu-objs := mali-vpu-probe.o \
 		mali-vpu-variant-v76.o \
-		mali-vpu-vidioc.o
+		mali-vpu-vidioc.o \
+		mali-vpu-session.o \
+		mali-vpu-dec.o
 
 obj-$(CONFIG_VIDEO_MALI_VPU) += mali-vpu.o

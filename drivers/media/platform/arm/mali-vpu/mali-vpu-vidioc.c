@@ -37,8 +37,15 @@ static int mali_vpu_open(struct file *filp)
 	v4l2_fh_init(&sess->fh, vdev);
 	v4l2_fh_add(&sess->fh, filp);
 
+	ret = mali_vpu_session_init(sess);
+	if (ret)
+		goto err_v4l2_fh_deinit;
+
 	return 0;
 
+err_v4l2_fh_deinit:
+	v4l2_fh_del(&sess->fh, filp);
+	v4l2_fh_exit(&sess->fh);
 err_free_sess:
 	kfree(sess);
 	return ret;
