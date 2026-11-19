@@ -18,6 +18,75 @@
 
 #include "thermal_core.h"
 
+#ifdef CONFIG_THERMAL_AGGREGATION
+struct thermal_of_source {
+	struct list_head node;
+	struct device_node *provider;
+	int id;
+	/*
+	 * Borrowed from the OF zone registration. The mapping is removed under
+	 * thermal_of_lock before the zone is unregistered. Aggregate consumers
+	 * acquire their own references while holding the same lock.
+	 */
+	struct thermal_zone_device *tz;
+};
+
+/*
+ * OF lifecycle operations are serialized outside thermal zone locks. Thermal
+ * callbacks must not acquire this mutex. Source removal holds it until all OF
+ * consumers have released their references, before calling core unregister.
+ */
+static DEFINE_MUTEX(thermal_of_lock);
+static LIST_HEAD(thermal_of_sources);
+
+static int thermal_of_source_add(struct device_node *provider, int id,
+				 struct thermal_zone_device *tz)
+{
+	struct thermal_of_source *source, *pos;
+
+	source = kzalloc_obj(*source);
+	if (!source)
+		return -ENOMEM;
+
+	guard(mutex)(&thermal_of_lock);
+	list_for_each_entry(pos, &thermal_of_sources, node) {
+		if (pos->provider == provider && pos->id == id) {
+			kfree(source);
+			return -EEXIST;
+		}
+	}
+	source->provider = of_node_get(provider);
+	source->id = id;
+	source->tz = tz;
+	list_add_tail(&source->node, &thermal_of_sources);
+	return 0;
+}
+
+static void thermal_of_source_remove(struct thermal_zone_device *tz)
+{
+	struct thermal_of_source *source;
+
+	guard(mutex)(&thermal_of_lock);
+	list_for_each_entry(source, &thermal_of_sources, node) {
+		if (source->tz != tz)
+			continue;
+		list_del(&source->node);
+		of_node_put(source->provider);
+		kfree(source);
+		break;
+	}
+}
+
+#else
+static int thermal_of_source_add(struct device_node *provider, int id,
+				 struct thermal_zone_device *tz)
+{
+	return 0;
+}
+
+static void thermal_of_source_remove(struct thermal_zone_device *tz) {}
+#endif
+
 /***   functions parsing device tree nodes   ***/
 
 /*
@@ -359,6 +428,7 @@ out:
  */
 static void thermal_of_zone_unregister(struct thermal_zone_device *tz)
 {
+	thermal_of_source_remove(tz);
 	thermal_zone_device_disable(tz);
 	thermal_zone_device_unregister(tz);
 }
@@ -445,6 +515,15 @@ thermal_of_zone_register(struct device_node *sensor, int id, void *data,
 	thermal_of_parameters_init(np, &tzp);
 	tz = thermal_of_zone_register_node(np, data, ops, &tzp);
 	of_node_put(np);
+
+	if (!IS_ERR(tz)) {
+		int ret = thermal_of_source_add(sensor, id, tz);
+
+		if (ret) {
+			thermal_of_zone_unregister(tz);
+			return ERR_PTR(ret);
+		}
+	}
 
 	return tz;
 }
