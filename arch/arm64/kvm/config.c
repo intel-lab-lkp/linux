@@ -1791,6 +1791,8 @@ static void __compute_hdfgrtr(struct kvm_vcpu *vcpu)
 	__compute_fgt(vcpu, HDFGRTR_EL2);
 
 	if (kvm_pmu_is_partitioned(vcpu->kvm)) {
+		unsigned int n = vcpu->kvm->arch.nr_pmu_counters;
+		bool hide_gp0 = kvm_arm_pmu_part_hpmn(n) != n;
 		u64 set = HDFGRTR_EL2_PMOVS |
 			  HDFGRTR_EL2_PMCCFILTR_EL0 |
 			  HDFGRTR_EL2_PMEVTYPERn_EL0 |
@@ -1801,10 +1803,12 @@ static void __compute_hdfgrtr(struct kvm_vcpu *vcpu)
 		    (__vcpu_sys_reg(vcpu, MDCR_EL2) & MDCR_EL2_TPM))
 			set |= HDFGRTR_EL2_PMUSERENR_EL0;
 
-		if (kvm_pmu_hyp_counter_mask(vcpu))
+		if (kvm_pmu_hyp_counter_mask(vcpu) || hide_gp0)
 			set |= HDFGRTR_EL2_PMCNTEN;
-		if (kvm_pmu_part_ovf32_mask(vcpu))
+		if (kvm_pmu_part_ovf32_mask(vcpu) || hide_gp0)
 			set |= HDFGRTR_EL2_PMEVCNTRn_EL0;
+		if (hide_gp0)
+			set |= HDFGRTR_EL2_PMINTEN;
 
 		*vcpu_fgt(vcpu, HDFGRTR_EL2) |= set & ~hdfgrtr_masks.res0;
 	}
@@ -1818,6 +1822,8 @@ static void __compute_hdfgwtr(struct kvm_vcpu *vcpu)
 		*vcpu_fgt(vcpu, HDFGWTR_EL2) |= HDFGWTR_EL2_MDSCR_EL1;
 
 	if (kvm_pmu_is_partitioned(vcpu->kvm)) {
+		unsigned int n = vcpu->kvm->arch.nr_pmu_counters;
+		bool hide_gp0 = kvm_arm_pmu_part_hpmn(n) != n;
 		u64 set = HDFGWTR_EL2_PMOVS |
 			  HDFGWTR_EL2_PMCCFILTR_EL0 |
 			  HDFGWTR_EL2_PMEVTYPERn_EL0;
@@ -1825,10 +1831,12 @@ static void __compute_hdfgwtr(struct kvm_vcpu *vcpu)
 		if (is_hyp_ctxt(vcpu))
 			set |= HDFGWTR_EL2_PMUSERENR_EL0;
 
-		if (kvm_pmu_hyp_counter_mask(vcpu))
+		if (kvm_pmu_hyp_counter_mask(vcpu) || hide_gp0)
 			set |= HDFGWTR_EL2_PMCNTEN | HDFGWTR_EL2_PMSWINC_EL0;
-		if (kvm_pmu_part_ovf32_mask(vcpu))
+		if (kvm_pmu_part_ovf32_mask(vcpu) || hide_gp0)
 			set |= HDFGWTR_EL2_PMEVCNTRn_EL0;
+		if (hide_gp0)
+			set |= HDFGWTR_EL2_PMINTEN;
 
 		*vcpu_fgt(vcpu, HDFGWTR_EL2) |= set & ~hdfgwtr_masks.res0;
 	}

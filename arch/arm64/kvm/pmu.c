@@ -914,6 +914,13 @@ u64 kvm_pmu_accessible_counter_mask(struct kvm_vcpu *vcpu)
 	return mask & ~kvm_pmu_hyp_counter_mask(vcpu);
 }
 
+unsigned int kvm_arm_pmu_part_hpmn(unsigned int n)
+{
+	if (!n && !cpus_have_final_cap(ARM64_HAS_HPMN0))
+		return 1;
+	return n;
+}
+
 /**
  * kvm_vcpu_read_pmcr - Read PMCR_EL0 register for the vCPU
  * @vcpu: The vcpu pointer
@@ -923,8 +930,12 @@ u64 kvm_vcpu_read_pmcr(struct kvm_vcpu *vcpu)
 	u64 pmcr = __vcpu_sys_reg(vcpu, PMCR_EL0);
 	u64 n = vcpu->kvm->arch.nr_pmu_counters;
 
-	if (vcpu_has_nv(vcpu) && !vcpu_is_el2(vcpu))
-		n = FIELD_GET(MDCR_EL2_HPMN, __vcpu_sys_reg(vcpu, MDCR_EL2));
+	if (vcpu_has_nv(vcpu) && !vcpu_is_el2(vcpu)) {
+		u64 hpmn = FIELD_GET(MDCR_EL2_HPMN, __vcpu_sys_reg(vcpu, MDCR_EL2));
+
+		if (hpmn < n)
+			n = hpmn;
+	}
 
 	return u64_replace_bits(pmcr, n, ARMV8_PMU_PMCR_N);
 }

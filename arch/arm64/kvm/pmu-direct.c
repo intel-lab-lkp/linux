@@ -89,6 +89,22 @@ static u64 kvm_vcpu_pmu_guest_counter_mask(struct kvm_vcpu *vcpu)
 	return 0;
 }
 
+static u64 kvm_vcpu_pmu_reserved_counter_mask(struct kvm_vcpu *vcpu)
+{
+	if (vcpu && kvm_pmu_is_partitioned(vcpu->kvm)) {
+		u64 mask = ARMV8_PMU_CNT_MASK_C;
+		unsigned int hpmn =
+			kvm_arm_pmu_part_hpmn(vcpu->kvm->arch.nr_pmu_counters);
+
+		if (hpmn > 0)
+			mask |= GENMASK_ULL(hpmn - 1, 0);
+
+		return mask;
+	}
+
+	return 0;
+}
+
 static void kvm_pmu_set_guest_owned(struct kvm_vcpu *vcpu);
 
 /**
@@ -372,8 +388,12 @@ static u64 kvm_pmu_direct_pmcr_read(struct kvm_vcpu *vcpu)
 	if (!kvm_has_feat(vcpu->kvm, ID_AA64DFR0_EL1, PMUVer, V3P5))
 		pmcr &= ~ARMV8_PMU_PMCR_LP;
 
-	if (vcpu_has_nv(vcpu) && !vcpu_is_el2(vcpu))
-		n = FIELD_GET(MDCR_EL2_HPMN, __vcpu_sys_reg(vcpu, MDCR_EL2));
+	if (vcpu_has_nv(vcpu) && !vcpu_is_el2(vcpu)) {
+		u64 hpmn = FIELD_GET(MDCR_EL2_HPMN, __vcpu_sys_reg(vcpu, MDCR_EL2));
+
+		if (hpmn < n)
+			n = hpmn;
+	}
 
 	return u64_replace_bits(pmcr, n, ARMV8_PMU_PMCR_N);
 }
@@ -686,6 +706,7 @@ static void kvm_pmu_apply_event_filter(struct kvm_vcpu *vcpu)
 static void __kvm_pmu_load(struct kvm_vcpu *vcpu, bool reserve_counters)
 {
 	struct arm_pmu *pmu = vcpu->kvm->arch.arm_pmu;
+	unsigned long reserved_counters;
 	unsigned long guest_counters;
 	unsigned long flags;
 	unsigned long daif;
@@ -710,20 +731,27 @@ static void __kvm_pmu_load(struct kvm_vcpu *vcpu, bool reserve_counters)
 		return;
 	}
 
+	reserved_counters = kvm_vcpu_pmu_reserved_counter_mask(vcpu);
 	guest_counters = kvm_vcpu_pmu_guest_counter_mask(vcpu);
 	if (reserve_counters)
-		kvm_pmu_set_guest_counters(pmu, guest_counters);
+		kvm_pmu_set_guest_counters(pmu, reserved_counters);
 
 	daif = local_daif_save();
 
 	/*
 	 * Ensure guest counters, interrupts, and overflow flags are quiesced
 	 * in hardware before lowering MDCR_EL2.HPMN and marking the partition
-	 * live on this CPU.
+	 * live on this CPU. If counter 0 is reserved solely to satisfy HPMN=1
+	 * without FEAT_HPMN0, scrub and filter it so it cannot count or leak.
 	 */
-	write_sysreg(guest_counters, pmcntenclr_el0);
-	write_sysreg(guest_counters, pmintenclr_el1);
-	write_sysreg(guest_counters, pmovsclr_el0);
+	write_sysreg(reserved_counters, pmcntenclr_el0);
+	write_sysreg(reserved_counters, pmintenclr_el1);
+	write_sysreg(reserved_counters, pmovsclr_el0);
+	if (reserved_counters & ~guest_counters) {
+		write_pmevcntrn(0, 0);
+		write_pmevtypern(0, ARMV8_PMU_EXCLUDE_EL0 |
+				    ARMV8_PMU_EXCLUDE_EL1);
+	}
 	isb();
 
 	vcpu->arch.pmu.loaded_on_cpu = true;

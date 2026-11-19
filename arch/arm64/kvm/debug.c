@@ -58,11 +58,11 @@ void kvm_arm_setup_mdcr_el2(struct kvm_vcpu *vcpu)
 	if (kvm_pmu_is_partitioned(vcpu->kvm) && vcpu->arch.pmu.loaded_on_cpu) {
 		u8 nr_host_cntr = *host_data_ptr(nr_event_counters);
 		u8 nr_guest_cntr = vcpu->kvm->arch.nr_pmu_counters;
+		u8 guest_hpmn = kvm_arm_pmu_part_hpmn(nr_guest_cntr);
 
 		if (cpumask_test_cpu(smp_processor_id(),
 				     vcpu->kvm->arch.supported_cpus) &&
-		    nr_guest_cntr < nr_host_cntr &&
-		    (cpus_have_final_cap(ARM64_HAS_HPMN0) || nr_guest_cntr > 0)) {
+		    guest_hpmn < nr_host_cntr) {
 			u64 hpmn = FIELD_GET(MDCR_EL2_HPMN, read_sysreg(mdcr_el2));
 			bool hpme;
 
@@ -81,14 +81,16 @@ void kvm_arm_setup_mdcr_el2(struct kvm_vcpu *vcpu)
 			 * Take out the coarse grain traps if we are using
 			 * fine grain traps and enforce counter access with
 			 * HPMN. Keep TPMCR when L1 sub-partitions its counters
-			 * so PMCR_EL0 reads and writes trap for multiplexing.
+			 * or when guest_hpmn > nr_guest_cntr (!FEAT_HPMN0 with
+			 * 0 event counters) so PMCR_EL0 accesses trap.
 			 */
 			mdcr &= ~MDCR_EL2_HPMN;
-			mdcr |= FIELD_PREP(MDCR_EL2_HPMN, nr_guest_cntr);
+			mdcr |= FIELD_PREP(MDCR_EL2_HPMN, guest_hpmn);
 
 			if (cpus_have_final_cap(ARM64_HAS_FGT)) {
 				mdcr &= ~MDCR_EL2_TPM;
-				if (!kvm_pmu_hyp_counter_mask(vcpu))
+				if (!kvm_pmu_hyp_counter_mask(vcpu) &&
+				    guest_hpmn == nr_guest_cntr)
 					mdcr &= ~MDCR_EL2_TPMCR;
 			}
 		}
