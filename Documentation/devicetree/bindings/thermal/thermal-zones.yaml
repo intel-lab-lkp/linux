@@ -95,10 +95,13 @@ patternProperties:
 
       thermal-sensors:
         $ref: /schemas/types.yaml#/definitions/phandle-array
-        maxItems: 1
-        description:
-          The thermal sensor phandle and sensor specifier used to monitor this
-          thermal zone.
+        description: |
+          A list of hardware thermal sensor provider phandles and sensor
+          specifiers used to monitor this thermal zone. Each entry uses the
+          number of specifier cells defined by its provider's
+          #thermal-sensor-cells. Multiple entries describe an aggregation of
+          the corresponding source zone temperatures. Thermal zone nodes are
+          not referenced by this property.
 
       coefficients:
         $ref: /schemas/types.yaml#/definitions/int32-array
@@ -110,9 +113,23 @@ patternProperties:
             z = c0 * x0 + c1 * x1 + ... + c(n-1) * x(n-1) + cn
           where c0, c1, .., cn are the coefficients.
 
-          Coefficients default to 1 in case this property is not specified. The
-          coefficients are ordered and are matched with sensors by means of the
-          sensor ID. Additional coefficients are interpreted as constant offset.
+          For multiple sources, the first n coefficients correspond to entries
+          in thermal-sensors in list order, not to provider-specific sensor IDs.
+          Supply all n multipliers, optionally followed by the constant offset
+          in millicelsius. Multipliers are signed nonzero unscaled integers;
+          there is no implicit divisor or normalization for supplied values.
+          An omitted offset is zero.
+
+          When coefficients are absent for a multi-source zone, the temperature
+          is the approximate arithmetic mean of the source zone temperatures.
+          Contributions are distributed as evenly as possible in source order
+          with a total gain of one. A single source consequently has a default
+          multiplier of one.
+
+          Existing single-source hardware zones retain their sensor-specific
+          slope and offset calibration interpretation, including signed or zero
+          values and any sensor-specific scaling. Their default slope is one
+          and default offset is zero.
 
       sustainable-power:
         $ref: /schemas/types.yaml#/definitions/uint32
@@ -338,6 +355,21 @@ examples:
             };
 
             /* ... */
+
+            // With no coefficients, use approximately equal contributions.
+            skin-thermal {
+                    polling-delay-passive = <250>;
+                    polling-delay = <1000>;
+                    thermal-sensors = <&tsens0 1>, <&tsens0 5>;
+            };
+
+            // Explicit multipliers are not normalized: board = 2*T0 - T1 - 1000.
+            board-thermal {
+                    polling-delay-passive = <250>;
+                    polling-delay = <1000>;
+                    thermal-sensors = <&tsens0 1>, <&tsens0 5>;
+                    coefficients = <2 (-1) (-1000)>;
+            };
 
             gpu-top-thermal {
                     polling-delay-passive = <250>;
