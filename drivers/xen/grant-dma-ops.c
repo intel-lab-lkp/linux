@@ -66,6 +66,15 @@ static int store_xen_grant_dma_data(struct device *dev,
 	return ret;
 }
 
+static void remove_xen_grant_dma_data(void *dev)
+{
+	unsigned long flags;
+
+	xa_lock_irqsave(&xen_grant_dma_devices, flags);
+	__xa_erase(&xen_grant_dma_devices, (unsigned long)dev);
+	xa_unlock_irqrestore(&xen_grant_dma_devices, flags);
+}
+
 /*
  * DMA ops for Xen frontends (e.g. virtio).
  *
@@ -395,6 +404,9 @@ static void xen_grant_setup_dma_ops(struct device *dev, domid_t backend_domid)
 		dev_err(dev, "Cannot store Xen grant DMA data\n");
 		goto err;
 	}
+
+	if (devm_add_action_or_reset(dev, remove_xen_grant_dma_data, dev))
+		goto err;
 
 	dev->dma_ops = &xen_grant_dma_ops;
 
