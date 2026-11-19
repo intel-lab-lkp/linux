@@ -221,15 +221,43 @@ static inline bool kvm_kick_many_cpus(struct cpumask *cpus, bool wait)
 	return true;
 }
 
-static void kvm_make_vcpu_request(struct kvm_vcpu *vcpu, unsigned int req,
-				  struct cpumask *tmp, int current_cpu)
+struct kvm_cpu_kick {
+	int me;
+	unsigned int req;
+	struct cpumask *cpus;
+};
+
+static __always_inline struct kvm_cpu_kick kvm_init_cpu_kick(unsigned int req)
+{
+	struct kvm_cpu_kick kick = { .req = req };
+
+	kick.me = get_cpu();
+
+	kick.cpus = this_cpu_cpumask_var_ptr(cpu_kick_mask);
+	cpumask_clear(kick.cpus);
+
+	return kick;
+}
+
+static bool kvm_finish_cpu_kick(struct kvm_cpu_kick *kick)
+{
+	bool kicked;
+
+	kicked = kvm_kick_many_cpus(kick->cpus, !!(kick->req & KVM_REQUEST_WAIT));
+
+	put_cpu();
+	return kicked;
+}
+
+static void kvm_make_vcpu_request(struct kvm_vcpu *vcpu,
+				  struct kvm_cpu_kick *kick)
 {
 	int cpu;
 
-	if (likely(!(req & KVM_REQUEST_NO_ACTION)))
-		__kvm_make_request(req, vcpu);
+	if (likely(!(kick->req & KVM_REQUEST_NO_ACTION)))
+		__kvm_make_request(kick->req, vcpu);
 
-	if (!(req & KVM_REQUEST_NO_WAKEUP) && kvm_vcpu_wake_up(vcpu))
+	if (!(kick->req & KVM_REQUEST_NO_WAKEUP) && kvm_vcpu_wake_up(vcpu))
 		return;
 
 	/*
@@ -242,59 +270,40 @@ static void kvm_make_vcpu_request(struct kvm_vcpu *vcpu, unsigned int req,
 	 * for vCPUs that were reading SPTEs _before_ any changes were
 	 * finalized. See kvm_vcpu_kick() for more details on handling requests.
 	 */
-	if (kvm_request_needs_ipi(vcpu, req)) {
+	if (kvm_request_needs_ipi(vcpu, kick->req)) {
 		cpu = READ_ONCE(vcpu->cpu);
-		if (cpu != -1 && cpu != current_cpu)
-			__cpumask_set_cpu(cpu, tmp);
+		if (cpu != -1 && cpu != kick->me)
+			__cpumask_set_cpu(cpu, kick->cpus);
 	}
 }
 
 bool kvm_make_vcpus_request_mask(struct kvm *kvm, unsigned int req,
 				 unsigned long *vcpu_bitmap)
 {
+	struct kvm_cpu_kick kick = kvm_init_cpu_kick(req);
 	struct kvm_vcpu *vcpu;
-	struct cpumask *cpus;
-	int i, me;
-	bool called;
-
-	me = get_cpu();
-
-	cpus = this_cpu_cpumask_var_ptr(cpu_kick_mask);
-	cpumask_clear(cpus);
+	int i;
 
 	for_each_set_bit(i, vcpu_bitmap, KVM_MAX_VCPUS) {
 		vcpu = kvm_get_vcpu(kvm, i);
 		if (!vcpu)
 			continue;
-		kvm_make_vcpu_request(vcpu, req, cpus, me);
+		kvm_make_vcpu_request(vcpu, &kick);
 	}
 
-	called = kvm_kick_many_cpus(cpus, !!(req & KVM_REQUEST_WAIT));
-	put_cpu();
-
-	return called;
+	return kvm_finish_cpu_kick(&kick);
 }
 
 bool kvm_make_all_cpus_request(struct kvm *kvm, unsigned int req)
 {
+	struct kvm_cpu_kick kick = kvm_init_cpu_kick(req);
 	struct kvm_vcpu *vcpu;
-	struct cpumask *cpus;
 	unsigned long i;
-	bool called;
-	int me;
-
-	me = get_cpu();
-
-	cpus = this_cpu_cpumask_var_ptr(cpu_kick_mask);
-	cpumask_clear(cpus);
 
 	kvm_for_each_vcpu(i, vcpu, kvm)
-		kvm_make_vcpu_request(vcpu, req, cpus, me);
+		kvm_make_vcpu_request(vcpu, &kick);
 
-	called = kvm_kick_many_cpus(cpus, !!(req & KVM_REQUEST_WAIT));
-	put_cpu();
-
-	return called;
+	return kvm_finish_cpu_kick(&kick);
 }
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_make_all_cpus_request);
 
