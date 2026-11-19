@@ -56,6 +56,9 @@ static int of_mdiobus_register_device(struct mii_bus *mdio,
 	struct mdio_device *mdiodev;
 	int rc;
 
+	if (fwnode_property_read_bool(fwnode, "broken-turn-around"))
+		mdio->phy_ignore_ta_mask |= BIT(addr);
+
 	mdiodev = mdio_device_create(mdio, addr);
 	if (IS_ERR(mdiodev))
 		return PTR_ERR(mdiodev);
