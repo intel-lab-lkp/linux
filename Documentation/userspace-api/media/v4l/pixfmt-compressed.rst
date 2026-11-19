@@ -129,6 +129,29 @@ Compressed Formats
 	this pixel format. The output buffer must contain the appropriate number
 	of macroblocks to decode a full corresponding frame to the matching
 	capture buffer.
+    * .. _V4L2-PIX-FMT-MPEG1-SLICE:
+
+      - ``V4L2_PIX_FMT_MPEG1_SLICE``
+      - 'MG1S'
+      - MPEG-1 parsed slice data, as extracted from the MPEG-1
+	(ISO/IEC 11172-2) bitstream. This format is adapted for stateless
+	video decoders that implement a MPEG-1 pipeline with the
+	:ref:`stateless_decoder`. It uses the controls of
+	``V4L2_PIX_FMT_MPEG2_SLICE``: metadata associated with the frame to
+	decode is required to be passed through the
+	``V4L2_CID_STATELESS_MPEG2_SEQUENCE`` and
+	``V4L2_CID_STATELESS_MPEG2_PICTURE`` controls, with
+	``V4L2_MPEG2_SEQ_FLAG_MPEG1`` set in the sequence control and the
+	fields that come from the MPEG-2 extensions filled as described for
+	that flag. Quantisation matrices can optionally be specified through
+	the ``V4L2_CID_STATELESS_MPEG2_QUANTISATION`` control.
+	See the :ref:`associated Codec Control IDs <v4l2-codec-stateless-mpeg2>`.
+	Exactly one output and one capture buffer must be provided for use with
+	this pixel format. The output buffer must contain the appropriate number
+	of macroblocks to decode a full corresponding frame to the matching
+	capture buffer. Decoders that enumerate this format decode MPEG-1
+	sequences; decoders that only enumerate ``V4L2_PIX_FMT_MPEG2_SLICE``
+	do not.
     * .. _V4L2-PIX-FMT-MPEG4:
 
       - ``V4L2_PIX_FMT_MPEG4``
