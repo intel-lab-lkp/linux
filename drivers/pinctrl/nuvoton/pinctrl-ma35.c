@@ -556,6 +556,11 @@ static int ma35_gpiolib_register(struct platform_device *pdev, struct ma35_pinct
 	return 0;
 }
 
+static void ma35_bank_fwnode_release(void *data)
+{
+	fwnode_handle_put(data);
+}
+
 static void ma35_bank_iounmap(void *data)
 {
 	struct ma35_pin_bank *bank = data;
@@ -629,7 +634,14 @@ static int ma35_pinctrl_get_soc_data(struct ma35_pinctrl *pctl, struct platform_
 			return -EINVAL;
 		}
 		bank = &ctrl->pin_banks[id];
-		bank->fwnode = child;
+		bank->fwnode = fwnode_handle_get(child);
+		ret = devm_add_action_or_reset(&pdev->dev,
+					       ma35_bank_fwnode_release,
+					       bank->fwnode);
+		if (ret) {
+			fwnode_handle_put(child);
+			return ret;
+		}
 		bank->regmap = pctl->regmap;
 		bank->dev = &pdev->dev;
 		ret = ma35_get_bank_data(bank);
