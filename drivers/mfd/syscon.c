@@ -132,13 +132,13 @@ static struct syscon *of_syscon_register(struct device_node *np, bool check_res)
 		} else {
 			ret = regmap_mmio_attach_clk(regmap, clk);
 			if (ret)
-				goto err_attach_clk;
+				goto err_clk;
 		}
 
 		reset = of_reset_control_get_optional_exclusive(np, NULL);
 		if (IS_ERR(reset)) {
 			ret = PTR_ERR(reset);
-			goto err_attach_clk;
+			goto err_clk;
 		}
 
 		ret = reset_control_deassert(reset);
@@ -155,11 +155,10 @@ static struct syscon *of_syscon_register(struct device_node *np, bool check_res)
 
 err_reset:
 	reset_control_put(reset);
-err_attach_clk:
-	if (!IS_ERR(clk))
-		clk_put(clk);
 err_clk:
 	regmap_exit(regmap);
+	if (!IS_ERR(clk))
+		clk_put(clk);
 err_regmap:
 	iounmap(base);
 	return ERR_PTR(ret);
