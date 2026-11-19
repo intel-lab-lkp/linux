@@ -898,6 +898,7 @@ ice_vc_fdir_parse_raw(struct ice_vf *vf,
 
 err_parser_profile_init:
 	kfree(conf->prof);
+	conf->prof = NULL;
 err_parser_destroy:
 	ice_parser_destroy(psr);
 err_mem_alloc:
@@ -1359,6 +1360,22 @@ ice_vc_fdir_lookup_entry(struct ice_vf *vf, u32 id)
 }
 
 /**
+ * ice_vc_fdir_free_conf - free a FDIR filter conf and its raw flow data
+ * @dev: pointer to the device
+ * @conf: FDIR configuration for each filter
+ *
+ * conf->pkt_buf and conf->prof are only set for raw (parser) filters by
+ * ice_vc_fdir_parse_raw(); kfree(NULL) is a no-op for the other filters.
+ */
+static void
+ice_vc_fdir_free_conf(struct device *dev, struct virtchnl_fdir_fltr_conf *conf)
+{
+	kfree(conf->pkt_buf);
+	kfree(conf->prof);
+	devm_kfree(dev, conf);
+}
+
+/**
  * ice_vc_fdir_flush_entry - remove all FDIR conf entry
  * @vf: pointer to the VF info
  */
@@ -1371,7 +1388,7 @@ static void ice_vc_fdir_flush_entry(struct ice_vf *vf)
 				 &vf->fdir.fdir_rule_list, fltr_node) {
 		conf = to_fltr_conf_from_desc(desc);
 		list_del(&desc->fltr_node);
-		devm_kfree(ice_pf_to_dev(vf->pf), conf);
+		ice_vc_fdir_free_conf(ice_pf_to_dev(vf->pf), conf);
 	}
 }
 
@@ -1718,7 +1735,7 @@ err_exit:
 	if (resp)
 		resp->status = status;
 	ice_vc_fdir_remove_entry(vf, conf, conf->flow_id);
-	devm_kfree(dev, conf);
+	ice_vc_fdir_free_conf(dev, conf);
 
 	ret = ice_vc_send_msg_to_vf(vf, ctx->v_opcode, v_ret,
 				    (u8 *)resp, len);
@@ -1777,14 +1794,14 @@ ice_vc_del_fdir_fltr_post(struct ice_vf *vf, struct ice_vf_fdir_ctx *ctx,
 		vf->vf_id, conf->flow_id,
 		(ctx->v_opcode == VIRTCHNL_OP_ADD_FDIR_FILTER) ?
 		"add" : "del");
-	devm_kfree(dev, conf);
+	ice_vc_fdir_free_conf(dev, conf);
 	return ret;
 
 err_exit:
 	if (resp)
 		resp->status = status;
 	if (success)
-		devm_kfree(dev, conf);
+		ice_vc_fdir_free_conf(dev, conf);
 
 	ret = ice_vc_send_msg_to_vf(vf, ctx->v_opcode, v_ret,
 				    (u8 *)resp, len);
@@ -2152,7 +2169,7 @@ int ice_vc_add_fdir_fltr(struct ice_vf *vf, u8 *msg)
 	if (fltr->validate_only) {
 		v_ret = VIRTCHNL_STATUS_SUCCESS;
 		stat->status = VIRTCHNL_FDIR_SUCCESS;
-		devm_kfree(dev, conf);
+		ice_vc_fdir_free_conf(dev, conf);
 		ret = ice_vc_send_msg_to_vf(vf, VIRTCHNL_OP_ADD_FDIR_FILTER,
 					    v_ret, (u8 *)stat, len);
 		goto exit;
@@ -2219,7 +2236,7 @@ err_clr_irq:
 err_rem_entry:
 	ice_vc_fdir_remove_entry(vf, conf, conf->flow_id);
 err_free_conf:
-	devm_kfree(dev, conf);
+	ice_vc_fdir_free_conf(dev, conf);
 err_exit:
 	ret = ice_vc_send_msg_to_vf(vf, VIRTCHNL_OP_ADD_FDIR_FILTER, v_ret,
 				    (u8 *)stat, len);
