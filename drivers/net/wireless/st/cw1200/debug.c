@@ -359,19 +359,20 @@ static const struct file_operations fops_wsm_dumps = {
 
 int cw1200_debug_init(struct cw1200_common *priv)
 {
+	struct dentry *dir;
 	int ret = -ENOMEM;
 	struct cw1200_debug_priv *d = kzalloc_obj(struct cw1200_debug_priv);
 	priv->debug = d;
 	if (!d)
 		return ret;
 
-	d->debugfs_phy = debugfs_create_dir("cw1200",
-					    priv->hw->wiphy->debugfsdir);
-	debugfs_create_file("status", 0400, d->debugfs_phy, priv,
+	/* wiphy_unregister() removes the whole subtree. */
+	dir = debugfs_create_dir("cw1200", priv->hw->wiphy->debugfsdir);
+	debugfs_create_file("status", 0400, dir, priv,
 			    &cw1200_status_fops);
-	debugfs_create_file("counters", 0400, d->debugfs_phy, priv,
+	debugfs_create_file("counters", 0400, dir, priv,
 			    &cw1200_counters_fops);
-	debugfs_create_file("wsm_dumps", 0200, d->debugfs_phy, priv,
+	debugfs_create_file("wsm_dumps", 0200, dir, priv,
 			    &fops_wsm_dumps);
 
 	return 0;
@@ -379,10 +380,6 @@ int cw1200_debug_init(struct cw1200_common *priv)
 
 void cw1200_debug_release(struct cw1200_common *priv)
 {
-	struct cw1200_debug_priv *d = priv->debug;
-	if (d) {
-		debugfs_remove_recursive(d->debugfs_phy);
-		priv->debug = NULL;
-		kfree(d);
-	}
+	kfree(priv->debug);
+	priv->debug = NULL;
 }
