@@ -12,6 +12,7 @@ config IDEAPAD_LAPTOP
 	depends on BACKLIGHT_CLASS_DEVICE
 	depends on ACPI_VIDEO || ACPI_VIDEO = n
 	depends on ACPI_WMI || ACPI_WMI = n
+	depends on LENOVO_WMI_HOTKEYS || LENOVO_WMI_HOTKEYS = n
 	select ACPI_PLATFORM_PROFILE
 	select INPUT_SPARSEKMAP
 	select NEW_LEDS

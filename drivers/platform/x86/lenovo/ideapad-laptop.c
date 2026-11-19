@@ -34,7 +34,7 @@
 #include <linux/string_choices.h>
 #include <linux/sysfs.h>
 #include <linux/types.h>
-#include <linux/wmi.h>
+#include <linux/platform_data/x86/lenovo-wmi-hotkeys.h>
 #include "ideapad-laptop.h"
 
 #include <acpi/battery.h>
@@ -180,6 +180,7 @@ struct ideapad_private {
 	struct input_dev *inputdev;
 	struct backlight_device *blightdev;
 	struct ideapad_dytc_priv *dytc;
+	struct notifier_block hotkeys_nb;
 	struct dentry *debug;
 	struct acpi_battery_hook battery_hook;
 	const struct power_supply_ext *battery_ext;
@@ -1312,8 +1313,6 @@ static void ideapad_unregister_rfkill(struct ideapad_private *priv, int dev)
 /*
  * input device
  */
-#define IDEAPAD_WMI_KEY 0x100
-
 static const struct key_entry ideapad_keymap[] = {
 	{ KE_KEY,   6, { KEY_SWITCHVIDEOMODE } },
 	{ KE_KEY,   7, { KEY_CAMERA } },
@@ -1326,65 +1325,6 @@ static const struct key_entry ideapad_keymap[] = {
 	{ KE_KEY,  65, { KEY_PROG4 } },
 	{ KE_KEY,  66, { KEY_TOUCHPAD_OFF } },
 	{ KE_KEY,  67, { KEY_TOUCHPAD_ON } },
-	{ KE_KEY, 128, { KEY_ESC } },
-
-	/*
-	 * WMI keys
-	 */
-
-	/* FnLock (handled by the firmware) */
-	{ KE_IGNORE,	0x02 | IDEAPAD_WMI_KEY },
-	/* Esc (handled by the firmware) */
-	{ KE_IGNORE,	0x03 | IDEAPAD_WMI_KEY },
-	/* Customizable Lenovo Hotkey ("star" with 'S' inside) */
-	{ KE_KEY,	0x01 | IDEAPAD_WMI_KEY, { KEY_FAVORITES } },
-	{ KE_KEY,	0x04 | IDEAPAD_WMI_KEY, { KEY_SELECTIVE_SCREENSHOT } },
-	/* Lenovo Support */
-	{ KE_KEY,	0x07 | IDEAPAD_WMI_KEY, { KEY_HELP } },
-	{ KE_KEY,	0x0e | IDEAPAD_WMI_KEY, { KEY_PICKUP_PHONE } },
-	{ KE_KEY,	0x0f | IDEAPAD_WMI_KEY, { KEY_HANGUP_PHONE } },
-	/* Refresh Rate Toggle (Fn+R) */
-	{ KE_KEY,	0x10 | IDEAPAD_WMI_KEY, { KEY_REFRESH_RATE_TOGGLE } },
-	/* Dark mode toggle */
-	{ KE_KEY,	0x13 | IDEAPAD_WMI_KEY, { KEY_PROG1 } },
-	/* Sound profile switch */
-	{ KE_KEY,	0x12 | IDEAPAD_WMI_KEY, { KEY_PROG2 } },
-	/* Lenovo Virtual Background application */
-	{ KE_KEY,	0x28 | IDEAPAD_WMI_KEY, { KEY_PROG3 } },
-	/* Lenovo Support */
-	{ KE_KEY,	0x27 | IDEAPAD_WMI_KEY, { KEY_HELP } },
-	/* Refresh Rate Toggle */
-	{ KE_KEY,	0x0a | IDEAPAD_WMI_KEY, { KEY_REFRESH_RATE_TOGGLE } },
-	/* Specific to some newer models */
-	{ KE_KEY,	0x3e | IDEAPAD_WMI_KEY, { KEY_MICMUTE } },
-	{ KE_KEY,	0x3f | IDEAPAD_WMI_KEY, { KEY_RFKILL } },
-	/* Star- (User Assignable Key) */
-	{ KE_KEY,	0x44 | IDEAPAD_WMI_KEY, { KEY_PROG1 } },
-	/* Eye */
-	{ KE_KEY,	0x45 | IDEAPAD_WMI_KEY, { KEY_PROG3 } },
-	/* Lenovo Smart Connect */
-	{ KE_KEY,	0x48 | IDEAPAD_WMI_KEY, { KEY_LINK_PHONE } },
-	/* Performance toggle also Fn+Q, handled inside ideapad_wmi_notify() */
-	{ KE_KEY,	0x3d | IDEAPAD_WMI_KEY, { KEY_PROG4 } },
-	/* Mode, opens a profile chooser; the Fn+Q button cycles the profile */
-	{ KE_KEY,	0x46 | IDEAPAD_WMI_KEY, { KEY_PROG4 } },
-	/* shift + prtsc */
-	{ KE_KEY,   0x2d | IDEAPAD_WMI_KEY, { KEY_SELECTIVE_SCREENSHOT } },
-	{ KE_KEY,   0x29 | IDEAPAD_WMI_KEY, { KEY_TOUCHPAD_TOGGLE } },
-	{ KE_KEY,   0x2a | IDEAPAD_WMI_KEY, { KEY_ROOT_MENU } },
-
-	/*
-	 * WMI switches
-	 *
-	 * Some devices come with physical switches. Whenever a switch is
-	 * toggled, an WMI event is emitted to inform the software about the
-	 * switch's latest state.
-	 */
-
-	/* Camera switch */
-	{ KE_SW,	0x0c | IDEAPAD_WMI_KEY, .sw = { SW_CAMERA_LENS_COVER, 0 } },
-	{ KE_SW,	0x0d | IDEAPAD_WMI_KEY, .sw = { SW_CAMERA_LENS_COVER, 1 } },
-
 	{ KE_END },
 };
 
@@ -2261,123 +2201,52 @@ static int ideapad_check_features(struct ideapad_private *priv)
 	return 0;
 }
 
-#if IS_ENABLED(CONFIG_ACPI_WMI)
+#if IS_ENABLED(CONFIG_LENOVO_WMI_HOTKEYS)
 /*
- * WMI driver
+ * The vendor specific Fn keys arrive as WMI events owned by the Lenovo WMI
+ * hotkeys driver, which reports them as input events. Subscribe to act on the
+ * ones that touch the VPC state: the Fn lock LED and the performance mode
+ * button, which cycles the platform profile through DYTC instead of
+ * reporting a key.
  */
-enum ideapad_wmi_event_type {
-	IDEAPAD_WMI_EVENT_ESC,
-	IDEAPAD_WMI_EVENT_FN_KEYS,
-};
-
-struct ideapad_wmi_private {
-	enum ideapad_wmi_event_type event;
-};
-
-static int ideapad_wmi_probe(struct wmi_device *wdev, const void *context)
+static int ideapad_hotkeys_notify(struct notifier_block *nb, unsigned long code,
+				  void *data)
 {
-	struct ideapad_wmi_private *wpriv;
+	struct ideapad_private *priv = container_of(nb, struct ideapad_private, hotkeys_nb);
 
-	wpriv = devm_kzalloc_obj(&wdev->dev, *wpriv);
-	if (!wpriv)
-		return -ENOMEM;
+	if (priv->features.set_fn_lock_led) {
+		int brightness = ideapad_fn_lock_get(priv);
 
-	*wpriv = *(const struct ideapad_wmi_private *)context;
-
-	dev_set_drvdata(&wdev->dev, wpriv);
-	return 0;
-}
-
-static void ideapad_wmi_notify(struct wmi_device *wdev, union acpi_object *data)
-{
-	struct ideapad_wmi_private *wpriv = dev_get_drvdata(&wdev->dev);
-	struct ideapad_private *priv;
-
-	guard(mutex)(&ideapad_shared_mutex);
-
-	priv = ideapad_shared;
-	if (!priv)
-		return;
-
-	switch (wpriv->event) {
-	case IDEAPAD_WMI_EVENT_ESC:
-		ideapad_input_report(priv, 128);
-		break;
-	case IDEAPAD_WMI_EVENT_FN_KEYS:
-		if (priv->features.set_fn_lock_led) {
-			int brightness = ideapad_fn_lock_get(priv);
-
-			if (brightness >= 0) {
-				ideapad_fn_lock_set(priv, brightness);
-				ideapad_fn_lock_led_notify(priv, brightness);
-			}
+		if (brightness >= 0) {
+			ideapad_fn_lock_set(priv, brightness);
+			ideapad_fn_lock_led_notify(priv, brightness);
 		}
-
-		if (data->type != ACPI_TYPE_INTEGER) {
-			dev_warn(&wdev->dev,
-				 "WMI event data is not an integer\n");
-			break;
-		}
-
-		dev_dbg(&wdev->dev, "WMI fn-key event: 0x%llx\n",
-			data->integer.value);
-
-		/* performance button triggered by 0x3d */
-		if (data->integer.value == 0x3d && priv->dytc) {
-			platform_profile_cycle();
-			break;
-		}
-
-		/* 0x02 FnLock, 0x03 Esc */
-		if (data->integer.value == 0x02 || data->integer.value == 0x03)
-			ideapad_fn_lock_led_notify(priv, data->integer.value == 0x02);
-
-		ideapad_input_report(priv,
-				     data->integer.value | IDEAPAD_WMI_KEY);
-
-		break;
 	}
+
+	dev_dbg(&priv->platform_device->dev, "WMI fn-key event: 0x%lx\n", code);
+
+	/* performance button triggered by 0x3d */
+	if (code == 0x3d && priv->dytc) {
+		platform_profile_cycle();
+		return NOTIFY_STOP;
+	}
+
+	/* 0x02 FnLock, 0x03 Esc */
+	if (code == 0x02 || code == 0x03)
+		ideapad_fn_lock_led_notify(priv, code == 0x02);
+
+	return NOTIFY_OK;
 }
 
-static const struct ideapad_wmi_private ideapad_wmi_context_esc = {
-	.event = IDEAPAD_WMI_EVENT_ESC
-};
-
-static const struct ideapad_wmi_private ideapad_wmi_context_fn_keys = {
-	.event = IDEAPAD_WMI_EVENT_FN_KEYS
-};
-
-static const struct wmi_device_id ideapad_wmi_ids[] = {
-	{ "26CAB2E5-5CF1-46AE-AAC3-4A12B6BA50E6", &ideapad_wmi_context_esc }, /* Yoga 3 */
-	{ "56322276-8493-4CE8-A783-98C991274F5E", &ideapad_wmi_context_esc }, /* Yoga 700 */
-	{ "8FC0DE0C-B4E4-43FD-B0F3-8871711C1294", &ideapad_wmi_context_fn_keys }, /* Legion 5 */
-	{},
-};
-MODULE_DEVICE_TABLE(wmi, ideapad_wmi_ids);
-
-static struct wmi_driver ideapad_wmi_driver = {
-	.driver = {
-		.name = "ideapad_wmi",
-	},
-	.id_table = ideapad_wmi_ids,
-	.min_event_size = sizeof(u32),
-	.probe = ideapad_wmi_probe,
-	.notify = ideapad_wmi_notify,
-};
-
-static int ideapad_wmi_driver_register(void)
+static int ideapad_hotkeys_register(struct ideapad_private *priv)
 {
-	return wmi_driver_register(&ideapad_wmi_driver);
-}
+	priv->hotkeys_nb.notifier_call = ideapad_hotkeys_notify;
 
-static void ideapad_wmi_driver_unregister(void)
-{
-	return wmi_driver_unregister(&ideapad_wmi_driver);
+	return devm_lenovo_wmi_hotkeys_register_notifier(&priv->platform_device->dev,
+							 &priv->hotkeys_nb);
 }
-
 #else
-static inline int ideapad_wmi_driver_register(void) { return 0; }
-static inline void ideapad_wmi_driver_unregister(void) { }
+static inline int ideapad_hotkeys_register(struct ideapad_private *priv) { return 0; }
 #endif
 
 /*
@@ -2459,6 +2328,10 @@ static int ideapad_acpi_add(struct platform_device *pdev)
 		else
 			dev_info(&pdev->dev, "DYTC interface is not available\n");
 	}
+
+	err = ideapad_hotkeys_register(priv);
+	if (err)
+		dev_warn(&pdev->dev, "Could not subscribe to the WMI hotkey events: %d\n", err);
 
 	if (acpi_video_get_backlight_type() == acpi_backlight_vendor) {
 		err = ideapad_backlight_init(priv);
@@ -2564,31 +2437,9 @@ static struct platform_driver ideapad_acpi_driver = {
 	},
 };
 
-static int __init ideapad_laptop_init(void)
-{
-	int err;
-
-	err = ideapad_wmi_driver_register();
-	if (err)
-		return err;
-
-	err = platform_driver_register(&ideapad_acpi_driver);
-	if (err) {
-		ideapad_wmi_driver_unregister();
-		return err;
-	}
-
-	return 0;
-}
-module_init(ideapad_laptop_init)
-
-static void __exit ideapad_laptop_exit(void)
-{
-	platform_driver_unregister(&ideapad_acpi_driver);
-	ideapad_wmi_driver_unregister();
-}
-module_exit(ideapad_laptop_exit)
+module_platform_driver(ideapad_acpi_driver);
 
 MODULE_AUTHOR("David Woodhouse <dwmw2@infradead.org>");
 MODULE_DESCRIPTION("IdeaPad ACPI Extras");
+MODULE_IMPORT_NS("LENOVO_WMI_HOTKEYS");
 MODULE_LICENSE("GPL");
