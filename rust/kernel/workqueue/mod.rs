@@ -212,6 +212,13 @@ use core::{
 mod builder;
 pub use self::builder::Builder;
 
+mod scoped;
+pub use self::scoped::{
+    new_scoped_work,
+    ScopedWork,
+    ScopedWorkItem, //
+};
+
 /// Creates a [`Work`] initialiser with the given name and a newly-created lock class.
 #[macro_export]
 macro_rules! new_work {
@@ -273,6 +280,12 @@ impl Queue {
         // SAFETY: The `Queue` type is `#[repr(transparent)]`, so the pointer cast is valid. The
         // caller promises that the pointer is not dangling.
         unsafe { &*ptr.cast::<Queue>() }
+    }
+
+    /// Obtain the raw `struct workqueue_struct` pointer.
+    #[inline]
+    pub fn as_raw(&self) -> *mut bindings::workqueue_struct {
+        self.0.get()
     }
 
     /// Enqueues a work item.
