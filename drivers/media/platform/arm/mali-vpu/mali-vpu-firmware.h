@@ -85,6 +85,29 @@ struct mali_vpu_fw_set_option {
 };
 
 /**
+ * struct mali_vpu_fw_seq_param - Sequence parameters.
+ * @planar: Planar output-buffer requirements.
+ * @planar.buffers_min:	Minimum number of planar buffers required.
+ */
+struct mali_vpu_fw_seq_param {
+	struct {
+		u32 buffers_min;
+	} planar;
+};
+
+/**
+ * struct mali_vpu_fw_alloc_param - Allocation parameters
+ * @height: in pixels
+ * @width: in pixels
+ *
+ * Dimensions of the decoded frame buffer
+ */
+struct mali_vpu_fw_alloc_param {
+	u32 height;
+	u32 width;
+};
+
+/**
  * struct mali_vpu_fw_error - Firmware error message.
  * @error_code: What kind of error that was reported.
  * @message: Error message string.
@@ -116,6 +139,11 @@ struct mali_vpu_fw_error {
  * @MALI_VPU_FW_CODE_STATE_CHANGE: Firmware state-change request or response.
  * @MALI_VPU_FW_CODE_SWITCH_IN: Firmware was booted on a Core in a session.
  * @MALI_VPU_FW_CODE_SWITCH_OUT: The last core in a session was switched out.
+ * @MALI_VPU_FW_CODE_EOS: Firmware returned an end-of-stream marker.
+ * @MALI_VPU_FW_CODE_INPUT_FLUSH: Firmware successfully completed a OUTPUT queue flush.
+ * @MALI_VPU_FW_CODE_OUTPUT_FLUSH: Firmware successfully completed a CAPTURE queue flush.
+ * @MALI_VPU_FW_CODE_SEQUENCE_PARAMS: Firmware reported new sequence parameters.
+ * @MALI_VPU_FW_CODE_ALLOC_PARAM: Firmware reported new frame allocation parameters.
  * @MALI_VPU_FW_CODE_UNKNOWN: Unrecognized firmware message.
  * @MALI_VPU_FW_CODE_MAX: Sentinel marking the end of the message-code enum.
  */
@@ -131,6 +159,11 @@ enum mali_vpu_fw_code {
 	MALI_VPU_FW_CODE_STATE_CHANGE,       /* Driver <-> Firmware. */
 	MALI_VPU_FW_CODE_SWITCH_IN,          /* Driver <- Firmware. */
 	MALI_VPU_FW_CODE_SWITCH_OUT,         /* Driver <-> Firmware. */
+	MALI_VPU_FW_CODE_EOS,                /* Driver <- Firmware. */
+	MALI_VPU_FW_CODE_INPUT_FLUSH,        /* Driver <- Firmware. */
+	MALI_VPU_FW_CODE_OUTPUT_FLUSH,       /* Driver <- Firmware. */
+	MALI_VPU_FW_CODE_SEQUENCE_PARAMS,    /* Driver <- Firmware. */
+	MALI_VPU_FW_CODE_ALLOC_PARAM,        /* Driver <- Firmware. */
 	MALI_VPU_FW_CODE_UNKNOWN,            /* Driver <- Firmware. */
 	MALI_VPU_FW_CODE_MAX
 };
@@ -147,6 +180,8 @@ struct mali_vpu_fw_msg {
 		struct mali_vpu_fw_job job;
 		struct mali_vpu_fw_error error;
 		struct mali_vpu_buffer *vpu_buf;
+		struct mali_vpu_fw_alloc_param alloc_params;
+		struct mali_vpu_fw_seq_param seq_params;
 	} data;
 };
 
@@ -260,6 +295,9 @@ int mali_vpu_fw_send_buffer(struct mali_vpu_fw *fw, struct mali_vpu_fw_msg *fw_m
 int mali_vpu_fw_send_ping(struct mali_vpu_fw *fw);
 int mali_vpu_fw_send_state_change(struct mali_vpu_fw *fw, enum mali_vpu_fw_state state);
 int mali_vpu_fw_send_set_option(struct mali_vpu_fw *fw, struct mali_vpu_fw_set_option *option);
+int mali_vpu_fw_send_eos(struct mali_vpu_fw *fw);
+int mali_vpu_fw_send_flush_src(struct mali_vpu_fw *fw);
+int mali_vpu_fw_send_flush_dst(struct mali_vpu_fw *fw);
 int mali_vpu_fw_parse_msg(struct mali_vpu_fw *fw, struct mali_vpu_fw_msg *msg);
 int mali_vpu_fw_get_region(enum mali_vpu_fw_region region, mali_vpu_mmu_va *begin,
 			   mali_vpu_mmu_va *end);

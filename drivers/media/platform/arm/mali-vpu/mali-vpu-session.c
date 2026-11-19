@@ -9,6 +9,7 @@
 #include <linux/errno.h>
 #include <linux/slab.h>
 #include <linux/string.h>
+#include <media/v4l2-event.h>
 #include <media/v4l2-mem2mem.h>
 
 #include "mali-vpu-session.h"
@@ -69,6 +70,14 @@ static int mali_vpu_set_port_defaults(struct mali_vpu_session *sess)
 
 	return mali_vpu_set_port_fmt(&sess->port_dst, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE,
 				    fmsz->width_default, fmsz->height_default);
+}
+
+static bool mali_vpu_both_queues_streaming(const struct mali_vpu_session *sess)
+{
+	struct vb2_queue *src_q = v4l2_m2m_get_src_vq(sess->m2m_ctx);
+	struct vb2_queue *dst_q = v4l2_m2m_get_dst_vq(sess->m2m_ctx);
+
+	return vb2_is_streaming(src_q) && vb2_is_streaming(dst_q);
 }
 
 static bool
@@ -155,6 +164,67 @@ int mali_vpu_session_fw_send_set_option(struct mali_vpu_session *sess,
 
 	mali_vpu_sched_send_irq(&sess->sched_sess, &sess->vpu_dev->sched);
 	return 0;
+}
+
+int mali_vpu_session_fw_send_eos(struct mali_vpu_session *sess)
+{
+	int ret;
+
+	if (sess->error)
+		return sess->error;
+
+	if (!mali_vpu_both_queues_streaming(sess))
+		return 0;
+
+	ret = mali_vpu_fw_send_eos(&sess->fw);
+	if (ret)
+		return ret;
+
+	mali_vpu_sched_send_irq(&sess->sched_sess, &sess->vpu_dev->sched);
+	return 0;
+}
+
+static int mali_vpu_session_fw_send_flush(struct mali_vpu_session *sess, bool to_src)
+{
+	int ret;
+
+	if (to_src)
+		ret = mali_vpu_fw_send_flush_src(&sess->fw);
+	else
+		ret = mali_vpu_fw_send_flush_dst(&sess->fw);
+
+	if (ret)
+		return ret;
+
+	mali_vpu_sched_send_irq(&sess->sched_sess, &sess->vpu_dev->sched);
+	return 0;
+}
+
+static int mali_vpu_session_send_drc_event(struct mali_vpu_session *sess)
+{
+	const struct v4l2_event event = {
+		.type                 = V4L2_EVENT_SOURCE_CHANGE,
+		.u.src_change.changes = V4L2_EVENT_SRC_CH_RESOLUTION
+	};
+
+	v4l2_event_queue_fh(&sess->fh, &event);
+	return 0;
+}
+
+static int
+mali_vpu_session_update_capture_format(struct mali_vpu_session *sess,
+				       const struct mali_vpu_fw_alloc_param alloc_params)
+{
+	struct v4l2_pix_format_mplane *src = &sess->port_src.curr_fmt.fmt.pix_mp;
+	struct v4l2_pix_format_mplane *dst = &sess->port_dst.curr_fmt.fmt.pix_mp;
+	int ret = 0;
+
+	src->width = alloc_params.width;
+	src->height = alloc_params.height;
+
+	ret = v4l2_fill_pixfmt_mp(dst, dst->pixelformat, alloc_params.width,
+				  alloc_params.height);
+	return ret;
 }
 
 static int mali_vpu_buffer_map_fw_region(struct mali_vpu_session *sess,
@@ -350,6 +420,7 @@ static void mali_vpu_session_buffer_done(struct mali_vpu_session *sess,
 {
 	struct vb2_v4l2_buffer *vbuf = &vpu_buf->m2m_buf.vb;
 	struct vb2_buffer *vb2_buf = &vbuf->vb2_buf;
+	struct vb2_queue *q = v4l2_m2m_get_vq(sess->m2m_ctx, vb2_buf->type);
 	struct mali_vpu_port *port;
 
 	if (vb2_buf->state != VB2_BUF_STATE_ACTIVE) {
@@ -373,6 +444,17 @@ static void mali_vpu_session_buffer_done(struct mali_vpu_session *sess,
 		v4l2_m2m_dst_buf_remove_by_buf(sess->m2m_ctx, vbuf);
 
 	v4l2_m2m_buf_done(vbuf, state);
+
+	if (V4L2_TYPE_IS_CAPTURE(vpu_buf->type) &&
+	    !q->last_buffer_dequeued &&
+	    (vbuf->flags & V4L2_BUF_FLAG_LAST) &&
+	    !sess->drc_pending) {
+		const struct v4l2_event event = {
+			.type = V4L2_EVENT_EOS,
+		};
+
+		v4l2_event_queue_fh(&sess->fh, &event);
+	}
 }
 
 static void mali_vpu_session_set_error(struct mali_vpu_session *sess, int error)
@@ -403,6 +485,7 @@ static void mali_vpu_session_set_error(struct mali_vpu_session *sess, int error)
 static int mali_vpu_session_handle_fw_msg(struct mali_vpu_session *sess,
 					  const struct mali_vpu_fw_msg *fw_msg)
 {
+	int ret = 0;
 	switch (fw_msg->code) {
 	case MALI_VPU_FW_CODE_ERROR:
 		dev_warn(sess->vpu_dev->dev, "firmware rsp: Error. code=%u, message=%s\n",
@@ -464,6 +547,49 @@ static int mali_vpu_session_handle_fw_msg(struct mali_vpu_session *sess,
 	case MALI_VPU_FW_CODE_IDLE:
 		dev_dbg(sess->vpu_dev->dev, "fw entered Idle/sleeping state.\n");
 		return 0;
+	case MALI_VPU_FW_CODE_EOS:
+		/*
+		 * This is driver generated dummy EOS buffer response no action
+		 * required as EOS is handled via buffer flags.
+		 */
+		return 0;
+	case MALI_VPU_FW_CODE_INPUT_FLUSH:
+		/*
+		 * Acknowledge completion of the input flush. No additional session
+		 * state update is required.
+		 */
+		return 0;
+	case MALI_VPU_FW_CODE_OUTPUT_FLUSH:
+		dev_dbg(sess->vpu_dev->dev, "fw rsp: Dst queue flushed\n");
+		if (sess->role == MALI_VPU_DECODER && sess->drc_pending)
+			return mali_vpu_session_send_drc_event(sess);
+
+		return 0;
+	case MALI_VPU_FW_CODE_ALLOC_PARAM:
+		ret = mali_vpu_session_update_capture_format(sess, fw_msg->data.alloc_params);
+		if (!ret)
+			sess->drc_pending = true;
+
+		return ret;
+	case MALI_VPU_FW_CODE_SEQUENCE_PARAMS: {
+		struct vb2_queue *dst_q;
+		u32 buffers_min;
+
+		buffers_min = fw_msg->data.seq_params.planar.buffers_min;
+		dst_q = v4l2_m2m_get_dst_vq(sess->m2m_ctx);
+
+		if (!buffers_min || buffers_min > dst_q->max_num_buffers) {
+			dev_err(sess->vpu_dev->dev,
+				"invalid minimum buffer count %u, max is %u\n",
+				buffers_min, dst_q->max_num_buffers);
+			return -EPROTO;
+		}
+
+		sess->min_buffers_required = buffers_min;
+		dst_q->min_reqbufs_allocation = sess->min_buffers_required;
+
+		return mali_vpu_session_fw_send_flush(sess, false);
+	}
 	case MALI_VPU_FW_CODE_UNKNOWN:
 	case MALI_VPU_FW_CODE_MAX:
 	default:
@@ -668,6 +794,22 @@ int mali_vpu_session_qbuf(struct mali_vpu_session *sess, struct vb2_buffer *vb2_
 	if (sess->error)
 		return sess->error;
 
+	/*
+	 * After SEQUENCE_PARAMS and DRC fw has flushed the destination queue,
+	 * but userspace can briefly requeue one of the returned buffer before
+	 * it tears down the old destination buffer allocation with REQBUF(0).
+	 * Do not give the requeued buffer back to fw as it belongs to pre DRC
+	 * allocation which will be unmapped immediately afterwards.
+	 */
+	if (sess->drc_pending && sess->role == MALI_VPU_DECODER &&
+	    mali_vpu_is_raw_q(sess, vb2_buf->type) &&
+	    port->stream_requested) {
+		v4l2_buf->flags |= V4L2_BUF_FLAG_LAST;
+		mali_vpu_session_buffer_done(sess, vpu_buf, VB2_BUF_STATE_DONE);
+
+		return 0;
+	}
+
 	if (!port->stream_requested ||
 	    !mali_vpu_session_can_stream(sess) ||
 	    sess->fw_state != MALI_VPU_FW_STATE_RUNNING) {
@@ -805,6 +947,9 @@ int mali_vpu_session_prepare_streaming(struct mali_vpu_session *sess,
 		}
 	}
 
+	if (sess->role == MALI_VPU_DECODER && mali_vpu_is_raw_q(sess, type))
+		sess->drc_pending = false;
+
 	port->sequence = 0;
 
 	return 0;
@@ -834,7 +979,8 @@ int mali_vpu_session_streamoff(struct mali_vpu_session *sess, enum v4l2_buf_type
 	    !sess->sched_sess.lsid)
 		return 0;
 
-	if (mali_vpu_is_raw_q(sess, type)) {
+	if (sess->drc_pending && sess->role == MALI_VPU_DECODER &&
+	    mali_vpu_is_raw_q(sess, type)) {
 		ret = mali_vpu_session_wait_pending(sess);
 		if (ret)
 			goto err_session;
@@ -846,7 +992,15 @@ int mali_vpu_session_streamoff(struct mali_vpu_session *sess, enum v4l2_buf_type
 	if (ret)
 		goto err_session;
 
-	return mali_vpu_session_wait_pending(sess);
+	ret = mali_vpu_session_fw_send_flush(sess, V4L2_TYPE_IS_OUTPUT(type));
+	if (ret)
+		goto err_session;
+
+	ret = mali_vpu_session_wait_pending(sess);
+	if (ret)
+		goto err_session;
+
+	return 0;
 
 err_session:
 	mali_vpu_session_set_error(sess, ret);

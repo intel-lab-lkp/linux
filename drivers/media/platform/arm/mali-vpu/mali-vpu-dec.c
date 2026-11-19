@@ -23,6 +23,7 @@ void mali_vpu_session_init_dec(struct mali_vpu_session *sess)
 	sess->num_ctrls_caps	= variant_ctrls->num_dec_ctrls;
 
 	sess->min_buffers_required = 3;	/* For CAPTURE/dst queue */
+	sess->drc_pending	= false;
 }
 
 int mali_vpu_ctrl_set_ignore_stream_headers(struct mali_vpu_session *sess,
@@ -63,4 +64,32 @@ int mali_vpu_ctrl_set_frame_reordering(struct mali_vpu_session *sess, u32 cid,
 	option.frame_reordering = value;
 
 	return mali_vpu_session_fw_send_set_option(sess, &option);
+}
+
+int mali_vpu_decoder_cmd(struct file *filp, void *priv, struct v4l2_decoder_cmd *cmd)
+{
+	struct mali_vpu_session *sess = mali_vpu_get_session(filp);
+	int ret;
+
+	ret = v4l2_m2m_ioctl_try_decoder_cmd(filp, priv, cmd);
+	if (ret)
+		return ret;
+
+	mutex_lock(&sess->vq_lock);
+
+	switch (cmd->cmd) {
+	case V4L2_DEC_CMD_STOP:
+		ret = mali_vpu_session_fw_send_eos(sess);
+		break;
+	case V4L2_DEC_CMD_START:
+		vb2_clear_last_buffer_dequeued(v4l2_m2m_get_dst_vq(sess->m2m_ctx));
+		ret = 0;
+		break;
+	default:
+		ret = -EINVAL;
+		break;
+	}
+
+	mutex_unlock(&sess->vq_lock);
+	return ret;
 }

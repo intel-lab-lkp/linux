@@ -800,6 +800,43 @@ int mali_vpu_fw_send_set_option(struct mali_vpu_fw *fw,
 	return ret;
 }
 
+int mali_vpu_fw_send_flush_src(struct mali_vpu_fw *fw)
+{
+	int ret;
+
+	ret = mali_vpu_fw_write_msg(fw, &fw->msg_host, &fw->msg_mve, MVE_REQUEST_CODE_INPUT_FLUSH,
+				    NULL, 0);
+	if (!ret)
+		fw->pending_response_count++;
+
+	return ret;
+}
+
+int mali_vpu_fw_send_flush_dst(struct mali_vpu_fw *fw)
+{
+	int ret;
+
+	ret = mali_vpu_fw_write_msg(fw, &fw->msg_host, &fw->msg_mve, MVE_REQUEST_CODE_OUTPUT_FLUSH,
+				    NULL, 0);
+	if (!ret)
+		fw->pending_response_count++;
+
+	return ret;
+}
+
+int mali_vpu_fw_send_eos(struct mali_vpu_fw *fw)
+{
+	struct mve_buffer_bitstream bs_buffer = {
+		.host_handle        = 0,
+		.bitstream_buf_addr = MVE_MEM_REGION_PROTECTED_ADDR_BEGIN,
+		.bitstream_flags    = MVE_BUFFER_BITSTREAM_FLAG_EOS,
+	};
+
+	return mali_vpu_fw_write_msg(fw, &fw->buf_in_host, &fw->buf_in_mve,
+				     MVE_BUFFER_CODE_BITSTREAM, &bs_buffer,
+				     sizeof(bs_buffer));
+}
+
 static struct mali_vpu_buffer *
 mali_vpu_fw_resolve_returned_buffer(struct mali_vpu_fw *fw,
 				    u64 host_handle,
@@ -831,14 +868,20 @@ mali_vpu_fw_resolve_returned_buffer(struct mali_vpu_fw *fw,
 	return vpu_buf;
 }
 
-static int
-mali_vpu_convert_buffer_frame(struct mali_vpu_fw *fw,
-			      struct mali_vpu_fw_msg *msg,
-			      u32 buf_type,
-			      struct mve_buffer_frame *mve_frame_buf)
+static int mali_vpu_convert_buffer_frame(struct mali_vpu_fw *fw,
+					 struct mali_vpu_fw_msg *msg,
+					 u32 buf_type,
+					 struct mve_buffer_frame *mve_frame_buf)
 {
 	struct mali_vpu_buffer *vpu_buf;
 	unsigned int i;
+
+	/* NULL host handle with the EOS flag denotes a firmware-generated EOS marker. */
+	if (!mve_frame_buf->host_handle &&
+	    mve_frame_buf->frame_flags & MVE_BUFFER_FRAME_FLAG_EOS) {
+		msg->code = MALI_VPU_FW_CODE_EOS;
+		return 0;
+	}
 
 	vpu_buf = mali_vpu_fw_resolve_returned_buffer(fw,
 						      mve_frame_buf->host_handle,
@@ -880,10 +923,18 @@ mali_vpu_convert_buffer_bitstream(struct mali_vpu_fw *fw,
 				  u32 buf_type,
 				  struct mve_buffer_bitstream *mve_stream_buf)
 {
-	struct mali_vpu_buffer *vpu_buf =
-		mali_vpu_fw_resolve_returned_buffer(fw,
-						    mve_stream_buf->host_handle,
-						    buf_type);
+	struct mali_vpu_buffer *vpu_buf;
+
+	/* NULL host handle with the EOS flag denotes a firmware-generated EOS marker. */
+	if (!mve_stream_buf->host_handle &&
+	    mve_stream_buf->bitstream_flags & MVE_BUFFER_BITSTREAM_FLAG_EOS) {
+		msg->code = MALI_VPU_FW_CODE_EOS;
+		return 0;
+	}
+
+	vpu_buf = mali_vpu_fw_resolve_returned_buffer(fw,
+						      mve_stream_buf->host_handle,
+						      buf_type);
 	if (IS_ERR(vpu_buf))
 		return PTR_ERR(vpu_buf);
 
@@ -954,6 +1005,8 @@ int mali_vpu_fw_parse_msg(struct mali_vpu_fw *fw, struct mali_vpu_fw_msg *msg)
 		struct mve_response_set_option_confirm set_option_confirm;
 		struct mve_response_set_option_fail set_option_fail;
 		struct mve_response_state_change state_change;
+		struct mve_response_frame_alloc_parameters alloc_params;
+		struct mve_response_sequence_parameters seq_params;
 		struct mve_response_error error;
 	} fw_msg = {};
 	size_t size = sizeof(fw_msg);
@@ -1052,6 +1105,37 @@ int mali_vpu_fw_parse_msg(struct mali_vpu_fw *fw, struct mali_vpu_fw_msg *msg)
 
 		ret = mali_vpu_fw_get_buffer(fw, buf_host_page, buf_mve_page, msg,
 					     V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE);
+		break;
+	case MVE_RESPONSE_CODE_FRAME_ALLOC_PARAM:
+		if (size != sizeof(fw_msg.alloc_params))
+			return -EPROTO;
+
+		msg->code = MALI_VPU_FW_CODE_ALLOC_PARAM;
+		msg->data.alloc_params.width = fw_msg.alloc_params.planar_alloc_frame_width;
+		msg->data.alloc_params.height = fw_msg.alloc_params.planar_alloc_frame_height;
+		break;
+	case MVE_RESPONSE_CODE_SEQUENCE_PARAMETERS:
+		if (size != sizeof(fw_msg.seq_params))
+			return -EPROTO;
+
+		msg->code = MALI_VPU_FW_CODE_SEQUENCE_PARAMS;
+		msg->data.seq_params.planar.buffers_min = fw_msg.seq_params.num_buffers_planar;
+		break;
+	case MVE_RESPONSE_CODE_INPUT_FLUSHED:
+		msg->code = MALI_VPU_FW_CODE_INPUT_FLUSH;
+
+		if (fw->pending_response_count == 0)
+			return -EPROTO;
+
+		fw->pending_response_count--;
+		break;
+	case MVE_RESPONSE_CODE_OUTPUT_FLUSHED:
+		msg->code = MALI_VPU_FW_CODE_OUTPUT_FLUSH;
+
+		if (fw->pending_response_count == 0)
+			return -EPROTO;
+
+		fw->pending_response_count--;
 		break;
 	case MVE_RESPONSE_CODE_ERROR: {
 		size_t message_offset = offsetof(struct mve_response_error, message);

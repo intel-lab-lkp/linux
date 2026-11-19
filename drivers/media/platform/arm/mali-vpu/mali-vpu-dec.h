@@ -8,12 +8,16 @@
 
 #include <linux/types.h>
 
+struct file;
 struct mali_vpu_session;
+struct v4l2_decoder_cmd;
 
 void mali_vpu_session_init_dec(struct mali_vpu_session *sess);
 
 /* Decoder controls setters */
 int mali_vpu_ctrl_set_ignore_stream_headers(struct mali_vpu_session *sess, u32 cid, s64 value);
 int mali_vpu_ctrl_set_frame_reordering(struct mali_vpu_session *sess, u32 cid, s64 value);
+
+int mali_vpu_decoder_cmd(struct file *filp, void *priv, struct v4l2_decoder_cmd *cmd);
 
 #endif /* __MALI_VPU_DEC_H__ */

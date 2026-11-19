@@ -15,6 +15,7 @@
 #include <media/v4l2-ioctl.h>
 #include <media/v4l2-mem2mem.h>
 
+#include "mali-vpu-dec.h"
 #include "mali-vpu-formats.h"
 #include "mali-vpu-session.h"
 #include "mali-vpu-variant.h"
@@ -359,4 +360,6 @@ const struct v4l2_ioctl_ops mali_vpu_ioctl_ops_dec = {
 	.vidioc_unsubscribe_event	= v4l2_event_unsubscribe,
 	.vidioc_streamon		= v4l2_m2m_ioctl_streamon,
 	.vidioc_streamoff		= v4l2_m2m_ioctl_streamoff,
+	.vidioc_decoder_cmd		= mali_vpu_decoder_cmd,
+	.vidioc_try_decoder_cmd		= v4l2_m2m_ioctl_try_decoder_cmd,
 };

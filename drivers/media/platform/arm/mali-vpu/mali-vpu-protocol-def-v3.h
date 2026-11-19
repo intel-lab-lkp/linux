@@ -224,6 +224,8 @@ struct mve_msg_header {
 		 */
 		#define MVE_REQUEST_CODE_GO                   (1001) /* no extra data */
 		#define MVE_REQUEST_CODE_STOP                 (1002) /* no extra data */
+		#define MVE_REQUEST_CODE_INPUT_FLUSH          (1003) /* no extra data */
+		#define MVE_REQUEST_CODE_OUTPUT_FLUSH         (1004) /* no extra data */
 		#define MVE_REQUEST_CODE_PING                 (1006) /* no extra data */
 		#define MVE_REQUEST_CODE_JOB                  (1009) /* struct mve_request_job */
 		#define MVE_REQUEST_CODE_SET_OPTION           (1010) /* struct
@@ -245,12 +247,18 @@ struct mve_msg_header {
 		#define MVE_RESPONSE_CODE_INPUT               (2005)
 		/* no extra data, but buffer placed in buffer queue */
 		#define MVE_RESPONSE_CODE_OUTPUT              (2006)
+		#define MVE_RESPONSE_CODE_INPUT_FLUSHED       (2007)
+		#define MVE_RESPONSE_CODE_OUTPUT_FLUSHED      (2008)
 		#define MVE_RESPONSE_CODE_PONG                (2009)
 		/* struct mve_response_error */
 		#define MVE_RESPONSE_CODE_ERROR               (2010)
 		/* struct mve_response_state_change */
 		#define MVE_RESPONSE_CODE_STATE_CHANGE        (2011)
 		#define MVE_RESPONSE_CODE_IDLE                (2013)
+		/* struct mve_response_frame_alloc_parameters */
+		#define MVE_RESPONSE_CODE_FRAME_ALLOC_PARAM   (2014)
+		/* struct mve_response_sequence_parameters */
+		#define MVE_RESPONSE_CODE_SEQUENCE_PARAMETERS (2015)
 		/* struct mve_response_set_option_fail */
 		#define MVE_RESPONSE_CODE_SET_OPTION_FAIL     (2017)
 
@@ -354,6 +362,62 @@ struct mve_response_state_change {
  */
 struct mve_response_job_dequeued {
 	u32 valid_job;
+};
+
+/* Decode only: This message is sent from MVE to the host so that it can
+ * allocate large enough output buffers. Output buffers that are to small
+ * will be returned to the host marked as 'rejected'.
+ */
+struct mve_response_frame_alloc_parameters {
+	/* Please note that the below information is a hint
+	 * for what buffers to allocate, it does not say
+	 * what actual resolution an output picture has.
+	 */
+
+	/* To use if allocating PLANAR YUV output buffers: */
+	u16 planar_alloc_frame_width;
+	u16 planar_alloc_frame_height;
+	u32 afbc_alloc_bytes;
+	u32 afbc_alloc_bytes_downscaled;
+	u16 afbc_width_in_superblocks;
+	u16 afbc_width_in_superblocks_downscaled;
+
+	/* For PLANAR YUV output, every plane's address need to be adjusted to get
+	 * optimal AXI bursts when the pixel data is written, the values below may
+	 * be used to calculate address offsets.
+	 */
+	u16 cropx;
+	u16 cropy;
+
+	u32 mbinfo_alloc_bytes; /* Only for debugging */
+};
+
+/* Decode only: This message is sent from MVE to the host so that it can
+ * allocate suitable output buffers. The needed size of the buffer is sent
+ * in a separate message (above).
+ * When MVE sends the message below, it enters a waiting-state and will not
+ * make any progress until the host sends an output-flush command, upon
+ * which MVE will return all output buffers, followed by a message saying
+ * that the output has been flushed. Only then should the host start
+ * enqueueing new output buffers.
+ */
+struct mve_response_sequence_parameters {
+	/* Other stream parameters affecting buffer allocation,
+	 * any change in these values will trigger a flush.
+	 */
+	u8 interlace;              /* 0 or 1 */
+	u8 chroma_format;
+		#define MVE_CHROMA_FORMAT_MONO (0x0)
+		#define MVE_CHROMA_FORMAT_420  (0x1)
+		#define MVE_CHROMA_FORMAT_422  (0x2)
+		#define MVE_CHROMA_FORMAT_440  (0x3)
+		#define MVE_CHROMA_FORMAT_ARGB (0x4)
+	u8 bitdepth_luma;          /* 8, 9 or 10 */
+	u8 bitdepth_chroma;        /* 8, 9 or 10 */
+	u8 num_buffers_planar;     /* number of planar buffers needed */
+	u8 num_buffers_afbc;
+	u8 range_mapping_enabled;
+	u8 reserved0;
 };
 
 /*
