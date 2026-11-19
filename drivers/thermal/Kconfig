@@ -17,6 +17,14 @@ menuconfig THERMAL
 
 if THERMAL
 
+config THERMAL_AGGREGATION
+	bool "Thermal zone aggregation"
+	help
+	  Allow thermal zones to calculate their temperature from multiple
+	  existing thermal zones using signed coefficients and an offset.
+	  This also enables discovery of multi-source zones in Device Tree.
+	  If unsure, say N.
+
 config THERMAL_NETLINK
 	bool "Thermal netlink management"
 	depends on NET
