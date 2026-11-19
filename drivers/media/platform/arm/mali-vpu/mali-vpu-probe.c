@@ -15,10 +15,14 @@
 #include <linux/platform_device.h>
 #include <linux/reset.h>
 #include <linux/slab.h>
+#include <linux/string.h>
+#include <media/v4l2-dev.h>
+#include <media/v4l2-device.h>
 
 #include "mali-vpu-device.h"
 #include "mali-vpu-registers.h"
 #include "mali-vpu-variant.h"
+#include "mali-vpu-vidioc.h"
 
 /* VPU register access helpers */
 static u32 mali_vpu_read_reg(void __iomem *regs_base, u32 off)
@@ -119,6 +123,44 @@ static int mali_vpu_get_resources(struct mali_vpu_dev *vpu_dev)
 	return mali_vpu_get_resets(vpu_dev);
 }
 
+static int mali_vpu_register_video_device(struct mali_vpu_dev *vpu_dev,
+					  enum mali_vpu_session_role role)
+{
+	struct video_device *vdev;
+	int ret;
+
+	vdev = video_device_alloc();
+	if (!vdev)
+		return -ENOMEM;
+
+	vdev->release		= video_device_release;
+	vdev->fops		= &mali_vpu_fops;
+	vdev->vfl_dir		= VFL_DIR_M2M;
+	vdev->v4l2_dev		= &vpu_dev->v4l2_dev;
+	vdev->device_caps	= V4L2_CAP_VIDEO_M2M_MPLANE | V4L2_CAP_STREAMING;
+
+	if (role == MALI_VPU_DECODER) {
+		strscpy(vdev->name, "mali-vpu-decoder", sizeof(vdev->name));
+		vdev->ioctl_ops		= &mali_vpu_ioctl_ops_dec;
+		vpu_dev->vdev_dec	= vdev;
+	} else {
+		ret = -EINVAL;
+		goto err_vdev_release;
+	}
+
+	video_set_drvdata(vdev, vpu_dev);
+
+	ret = video_register_device(vdev, VFL_TYPE_VIDEO, -1);
+	if (ret)
+		goto err_vdev_release;
+
+	return 0;
+
+err_vdev_release:
+	video_device_release(vdev);
+	return ret;
+}
+
 static int mali_vpu_probe(struct platform_device *pdev)
 {
 	struct mali_vpu_dev *vpu_dev;
@@ -170,10 +212,22 @@ static int mali_vpu_probe(struct platform_device *pdev)
 		goto err_rst_clk;
 	}
 
+	ret = v4l2_device_register(&pdev->dev, &vpu_dev->v4l2_dev);
+	if (ret) {
+		dev_err(vpu_dev->dev, "failed to register V4L2 device\n");
+		goto err_rst_clk;
+	}
+
+	ret = mali_vpu_register_video_device(vpu_dev, MALI_VPU_DECODER);
+	if (ret)
+		goto err_unreg_v4l2;
+
 	platform_set_drvdata(pdev, vpu_dev);
 
 	return 0;
 
+err_unreg_v4l2:
+	v4l2_device_unregister(&vpu_dev->v4l2_dev);
 err_rst_clk:
 	mali_vpu_assert_reset(vpu_dev);
 err_clk:
@@ -185,6 +239,9 @@ err_clk:
 static void mali_vpu_remove(struct platform_device *pdev)
 {
 	struct mali_vpu_dev *vpu_dev = platform_get_drvdata(pdev);
+
+	video_unregister_device(vpu_dev->vdev_dec);
+	v4l2_device_unregister(&vpu_dev->v4l2_dev);
 
 	mali_vpu_assert_reset(vpu_dev);
 	mali_vpu_disable_clk(vpu_dev);
@@ -205,7 +262,7 @@ static struct platform_driver mali_vpu_driver = {
 	.probe = mali_vpu_probe,
 	.remove = mali_vpu_remove,
 	.driver = {
-		.name = "mali-vpu",
+		.name = MALI_VPU_DRV_NAME,
 		.of_match_table = mali_vpu_dt_match,
 	},
 };

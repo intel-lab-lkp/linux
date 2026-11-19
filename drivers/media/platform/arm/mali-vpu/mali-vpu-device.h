@@ -7,10 +7,21 @@
 #define __MALI_VPU_DEVICE_H__
 
 #include <linux/device.h>
+#include <media/v4l2-device.h>
+
+#define MALI_VPU_DRV_NAME "mali-vpu"
 
 struct clk_bulk_data;
 struct mali_vpu_variant;
 struct reset_control_bulk_data;
+
+/**
+ * enum mali_vpu_session_role - Mali VPU session role
+ * @MALI_VPU_DECODER: Video decoding session
+ */
+enum mali_vpu_session_role {
+	MALI_VPU_DECODER = 0,
+};
 
 /**
  * struct mali_vpu_dev - Mali VPU device
@@ -22,6 +33,8 @@ struct reset_control_bulk_data;
  * @rst_count: Number of reset controls in @rst_list.
  * @irq: IRQ number for VPU.
  * @variant: Structure describing variant-specific features and capabilities.
+ * @v4l2_dev: V4L2 device structure for mali vpu.
+ * @vdev_dec: Video device structure for decoder.
  */
 struct mali_vpu_dev {
 	struct device			*dev;
@@ -33,6 +46,8 @@ struct mali_vpu_dev {
 	int				irq;
 
 	const struct mali_vpu_variant	*variant;
+	struct v4l2_device		v4l2_dev;
+	struct video_device		*vdev_dec;
 };
 
 #endif /* __MALI_VPU_DEVICE_H__ */

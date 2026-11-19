@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-only
 config VIDEO_MALI_VPU
 	tristate "ARM Mali VPU driver"
+	depends on V4L_MEM2MEM_DRIVERS
 	depends on VIDEO_DEV
 	depends on !CPU_BIG_ENDIAN
 	help
