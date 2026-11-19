@@ -237,9 +237,14 @@ class_perf_ctx_lock_constructor(struct perf_cpu_context *cpuctx,
 
 #define TASK_TOMBSTONE ((void *)-1L)
 
-static bool is_kernel_event(struct perf_event *event)
+static bool is_kernel_event(const struct perf_event *event)
 {
 	return READ_ONCE(event->owner) == TASK_TOMBSTONE;
+}
+
+static bool is_pinned_kernel_event(const struct perf_event *event)
+{
+	return event->attr.pinned && is_kernel_event(event);
 }
 
 static DEFINE_PER_CPU(struct perf_cpu_context, perf_cpu_context);
@@ -1781,7 +1786,8 @@ static inline struct cgroup *event_cgroup(const struct perf_event *event)
  */
 static __always_inline int
 perf_event_groups_cmp(const int left_cpu, const struct pmu *left_pmu,
-		      const struct cgroup *left_cgroup, const u64 left_group_index,
+		      const struct cgroup *left_cgroup, const bool left_kernel,
+		      const u64 left_group_index,
 		      const struct perf_event *right)
 {
 	if (left_cpu < right->cpu)
@@ -1824,6 +1830,9 @@ perf_event_groups_cmp(const int left_cpu, const struct pmu *left_pmu,
 	}
 #endif
 
+	if (left_kernel != is_pinned_kernel_event(right))
+		return left_kernel ? -1 : 1;
+
 	if (left_group_index < right->group_index)
 		return -1;
 	if (left_group_index > right->group_index)
@@ -1839,7 +1848,8 @@ static inline bool __group_less(struct rb_node *a, const struct rb_node *b)
 {
 	struct perf_event *e = __node_2_pe(a);
 	return perf_event_groups_cmp(e->cpu, e->pmu_ctx->pmu, event_cgroup(e),
-				     e->group_index, __node_2_pe(b)) < 0;
+				     is_pinned_kernel_event(e), e->group_index,
+				     __node_2_pe(b)) < 0;
 }
 
 struct __group_key {
@@ -1853,8 +1863,9 @@ static inline int __group_cmp(const void *key, const struct rb_node *node)
 	const struct __group_key *a = key;
 	const struct perf_event *b = __node_2_pe(node);
 
-	/* partial/subtree match: @cpu, @pmu, @cgroup; ignore: @group_index */
-	return perf_event_groups_cmp(a->cpu, a->pmu, a->cgroup, b->group_index, b);
+	/* partial/subtree match: @cpu, @pmu, @cgroup; ignore: @kernel, @group_index */
+	return perf_event_groups_cmp(a->cpu, a->pmu, a->cgroup,
+				     is_pinned_kernel_event(b), b->group_index, b);
 }
 
 static inline int
@@ -1863,9 +1874,9 @@ __group_cmp_ignore_cgroup(const void *key, const struct rb_node *node)
 	const struct __group_key *a = key;
 	const struct perf_event *b = __node_2_pe(node);
 
-	/* partial/subtree match: @cpu, @pmu, ignore: @cgroup, @group_index */
+	/* partial/subtree match: @cpu, @pmu, ignore: @cgroup, @kernel, @group_index */
 	return perf_event_groups_cmp(a->cpu, a->pmu, event_cgroup(b),
-				     b->group_index, b);
+				     is_pinned_kernel_event(b), b->group_index, b);
 }
 
 /*
@@ -4023,6 +4034,9 @@ static bool perf_less_group_idx(const void *l, const void *r, void __always_unus
 {
 	const struct perf_event *le = *(const struct perf_event **)l;
 	const struct perf_event *re = *(const struct perf_event **)r;
+
+	if (is_pinned_kernel_event(le) != is_pinned_kernel_event(re))
+		return is_pinned_kernel_event(le);
 
 	return le->group_index < re->group_index;
 }
