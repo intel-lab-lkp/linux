@@ -39,8 +39,9 @@ static int sev_tio_spdm_cmd(struct tio_dsm *dsm, int ret)
 
 	/* ret > 0 means "SPDM requested" */
 	while (ret == PCI_DOE_FEATURE_CMA || ret == PCI_DOE_FEATURE_SSESSION) {
-		ret = pci_doe(dsm->tsm.doe_mb, PCI_VENDOR_ID_PCI_SIG, ret,
-			      spdm->req, spdm->req_len, spdm->rsp, spdm->rsp_len);
+		ret = pci_tsm_doe_transfer(dsm->tsm.base_tsm.pdev, ret,
+					   spdm->req, spdm->req_len,
+					   spdm->rsp, spdm->rsp_len);
 		if (ret < 0)
 			break;
 
