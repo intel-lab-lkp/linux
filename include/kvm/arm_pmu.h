@@ -138,6 +138,7 @@ u64 kvm_pmu_evtyper_mask(struct kvm *kvm);
 int kvm_arm_set_default_pmu(struct kvm *kvm);
 u8 kvm_arm_pmu_get_max_counters(struct kvm *kvm);
 unsigned int kvm_arm_pmu_part_hpmn(unsigned int n);
+bool kvm_arm_pmu_part_nr_valid(struct kvm *kvm, unsigned int n);
 
 u64 kvm_vcpu_read_pmcr(struct kvm_vcpu *vcpu);
 bool kvm_pmu_counter_is_hyp(struct kvm_vcpu *vcpu, unsigned int idx);
@@ -281,6 +282,11 @@ static inline u8 kvm_arm_pmu_get_max_counters(struct kvm *kvm)
 static inline unsigned int kvm_arm_pmu_part_hpmn(unsigned int n)
 {
 	return n;
+}
+
+static inline bool kvm_arm_pmu_part_nr_valid(struct kvm *kvm, unsigned int n)
+{
+	return false;
 }
 
 static inline u64 kvm_vcpu_read_pmcr(struct kvm_vcpu *vcpu)
