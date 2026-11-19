@@ -142,6 +142,9 @@ int mali_vpu_session_fw_send_set_option(struct mali_vpu_session *sess,
 {
 	int ret;
 
+	if (sess->error)
+		return sess->error;
+
 	ret = mali_vpu_fw_send_set_option(&sess->fw, opt);
 	if (ret)
 		return ret;
@@ -307,6 +310,31 @@ static void mali_vpu_session_buffer_done(struct mali_vpu_session *sess,
 	v4l2_m2m_buf_done(vbuf, state);
 }
 
+static void mali_vpu_session_set_error(struct mali_vpu_session *sess, int error)
+{
+	struct vb2_queue *src_q;
+	struct vb2_queue *dst_q;
+
+	lockdep_assert_held(&sess->vq_lock);
+
+	if (sess->error)
+		return;
+
+	sess->error = error;
+	sess->fw_requested_state = MALI_VPU_FW_STATE_STOPPED;
+	sess->fw_state = MALI_VPU_FW_STATE_STOPPED;
+
+	mali_vpu_sched_session_terminate(&sess->sched_sess, &sess->vpu_dev->sched);
+
+	src_q = v4l2_m2m_get_src_vq(sess->m2m_ctx);
+	dst_q = v4l2_m2m_get_dst_vq(sess->m2m_ctx);
+
+	vb2_queue_error(src_q);
+	vb2_queue_error(dst_q);
+
+	wake_up(&sess->fw_waitq);
+}
+
 static int mali_vpu_session_handle_fw_msg(struct mali_vpu_session *sess,
 					  const struct mali_vpu_fw_msg *fw_msg)
 {
@@ -385,11 +413,13 @@ static int mali_vpu_session_wait_pending(struct mali_vpu_session *sess)
 
 	lockdep_assert_held(&sess->vq_lock);
 
-	while (sess->fw_bin_state == MALI_VPU_SESSION_FW_BIN_READY &&
+	while (!sess->error &&
+	       sess->fw_bin_state == MALI_VPU_SESSION_FW_BIN_READY &&
 	       sess->fw.pending_response_count) {
 		mutex_unlock(&sess->vq_lock);
 
 		timeout = wait_event_timeout(sess->fw_waitq,
+					     READ_ONCE(sess->error) ||
 					     READ_ONCE(sess->fw_bin_state) !=
 					     MALI_VPU_SESSION_FW_BIN_READY ||
 					     !READ_ONCE(sess->fw.pending_response_count),
@@ -397,11 +427,14 @@ static int mali_vpu_session_wait_pending(struct mali_vpu_session *sess)
 
 		mutex_lock(&sess->vq_lock);
 
+		if (sess->error)
+			return sess->error;
+
 		if (!timeout && sess->fw.pending_response_count)
-			return -ETIMEDOUT;
+			mali_vpu_session_set_error(sess, -ETIMEDOUT);
 	}
 
-	return 0;
+	return sess->error;
 }
 
 static int mali_vpu_session_fw_init(struct mali_vpu_session *sess)
@@ -518,6 +551,7 @@ int mali_vpu_session_init(struct mali_vpu_session *sess)
 		goto err_mmu_cleanup;
 	}
 
+	sess->error = 0;
 	sess->fw_bin = NULL;
 	sess->port_src.stream_requested = false;
 	sess->port_dst.stream_requested = false;
@@ -565,6 +599,9 @@ int mali_vpu_session_qbuf(struct mali_vpu_session *sess, struct vb2_buffer *vb2_
 	struct mali_vpu_port *port =
 			mali_vpu_session_get_port(sess, vb2_buf->type);
 	int ret;
+
+	if (sess->error)
+		return sess->error;
 
 	if (!port->stream_requested ||
 	    !mali_vpu_session_can_stream(sess) ||
@@ -674,6 +711,9 @@ int mali_vpu_session_prepare_streaming(struct mali_vpu_session *sess,
 
 	lockdep_assert_held(&sess->vq_lock);
 
+	if (sess->error)
+		return sess->error;
+
 	if (port->stream_requested)
 		return 0;
 
@@ -687,8 +727,10 @@ int mali_vpu_session_prepare_streaming(struct mali_vpu_session *sess,
 	if (sess->fw_bin_state == MALI_VPU_SESSION_FW_BIN_READY &&
 	    mali_vpu_session_can_stream(sess)) {
 		ret = mali_vpu_session_fw_init(sess);
-		if (ret)
+		if (ret) {
+			mali_vpu_session_set_error(sess, ret);
 			goto err_rollback;
+		}
 	}
 
 	return 0;
@@ -711,18 +753,31 @@ int mali_vpu_session_streamoff(struct mali_vpu_session *sess, enum v4l2_buf_type
 
 	port->stream_requested = false;
 
+	if (sess->error)
+		return 0;
+
 	if (sess->fw_bin_state != MALI_VPU_SESSION_FW_BIN_READY ||
 	    !sess->sched_sess.lsid)
 		return 0;
 
-	if (mali_vpu_is_raw_q(sess, type))
-		return mali_vpu_session_wait_pending(sess);
+	if (mali_vpu_is_raw_q(sess, type)) {
+		ret = mali_vpu_session_wait_pending(sess);
+		if (ret)
+			goto err_session;
+
+		return 0;
+	}
 
 	ret = mali_vpu_session_fw_stop(sess);
 	if (ret)
-		return ret;
+		goto err_session;
 
 	return mali_vpu_session_wait_pending(sess);
+
+err_session:
+	mali_vpu_session_set_error(sess, ret);
+
+	return ret;
 }
 
 static void mali_vpu_session_fw_bin_ready(struct mali_vpu_fw_bin *vpu_fw_bin,
@@ -739,13 +794,15 @@ static void mali_vpu_session_fw_bin_ready(struct mali_vpu_fw_bin *vpu_fw_bin,
 	 * A synchronous cache hit precedes marking the port requested.
 	 * An asynchronous callback acquires vq_lock after preparation.
 	 */
-	if (!same_thread && mali_vpu_both_ports_unrequested(sess)) {
+	if (sess->error ||
+	    (!same_thread && mali_vpu_both_ports_unrequested(sess))) {
 		sess->fw_bin_state = MALI_VPU_SESSION_FW_BIN_UNINITIALIZED;
 		goto err_cache_put;
 	}
 
 	if (vpu_fw_bin->load_status) {
 		sess->fw_bin_state = MALI_VPU_SESSION_FW_BIN_FAILED;
+		mali_vpu_session_set_error(sess, vpu_fw_bin->load_status);
 		goto err_cache_put;
 	}
 
@@ -758,6 +815,7 @@ static void mali_vpu_session_fw_bin_ready(struct mali_vpu_fw_bin *vpu_fw_bin,
 	ret = mali_vpu_sched_session_prepare(&sess->sched_sess, sess);
 	if (ret) {
 		sess->fw_bin_state = MALI_VPU_SESSION_FW_BIN_UNINITIALIZED;
+		mali_vpu_session_set_error(sess, ret);
 		goto err_cache_put;
 	}
 
@@ -767,6 +825,7 @@ static void mali_vpu_session_fw_bin_ready(struct mali_vpu_fw_bin *vpu_fw_bin,
 		dev_err(sess->vpu_dev->dev,
 			"failed to initialise firmware: %d\n", ret);
 		sess->fw_bin_state = MALI_VPU_SESSION_FW_BIN_FAILED;
+		mali_vpu_session_set_error(sess, ret);
 		goto err_cache_put;
 	}
 
@@ -782,6 +841,7 @@ static void mali_vpu_session_fw_bin_ready(struct mali_vpu_fw_bin *vpu_fw_bin,
 			dev_err(sess->vpu_dev->dev,
 				"failed to start streaming: %d\n", ret);
 			sess->fw_bin_state = MALI_VPU_SESSION_FW_BIN_UNINITIALIZED;
+			mali_vpu_session_set_error(sess, ret);
 			goto err_fw_cleanup;
 		}
 	}
@@ -833,6 +893,9 @@ int mali_vpu_session_request_fw_load(struct mali_vpu_session *sess)
 
 	lockdep_assert_held(&sess->vq_lock);
 
+	if (sess->error)
+		return sess->error;
+
 	if (sess->fw_bin_state == MALI_VPU_SESSION_FW_BIN_READY ||
 	    sess->fw_bin_state == MALI_VPU_SESSION_FW_BIN_LOADING)
 		return 0;
@@ -849,6 +912,7 @@ int mali_vpu_session_request_fw_load(struct mali_vpu_session *sess)
 	ret = mali_vpu_fw_cache_get(sess->vpu_dev->fw_cache, &fw_key, sess->fw_event);
 	if (ret) {
 		sess->fw_bin_state = MALI_VPU_SESSION_FW_BIN_FAILED;
+		mali_vpu_session_set_error(sess, ret);
 		complete_all(&sess->fw_load_done);
 		return ret;
 	}
@@ -864,31 +928,40 @@ void mali_vpu_session_irq(struct mali_vpu_session *sess)
 
 	mutex_lock(&sess->vq_lock);
 
+	if (sess->error)
+		goto unlock_mutex;
+
 	ret = mali_vpu_fw_handle_rpc(&sess->fw, &flush_mmu);
 	if (ret) {
 		if (flush_mmu)
 			mali_vpu_sched_flush_mmu(&sess->sched_sess, &sess->vpu_dev->sched);
 		mali_vpu_sched_send_irq(&sess->sched_sess, &sess->vpu_dev->sched);
 
-		if (ret < 0)
+		if (ret < 0) {
+			mali_vpu_session_set_error(sess, ret);
 			goto unlock_mutex;
+		}
 	}
 
 	do {
 		ret = mali_vpu_fw_parse_msg(&sess->fw, &msg);
-		if (ret < 0)
+		if (ret < 0) {
+			mali_vpu_session_set_error(sess, ret);
 			goto unlock_mutex;
+		}
 
 		if (!ret)
 			break;
 
 		ret = mali_vpu_session_handle_fw_msg(sess, &msg);
-		if (ret)
+		if (ret < 0) {
+			mali_vpu_session_set_error(sess, ret);
 			goto unlock_mutex;
+		}
 	} while (ret >= 0);
 
-unlock_mutex:
 	wake_up(&sess->fw_waitq);
 
+unlock_mutex:
 	mutex_unlock(&sess->vq_lock);
 }

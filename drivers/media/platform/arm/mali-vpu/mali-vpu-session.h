@@ -60,6 +60,9 @@ struct mali_vpu_port {
  * Session cleanup waits for an in-flight callback before releasing the
  * session-owned binary reference and callback event. On timeout, it cancels
  * the pending cache waiter or waits for an already claimed callback.
+ *
+ * Errors follow the session error-handling policy. A FAILED binary state alone
+ * does not imply that another STREAMON can recover the session.
  */
 enum mali_vpu_session_fw_bin_state {
 	MALI_VPU_SESSION_FW_BIN_UNINITIALIZED = 0,
@@ -93,6 +96,7 @@ enum mali_vpu_session_fw_bin_state {
  * @fw_requested_state: Last firmware state requested by the driver.
  * @sched_sess: Scheduler state used to map this session to an LSID.
  * @ncores: Number of cores assigned to this session by scheduler.
+ * @error: Fatal session error code.
  */
 struct mali_vpu_session {
 	struct mali_vpu_dev		*vpu_dev;
@@ -122,6 +126,7 @@ struct mali_vpu_session {
 
 	struct mali_vpu_sched_session	sched_sess;
 	u32				ncores;
+	int				error;
 };
 
 int mali_vpu_session_init(struct mali_vpu_session *sess);
