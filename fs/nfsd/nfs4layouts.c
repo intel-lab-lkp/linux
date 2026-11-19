@@ -12,6 +12,7 @@
 #include "nfserr.h"
 #include "pnfs.h"
 #include "netns.h"
+#include "vfs.h"
 #include "trace.h"
 
 #define NFSDDBG_FACILITY                NFSDDBG_PNFS
@@ -184,6 +185,11 @@ void nfsd4_close_layout(struct nfs4_layout_stateid *ls)
 	}
 }
 
+/* The mask that nfsd4_layout_holders() returns */
+#define NFSD_LAYOUTS_OWN	0x1
+#define NFSD_LAYOUTS_OTHER	0x2
+#define NFSD_LAYOUTS_IDLE	0x4
+
 /**
  * nfsd4_layout_holders - Report which clients hold layout leases on a file
  * @inode: file whose layout leases are checked
@@ -195,7 +201,7 @@ void nfsd4_close_layout(struct nfs4_layout_stateid *ls)
  * holds one, and NFSD_LAYOUTS_IDLE if a lease of another client is not
  * being broken yet.
  */
-unsigned int nfsd4_layout_holders(struct inode *inode)
+static unsigned int nfsd4_layout_holders(struct inode *inode)
 {
 	struct file_lock_context *ctx = locks_inode_context(inode);
 	struct nfs4_client *clp = NULL;
@@ -230,6 +236,58 @@ unsigned int nfsd4_layout_holders(struct inode *inode)
 	}
 	spin_unlock(&ctx->flc_lock);
 	return holders;
+}
+
+static bool nfsd_other_layouts(struct inode *inode)
+{
+	return nfsd4_layout_holders(inode) & NFSD_LAYOUTS_OTHER;
+}
+
+/**
+ * nfsd_break_layouts - Recall the layouts of one or two files
+ * @inode: file that is about to be modified
+ * @inode2: the other file of a COPY or CLONE, or NULL
+ *
+ * Context: Process context. Sleeps for up to NFSD_LAYOUTRETURN_TIMEOUT.
+ *
+ * Return: zero if no layout is left, -EWOULDBLOCK while a recall is under
+ * way, or -ENOMEM
+ */
+int nfsd_break_layouts(struct inode *inode, struct inode *inode2)
+{
+	long timeout = NFSD_LAYOUTRETURN_TIMEOUT;
+	unsigned int holders;
+	int ret, ret2 = 0;
+
+	holders = nfsd4_layout_holders(inode);
+	if (inode2)
+		holders |= nfsd4_layout_holders(inode2);
+	if (!holders)
+		return 0;
+
+	/* Start the recalls without waiting, unlike the filesystem's break */
+	ret = break_layout(inode, false);
+	if (inode2)
+		ret2 = break_layout(inode2, false);
+	if (ret != -EWOULDBLOCK && ret2 != -EWOULDBLOCK)
+		return ret ? ret : ret2;
+	/*
+	 * Briefly wait for other clients' layouts if this started their
+	 * recall, as for delegations. The client of this request returns its
+	 * own only after its I/O through them.
+	 */
+	if ((holders & NFSD_LAYOUTS_OWN) || !(holders & NFSD_LAYOUTS_IDLE))
+		return -EWOULDBLOCK;
+
+	timeout = wait_var_event_timeout(inode, !nfsd_other_layouts(inode),
+					 timeout);
+	if (inode2 && timeout)
+		wait_var_event_timeout(inode2, !nfsd_other_layouts(inode2),
+				       timeout);
+	ret = break_layout(inode, false);
+	if (!ret && inode2)
+		ret = break_layout(inode2, false);
+	return ret;
 }
 
 static void

@@ -46,7 +46,6 @@
 #include "netns.h"
 #include "stats.h"
 #include "vfs.h"
-#include "pnfs.h"
 #include "filecache.h"
 #include "trace.h"
 
@@ -916,58 +915,6 @@ int nfsd_open_break_lease(struct inode *inode, int access)
 		return 0;
 	mode = (access & NFSD_MAY_WRITE) ? O_WRONLY : O_RDONLY;
 	return break_lease(inode, mode | O_NONBLOCK);
-}
-
-static bool nfsd_other_layouts(struct inode *inode)
-{
-	return nfsd4_layout_holders(inode) & NFSD_LAYOUTS_OTHER;
-}
-
-/**
- * nfsd_break_layouts - Recall the layouts of one or two files
- * @inode: file that is about to be modified
- * @inode2: the other file of a COPY or CLONE, or NULL
- *
- * Context: Process context. Sleeps for up to NFSD_LAYOUTRETURN_TIMEOUT.
- *
- * Return: zero if no layout is left, -EWOULDBLOCK while a recall is under
- * way, or -ENOMEM
- */
-int nfsd_break_layouts(struct inode *inode, struct inode *inode2)
-{
-	long timeout = NFSD_LAYOUTRETURN_TIMEOUT;
-	unsigned int holders;
-	int ret, ret2 = 0;
-
-	holders = nfsd4_layout_holders(inode);
-	if (inode2)
-		holders |= nfsd4_layout_holders(inode2);
-	if (!holders)
-		return 0;
-
-	/* Start the recalls without waiting, unlike the filesystem's break */
-	ret = break_layout(inode, false);
-	if (inode2)
-		ret2 = break_layout(inode2, false);
-	if (ret != -EWOULDBLOCK && ret2 != -EWOULDBLOCK)
-		return ret ? ret : ret2;
-	/*
-	 * Briefly wait for other clients' layouts if this started their
-	 * recall, as for delegations. The client of this request returns its
-	 * own only after its I/O through them.
-	 */
-	if ((holders & NFSD_LAYOUTS_OWN) || !(holders & NFSD_LAYOUTS_IDLE))
-		return -EWOULDBLOCK;
-
-	timeout = wait_var_event_timeout(inode, !nfsd_other_layouts(inode),
-					 timeout);
-	if (inode2 && timeout)
-		wait_var_event_timeout(inode2, !nfsd_other_layouts(inode2),
-				       timeout);
-	ret = break_layout(inode, false);
-	if (!ret && inode2)
-		ret = break_layout(inode2, false);
-	return ret;
 }
 
 /*

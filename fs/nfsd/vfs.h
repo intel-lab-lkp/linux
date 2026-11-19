@@ -203,7 +203,14 @@ __be32		nfsd_setxattr(struct svc_rqst *rqstp, struct svc_fh *fhp,
 			    char *name, void *buf, u32 len, u32 flags);
 #endif
 int 		nfsd_open_break_lease(struct inode *, int);
+#ifdef CONFIG_NFSD_PNFS
 int		nfsd_break_layouts(struct inode *inode, struct inode *inode2);
+#else
+static inline int nfsd_break_layouts(struct inode *inode, struct inode *inode2)
+{
+	return 0;
+}
+#endif
 __be32		nfsd_open(struct svc_rqst *, struct svc_fh *, umode_t,
 				int, struct file **);
 int		nfsd_open_verified(struct svc_fh *fhp, umode_t type, int may_flags,
