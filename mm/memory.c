@@ -5609,6 +5609,22 @@ static vm_fault_t do_anonymous_page(struct vm_fault *vmf)
 	ret = vmf_anon_prepare(vmf);
 	if (ret)
 		return ret;
+
+	if (unlikely(userfaultfd_missing(vma))) {
+		vmf->pte = pte_offset_map_lock(vma->vm_mm, vmf->pmd,
+				vmf->address, &vmf->ptl);
+		if (!vmf->pte)
+			goto unlock;
+		if (vmf_pte_changed(vmf)) {
+			update_mmu_tlb(vma, vmf->address, vmf->pte);
+			goto unlock;
+		}
+		ret = check_stable_address_space(vma->vm_mm);
+		if (ret)
+			goto unlock;
+		pte_unmap_unlock(vmf->pte, vmf->ptl);
+		return handle_userfault(vmf, VM_UFFD_MISSING);
+	}
 	/* Returns NULL on OOM or ERR_PTR(-EAGAIN) if we must retry the fault */
 	folio = alloc_anon_folio(vmf);
 	if (IS_ERR(folio))
@@ -5641,12 +5657,6 @@ static vm_fault_t do_anonymous_page(struct vm_fault *vmf)
 	if (ret)
 		goto release;
 
-	/* Deliver the page fault to userland, check inside PT lock */
-	if (userfaultfd_missing(vma)) {
-		pte_unmap_unlock(vmf->pte, vmf->ptl);
-		folio_put(folio);
-		return handle_userfault(vmf, VM_UFFD_MISSING);
-	}
 	map_anon_folio_pte_pf(folio, vmf->pte, vma, addr,
 			      vmf_orig_pte_uffd_wp(vmf));
 unlock:
