@@ -18,10 +18,16 @@
 #include <linux/slab.h>
 #include <linux/smp.h>
 #include <linux/uaccess.h>
+#include <linux/wait.h>
 
 struct pfdi_per_cpu_info {
+	atomic_t run_inprogress;
 	/* Ensures a single userspace owner per CPU while the node is open. */
 	struct semaphore open_sem;
+	/* Serializes per-CPU run state and device availability. */
+	struct mutex state_lock;
+	struct pfdi_test_range ongoing_run_range;
+	wait_queue_head_t run_wait;
 };
 
 struct pfdi_dev_data {
@@ -36,6 +42,8 @@ struct pfdi_cpu_worker {
 	u32 feature_fid;
 	/* Protects worker lifetime and in-flight work state. */
 	struct mutex worker_lock;
+	struct pfdi_force_error error_info;
+	struct pfdi_test_run test_run;
 	struct arm_smccc_res smc_ret;
 	int result;
 };
@@ -59,6 +67,10 @@ static DEFINE_PER_CPU(struct pfdi_per_cpu_info, pfdi_cpu_info);
 
 static enum cpuhp_state pfdi_cpuhp_state;
 
+static unsigned int pfdi_wait_timeout_ms = 60;
+module_param_named(wait_timeout_ms, pfdi_wait_timeout_ms, uint, 0444);
+MODULE_PARM_DESC(wait_timeout_ms,
+		 "Maximum time in ms to wait for an in-progress PFDI run");
 static int pfdi_to_linux_errno(int err)
 {
 	switch (err) {
@@ -93,6 +105,18 @@ static struct arm_smccc_res pfdi_smc_call(u32 smc_fid, u64 x1, u64 x2, u64 x3,
 static int pfdi_smc_feature(u32 smc_fid)
 {
 	return (int)pfdi_smc_call(PFDI_FN_FEATURES, smc_fid, 0, 0, 0).a0;
+}
+
+static bool pfdi_fid_supported(u32 smc_fid)
+{
+	unsigned int i;
+
+	for (i = 0; i < ARRAY_SIZE(pfdi_supported_fids); i++) {
+		if (pfdi_supported_fids[i] == smc_fid)
+			return true;
+	}
+
+	return false;
 }
 
 static int pfdi_validate_cpu_features(void)
@@ -275,6 +299,172 @@ static int pfdi_pe_fw_check(unsigned int cpu)
 	return pfdi_to_linux_errno(per_cpu(pfdi_worker_ctx, cpu).result);
 }
 
+static void pfdi_pe_get_result_fn(struct kthread_work *work)
+{
+	struct pfdi_cpu_worker *worker_ctx;
+
+	worker_ctx = container_of(work, struct pfdi_cpu_worker, work);
+	worker_ctx->smc_ret = pfdi_smc_call(PFDI_FN_PE_TEST_RESULT,
+					    0, 0, 0, 0);
+	complete(&worker_ctx->done);
+}
+
+static int pfdi_pe_get_result(unsigned int cpu, s64 *ft_id)
+{
+	int ret;
+	struct pfdi_cpu_worker *worker_ctx = &per_cpu(pfdi_worker_ctx, cpu);
+
+	ret = pfdi_thread_worker(cpu, pfdi_pe_get_result_fn,
+				 MAX_SCHEDULE_TIMEOUT);
+	if (ret)
+		return ret;
+
+	ret = (int)worker_ctx->smc_ret.a0;
+	if (ret == PFDI_RET_FAULT_FOUND)
+		*ft_id = worker_ctx->smc_ret.a1;
+
+	return pfdi_to_linux_errno(ret);
+}
+
+static void pfdi_pe_force_error_fn(struct kthread_work *work)
+{
+	struct pfdi_cpu_worker *worker_ctx;
+
+	worker_ctx = container_of(work, struct pfdi_cpu_worker, work);
+	worker_ctx->result = pfdi_smc_call(PFDI_FN_FORCE_ERROR,
+					   worker_ctx->error_info.smc_fid,
+					   worker_ctx->error_info.error_id,
+					   0, 0).a0;
+	complete(&worker_ctx->done);
+}
+
+static int pfdi_pe_force_error(unsigned int cpu,
+			       const struct pfdi_force_error *error_info)
+{
+	int ret;
+	struct pfdi_cpu_worker *worker_ctx = &per_cpu(pfdi_worker_ctx, cpu);
+
+	if (!pfdi_fid_supported(error_info->smc_fid))
+		return -EINVAL;
+
+	if (error_info->error_id < PFDI_RET_TEST_COUNT_ZERO ||
+	    error_info->error_id > SMCCC_RET_SUCCESS)
+		return -EINVAL;
+
+	worker_ctx->error_info = *error_info;
+
+	ret = pfdi_thread_worker(cpu, pfdi_pe_force_error_fn,
+				 MAX_SCHEDULE_TIMEOUT);
+	if (ret)
+		return ret;
+
+	return pfdi_to_linux_errno(worker_ctx->result);
+}
+
+static bool pfdi_ranges_equal(const struct pfdi_test_range *lhs,
+			      const struct pfdi_test_range *rhs)
+{
+	return lhs->start == rhs->start && lhs->end == rhs->end;
+}
+
+static bool pfdi_run_available(const struct pfdi_per_cpu_info *cpu_info)
+{
+	return !atomic_read(&cpu_info->run_inprogress);
+}
+
+static int pfdi_validate_test_range(unsigned int cpu,
+				    const struct pfdi_test_range *range)
+{
+	s64 count;
+	int ret;
+
+	if (range->start == -1 || range->end == -1)
+		return pfdi_ranges_equal(range,
+					 &(struct pfdi_test_range){ .start = -1,
+								    .end = -1 }) ?
+		       0 : -EINVAL;
+
+	if (range->start < 0 || range->end < 0 || range->start > range->end)
+		return -EINVAL;
+
+	ret = pfdi_pe_get_test_count(cpu, &count);
+	if (ret)
+		return ret;
+
+	if (range->start >= count || range->end >= count)
+		return -EINVAL;
+
+	return 0;
+}
+
+static void pfdi_pe_run_fn(struct kthread_work *work)
+{
+	struct arm_smccc_res smc_ret;
+	struct pfdi_cpu_worker *worker_ctx;
+
+	worker_ctx = container_of(work, struct pfdi_cpu_worker, work);
+	smc_ret = pfdi_smc_call(PFDI_FN_PE_TEST_RUN,
+				worker_ctx->test_run.range.start,
+				worker_ctx->test_run.range.end, 0, 0);
+
+	if ((int)smc_ret.a0 == PFDI_RET_FAULT_FOUND)
+		worker_ctx->test_run.ft_id = smc_ret.a1;
+
+	worker_ctx->result = (int)smc_ret.a0;
+	complete(&worker_ctx->done);
+}
+
+static int pfdi_pe_run_tests(unsigned int cpu, struct pfdi_test_run *test_run)
+{
+	int ret;
+	unsigned long wait_timeout;
+	struct pfdi_cpu_worker *worker_ctx = &per_cpu(pfdi_worker_ctx, cpu);
+	struct pfdi_per_cpu_info *cpu_info = &per_cpu(pfdi_cpu_info, cpu);
+
+	ret = pfdi_validate_test_range(cpu, &test_run->range);
+	if (ret)
+		return ret;
+
+	wait_timeout = msecs_to_jiffies(pfdi_wait_timeout_ms);
+
+	mutex_lock(&cpu_info->state_lock);
+	while (atomic_read(&cpu_info->run_inprogress)) {
+		if (pfdi_ranges_equal(&test_run->range,
+				      &cpu_info->ongoing_run_range)) {
+			mutex_unlock(&cpu_info->state_lock);
+			return -EBUSY;
+		}
+
+		mutex_unlock(&cpu_info->state_lock);
+			ret = wait_event_interruptible_timeout(cpu_info->run_wait,
+							       pfdi_run_available(cpu_info),
+							       wait_timeout);
+		if (ret <= 0)
+			return ret ? ret : -ETIME;
+
+		mutex_lock(&cpu_info->state_lock);
+	}
+
+	atomic_set(&cpu_info->run_inprogress, 1);
+	cpu_info->ongoing_run_range = test_run->range;
+	worker_ctx->test_run = *test_run;
+	mutex_unlock(&cpu_info->state_lock);
+
+	ret = pfdi_thread_worker(cpu, pfdi_pe_run_fn, wait_timeout);
+
+	mutex_lock(&cpu_info->state_lock);
+	if (worker_ctx->result == PFDI_RET_FAULT_FOUND)
+		test_run->ft_id = worker_ctx->test_run.ft_id;
+	atomic_set(&cpu_info->run_inprogress, 0);
+	wake_up_all(&cpu_info->run_wait);
+	mutex_unlock(&cpu_info->state_lock);
+
+	if (ret)
+		return ret;
+
+	return pfdi_to_linux_errno(worker_ctx->result);
+}
+
 static int arm_pfdi_open(struct inode *inode, struct file *file)
 {
 	struct miscdevice *misc_dev = file->private_data;
@@ -310,9 +500,12 @@ static long arm_pfdi_ioctl(struct file *file, unsigned int cmd,
 	u32 feature_fid;
 	u32 version;
 	s64 count;
+	s64 ft_id;
 	u64 lib_info;
 	struct miscdevice *misc_dev = file->private_data;
 	struct pfdi_dev_data *device_data;
+	struct pfdi_test_run test_run;
+	struct pfdi_force_error error_info;
 	unsigned int cpu;
 
 	if (!misc_dev || !misc_dev->this_device)
@@ -350,8 +543,34 @@ static long arm_pfdi_ioctl(struct file *file, unsigned int cmd,
 					 sizeof(count)))
 			err = -EFAULT;
 		break;
+	case PFDI_IOCTL_PE_TEST_RUN:
+		if (copy_from_user(&test_run, (void __user *)arg,
+				   sizeof(test_run)))
+			return -EFAULT;
+
+		err = pfdi_pe_run_tests(cpu, &test_run);
+		if (err == -EFAULT &&
+		    copy_to_user((void __user *)arg, &test_run,
+				 sizeof(test_run)))
+			err = -EFAULT;
+		break;
+	case PFDI_IOCTL_PE_TEST_RESULT:
+		err = pfdi_pe_get_result(cpu, &ft_id);
+		if (err == -EFAULT && copy_to_user((void __user *)arg, &ft_id,
+						   sizeof(ft_id)))
+			err = -EFAULT;
+		break;
 	case PFDI_IOCTL_FW_CHECK:
 		err = pfdi_pe_fw_check(cpu);
+		break;
+	case PFDI_IOCTL_FORCE_ERROR:
+		if (copy_from_user(&error_info, (void __user *)arg,
+				   sizeof(error_info)))
+			return -EFAULT;
+		if (error_info.reserved)
+			return -EINVAL;
+
+		err = pfdi_pe_force_error(cpu, &error_info);
 		break;
 	default:
 		err = -ENOTTY;
@@ -413,6 +632,9 @@ static int arm_pfdi_device_create(unsigned int cpu)
 
 	sema_init(&per_cpu(pfdi_cpu_info, cpu).open_sem, 1);
 	mutex_init(&worker_ctx->worker_lock);
+	atomic_set(&per_cpu(pfdi_cpu_info, cpu).run_inprogress, 0);
+	mutex_init(&per_cpu(pfdi_cpu_info, cpu).state_lock);
+	init_waitqueue_head(&per_cpu(pfdi_cpu_info, cpu).run_wait);
 	init_completion(&worker_ctx->done);
 	per_cpu(pfdi_worker, cpu) =
 		kthread_create_worker_on_cpu(cpu, 0, "pfdi/%u");
@@ -446,6 +668,9 @@ destroy_worker:
 static int arm_pfdi_device_destroy(unsigned int cpu)
 {
 	struct miscdevice *misc_dev = &per_cpu(pfdi_misc_device, cpu);
+
+	if (atomic_read(&per_cpu(pfdi_cpu_info, cpu).run_inprogress) > 0)
+		return -EBUSY;
 
 	if (per_cpu(pfdi_worker, cpu)) {
 		kthread_flush_worker(per_cpu(pfdi_worker, cpu));
