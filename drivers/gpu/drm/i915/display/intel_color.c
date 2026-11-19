@@ -4278,7 +4278,7 @@ void intel_color_plane_commit_arm(struct intel_dsb *dsb,
 				  const struct intel_plane_state *plane_state)
 {
 	struct intel_display *display = to_intel_display(plane_state);
-	struct intel_crtc *crtc = to_intel_crtc(plane_state->uapi.crtc);
+	struct intel_crtc *crtc = to_intel_crtc(plane_state->hw.crtc);
 
 	if (crtc && intel_color_crtc_has_3dlut(display, crtc->pipe))
 		glk_lut_3d_commit(dsb, crtc, !!plane_state->hw.lut_3d);
@@ -4318,7 +4318,7 @@ intel_color_load_3dlut(struct intel_dsb *dsb,
 		       const struct intel_plane_state *plane_state)
 {
 	struct intel_display *display = to_intel_display(plane_state);
-	struct intel_crtc *crtc = to_intel_crtc(plane_state->uapi.crtc);
+	struct intel_crtc *crtc = to_intel_crtc(plane_state->hw.crtc);
 
 	if (crtc && intel_color_crtc_has_3dlut(display, crtc->pipe))
 		glk_load_lut_3d(dsb, crtc, plane_state->hw.lut_3d);
