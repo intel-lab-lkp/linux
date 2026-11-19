@@ -1364,13 +1364,6 @@ static void carl9170_tx(struct ar9170 *ar)
 
 			atomic_inc(&ar->tx_total_pending);
 
-			q = __carl9170_get_queue(ar, i);
-			/*
-			 * NB: tx_status[i] vs. tx_status[q],
-			 * TODO: Move into pick_skb or alloc_dev_space.
-			 */
-			skb_queue_tail(&ar->tx_status[q], skb);
-
 			/*
 			 * increase ref count to "2".
 			 * Ref counting is the easiest way to solve the
@@ -1378,8 +1371,17 @@ static void carl9170_tx(struct ar9170 *ar)
 			 *	carl9170_tx_callback
 			 * and wlan tx status functions:
 			 *	carl9170_tx_status/janitor.
+			 * It must be taken before the frame is queued on
+			 * tx_status[], where the status path can find it.
 			 */
 			carl9170_tx_get_skb(skb);
+
+			q = __carl9170_get_queue(ar, i);
+			/*
+			 * NB: tx_status[i] vs. tx_status[q],
+			 * TODO: Move into pick_skb or alloc_dev_space.
+			 */
+			skb_queue_tail(&ar->tx_status[q], skb);
 
 			carl9170_usb_tx(ar, skb);
 			schedule_garbagecollector = true;
