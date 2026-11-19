@@ -11,6 +11,7 @@
 #include <linux/firmware.h>
 #include <linux/module.h>
 #include <linux/etherdevice.h>
+#include <linux/unaligned.h>
 
 #include "cw1200.h"
 #include "sta.h"
@@ -1072,28 +1073,34 @@ static int cw1200_parse_sdd_file(struct cw1200_common *priv)
 	while (p + 2 <= priv->sdd->data + priv->sdd->size) {
 		if (p + p[1] + 2 > priv->sdd->data + priv->sdd->size) {
 			pr_warn("Malformed sdd structure\n");
-			return -1;
+			return -EINVAL;
 		}
 		switch (p[0]) {
 		case SDD_PTA_CFG_ELT_ID: {
 			u16 v;
+
 			if (p[1] < 4) {
 				pr_warn("SDD_PTA_CFG_ELT_ID malformed\n");
-				ret = -1;
-				break;
+				return -EINVAL;
 			}
-			v = le16_to_cpu(*((__le16 *)(p + 2)));
+			v = get_unaligned_le16(p + 2);
 			if (!v)  /* non-zero means this is enabled */
 				break;
 
-			v = le16_to_cpu(*((__le16 *)(p + 4)));
+			v = get_unaligned_le16(p + 4);
 			priv->conf_listen_interval = (v >> 7) & 0x1F;
 			pr_debug("PTA found; Listen Interval %d\n",
 				 priv->conf_listen_interval);
 			break;
 		}
 		case SDD_REFERENCE_FREQUENCY_ELT_ID: {
-			u16 clk = le16_to_cpu(*((__le16 *)(p + 2)));
+			u16 clk;
+
+			if (p[1] < sizeof(clk)) {
+				pr_warn("SDD reference frequency malformed\n");
+				return -EINVAL;
+			}
+			clk = get_unaligned_le16(p + 2);
 			if (clk != priv->hw_refclk)
 				pr_warn("SDD file doesn't match configured refclk (%d vs %d)\n",
 					clk, priv->hw_refclk);
@@ -1147,7 +1154,12 @@ int cw1200_setup_mac(struct cw1200_common *priv)
 			pr_err("Can't load sdd file %s.\n", priv->sdd_path);
 			return ret;
 		}
-		cw1200_parse_sdd_file(priv);
+		ret = cw1200_parse_sdd_file(priv);
+		if (ret) {
+			release_firmware(priv->sdd);
+			priv->sdd = NULL;
+			return ret;
+		}
 	}
 
 	cfg.dpdData = priv->sdd->data;
