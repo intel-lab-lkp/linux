@@ -62,8 +62,6 @@ static void mali_vpu_vb2_buffer_queue(struct vb2_buffer *vb2_buf)
 static int mali_vpu_vb2_prepare_streaming(struct vb2_queue *q)
 {
 	struct mali_vpu_session *sess = vb2_get_drv_priv(q);
-	struct mali_vpu_port *port = V4L2_TYPE_IS_OUTPUT(q->type) ?
-					&sess->port_src : &sess->port_dst;
 	int ret;
 
 	if (mali_vpu_is_coded_q(sess, q->type)) {
@@ -72,17 +70,51 @@ static int mali_vpu_vb2_prepare_streaming(struct vb2_queue *q)
 			return ret;
 	}
 
-	port->stream_requested = true;
+	return mali_vpu_session_prepare_streaming(sess, q->type);
+}
+
+static int mali_vpu_vb2_start_streaming(struct vb2_queue *q,
+					unsigned int count __always_unused)
+{
+	struct mali_vpu_session *sess = vb2_get_drv_priv(q);
+
+	v4l2_m2m_update_start_streaming_state(sess->m2m_ctx, q);
 	return 0;
+}
+
+static void mali_vpu_vb2_stop_streaming(struct vb2_queue *q)
+{
+	struct mali_vpu_session *sess = vb2_get_drv_priv(q);
+	struct vb2_v4l2_buffer *v4l2_buf;
+	int ret;
+
+	ret = mali_vpu_session_streamoff(sess, q->type);
+	if (ret)
+		dev_warn(sess->vpu_dev->dev, "failed to stop streaming: %d\n", ret);
+
+	if (V4L2_TYPE_IS_OUTPUT(q->type)) {
+		while ((v4l2_buf = v4l2_m2m_src_buf_remove(sess->m2m_ctx)))
+			v4l2_m2m_buf_done(v4l2_buf, VB2_BUF_STATE_ERROR);
+	} else {
+		while ((v4l2_buf = v4l2_m2m_dst_buf_remove(sess->m2m_ctx)))
+			v4l2_m2m_buf_done(v4l2_buf, VB2_BUF_STATE_ERROR);
+	}
+
+	v4l2_m2m_update_stop_streaming_state(sess->m2m_ctx, q);
 }
 
 static void mali_vpu_vb2_unprepare_streaming(struct vb2_queue *q)
 {
 	struct mali_vpu_session *sess = vb2_get_drv_priv(q);
-	struct mali_vpu_port *port = V4L2_TYPE_IS_OUTPUT(q->type) ?
-					&sess->port_src : &sess->port_dst;
+	int ret;
 
-	port->stream_requested = false;
+	ret = mali_vpu_session_streamoff(sess, q->type);
+	if (ret)
+		dev_warn(sess->vpu_dev->dev,
+			 "failed to unprepare streaming: %d\n", ret);
+
+	if (!vb2_start_streaming_called(q))
+		v4l2_m2m_update_stop_streaming_state(sess->m2m_ctx, q);
 }
 
 static const struct vb2_ops mali_vpu_vb2_ops = {
@@ -92,6 +124,8 @@ static const struct vb2_ops mali_vpu_vb2_ops = {
 	.buf_prepare		= mali_vpu_vb2_buffer_prepare,
 	.buf_queue		= mali_vpu_vb2_buffer_queue,
 	.prepare_streaming	= mali_vpu_vb2_prepare_streaming,
+	.start_streaming	= mali_vpu_vb2_start_streaming,
+	.stop_streaming		= mali_vpu_vb2_stop_streaming,
 	.unprepare_streaming	= mali_vpu_vb2_unprepare_streaming,
 };
 

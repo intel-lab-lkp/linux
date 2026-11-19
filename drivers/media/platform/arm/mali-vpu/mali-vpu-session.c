@@ -19,7 +19,14 @@
 #include "mali-vpu-variant.h"
 #include "mali-vpu-vb2.h"
 
+static const unsigned int mali_vpu_fw_response_timeout_ms = 10000;
 static const unsigned int mali_vpu_fw_load_timeout_ms     = 10000;
+
+static struct mali_vpu_port *
+mali_vpu_session_get_port(struct mali_vpu_session *sess, enum v4l2_buf_type type)
+{
+	return V4L2_TYPE_IS_OUTPUT(type) ? &sess->port_src : &sess->port_dst;
+}
 
 static int mali_vpu_set_port_fmt(struct mali_vpu_port *port,
 				 enum v4l2_buf_type type,
@@ -67,10 +74,91 @@ mali_vpu_both_ports_unrequested(struct mali_vpu_session *sess)
 	       !sess->port_dst.stream_requested;
 }
 
+static bool mali_vpu_session_can_stream(const struct mali_vpu_session *sess)
+{
+	/*
+	 * Start a decoder with OUTPUT/src port only, so firmware can
+	 * parse the bitstream and report its decoded format.
+	 * An encoder requires both ports.
+	 *
+	 * Use the driver's preparation state because VB2 sets its streaming
+	 * flag only after prepare_streaming() and initial buffer handoff.
+	 */
+	if (sess->role == MALI_VPU_DECODER)
+		return sess->port_src.stream_requested;
+
+	return sess->port_src.stream_requested &&
+	       sess->port_dst.stream_requested;
+}
+
+static int mali_vpu_session_fw_send_job(struct mali_vpu_session *sess, u16 frames)
+{
+	int ret;
+
+	ret = mali_vpu_fw_send_job(&sess->fw, sess->ncores, frames);
+	if (ret)
+		return ret;
+
+	mali_vpu_sched_send_irq(&sess->sched_sess, &sess->vpu_dev->sched);
+	return 0;
+}
+
+static int mali_vpu_session_fw_send_ping(struct mali_vpu_session *sess)
+{
+	int ret;
+
+	ret = mali_vpu_fw_send_ping(&sess->fw);
+	if (ret)
+		return ret;
+
+	mali_vpu_sched_send_irq(&sess->sched_sess, &sess->vpu_dev->sched);
+	return 0;
+}
+
+static int mali_vpu_session_fw_send_state(struct mali_vpu_session *sess,
+					  enum mali_vpu_fw_state new_state)
+{
+	int ret;
+
+	if (sess->fw_requested_state != sess->fw_state)
+		/* There is a pending request: is this one duplicate? */
+		return sess->fw_requested_state == new_state ? 0 : -EBUSY;
+
+	if (sess->fw_state == new_state)
+		return 0;
+
+	ret = mali_vpu_fw_send_state_change(&sess->fw, new_state);
+	if (ret)
+		return ret;
+
+	sess->fw_requested_state = new_state;
+	mali_vpu_sched_send_irq(&sess->sched_sess, &sess->vpu_dev->sched);
+
+	return 0;
+}
+
 int mali_vpu_session_fw_send_set_option(struct mali_vpu_session *sess,
 					struct mali_vpu_fw_set_option *opt)
 {
-	return mali_vpu_fw_send_set_option(&sess->fw, opt);
+	int ret;
+
+	ret = mali_vpu_fw_send_set_option(&sess->fw, opt);
+	if (ret)
+		return ret;
+
+	mali_vpu_sched_send_irq(&sess->sched_sess, &sess->vpu_dev->sched);
+	return 0;
+}
+
+static int mali_vpu_session_sched_activate(struct mali_vpu_session *sess)
+{
+	lockdep_assert_held(&sess->vq_lock);
+
+	if (sess->sched_sess.lsid)
+		return 0;
+
+	/* This maps LSID 0 and makes any staged IRQHOST visible. */
+	return mali_vpu_sched_switch_in(&sess->sched_sess, &sess->vpu_dev->sched);
 }
 
 static int mali_vpu_session_handle_fw_msg(struct mali_vpu_session *sess,
@@ -123,6 +211,102 @@ static int mali_vpu_session_handle_fw_msg(struct mali_vpu_session *sess,
 	}
 }
 
+static int mali_vpu_session_wait_pending(struct mali_vpu_session *sess)
+{
+	long timeout;
+
+	lockdep_assert_held(&sess->vq_lock);
+
+	while (sess->fw_bin_state == MALI_VPU_SESSION_FW_BIN_READY &&
+	       sess->fw.pending_response_count) {
+		mutex_unlock(&sess->vq_lock);
+
+		timeout = wait_event_timeout(sess->fw_waitq,
+					     READ_ONCE(sess->fw_bin_state) !=
+					     MALI_VPU_SESSION_FW_BIN_READY ||
+					     !READ_ONCE(sess->fw.pending_response_count),
+					     msecs_to_jiffies(mali_vpu_fw_response_timeout_ms));
+
+		mutex_lock(&sess->vq_lock);
+
+		if (!timeout && sess->fw.pending_response_count)
+			return -ETIMEDOUT;
+	}
+
+	return 0;
+}
+
+static int mali_vpu_session_fw_init(struct mali_vpu_session *sess)
+{
+	int ret;
+
+	lockdep_assert_held(&sess->vq_lock);
+
+	if (sess->fw_requested_state != sess->fw_state) {
+		if (sess->fw_requested_state != MALI_VPU_FW_STATE_RUNNING)
+			return -EBUSY;
+
+		return mali_vpu_session_sched_activate(sess);
+	}
+
+	if (sess->fw_state == MALI_VPU_FW_STATE_RUNNING)
+		return 0;
+
+	ret = mali_vpu_session_fw_send_job(sess, 0);
+	if (ret)
+		return ret;
+
+	/*
+	 * Map the LSID and allow the stopped firmware to process the
+	 * queued SET_OPTION requests before it can be RUNNING.
+	 */
+	ret = mali_vpu_session_sched_activate(sess);
+	if (ret)
+		return ret;
+
+	ret = mali_vpu_session_fw_send_ping(sess);
+	if (ret)
+		return ret;
+
+	ret = mali_vpu_apply_staged_controls(sess);
+	if (ret)
+		return ret;
+
+	/*
+	 * SET_OPTION is only valid while stopped. Wait for pending option
+	 * responses before requesting RUNNING.
+	 */
+	ret = mali_vpu_session_wait_pending(sess);
+	if (ret)
+		return ret;
+
+	/* Waiting drops vq_lock, so streaming may have been withdrawn. */
+	if (!mali_vpu_session_can_stream(sess))
+		return 0;
+
+	return mali_vpu_session_fw_send_state(sess, MALI_VPU_FW_STATE_RUNNING);
+}
+
+static int mali_vpu_session_fw_stop(struct mali_vpu_session *sess)
+{
+	int ret;
+
+	lockdep_assert_held(&sess->vq_lock);
+
+	ret = mali_vpu_session_wait_pending(sess);
+	if (ret)
+		return ret;
+
+	if (sess->fw_state == MALI_VPU_FW_STATE_STOPPED)
+		return 0;
+
+	ret = mali_vpu_session_fw_send_state(sess, MALI_VPU_FW_STATE_STOPPED);
+	if (ret)
+		return ret;
+
+	return mali_vpu_session_wait_pending(sess);
+}
+
 int mali_vpu_session_init(struct mali_vpu_session *sess)
 {
 	int ret;
@@ -170,7 +354,9 @@ int mali_vpu_session_init(struct mali_vpu_session *sess)
 	sess->port_src.stream_requested = false;
 	sess->port_dst.stream_requested = false;
 	init_completion(&sess->fw_load_done);
+	init_waitqueue_head(&sess->fw_waitq);
 	sess->fw_state = MALI_VPU_FW_STATE_STOPPED;
+	sess->fw_requested_state = MALI_VPU_FW_STATE_STOPPED;
 
 	return 0;
 
@@ -208,6 +394,8 @@ int mali_vpu_session_cleanup(struct mali_vpu_session *sess)
 {
 	struct mali_vpu_dev *vpu_dev = sess->vpu_dev;
 	int fw_load_ret = 0;
+	int fw_stop_ret = 0;
+	int terminate_ret;
 	bool waiter_cancelled = false;
 
 	mutex_lock(&sess->vq_lock);
@@ -215,7 +403,9 @@ int mali_vpu_session_cleanup(struct mali_vpu_session *sess)
 	sess->port_src.stream_requested = false;
 	sess->port_dst.stream_requested = false;
 
-	if (sess->fw_bin_state == MALI_VPU_SESSION_FW_BIN_LOADING) {
+	if (sess->fw_bin_state == MALI_VPU_SESSION_FW_BIN_LOADING ||
+	    (sess->fw_bin_state == MALI_VPU_SESSION_FW_BIN_READY &&
+	     !completion_done(&sess->fw_load_done))) {
 		mutex_unlock(&sess->vq_lock);
 
 		if (!wait_for_completion_timeout(&sess->fw_load_done,
@@ -243,6 +433,21 @@ int mali_vpu_session_cleanup(struct mali_vpu_session *sess)
 			sess->fw_bin_state = MALI_VPU_SESSION_FW_BIN_FAILED;
 	}
 
+	if (sess->fw_bin_state == MALI_VPU_SESSION_FW_BIN_READY)
+		fw_stop_ret = mali_vpu_session_fw_stop(sess);
+
+	terminate_ret = mali_vpu_sched_session_terminate(&sess->sched_sess,
+							 &vpu_dev->sched);
+	mutex_unlock(&sess->vq_lock);
+
+	/*
+	 * The LSID is no longer routed to this session. Drain a worker that
+	 * may have resolved sess before it was detached.
+	 */
+	flush_work(&vpu_dev->irq_work);
+
+	mutex_lock(&sess->vq_lock);
+
 	mali_vpu_session_release_fw_bin(sess);
 
 	if (sess->m2m_ctx) {
@@ -258,7 +463,72 @@ int mali_vpu_session_cleanup(struct mali_vpu_session *sess)
 	mali_vpu_ctrls_cleanup(sess);
 	mutex_destroy(&sess->vq_lock);
 
-	return fw_load_ret;
+	if (fw_load_ret)
+		return fw_load_ret;
+
+	if (fw_stop_ret)
+		return fw_stop_ret;
+
+	return terminate_ret;
+}
+
+int mali_vpu_session_prepare_streaming(struct mali_vpu_session *sess,
+				       enum v4l2_buf_type type)
+{
+	struct mali_vpu_port *port = mali_vpu_session_get_port(sess, type);
+	int ret;
+
+	lockdep_assert_held(&sess->vq_lock);
+
+	if (port->stream_requested)
+		return 0;
+
+	if (sess->fw_bin_state == MALI_VPU_SESSION_FW_BIN_READY &&
+	    sess->fw_requested_state != sess->fw_state &&
+	    sess->fw_requested_state != MALI_VPU_FW_STATE_RUNNING)
+		return -EBUSY;
+
+	port->stream_requested = true;
+
+	if (sess->fw_bin_state == MALI_VPU_SESSION_FW_BIN_READY &&
+	    mali_vpu_session_can_stream(sess)) {
+		ret = mali_vpu_session_fw_init(sess);
+		if (ret)
+			goto err_rollback;
+	}
+
+	return 0;
+
+err_rollback:
+	port->stream_requested = false;
+
+	return ret;
+}
+
+int mali_vpu_session_streamoff(struct mali_vpu_session *sess, enum v4l2_buf_type type)
+{
+	struct mali_vpu_port *port = mali_vpu_session_get_port(sess, type);
+	int ret;
+
+	lockdep_assert_held(&sess->vq_lock);
+
+	if (!port->stream_requested)
+		return 0;
+
+	port->stream_requested = false;
+
+	if (sess->fw_bin_state != MALI_VPU_SESSION_FW_BIN_READY ||
+	    !sess->sched_sess.lsid)
+		return 0;
+
+	if (mali_vpu_is_raw_q(sess, type))
+		return mali_vpu_session_wait_pending(sess);
+
+	ret = mali_vpu_session_fw_stop(sess);
+	if (ret)
+		return ret;
+
+	return mali_vpu_session_wait_pending(sess);
 }
 
 static void mali_vpu_session_fw_bin_ready(struct mali_vpu_fw_bin *vpu_fw_bin,
@@ -308,7 +578,26 @@ static void mali_vpu_session_fw_bin_ready(struct mali_vpu_fw_bin *vpu_fw_bin,
 
 	sess->fw_bin_state = MALI_VPU_SESSION_FW_BIN_READY;
 
+	/*
+	 * A synchronous callback leaves startup to session preparation.
+	 * A delayed callback completes startup itself.
+	 */
+	if (!same_thread && mali_vpu_session_can_stream(sess)) {
+		ret = mali_vpu_session_fw_init(sess);
+		if (ret) {
+			dev_err(sess->vpu_dev->dev,
+				"failed to start streaming: %d\n", ret);
+			sess->fw_bin_state = MALI_VPU_SESSION_FW_BIN_UNINITIALIZED;
+			goto err_fw_cleanup;
+		}
+	}
+
 	goto out_complete;
+
+err_fw_cleanup:
+	mali_vpu_fw_cleanup(&sess->fw);
+	sess->fw_state = MALI_VPU_FW_STATE_STOPPED;
+	sess->fw_requested_state = MALI_VPU_FW_STATE_STOPPED;
 
 err_cache_put:
 	mali_vpu_fw_cache_put(vpu_fw_bin);
@@ -405,5 +694,7 @@ void mali_vpu_session_irq(struct mali_vpu_session *sess)
 	} while (ret >= 0);
 
 unlock_mutex:
+	wake_up(&sess->fw_waitq);
+
 	mutex_unlock(&sess->vq_lock);
 }

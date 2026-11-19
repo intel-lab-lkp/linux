@@ -34,5 +34,6 @@ int mali_vpu_fill_pixmp_fmt(const struct mali_vpu_format_desc *fmt,
 			    u32 width, u32 height,
 			    struct v4l2_pix_format_mplane *pix_mp);
 bool mali_vpu_is_coded_q(const struct mali_vpu_session *sess, enum v4l2_buf_type type);
+bool mali_vpu_is_raw_q(const struct mali_vpu_session *sess, enum v4l2_buf_type type);
 
 #endif /* __MALI_VPU_FORMATS_H__ */

@@ -47,6 +47,11 @@ struct mali_vpu_port {
  * construct the firmware address space before making the binary READY. The
  * session retains its binary reference until cleanup.
  *
+ * A synchronous callback leaves firmware startup to session preparation.
+ * An asynchronous callback starts firmware if the required ports still request
+ * streaming: OUTPUT for a decoder, both ports for an encoder.
+ * Binary READY and firmware RUNNING are separate states.
+ *
  * Session cleanup waits for an in-flight callback before releasing the
  * session-owned binary reference and callback event. On timeout, it cancels
  * the pending cache waiter or waits for an already claimed callback.
@@ -78,7 +83,9 @@ enum mali_vpu_session_fw_bin_state {
  * @fw_event: Firmware binary load event callback structure for this session.
  * @fw_bin_state: Session firmware binary status.
  * @fw_load_done: Completion used to synchronize teardown with an in-flight firmware load.
+ * @fw_waitq: Wait queue used while waiting for firmware responses.
  * @fw_state: Last state confirmed by the firmware.
+ * @fw_requested_state: Last firmware state requested by the driver.
  * @sched_sess: Scheduler state used to map this session to an LSID.
  * @ncores: Number of cores assigned to this session by scheduler.
  */
@@ -104,7 +111,9 @@ struct mali_vpu_session {
 	struct mali_vpu_fw_event		*fw_event;
 	enum mali_vpu_session_fw_bin_state	fw_bin_state;
 	struct completion			fw_load_done;
+	wait_queue_head_t			fw_waitq;
 	enum mali_vpu_fw_state			fw_state;
+	enum mali_vpu_fw_state			fw_requested_state;
 
 	struct mali_vpu_sched_session	sched_sess;
 	u32				ncores;
@@ -115,6 +124,9 @@ int mali_vpu_session_cleanup(struct mali_vpu_session *sess);
 int mali_vpu_session_request_fw_load(struct mali_vpu_session *sess);
 int mali_vpu_session_fw_send_set_option(struct mali_vpu_session *sess,
 					struct mali_vpu_fw_set_option *opt);
+int mali_vpu_session_prepare_streaming(struct mali_vpu_session *sess,
+				       enum v4l2_buf_type type);
+int mali_vpu_session_streamoff(struct mali_vpu_session *sess, enum v4l2_buf_type type);
 void mali_vpu_session_irq(struct mali_vpu_session *sess);
 
 static inline struct mali_vpu_session *mali_vpu_get_session(struct file *filp)
