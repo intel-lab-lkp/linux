@@ -202,17 +202,19 @@ static int ma35_pinctrl_dt_node_to_map_func(struct pinctrl_dev *pctldev,
 		return -EINVAL;
 	}
 
-	map_num += grp->grp.npins;
-	new_map = kzalloc_objs(*new_map, map_num);
-	if (!new_map)
-		return -ENOMEM;
-
-	*map = new_map;
-	*num_maps = map_num;
-	/* create mux map */
 	parent = of_get_parent(np);
 	if (!parent)
 		return -EINVAL;
+
+	map_num += grp->grp.npins;
+	new_map = kzalloc_objs(*new_map, map_num);
+	if (!new_map) {
+		of_node_put(parent);
+		return -ENOMEM;
+	}
+
+	*map = new_map;
+	*num_maps = map_num;
 
 	setting = grp->data;
 
