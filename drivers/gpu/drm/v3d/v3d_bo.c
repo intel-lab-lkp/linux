@@ -172,17 +172,26 @@ free_obj:
 }
 
 struct drm_gem_object *
-v3d_prime_import_sg_table(struct drm_device *dev,
-			  struct dma_buf_attachment *attach,
-			  struct sg_table *sgt)
+v3d_prime_import(struct drm_device *dev, struct dma_buf *dma_buf)
 {
 	struct drm_gem_object *obj;
 	int ret;
 
-	obj = drm_gem_shmem_prime_import_sg_table(dev, attach, sgt);
+	obj = drm_gem_prime_import(dev, dma_buf);
 	if (IS_ERR(obj))
 		return obj;
 
+	/* A dma-buf exported by this device comes back as the BO it was
+	 * exported from, which already has its GPU address.
+	 */
+	if (!drm_gem_is_imported(obj))
+		return obj;
+
+	/* The GPU address is allocated only now that the core has set
+	 * obj->import_attach, so that a failure here is torn down as an
+	 * import: the sg_table is unmapped once and the attachment is
+	 * detached.
+	 */
 	ret = v3d_bo_create_finish(obj);
 	if (ret) {
 		drm_gem_shmem_free(&to_v3d_bo(obj)->base);

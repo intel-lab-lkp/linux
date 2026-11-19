@@ -282,7 +282,8 @@ static const struct drm_driver v3d_drm_driver = {
 #endif
 
 	.gem_create_object = v3d_create_object,
-	.gem_prime_import_sg_table = v3d_prime_import_sg_table,
+	.gem_prime_import = v3d_prime_import,
+	.gem_prime_import_sg_table = drm_gem_shmem_prime_import_sg_table,
 
 	.ioctls = v3d_drm_ioctls,
 	.num_ioctls = ARRAY_SIZE(v3d_drm_ioctls),

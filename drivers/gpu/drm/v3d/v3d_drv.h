@@ -603,9 +603,8 @@ int v3d_get_bo_offset_ioctl(struct drm_device *dev, void *data,
 			    struct drm_file *file_priv);
 int v3d_wait_bo_ioctl(struct drm_device *dev, void *data,
 		      struct drm_file *file_priv);
-struct drm_gem_object *v3d_prime_import_sg_table(struct drm_device *dev,
-						 struct dma_buf_attachment *attach,
-						 struct sg_table *sgt);
+struct drm_gem_object *v3d_prime_import(struct drm_device *dev,
+					struct dma_buf *dma_buf);
 
 /* v3d_debugfs.c */
 void v3d_debugfs_init(struct drm_minor *minor);
