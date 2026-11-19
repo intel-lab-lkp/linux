@@ -461,7 +461,7 @@ static void ie31200_get_dimm_config(struct mem_ctl_info *mci, void __iomem *wind
 
 			nr_pages = nr_pages / dimm_info.ranks;
 			for (k = 0; k < dimm_info.ranks; k++) {
-				dimm = edac_get_dimm(mci, (j * dimm_info.ranks) + k, i, 0);
+				dimm = edac_get_dimm(mci, (j * 2) + k, i, 0);
 				dimm->nr_pages = nr_pages;
 				edac_dbg(0, "set nr pages: 0x%lx\n", nr_pages);
 				dimm->grain = 8; /* just a guess */
