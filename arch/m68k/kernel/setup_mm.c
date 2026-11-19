@@ -451,6 +451,16 @@ static int show_cpuinfo(struct seq_file *m, void *v)
 		   clockfreq/1000000,(clockfreq/100000)%10,
 		   loops_per_jiffy/(500000/HZ),(loops_per_jiffy/(5000/HZ))%100,
 		   loops_per_jiffy);
+	if (CPU_IS_060) {
+		u32 pcr = m68060_get_pcr();
+		u32 id = FIELD_GET(M68060_PCR_ID, pcr);
+
+		seq_printf(m, "PCR:\t\t0x%08x (ID 0x%04x%s, revision %u%s%s)\n",
+			   pcr, id, id == M68060_PCR_ID_68LC060 ? " LC/EC" : "",
+			   (unsigned int)FIELD_GET(M68060_PCR_REVISION, pcr),
+			   pcr & M68060_PCR_ESS ? ", superscalar" : "",
+			   pcr & M68060_PCR_I14 ? ", I14 workaround" : "");
+	}
 	return 0;
 }
 
