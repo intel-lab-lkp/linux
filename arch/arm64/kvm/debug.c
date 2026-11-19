@@ -11,6 +11,7 @@
 #include <linux/hw_breakpoint.h>
 
 #include <asm/arm_pmuv3.h>
+#include <asm/daifflags.h>
 #include <asm/debug-monitors.h>
 #include <asm/kvm_asm.h>
 #include <asm/kvm_arm.h>
@@ -37,9 +38,10 @@ static int cpu_has_spe(u64 dfr0)
  */
 static void kvm_arm_setup_mdcr_el2(struct kvm_vcpu *vcpu)
 {
+	unsigned long daif;
 	u64 mdcr;
 
-	preempt_disable();
+	daif = local_daif_save();
 
 	/*
 	 * This also clears MDCR_EL2_E2PB_MASK and MDCR_EL2_E2TB_MASK
@@ -52,6 +54,41 @@ static void kvm_arm_setup_mdcr_el2(struct kvm_vcpu *vcpu)
 		 MDCR_EL2_TPMCR |
 		 MDCR_EL2_TDRA |
 		 MDCR_EL2_TDOSA);
+
+	if (kvm_pmu_is_partitioned(vcpu->kvm)) {
+		u8 nr_host_cntr = *host_data_ptr(nr_event_counters);
+		u8 nr_guest_cntr = vcpu->kvm->arch.nr_pmu_counters;
+
+		if (cpumask_test_cpu(smp_processor_id(),
+				     vcpu->kvm->arch.supported_cpus) &&
+		    nr_guest_cntr < nr_host_cntr &&
+		    (cpus_have_final_cap(ARM64_HAS_HPMN0) || nr_guest_cntr > 0)) {
+			u64 hpmn = FIELD_GET(MDCR_EL2_HPMN, read_sysreg(mdcr_el2));
+			bool hpme;
+
+			if (hpmn < nr_host_cntr)
+				hpme = !!(read_sysreg(mdcr_el2) & MDCR_EL2_HPME);
+			else
+				hpme = !!(read_sysreg(pmcr_el0) & ARMV8_PMU_PMCR_E);
+
+			mdcr |= (MDCR_EL2_HPMD | MDCR_EL2_HCCD);
+			if (is_pmuv3p5(read_pmuver()))
+				mdcr |= MDCR_EL2_HLP;
+			if (hpme)
+				mdcr |= MDCR_EL2_HPME;
+
+			/*
+			 * Take out the coarse grain traps if we are using
+			 * fine grain traps and enforce counter access with
+			 * HPMN.
+			 */
+			mdcr &= ~MDCR_EL2_HPMN;
+			mdcr |= FIELD_PREP(MDCR_EL2_HPMN, nr_guest_cntr);
+
+			if (cpus_have_final_cap(ARM64_HAS_FGT))
+				mdcr &= ~(MDCR_EL2_TPM | MDCR_EL2_TPMCR);
+		}
+	}
 
 	/* Is the VM being debugged by userspace? */
 	if (vcpu->guest_debug)
@@ -73,7 +110,7 @@ static void kvm_arm_setup_mdcr_el2(struct kvm_vcpu *vcpu)
 	if (has_vhe())
 		write_sysreg(mdcr, mdcr_el2);
 
-	preempt_enable();
+	local_daif_restore(daif);
 }
 
 void kvm_init_host_debug_data(void)

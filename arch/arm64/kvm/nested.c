@@ -2241,16 +2241,29 @@ void kvm_nested_setup_mdcr_el2(struct kvm_vcpu *vcpu, u64 *mdcr)
 {
 	u64 guest_mdcr = __vcpu_sys_reg(vcpu, MDCR_EL2);
 
-	if (is_nested_ctxt(vcpu))
+	if (is_nested_ctxt(vcpu)) {
 		*mdcr |= (guest_mdcr & NV_MDCR_GUEST_INCLUDE);
-	/*
-	 * In yet another example where FEAT_NV2 is fscking broken, accesses
-	 * to MDSCR_EL1 are redirected to the VNCR despite having an effect
-	 * at EL2. Use a big hammer to apply sanity.
-	 *
-	 * Unless of course we have FEAT_FGT, in which case we can precisely
-	 * trap MDSCR_EL1.
-	 */
-	else if (!cpus_have_final_cap(ARM64_HAS_FGT))
-		*mdcr |= MDCR_EL2_TDA;
+		if (kvm_pmu_is_partitioned(vcpu->kvm) &&
+		    kvm_pmu_hyp_counter_mask(vcpu))
+			*mdcr |= MDCR_EL2_TPM | MDCR_EL2_TPMCR;
+	} else {
+		/*
+		 * In yet another example where FEAT_NV2 is fscking broken,
+		 * accesses to MDSCR_EL1 are redirected to the VNCR despite
+		 * having an effect at EL2. Use a big hammer to apply sanity.
+		 *
+		 * Unless of course we have FEAT_FGT, in which case we can
+		 * precisely trap MDSCR_EL1.
+		 */
+		if (!cpus_have_final_cap(ARM64_HAS_FGT))
+			*mdcr |= MDCR_EL2_TDA;
+
+		if (kvm_pmu_is_partitioned(vcpu->kvm) &&
+		    (__vcpu_sys_reg(vcpu, PMUSERENR_EL0) &
+		     ARMV8_PMU_USERENR_MASK)) {
+			*mdcr |= guest_mdcr & (MDCR_EL2_TPM | MDCR_EL2_TPMCR);
+			if (kvm_pmu_hyp_counter_mask(vcpu))
+				*mdcr |= MDCR_EL2_TPM | MDCR_EL2_TPMCR;
+		}
+	}
 }
