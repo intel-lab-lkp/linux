@@ -925,6 +925,11 @@ void kvm_vcpu_reload_pmu(struct kvm_vcpu *vcpu)
 {
 	u64 mask = kvm_pmu_implemented_counter_mask(vcpu);
 
+	if (kvm_pmu_is_partitioned(vcpu->kvm)) {
+		kvm_pmu_reload_part(vcpu);
+		return;
+	}
+
 	__vcpu_rmw_sys_reg(vcpu, PMOVSSET_EL0, &=, mask);
 	__vcpu_rmw_sys_reg(vcpu, PMINTENSET_EL1, &=, mask);
 	__vcpu_rmw_sys_reg(vcpu, PMCNTENSET_EL0, &=, mask);

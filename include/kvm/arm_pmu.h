@@ -7,6 +7,7 @@
 #ifndef __ASM_ARM_KVM_PMU_H
 #define __ASM_ARM_KVM_PMU_H
 
+#include <linux/kvm_types.h>
 #include <linux/perf_event.h>
 #include <linux/perf/arm_pmuv3.h>
 #include <linux/perf/arm_pmu.h>
@@ -43,6 +44,8 @@ struct kvm_pmu {
 	struct kvm_pmc pmc[KVM_ARMV8_PMU_MAX_COUNTERS];
 	int irq_num;
 	bool created;
+	bool loaded_on_cpu;
+	enum vcpu_pmu_register_access access;
 };
 
 struct arm_pmu_entry {
@@ -101,9 +104,13 @@ bool kvm_pmu_is_partitioned(struct kvm *kvm);
 u64 kvm_pmu_direct_reg_read(struct kvm_vcpu *vcpu, unsigned int reg);
 void kvm_pmu_direct_reg_write(struct kvm_vcpu *vcpu, unsigned int reg,
 			      u64 val, bool set);
+void kvm_pmu_reload_part(struct kvm_vcpu *vcpu);
 u64 kvm_pmu_guest_counter_mask(void);
 void kvm_pmu_load(struct kvm_vcpu *vcpu);
 void kvm_pmu_put(struct kvm_vcpu *vcpu);
+
+#define kvm_pmu_get_access(vcpu)	((vcpu)->arch.pmu.access)
+#define kvm_pmu_reset_access(vcpu)	((vcpu)->arch.pmu.access = VCPU_PMU_ACCESS_FREE)
 
 /*
  * Updates the vcpu's view of the pmu events for this cpu.
@@ -126,6 +133,7 @@ bool kvm_pmu_counter_is_hyp(struct kvm_vcpu *vcpu, unsigned int idx);
 void kvm_pmu_nested_transition(struct kvm_vcpu *vcpu);
 #else
 struct kvm_pmu {
+	bool loaded_on_cpu;
 };
 
 static inline bool kvm_supports_guest_pmuv3(void)
@@ -144,6 +152,11 @@ static inline bool kvm_pmu_is_partitioned(struct kvm *kvm)
 	return false;
 }
 
+static inline enum vcpu_pmu_register_access kvm_pmu_get_access(struct kvm_vcpu *vcpu)
+{
+	return VCPU_PMU_ACCESS_FREE;
+}
+static inline void kvm_pmu_reset_access(struct kvm_vcpu *vcpu) {}
 static inline u64 kvm_pmu_direct_reg_read(struct kvm_vcpu *vcpu,
 					  unsigned int reg)
 {
@@ -152,6 +165,7 @@ static inline u64 kvm_pmu_direct_reg_read(struct kvm_vcpu *vcpu,
 static inline void kvm_pmu_direct_reg_write(struct kvm_vcpu *vcpu,
 					    unsigned int reg, u64 val,
 					    bool set) {}
+static inline void kvm_pmu_reload_part(struct kvm_vcpu *vcpu) {}
 static inline void kvm_pmu_load(struct kvm_vcpu *vcpu) {}
 static inline void kvm_pmu_put(struct kvm_vcpu *vcpu) {}
 static inline void kvm_pmu_set_counter_value(struct kvm_vcpu *vcpu,

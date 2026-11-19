@@ -3181,10 +3181,11 @@ static bool access_mdcr(struct kvm_vcpu *vcpu,
 	__vcpu_assign_sys_reg(vcpu, MDCR_EL2, val);
 
 	/*
-	 * Request a reload of the PMU to enable/disable the counters
-	 * affected by HPME.
+	 * Request a reload of the PMU to update the counters and filters
+	 * affected by MDCR_EL2.
 	 */
-	if ((old ^ val) & MDCR_EL2_HPME)
+	if ((old ^ val) & (MDCR_EL2_HPME | MDCR_EL2_HPMN | MDCR_EL2_HPMD |
+			   MDCR_EL2_HCCD | MDCR_EL2_TPM | MDCR_EL2_TPMCR))
 		kvm_make_request(KVM_REQ_RELOAD_PMU, vcpu);
 
 	return true;
@@ -5455,8 +5456,10 @@ void kvm_reset_sys_regs(struct kvm_vcpu *vcpu)
 
 	set_bit(KVM_ARCH_FLAG_ID_REGS_INITIALIZED, &kvm->arch.flags);
 
-	if (kvm_vcpu_has_pmu(vcpu))
+	if (kvm_vcpu_has_pmu(vcpu)) {
+		kvm_pmu_reset_access(vcpu);
 		kvm_make_request(KVM_REQ_RELOAD_PMU, vcpu);
+	}
 }
 
 /**
@@ -5689,6 +5692,9 @@ int kvm_sys_reg_set_user(struct kvm_vcpu *vcpu, const struct kvm_one_reg *reg,
 		__vcpu_assign_sys_reg(vcpu, r->reg, val);
 		ret = 0;
 	}
+
+	if (!ret && kvm_vcpu_has_pmu(vcpu) && kvm_pmu_is_partitioned(vcpu->kvm))
+		kvm_make_request(KVM_REQ_RELOAD_PMU, vcpu);
 
 	return ret;
 }

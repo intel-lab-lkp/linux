@@ -11,6 +11,7 @@
 #include <linux/perf/arm_pmuv3.h>
 
 #include <asm/arm_pmuv3.h>
+#include <asm/daifflags.h>
 #include <asm/kvm_emulate.h>
 #include <asm/virt.h>
 
@@ -68,13 +69,9 @@ bool kvm_pmu_is_partitioned(struct kvm *kvm)
 
 static bool kvm_pmu_part_on_cpu(struct kvm_vcpu *vcpu)
 {
-	struct arm_pmu *pmu = vcpu->kvm->arch.arm_pmu;
-
 	lockdep_assert_preemption_disabled();
 
-	return kvm_pmu_is_partitioned(vcpu->kvm) &&
-	       vcpu == kvm_get_running_vcpu() && pmu &&
-	       cpumask_test_cpu(smp_processor_id(), &pmu->supported_cpus);
+	return vcpu == kvm_get_running_vcpu() && vcpu->arch.pmu.loaded_on_cpu;
 }
 
 static u64 kvm_vcpu_pmu_guest_counter_mask(struct kvm_vcpu *vcpu)
@@ -91,6 +88,8 @@ static u64 kvm_vcpu_pmu_guest_counter_mask(struct kvm_vcpu *vcpu)
 
 	return 0;
 }
+
+static void kvm_pmu_set_guest_owned(struct kvm_vcpu *vcpu);
 
 static void kvm_pmu_direct_pmcr_write(struct kvm_vcpu *vcpu, u64 val)
 {
@@ -119,6 +118,9 @@ static void kvm_pmu_direct_pmcr_write(struct kvm_vcpu *vcpu, u64 val)
 		for_each_set_bit(i, &mask, ARMV8_PMU_MAX_GENERAL_COUNTERS)
 			__vcpu_assign_sys_reg(vcpu, PMEVCNTR0_EL0 + i, 0);
 	}
+
+	if (val & ARMV8_PMU_PMCR_E)
+		kvm_pmu_set_guest_owned(vcpu);
 
 	if (!kvm_pmu_part_on_cpu(vcpu))
 		return;
@@ -230,7 +232,6 @@ static u64 kvm_pmu_direct_cntr_read(struct kvm_vcpu *vcpu, u8 idx)
 
 	return read_pmevcntrn(idx);
 }
-
 static void kvm_pmu_direct_cntr_write(struct kvm_vcpu *vcpu, u8 idx, u64 val)
 {
 	lockdep_assert_preemption_disabled();
@@ -412,6 +413,8 @@ void kvm_pmu_direct_reg_write(struct kvm_vcpu *vcpu, unsigned int reg,
 		val &= kvm_vcpu_pmu_guest_counter_mask(vcpu);
 		if (set) {
 			__vcpu_rmw_sys_reg(vcpu, PMCNTENSET_EL0, |=, val);
+			if (val)
+				kvm_pmu_set_guest_owned(vcpu);
 			if (kvm_pmu_part_on_cpu(vcpu))
 				write_sysreg(val, pmcntenset_el0);
 		} else {
@@ -424,6 +427,8 @@ void kvm_pmu_direct_reg_write(struct kvm_vcpu *vcpu, unsigned int reg,
 		val &= kvm_vcpu_pmu_guest_counter_mask(vcpu);
 		if (set) {
 			__vcpu_rmw_sys_reg(vcpu, PMINTENSET_EL1, |=, val);
+			if (val)
+				kvm_pmu_set_guest_owned(vcpu);
 			if (kvm_pmu_part_on_cpu(vcpu))
 				write_sysreg(val, pmintenset_el1);
 		} else {
@@ -444,13 +449,18 @@ void kvm_pmu_direct_reg_write(struct kvm_vcpu *vcpu, unsigned int reg,
 		}
 		local_irq_restore(flags);
 		break;
-	case PMUSERENR_EL0:
+	case PMUSERENR_EL0: {
+		u64 old = __vcpu_sys_reg(vcpu, reg);
+
 		val &= ARMV8_PMU_USERENR_MASK;
 		if (kvm_pmu_part_on_cpu(vcpu) &&
 		    !(vcpu->arch.mdcr_el2 & MDCR_EL2_TPM))
 			write_sysreg(val, pmuserenr_el0);
 		__vcpu_assign_sys_reg(vcpu, reg, val);
+		if (vcpu_has_nv(vcpu) && ((old ^ val) & ARMV8_PMU_USERENR_MASK))
+			kvm_make_request(KVM_REQ_RELOAD_PMU, vcpu);
 		break;
+	}
 	default:
 		WARN_ON(1);
 		break;
@@ -468,7 +478,12 @@ void kvm_pmu_direct_reg_write(struct kvm_vcpu *vcpu, unsigned int reg,
  */
 u64 kvm_pmu_guest_counter_mask(void)
 {
-	return kvm_vcpu_pmu_guest_counter_mask(kvm_get_running_vcpu());
+	struct kvm_vcpu *vcpu = kvm_get_running_vcpu();
+
+	if (vcpu && vcpu->arch.pmu.loaded_on_cpu)
+		return kvm_vcpu_pmu_guest_counter_mask(vcpu);
+
+	return 0;
 }
 
 static void kvm_pmu_apply_event_filter(struct kvm_vcpu *vcpu)
@@ -491,6 +506,7 @@ static void __kvm_pmu_load(struct kvm_vcpu *vcpu, bool reserve_counters)
 	struct arm_pmu *pmu = vcpu->kvm->arch.arm_pmu;
 	unsigned long guest_counters;
 	unsigned long flags;
+	unsigned long daif;
 	u64 mask;
 	u8 i;
 	u64 val;
@@ -499,7 +515,9 @@ static void __kvm_pmu_load(struct kvm_vcpu *vcpu, bool reserve_counters)
 	 * If we aren't guest-owned then we know the guest isn't using
 	 * the PMU anyway, so no need to bother with the swap.
 	 */
-	if (!kvm_pmu_is_partitioned(vcpu->kvm) || !vcpu->wants_to_run || !pmu)
+	if (!kvm_pmu_is_partitioned(vcpu->kvm) ||
+	    kvm_pmu_get_access(vcpu) != VCPU_PMU_ACCESS_GUEST_OWNED ||
+	    vcpu->arch.pmu.loaded_on_cpu || !vcpu->wants_to_run || !pmu)
 		return;
 
 	preempt_disable();
@@ -513,6 +531,22 @@ static void __kvm_pmu_load(struct kvm_vcpu *vcpu, bool reserve_counters)
 	guest_counters = kvm_vcpu_pmu_guest_counter_mask(vcpu);
 	if (reserve_counters)
 		kvm_pmu_set_guest_counters(pmu, guest_counters);
+
+	daif = local_daif_save();
+
+	/*
+	 * Ensure guest counters, interrupts, and overflow flags are quiesced
+	 * in hardware before lowering MDCR_EL2.HPMN and marking the partition
+	 * live on this CPU.
+	 */
+	write_sysreg(guest_counters, pmcntenclr_el0);
+	write_sysreg(guest_counters, pmintenclr_el1);
+	write_sysreg(guest_counters, pmovsclr_el0);
+	isb();
+
+	vcpu->arch.pmu.loaded_on_cpu = true;
+	kvm_arm_setup_mdcr_el2(vcpu);
+	isb();
 
 	kvm_pmu_apply_event_filter(vcpu);
 
@@ -565,6 +599,7 @@ static void __kvm_pmu_load(struct kvm_vcpu *vcpu, bool reserve_counters)
 	write_sysreg(val & mask, pmintenset_el1);
 	write_sysreg(~val & mask, pmintenclr_el1);
 
+	local_daif_restore(daif);
 	local_irq_restore(flags);
 	preempt_enable();
 }
@@ -582,6 +617,9 @@ void kvm_pmu_load(struct kvm_vcpu *vcpu)
 	bool reserve = !vcpu_get_flag(vcpu, IN_NESTED_ERET) &&
 		       !vcpu_get_flag(vcpu, IN_NESTED_EXCEPTION);
 
+	if (reserve && kvm_test_request(KVM_REQ_RELOAD_PMU, vcpu))
+		return;
+
 	__kvm_pmu_load(vcpu, reserve);
 }
 
@@ -590,28 +628,33 @@ static void __kvm_pmu_put(struct kvm_vcpu *vcpu, bool release_counters)
 	struct arm_pmu *pmu = vcpu->kvm->arch.arm_pmu;
 	unsigned long guest_counters;
 	unsigned long flags;
+	unsigned long daif;
 	u64 pmcr_mask;
 	u64 mask;
 	u8 i;
 	u64 val;
 
 	/*
-	 * If we aren't guest-owned then we know the guest is not
+	 * If we aren't loaded on the CPU then we know the guest is not
 	 * accessing the PMU anyway, so no need to bother with the
 	 * swap.
 	 */
-	if (!kvm_pmu_is_partitioned(vcpu->kvm) || !vcpu->wants_to_run || !pmu)
+	if (!kvm_pmu_is_partitioned(vcpu->kvm) ||
+	    !vcpu->arch.pmu.loaded_on_cpu || !pmu)
 		return;
 
 	preempt_disable();
+	local_irq_save(flags);
 	if (!cpumask_test_cpu(smp_processor_id(), &pmu->supported_cpus)) {
+		local_irq_restore(flags);
 		preempt_enable();
 		return;
 	}
 
-	local_irq_save(flags);
 	guest_counters = kvm_vcpu_pmu_guest_counter_mask(vcpu);
 	mask = guest_counters;
+
+	daif = local_daif_save();
 
 	/* Mask these to only save the guest relevant bits. */
 	val = read_sysreg(pmcntenset_el0);
@@ -657,7 +700,7 @@ static void __kvm_pmu_put(struct kvm_vcpu *vcpu, bool release_counters)
 	val = ARMV8_PMU_PMCR_LC;
 	if (pmu->pmuver >= ID_AA64DFR0_EL1_PMUVer_V3P5)
 		val |= ARMV8_PMU_PMCR_LP;
-	if (vcpu->arch.mdcr_el2 & MDCR_EL2_HPME)
+	if (READ_ONCE(vcpu->arch.mdcr_el2) & MDCR_EL2_HPME)
 		val |= ARMV8_PMU_PMCR_E;
 	write_sysreg(val, pmcr_el0);
 
@@ -665,6 +708,12 @@ static void __kvm_pmu_put(struct kvm_vcpu *vcpu, bool release_counters)
 	val = read_sysreg(pmovsset_el0);
 	__vcpu_rmw_sys_reg(vcpu, PMOVSSET_EL0, |=, val & mask);
 	write_sysreg(val & mask, pmovsclr_el0);
+
+	vcpu->arch.pmu.loaded_on_cpu = false;
+	kvm_arm_setup_mdcr_el2(vcpu);
+	isb();
+
+	local_daif_restore(daif);
 
 	if (release_counters)
 		kvm_pmu_set_guest_counters(pmu, 0);
@@ -686,4 +735,68 @@ void kvm_pmu_put(struct kvm_vcpu *vcpu)
 		       !vcpu_get_flag(vcpu, IN_NESTED_EXCEPTION);
 
 	__kvm_pmu_put(vcpu, release);
+}
+
+/**
+ * kvm_pmu_reload_part() - Reload partitioned PMU traps, filters, and state
+ * @vcpu: Pointer to struct kvm_vcpu
+ *
+ * Refresh MDCR_EL2 trap bits, event filters, and hardware register state
+ * without releasing the host counter reservation when the partitioned PMU is
+ * already loaded on the CPU.
+ */
+void kvm_pmu_reload_part(struct kvm_vcpu *vcpu)
+{
+	u64 mask = kvm_pmu_implemented_counter_mask(vcpu);
+	bool was_loaded;
+
+	guard(preempt)();
+
+	was_loaded = vcpu->arch.pmu.loaded_on_cpu;
+	if (was_loaded)
+		__kvm_pmu_put(vcpu, false);
+
+	if (!kvm_has_feat(vcpu->kvm, ID_AA64DFR0_EL1, PMUVer, V3P5))
+		__vcpu_rmw_sys_reg(vcpu, PMCR_EL0, &=, ~ARMV8_PMU_PMCR_LP);
+
+	__vcpu_rmw_sys_reg(vcpu, PMOVSSET_EL0, &=, mask);
+	__vcpu_rmw_sys_reg(vcpu, PMINTENSET_EL1, &=, mask);
+	__vcpu_rmw_sys_reg(vcpu, PMCNTENSET_EL0, &=, mask);
+
+	kvm_vcpu_load_fgt(vcpu);
+	if (vcpu == kvm_get_running_vcpu() && has_vhe() &&
+	    cpus_have_final_cap(ARM64_HAS_FGT)) {
+		write_sysreg_s(*vcpu_fgt(vcpu, HDFGRTR_EL2), SYS_HDFGRTR_EL2);
+		write_sysreg_s(*vcpu_fgt(vcpu, HDFGWTR_EL2), SYS_HDFGWTR_EL2);
+		isb();
+	}
+
+	if (was_loaded) {
+		__kvm_pmu_load(vcpu, false);
+	} else {
+		bool hpme_active = (__vcpu_sys_reg(vcpu, MDCR_EL2) &
+				    MDCR_EL2_HPME) &&
+				   kvm_pmu_hyp_counter_mask(vcpu);
+
+		if ((__vcpu_sys_reg(vcpu, PMCR_EL0) & ARMV8_PMU_PMCR_E) ||
+		    hpme_active)
+			kvm_pmu_set_guest_owned(vcpu);
+		else if (kvm_pmu_get_access(vcpu) == VCPU_PMU_ACCESS_GUEST_OWNED)
+			__kvm_pmu_load(vcpu, true);
+
+		if (!vcpu->arch.pmu.loaded_on_cpu &&
+		    vcpu == kvm_get_running_vcpu())
+			kvm_arm_setup_mdcr_el2(vcpu);
+	}
+}
+
+static void kvm_pmu_set_guest_owned(struct kvm_vcpu *vcpu)
+{
+	lockdep_assert_preemption_disabled();
+
+	if (kvm_pmu_is_partitioned(vcpu->kvm) &&
+	    vcpu == kvm_get_running_vcpu()) {
+		vcpu->arch.pmu.access = VCPU_PMU_ACCESS_GUEST_OWNED;
+		__kvm_pmu_load(vcpu, true);
+	}
 }
