@@ -86,13 +86,22 @@ struct mali_vpu_fw_set_option {
 
 /**
  * struct mali_vpu_fw_seq_param - Sequence parameters.
+ * @interlaced: Whether the decoded sequence is interlaced.
  * @planar: Planar output-buffer requirements.
  * @planar.buffers_min:	Minimum number of planar buffers required.
+ * @bitdepth: Decoded luma and chroma bitdepths.
+ * @bitdepth.luma: Decoded luma bitdepth.
+ * @bitdepth.chroma: Decoded chroma bitdepth.
  */
 struct mali_vpu_fw_seq_param {
+	bool interlaced;
 	struct {
 		u32 buffers_min;
 	} planar;
+	struct mali_vpu_fw_bitdepth {
+		u32 chroma;
+		u32 luma;
+	} bitdepth;
 };
 
 /**
@@ -146,6 +155,8 @@ struct mali_vpu_fw_error {
  * @MALI_VPU_FW_CODE_ALLOC_PARAM: Firmware reported new frame allocation parameters.
  * @MALI_VPU_FW_CODE_COLOR_DESC: Firmware reported colour-description metadata.
  * @MALI_VPU_FW_CODE_DPB_HELD_FRAMES: Firmware reported the number of frames held in the DPB.
+ * @MALI_VPU_FW_CODE_STREAM_NOT_SUPPORTED: Firmware rejected the coded stream.
+ * @MALI_VPU_FW_CODE_EVENT: Firmware reported an informational event.
  * @MALI_VPU_FW_CODE_UNKNOWN: Unrecognized firmware message.
  * @MALI_VPU_FW_CODE_MAX: Sentinel marking the end of the message-code enum.
  */
@@ -168,6 +179,8 @@ enum mali_vpu_fw_code {
 	MALI_VPU_FW_CODE_ALLOC_PARAM,        /* Driver <- Firmware. */
 	MALI_VPU_FW_CODE_COLOR_DESC,         /* Driver <- Firmware. */
 	MALI_VPU_FW_CODE_DPB_HELD_FRAMES,    /* Driver <- Firmware. */
+	MALI_VPU_FW_CODE_STREAM_NOT_SUPPORTED, /* Driver <- Firmware. */
+	MALI_VPU_FW_CODE_EVENT,              /* Driver <- Firmware. */
 	MALI_VPU_FW_CODE_UNKNOWN,            /* Driver <- Firmware. */
 	MALI_VPU_FW_CODE_MAX
 };

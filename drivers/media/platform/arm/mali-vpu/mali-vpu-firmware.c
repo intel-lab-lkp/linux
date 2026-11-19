@@ -1036,6 +1036,7 @@ int mali_vpu_fw_parse_msg(struct mali_vpu_fw *fw, struct mali_vpu_fw_msg *msg)
 		struct mve_response_frame_alloc_parameters alloc_params;
 		struct mve_response_sequence_parameters seq_params;
 		struct mve_buffer_param buffer_param;
+		struct mve_response_event event;
 		struct mve_response_error error;
 	} fw_msg = {};
 	size_t size = sizeof(fw_msg);
@@ -1149,6 +1150,9 @@ int mali_vpu_fw_parse_msg(struct mali_vpu_fw *fw, struct mali_vpu_fw_msg *msg)
 
 		msg->code = MALI_VPU_FW_CODE_SEQUENCE_PARAMS;
 		msg->data.seq_params.planar.buffers_min = fw_msg.seq_params.num_buffers_planar;
+		msg->data.seq_params.bitdepth.luma = fw_msg.seq_params.bitdepth_luma;
+		msg->data.seq_params.bitdepth.chroma = fw_msg.seq_params.bitdepth_chroma;
+		msg->data.seq_params.interlaced = fw_msg.seq_params.interlace;
 		break;
 	case MVE_RESPONSE_CODE_INPUT_FLUSHED:
 		msg->code = MALI_VPU_FW_CODE_INPUT_FLUSH;
@@ -1169,6 +1173,46 @@ int mali_vpu_fw_parse_msg(struct mali_vpu_fw *fw, struct mali_vpu_fw_msg *msg)
 	case MVE_BUFFER_CODE_PARAM:
 		ret =  mali_vpu_convert_buffer_param(msg, &fw_msg.buffer_param, size);
 		break;
+	case MVE_RESPONSE_CODE_EVENT: {
+		size_t message_offset = offsetof(struct mve_response_event, event_data.message);
+		size_t message_size;
+
+		msg->code = MALI_VPU_FW_CODE_EVENT;
+
+		if (size < sizeof(fw_msg.event.event_code))
+			return -EPROTO;
+
+		switch (fw_msg.event.event_code) {
+		case MVE_EVENT_ERROR_STREAM_CORRUPT:
+			if (size <= message_offset)
+				return -EPROTO;
+
+			message_size = min(size - message_offset,
+					   sizeof(fw_msg.event.event_data.message));
+
+			dev_warn_ratelimited(fw->dev,
+					     "firmware reports corrupt stream: %.*s\n",
+					     (int)message_size,
+					     fw_msg.event.event_data.message);
+
+			break;
+		case MVE_EVENT_ERROR_STREAM_NOT_SUPPORTED:
+			if (size <= message_offset)
+				return -EPROTO;
+
+			message_size = min(size - message_offset,
+					   sizeof(fw_msg.event.event_data.message));
+			dev_warn_ratelimited(fw->dev,
+					     "firmware reports unsupported stream: %.*s\n",
+					     (int)message_size,
+					     fw_msg.event.event_data.message);
+			msg->code = MALI_VPU_FW_CODE_STREAM_NOT_SUPPORTED;
+			break;
+		default:
+			break;
+		}
+		break;
+	}
 	case MVE_RESPONSE_CODE_ERROR: {
 		size_t message_offset = offsetof(struct mve_response_error, message);
 		size_t message_size;

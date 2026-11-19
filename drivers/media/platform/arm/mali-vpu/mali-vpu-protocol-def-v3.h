@@ -259,6 +259,8 @@ struct mve_msg_header {
 		#define MVE_RESPONSE_CODE_FRAME_ALLOC_PARAM   (2014)
 		/* struct mve_response_sequence_parameters */
 		#define MVE_RESPONSE_CODE_SEQUENCE_PARAMETERS (2015)
+		/* struct mve_response_event (variable size) */
+		#define MVE_RESPONSE_CODE_EVENT               (2016)
 		/* struct mve_response_set_option_fail */
 		#define MVE_RESPONSE_CODE_SET_OPTION_FAIL     (2017)
 
@@ -438,6 +440,91 @@ struct mve_response_error {
 
 		#define MVE_MAX_ERROR_MESSAGE_SIZE  (128)
 	char message[MVE_MAX_ERROR_MESSAGE_SIZE];
+};
+
+/*
+ * Per-frame processing statistics emitted when firmware profiling is
+ * enabled.
+ */
+struct mve_event_processed {
+	u8 pic_format;
+	u8 qp;
+	u8 pad0;
+	u8 pad1;
+	u32 parse_start_time;	/* Timestamp, absolute time */
+	u32 parse_end_time;	/* Timestamp, absolute time */
+	u32 parse_idle_time;	/* Waiting for in/out buffers or available RAM */
+	u32 pipe_start_time;	/* Timestamp */
+	u32 pipe_end_time;	/* Timestamp, end-start = process time. Idle time while in a frame
+				 * is not measured.
+				 */
+	u32 pipe_idle_time;	/* Always 0 in decode, */
+	u32 parser_coreid;	/* Core used to parse this frame */
+	u32 pipe_coreid;	/* Core used to pipe this frame */
+	u32 bitstream_bits;	/* Number of bitstream bits used for this frame. */
+	u32 intermediate_buffer_size;	/* Size of intermediate (mbinfo/residuals) buffer after this
+					 * frame was parsed.
+					 */
+	u32 total_memory_allocated;	/* after the frame was parsed. Including reference frames */
+	u32 bus_read_bytes;		/* bus read bytes */
+	u32 bus_write_bytes;		/* bus written bytes */
+	u32 afbc_bytes;
+	u32 slice0_end_time;		/* Timestamp, absolute time */
+	u32 stream_start_time;		/* Timestamp, absolute stream start time */
+	u32 stream_open_time;		/* Timestamp, absolute stream open time */
+};
+
+/*
+ * Encoder reference-frame metadata emitted when reference-frame exposure
+ * is enabled.
+ */
+struct mve_event_ref_frame {
+	u32 ref_width;		/* Width of display area in luma pixels */
+	u32 ref_height;		/* Height of display area in luma pixels */
+	u32 ref_mb_width;	/* Width in macroblocks */
+	u32 ref_mb_height;	/* Height in macroblocks */
+	u32 ref_left_crop;	/* Left crop in luma pixels */
+	u32 ref_top_crop;	/* Top crop in luma pixels */
+	u32 ref_frame_size;
+	u32 ref_display_order;
+	u32 ref_addr;
+	u16 bit_width;		/* bit width of the YUV either 8 or 10 */
+	u16 tiled_headers;
+};
+
+/*
+ * Trace-buffer allocations emitted by firmware build with event tracing
+ * enabled.
+ */
+struct mve_event_trace_buffers {
+	u16 reserved;
+	u8 num_cores;
+	u8 rasc_mask;
+		#define MVE_MAX_TRACE_BUFFERS 40
+	/* this array will contain one buffer per rasc in rasc_mask per num_core */
+	struct {
+		u32 rasc_addr;	/* rasc address of the buffer */
+		u32 size;	/* size of the buffer in bytes */
+	} buffers[MVE_MAX_TRACE_BUFFERS];
+};
+
+/*
+ * Firmware event response. Profiling and tracing events are informational,
+ * while stream-error events may require host action.
+ */
+struct mve_response_event {
+	u32 event_code;
+		#define MVE_EVENT_ERROR_STREAM_CORRUPT		(1) /* message, text string */
+		#define MVE_EVENT_ERROR_STREAM_NOT_SUPPORTED	(2) /* message, text string */
+		#define MVE_EVENT_PROCESSED			(3) /* struct mve_event_processed */
+		#define MVE_EVENT_REF_FRAME			(4) /* struct mve_event_ref_frame */
+		#define MVE_EVENT_TRACE_BUFFERS			(5)
+	union {
+		struct mve_event_processed event_processed;
+		struct mve_event_ref_frame event_ref_frame;
+		struct mve_event_trace_buffers event_trace_buffers;
+		char message[MVE_MAX_ERROR_MESSAGE_SIZE];
+	} event_data;
 };
 
 /*

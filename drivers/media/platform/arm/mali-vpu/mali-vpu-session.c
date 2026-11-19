@@ -584,6 +584,20 @@ static int mali_vpu_session_handle_fw_msg(struct mali_vpu_session *sess,
 		struct vb2_queue *dst_q;
 		u32 buffers_min;
 
+		if (fw_msg->data.seq_params.interlaced) {
+			dev_err(sess->vpu_dev->dev, "interlaced streams are not supported\n");
+			return -EOPNOTSUPP;
+		}
+
+		if (fw_msg->data.seq_params.bitdepth.luma != 8 ||
+		    fw_msg->data.seq_params.bitdepth.chroma != 8) {
+			dev_err(sess->vpu_dev->dev,
+				"bitdepth luma=%u chroma=%u is not supported\n",
+				fw_msg->data.seq_params.bitdepth.luma,
+				fw_msg->data.seq_params.bitdepth.chroma);
+			return -EOPNOTSUPP;
+		}
+
 		buffers_min = fw_msg->data.seq_params.planar.buffers_min;
 		dst_q = v4l2_m2m_get_dst_vq(sess->m2m_ctx);
 
@@ -599,6 +613,11 @@ static int mali_vpu_session_handle_fw_msg(struct mali_vpu_session *sess,
 
 		return mali_vpu_session_fw_send_flush(sess, false);
 	}
+	case MALI_VPU_FW_CODE_STREAM_NOT_SUPPORTED:
+		return -EOPNOTSUPP;
+	case MALI_VPU_FW_CODE_EVENT:
+		/* No session action is required for informational events. */
+		return 0;
 	case MALI_VPU_FW_CODE_UNKNOWN:
 	case MALI_VPU_FW_CODE_MAX:
 	default:
