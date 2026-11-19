@@ -321,6 +321,17 @@ static inline int thermal_zone_get_temp_aggregate(struct thermal_zone_device *tz
 	return -EOPNOTSUPP;
 }
 #endif
+#ifdef CONFIG_THERMAL_AGGREGATION
+int thermal_zone_aggregate_register(struct thermal_zone_aggregate *aggregate,
+				    const struct thermal_zone_device_ops *ops);
+#else
+static inline int
+thermal_zone_aggregate_register(struct thermal_zone_aggregate *aggregate,
+				const struct thermal_zone_device_ops *ops)
+{
+	return -EOPNOTSUPP;
+}
+#endif
 void thermal_zone_set_trip_hyst(struct thermal_zone_device *tz,
 				struct thermal_trip *trip, int hyst);
 

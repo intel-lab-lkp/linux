@@ -23,8 +23,7 @@
  * Return: 0 on success or -EINVAL for invalid arguments. Entries are unchanged
  * on failure.
  */
-static int __maybe_unused
-thermal_zone_aggregate_init_coefficients(struct thermal_zone_aggregate *aggregate)
+static int thermal_zone_aggregate_init_coefficients(struct thermal_zone_aggregate *aggregate)
 {
 	unsigned int initialized = 0;
 	unsigned int base, remainder, i;
@@ -110,9 +109,8 @@ thermal_zone_aggregate_init_coefficients(struct thermal_zone_aggregate *aggregat
  * specification, aggregated sources or destination set_trips,
  * or -ENODEV for missing or exiting sources.
  */
-static int __maybe_unused
-thermal_zone_aggregate_validate(struct thermal_zone_aggregate *aggregate,
-				const struct thermal_zone_device_ops *ops)
+static int thermal_zone_aggregate_validate(struct thermal_zone_aggregate *aggregate,
+					   const struct thermal_zone_device_ops *ops)
 {
 	unsigned int initialized = 0;
 	unsigned int i;
@@ -155,6 +153,30 @@ thermal_zone_aggregate_validate(struct thermal_zone_aggregate *aggregate,
 		return -EINVAL;
 
 	return 0;
+}
+
+/**
+ * thermal_zone_aggregate_register() - prepare an aggregation for zone registration
+ * @aggregate: caller-owned aggregation description
+ * @ops: operations of the destination thermal zone
+ *
+ * Validate the description before initializing default coefficients. Call before
+ * publishing the destination zone, without holding thermal zone locks. The
+ * caller retains ownership of the description and source references and must
+ * keep them alive and stable until the destination zone is unregistered.
+ *
+ * Return: 0 on success or an error from validation or coefficient initialization.
+ */
+int thermal_zone_aggregate_register(struct thermal_zone_aggregate *aggregate,
+				    const struct thermal_zone_device_ops *ops)
+{
+	int ret;
+
+	ret = thermal_zone_aggregate_validate(aggregate, ops);
+	if (ret)
+		return ret;
+
+	return thermal_zone_aggregate_init_coefficients(aggregate);
 }
 
 /**

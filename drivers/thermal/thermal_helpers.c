@@ -136,7 +136,7 @@ int thermal_zone_get_temp(struct thermal_zone_device *tz, int *temp)
 
 	guard(thermal_zone)(tz);
 
-	if (!tz->ops.get_temp)
+	if (!tz->ops.get_temp && !(tz->tzp && tz->tzp->aggregate))
 		return -EINVAL;
 
 	ret = __thermal_zone_get_temp(tz, temp);

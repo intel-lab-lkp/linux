@@ -1431,6 +1431,12 @@ static void thermal_zone_device_release(struct device *dev)
  * thermal_zone_device_unregister() must be called when the device is no
  * longer needed. The passive cooling depends on the .get_trend() return value.
  *
+ * If @tzp contains an aggregation description, validate it and initialize its
+ * coefficients before publication. The caller must keep the description and
+ * referenced source zones alive and stable for the registered zone's lifetime.
+ * Aggregated zones do not require a get_temp callback and cannot use set_trips
+ * to program hardware temperature boundaries.
+ *
  * Return: a pointer to the created struct thermal_zone_device or an
  * in case of error, an ERR_PTR. Caller must check return value with
  * IS_ERR*() helpers.
@@ -1470,7 +1476,7 @@ thermal_zone_device_register_with_trips(const char *type,
 		return ERR_PTR(-EINVAL);
 	}
 
-	if (!ops || !ops->get_temp) {
+	if (!ops || (!ops->get_temp && !(tzp && tzp->aggregate))) {
 		pr_err("Thermal zone device ops not defined or invalid\n");
 		return ERR_PTR(-EINVAL);
 	}
@@ -1483,6 +1489,12 @@ thermal_zone_device_register_with_trips(const char *type,
 
 	if (thermal_class_unavailable)
 		return ERR_PTR(-ENODEV);
+
+	if (tzp && tzp->aggregate) {
+		result = thermal_zone_aggregate_register(tzp->aggregate, ops);
+		if (result)
+			return ERR_PTR(result);
+	}
 
 	tz = kzalloc_flex(*tz, trips, num_trips);
 	if (!tz)
