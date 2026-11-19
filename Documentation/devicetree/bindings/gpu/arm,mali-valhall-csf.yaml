@@ -97,6 +97,30 @@ properties:
 
   dma-coherent: true
 
+  arm,sysc-alloc:
+    $ref: /schemas/types.yaml#/definitions/uint32-matrix
+    minItems: 1
+    maxItems: 32
+    items:
+      items:
+        - description: GPU internal source ID
+          minimum: 0
+          maximum: 31
+        - description: Read allocation policy
+          enum: [0, 2, 3, 4, 5]
+        - description: Write allocation policy
+          enum: [0, 2, 3, 4, 5]
+    description:
+      System-cache allocation policies for GPU architecture 11.0.3 and later.
+      Each entry contains a source ID, a read policy and a write policy.
+      Source IDs must be unique. Reserved source IDs and access directions
+      not supported by the GPU must use zero policies. Policy values are
+      0 for L2 allocation, 2 for never allocate, 3 for always allocate,
+      4 for partial allocation and 5 for L2 partial allocation. When present,
+      all source policies start at zero and the listed entries override them.
+      Omitted sources therefore use L2 allocation. If absent, the register
+      defaults are preserved.
+
 required:
   - compatible
   - reg
