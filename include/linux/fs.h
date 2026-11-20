@@ -877,7 +877,7 @@ struct inode {
  *
  * We hide all of it behind helpers so that we can validate consumers.
  */
-static inline enum inode_state_flags_enum inode_state_read_once(struct inode *inode)
+static inline enum inode_state_flags_enum inode_state_read_once(const struct inode *inode)
 {
 	return READ_ONCE(inode->i_state.__state);
 }
