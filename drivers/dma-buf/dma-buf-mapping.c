@@ -5,6 +5,7 @@
  */
 #include <linux/dma-buf-mapping.h>
 #include <linux/dma-resv.h>
+#include <linux/dma-buf.h>
 #include <linux/overflow.h>
 #include <linux/align.h>
 
@@ -257,3 +258,67 @@ void dma_buf_free_sgt(struct dma_buf_attachment *attach, struct sg_table *sgt,
 
 }
 EXPORT_SYMBOL_NS_GPL(dma_buf_free_sgt, "DMA_BUF");
+
+/**
+ * dma_buf_match_mapping - Record the mapping types agreed upon by exporter
+ *                         and importer
+ * @args: Match arguments from attach
+ * @exp: Array of mapping types supported by the exporter, in priority order
+ * @exp_len: Number of entries in @exp
+ *
+ * Walk the exporter's list in order and, for each entry, find the first
+ * importer entry of the same type that the type's match() callback accepts.
+ * Every such pair is recorded in @args->attach->matches, so the match set
+ * preserves the exporter's priority. The first entry is the default returned
+ * by dma_buf_attach_map_type().
+ *
+ * Because the exporter list is walked in order, the exporter controls the
+ * priority of mapping types.
+ *
+ * Returns: 0 if at least one type matched, -EOPNOTSUPP if the exporter and
+ * importer have no type in common, -EINVAL if either list is empty, -E2BIG if
+ * more than DMA_BUF_MAX_MATCHES types matched, or the error a match() callback
+ * aborted the search with.
+ */
+int dma_buf_match_mapping(struct dma_buf_match_args *args,
+			  const struct dma_buf_mapping_match *exp,
+			  size_t exp_len)
+{
+	const struct dma_buf_mapping_match *exp_end = exp + exp_len;
+	const struct dma_buf_mapping_match *imp_end =
+		args->imp_matches + args->imp_len;
+	struct dma_buf_attachment *attach = args->attach;
+	unsigned int nr = 0;
+	int ret;
+
+	if (!exp_len || !args->imp_len)
+		return -EINVAL;
+
+	for (; exp != exp_end; exp++) {
+		const struct dma_buf_mapping_match *imp = args->imp_matches;
+
+		for (; imp != imp_end; imp++) {
+			if (exp->type != imp->type)
+				continue;
+			if (exp->type->match) {
+				ret = exp->type->match(args, exp, imp);
+				if (ret == -EOPNOTSUPP)
+					continue;
+				if (ret != 0)
+					return ret;
+			}
+			if (nr == ARRAY_SIZE(attach->matches))
+				return -E2BIG;
+			exp->type->finish_match(args, exp, imp,
+						&attach->matches[nr++]);
+			break;
+		}
+	}
+
+	if (!nr)
+		return -EOPNOTSUPP;
+
+	attach->nr_matches = nr;
+	return 0;
+}
+EXPORT_SYMBOL_NS_GPL(dma_buf_match_mapping, "DMA_BUF");
