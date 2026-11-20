@@ -1206,8 +1206,11 @@ intel_dp_frl_bw_valid(struct intel_dp *intel_dp, int target_clock,
 	max_frl_bw = min(intel_dp->dfp.pcon_max_frl_bw,
 			 intel_dp_hdmi_sink_max_frl(intel_dp));
 
-	/* converting bw from Gbps to Kbps*/
-	max_frl_bw = max_frl_bw * 1000000;
+	/*
+	 * Convert the rate from Gbps to kbps. FRL uses 16b/18b line coding, so
+	 * only 16/18 of the raw rate carries payload.
+	 */
+	max_frl_bw = max_frl_bw * 1000000 * 16 / 18;
 
 	/* #FIXME check bandwidth with DSC if both PCON and HDMI sink support DSC */
 	if (target_bw > max_frl_bw)
