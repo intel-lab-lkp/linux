@@ -2,6 +2,7 @@
 #include <linux/cred.h>
 #include <linux/device.h>
 #include <linux/dma-buf.h>
+#include <linux/dma-buf-mapping.h>
 #include <linux/dma-resv.h>
 #include <linux/highmem.h>
 #include <linux/init.h>
@@ -128,33 +129,22 @@ static void vunmap_udmabuf(struct dma_buf *buf, struct iosys_map *map)
 	vm_unmap_ram(map->vaddr, ubuf->pagecount);
 }
 
-static struct sg_table *get_sg_table(struct device *dev, struct dma_buf *buf,
-				     enum dma_data_direction direction)
+static int get_sg_table(struct device *dev, struct dma_buf *buf,
+			struct sg_table *sg, enum dma_data_direction direction)
 {
 	struct udmabuf *ubuf = buf->priv;
-	struct sg_table *sg;
 	int ret;
-
-	sg = kzalloc_obj(*sg);
-	if (!sg)
-		return ERR_PTR(-ENOMEM);
 
 	ret = sg_alloc_table_from_pages(sg, ubuf->pages, ubuf->pagecount, 0,
 					ubuf->pagecount << PAGE_SHIFT,
 					GFP_KERNEL);
 	if (ret < 0)
-		goto err_alloc;
+		return ret;
 
 	ret = dma_map_sgtable(dev, sg, direction, DMA_ATTR_SKIP_CPU_SYNC);
 	if (ret < 0)
-		goto err_map;
-	return sg;
-
-err_map:
-	sg_free_table(sg);
-err_alloc:
-	kfree(sg);
-	return ERR_PTR(ret);
+		sg_free_table(sg);
+	return ret;
 }
 
 static void put_sg_table(struct device *dev, struct sg_table *sg,
@@ -162,20 +152,35 @@ static void put_sg_table(struct device *dev, struct sg_table *sg,
 {
 	dma_unmap_sgtable(dev, sg, direction, DMA_ATTR_SKIP_CPU_SYNC);
 	sg_free_table(sg);
-	kfree(sg);
 }
 
-static struct sg_table *map_udmabuf(struct dma_buf_attachment *at,
-				    enum dma_data_direction direction)
+static struct dma_buf_sgt_mapping *map_udmabuf(struct dma_buf_attachment *at,
+					       enum dma_data_direction direction)
 {
-	return get_sg_table(at->dev, at->dmabuf, direction);
+	struct dma_buf_sgt_mapping *mapping;
+	int ret;
+
+	mapping = kzalloc_obj(*mapping);
+	if (!mapping)
+		return ERR_PTR(-ENOMEM);
+
+	ret = get_sg_table(dma_buf_sgt_dma_device(at), at->dmabuf,
+			   &mapping->sgt, direction);
+	if (ret) {
+		kfree(mapping);
+		return ERR_PTR(ret);
+	}
+
+	return mapping;
 }
 
 static void unmap_udmabuf(struct dma_buf_attachment *at,
-			  struct sg_table *sg,
+			  struct dma_buf_sgt_mapping *mapping,
 			  enum dma_data_direction direction)
 {
-	return put_sg_table(at->dev, sg, direction);
+	put_sg_table(dma_buf_sgt_mapping_dma_device(mapping), &mapping->sgt,
+		     direction);
+	kfree(mapping);
 }
 
 static void unpin_all_folios(struct udmabuf *ubuf)
@@ -212,8 +217,10 @@ static void release_udmabuf(struct dma_buf *buf)
 	struct udmabuf *ubuf = buf->priv;
 	struct device *dev = ubuf->device->this_device;
 
-	if (ubuf->sg)
+	if (ubuf->sg) {
 		put_sg_table(dev, ubuf->sg, ubuf->sg_dir);
+		kfree(ubuf->sg);
+	}
 
 	deinit_udmabuf(ubuf);
 	kfree(ubuf);
@@ -226,16 +233,19 @@ static int begin_cpu_udmabuf(struct dma_buf *buf,
 	struct device *dev = ubuf->device->this_device;
 
 	if (!ubuf->sg) {
-		ubuf->sg = get_sg_table(dev, buf, direction);
-		if (IS_ERR(ubuf->sg)) {
-			int ret;
+		int ret;
 
-			ret = PTR_ERR(ubuf->sg);
+		ubuf->sg = kzalloc_obj(*ubuf->sg);
+		if (!ubuf->sg)
+			return -ENOMEM;
+
+		ret = get_sg_table(dev, buf, ubuf->sg, direction);
+		if (ret) {
+			kfree(ubuf->sg);
 			ubuf->sg = NULL;
 			return ret;
-		} else {
-			ubuf->sg_dir = direction;
 		}
+		ubuf->sg_dir = direction;
 	}
 
 	dma_sync_sgtable_for_cpu(dev, ubuf->sg, direction);
@@ -256,14 +266,13 @@ static int end_cpu_udmabuf(struct dma_buf *buf,
 }
 
 static const struct dma_buf_ops udmabuf_ops = {
-	.map_dma_buf	   = map_udmabuf,
-	.unmap_dma_buf	   = unmap_udmabuf,
 	.release	   = release_udmabuf,
 	.mmap		   = mmap_udmabuf,
 	.vmap		   = vmap_udmabuf,
 	.vunmap		   = vunmap_udmabuf,
 	.begin_cpu_access  = begin_cpu_udmabuf,
 	.end_cpu_access    = end_cpu_udmabuf,
+	DMA_BUF_SIMPLE_SGT_EXP_MATCH(map_udmabuf, unmap_udmabuf),
 };
 
 #define SEALS_WANTED (F_SEAL_SHRINK)
