@@ -909,7 +909,18 @@ static u32 iptfs_reassem_cont(struct xfrm_iptfs_data *xtfs, u64 seq,
 	    iptfs_skb_can_add_frags(newskb, fragwalk, data, copylen)) {
 		iptfs_skb_add_frags(newskb, fragwalk, data, copylen);
 	} else {
-		if (skb_linearize(newskb)) {
+		/* A newskb started by iptfs_pskb_add_frags() holds only the
+		 * inner IP header in its linear area. Make room, in one
+		 * reallocation, for the frag data that linearizing pulls in
+		 * and for the rest of the inner packet.
+		 */
+		int room = skb_end_pointer(newskb) - skb_tail_pointer(newskb);
+		int need = (int)(newskb->data_len + ipremain) - room;
+
+		if ((need > 0 &&
+		     pskb_expand_head(newskb, 0, need,
+				      GFP_ATOMIC | __GFP_NOWARN)) ||
+		    skb_linearize(newskb)) {
 			XFRM_INC_STATS(xs_net(xtfs->x),
 				       LINUX_MIB_XFRMINBUFFERERROR);
 			goto abandon;
