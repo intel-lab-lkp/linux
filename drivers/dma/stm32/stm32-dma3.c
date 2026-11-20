@@ -397,7 +397,8 @@ static void stm32_dma3_chan_dump_hwdesc(struct stm32_dma3_chan *chan,
 static struct stm32_dma3_swdesc *stm32_dma3_chan_desc_alloc(struct stm32_dma3_chan *chan, u32 count)
 {
 	struct stm32_dma3_swdesc *swdesc;
-	int i;
+	int i, last_alloc_idx = -1;
+	dma_addr_t base_addr = 0;
 
 	/*
 	 * If the memory to be allocated for the number of hwdesc (6 u32 members but 32-bytes
@@ -419,18 +420,38 @@ static struct stm32_dma3_swdesc *stm32_dma3_chan_desc_alloc(struct stm32_dma3_ch
 							&swdesc->lli[i].hwdesc_addr);
 		if (!swdesc->lli[i].hwdesc)
 			goto err_pool_free;
+
+		last_alloc_idx = i;
+
+		if (i == 0) {
+			base_addr = swdesc->lli[0].hwdesc_addr & CLBAR_LBA;
+			continue;
+		}
+
+		/*
+		 * dma_pool boundary=SZ_64K only guarantees that one allocation does not span a 64KB
+		 * boundary. It does not guarantee that all allocations of a given linked-list land
+		 * in the same 64KB address window required by CLBAR/CLLR addressing.
+		 */
+		if (base_addr != (swdesc->lli[i].hwdesc_addr & CLBAR_LBA)) {
+			dev_err(vchan_chan_dev(&chan->vchan), "LLI crosses a 64KB window (%pad)\n",
+				&swdesc->lli[i].hwdesc_addr);
+			goto err_pool_free;
+		}
 	}
-	swdesc->ccr = 0;
 
 	/* Set LL allocated port */
-	swdesc->ccr &= ~CCR_LAP;
+	swdesc->ccr = FIELD_PREP(CCR_LAP, 0);
 
 	return swdesc;
 
 err_pool_free:
 	dev_err(vchan_chan_dev(&chan->vchan), "Failed to alloc descriptors\n");
-	while (--i >= 0)
-		dma_pool_free(chan->lli_pool, swdesc->lli[i].hwdesc, swdesc->lli[i].hwdesc_addr);
+	while (last_alloc_idx >= 0) {
+		dma_pool_free(chan->lli_pool, swdesc->lli[last_alloc_idx].hwdesc,
+			      swdesc->lli[last_alloc_idx].hwdesc_addr);
+		last_alloc_idx--;
+	}
 	kfree(swdesc);
 
 	return NULL;
