@@ -23,19 +23,18 @@ static int picolcd_set_brightness(struct backlight_device *bdev)
 {
 	struct picolcd_data *data = bl_get_data(bdev);
 	struct hid_report *report = picolcd_out_report(REPORT_BRIGHTNESS, data->hdev);
-	unsigned long flags;
 
 	if (!report || report->maxfield != 1 || report->field[0]->report_count != 1)
 		return -ENODEV;
 
+	mutex_lock(&data->report_mutex);
 	data->lcd_brightness = bdev->props.brightness & 0x0ff;
 	data->lcd_power      = bdev->props.power;
-	spin_lock_irqsave(&data->lock, flags);
 	hid_set_field(report->field[0], 0,
 		      data->lcd_power == BACKLIGHT_POWER_ON ? data->lcd_brightness : 0);
-	if (!(data->status & PICOLCD_FAILED))
+	if (!(READ_ONCE(data->status) & PICOLCD_FAILED))
 		hid_hw_request(data->hdev, report, HID_REQ_SET_REPORT);
-	spin_unlock_irqrestore(&data->lock, flags);
+	mutex_unlock(&data->report_mutex);
 	return 0;
 }
 

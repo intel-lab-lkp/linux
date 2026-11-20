@@ -29,10 +29,9 @@
 #include "hid-picolcd.h"
 
 
-void picolcd_leds_set(struct picolcd_data *data)
+static void picolcd_leds_set_locked(struct picolcd_data *data)
 {
 	struct hid_report *report;
-	unsigned long flags;
 
 	if (!data->led[0])
 		return;
@@ -40,14 +39,19 @@ void picolcd_leds_set(struct picolcd_data *data)
 	if (!report || report->maxfield != 1 || report->field[0]->report_count != 1)
 		return;
 
-	spin_lock_irqsave(&data->lock, flags);
 	hid_set_field(report->field[0], 0, data->led_state);
-	if (!(data->status & PICOLCD_FAILED))
+	if (!(READ_ONCE(data->status) & PICOLCD_FAILED))
 		hid_hw_request(data->hdev, report, HID_REQ_SET_REPORT);
-	spin_unlock_irqrestore(&data->lock, flags);
 }
 
-static void picolcd_led_set_brightness(struct led_classdev *led_cdev,
+void picolcd_leds_set(struct picolcd_data *data)
+{
+	mutex_lock(&data->report_mutex);
+	picolcd_leds_set_locked(data);
+	mutex_unlock(&data->report_mutex);
+}
+
+static int picolcd_led_set_brightness(struct led_classdev *led_cdev,
 			enum led_brightness value)
 {
 	struct device *dev;
@@ -59,20 +63,23 @@ static void picolcd_led_set_brightness(struct led_classdev *led_cdev,
 	hdev = to_hid_device(dev);
 	data = hid_get_drvdata(hdev);
 	if (!data)
-		return;
+		return -ENODEV;
+	mutex_lock(&data->report_mutex);
 	for (i = 0; i < 8; i++) {
 		if (led_cdev != data->led[i])
 			continue;
 		state = (data->led_state >> i) & 1;
 		if (value == LED_OFF && state) {
 			data->led_state &= ~(1 << i);
-			picolcd_leds_set(data);
+			picolcd_leds_set_locked(data);
 		} else if (value != LED_OFF && !state) {
 			data->led_state |= 1 << i;
-			picolcd_leds_set(data);
+			picolcd_leds_set_locked(data);
 		}
 		break;
 	}
+	mutex_unlock(&data->report_mutex);
+	return 0;
 }
 
 static enum led_brightness picolcd_led_get_brightness(struct led_classdev *led_cdev)
@@ -87,7 +94,7 @@ static enum led_brightness picolcd_led_get_brightness(struct led_classdev *led_c
 	data = hid_get_drvdata(hdev);
 	for (i = 0; i < 8; i++)
 		if (led_cdev == data->led[i]) {
-			value = (data->led_state >> i) & 1;
+			value = (READ_ONCE(data->led_state) >> i) & 1;
 			break;
 		}
 	return value ? LED_FULL : LED_OFF;
@@ -122,7 +129,7 @@ int picolcd_init_leds(struct picolcd_data *data, struct hid_report *report)
 		led->brightness = 0;
 		led->max_brightness = 1;
 		led->brightness_get = picolcd_led_get_brightness;
-		led->brightness_set = picolcd_led_set_brightness;
+		led->brightness_set_blocking = picolcd_led_set_brightness;
 
 		data->led[i] = led;
 		ret = led_classdev_register(dev, data->led[i]);
@@ -159,5 +166,3 @@ void picolcd_exit_leds(struct picolcd_data *data)
 		kfree(led);
 	}
 }
-
-
