@@ -37,6 +37,7 @@ no-header-test += linux/usb/audio.h
 no-header-test += linux/v4l2-mediabus.h
 no-header-test += linux/v4l2-subdev.h
 no-header-test += linux/videodev2.h
+no-header-test += linux/virtio_media.h
 no-header-test += linux/vm_sockets.h
 no-header-test += sound/asequencer.h
 no-header-test += sound/asoc.h

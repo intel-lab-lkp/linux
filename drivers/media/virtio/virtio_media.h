@@ -1,0 +1,70 @@
+/* SPDX-License-Identifier: BSD-3-Clause OR GPL-2.0+ */
+
+/*
+ * Virtio-media structures & functions declarations.
+ *
+ * Copyright (c) 2024-2026 Google LLC.
+ */
+
+#ifndef __VIRTIO_MEDIA_H
+#define __VIRTIO_MEDIA_H
+
+#include <linux/virtio_config.h>
+#include <media/v4l2-device.h>
+
+#include "uapi/linux/virtio_media.h"
+
+#define VIRTIO_MEDIA_DEFAULT_DRIVER_NAME "virtio-media"
+
+/**
+ * struct virtio_media - Virtio-media device.
+ * @v4l2_dev: v4l2_device for the media device.
+ * @video_dev: video_device for the media device.
+ * @virtio_dev: virtio device for the media device.
+ * @commandq: virtio command queue.
+ * @sessions: list of active sessions on the device.
+ * @sessions_lock: protects @sessions and &struct virtio_media_session.list.
+ * @cmd: union of device-level commands. Session commands are handled by
+ *       &struct virtio_media_session.
+ * @resp: union of responses to device-level commands. Session responses are
+ *        handled by &struct virtio_media_session.
+ * @vlock: serializes access to the command queue.
+ * @wq: waitqueue for host responses on the command queue.
+ */
+struct virtio_media {
+	struct v4l2_device v4l2_dev;
+	struct video_device video_dev;
+
+	struct virtio_device *virtio_dev;
+	struct virtqueue *commandq;
+
+	struct list_head sessions;
+	struct mutex sessions_lock; /* protects sessions list */
+
+	__dma_from_device_group_begin();
+	union {
+		struct virtio_media_cmd_open open;
+	} cmd;
+
+	union {
+		struct virtio_media_resp_open open;
+	} resp;
+	__dma_from_device_group_end();
+
+	struct mutex vlock; /* serializes command queue access */
+	wait_queue_head_t wq;
+};
+
+static inline struct virtio_media *
+to_virtio_media(struct video_device *video_dev)
+{
+	return container_of(video_dev, struct virtio_media, video_dev);
+}
+
+/* virtio_media_driver.c */
+
+int virtio_media_send_command(struct virtio_media *vv, struct scatterlist **sgs,
+			      const size_t out_sgs, const size_t in_sgs,
+			      size_t minimum_resp_len, size_t *resp_len);
+#endif // __VIRTIO_MEDIA_H
+
