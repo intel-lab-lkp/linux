@@ -1059,9 +1059,8 @@ static int gss_read_proxy_verf(struct svc_rqst *rqstp,
 			       struct gssp_in_token *in_token)
 {
 	struct xdr_stream *xdr = &rqstp->rq_arg_stream;
-	unsigned int length, pgto_offs, pgfrom_offs;
-	int pages, i, pgto, pgfrom;
-	size_t to_offs, from_offs;
+	unsigned int base, length;
+	int pages, i;
 	u32 inlen;
 
 	if (dup_netobj(in_handle, &gc->gc_ctx))
@@ -1093,30 +1092,15 @@ static int gss_read_proxy_verf(struct svc_rqst *rqstp,
 		}
 	}
 
-	length = min_t(unsigned int, inlen, (char *)xdr->end - (char *)xdr->p);
-	for (to_offs = 0; to_offs < length; to_offs += PAGE_SIZE)
-		memcpy(page_address(in_token->pages[to_offs >> PAGE_SHIFT]),
-		       (char *)xdr->p + to_offs,
-		       min_t(unsigned int, length - to_offs, PAGE_SIZE));
-	inlen -= length;
-	to_offs = length;
-	from_offs = rqstp->rq_arg.page_base;
-	while (inlen) {
-		pgto = to_offs >> PAGE_SHIFT;
-		pgfrom = from_offs >> PAGE_SHIFT;
-		pgto_offs = to_offs & ~PAGE_MASK;
-		pgfrom_offs = from_offs & ~PAGE_MASK;
-
-		length = min_t(unsigned int, inlen,
-			 min_t(unsigned int, PAGE_SIZE - pgto_offs,
-			       PAGE_SIZE - pgfrom_offs));
-		memcpy(page_address(in_token->pages[pgto]) + pgto_offs,
-		       page_address(rqstp->rq_arg.pages[pgfrom]) + pgfrom_offs,
-		       length);
-
-		to_offs += length;
-		from_offs += length;
-		inlen -= length;
+	base = xdr_stream_pos(xdr);
+	for (i = 0; i < pages; i++) {
+		length = min_t(unsigned int, inlen - i * PAGE_SIZE, PAGE_SIZE);
+		if (read_bytes_from_xdr_buf(&rqstp->rq_arg, base + i * PAGE_SIZE,
+					    page_address(in_token->pages[i]),
+					    length)) {
+			gss_free_in_token_pages(in_token);
+			goto out_denied_free;
+		}
 	}
 	return 0;
 
