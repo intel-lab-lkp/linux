@@ -951,6 +951,8 @@ int etnaviv_gpu_init(struct etnaviv_gpu *gpu)
 	return 0;
 
 fail:
+	/* the GPU is not used, a resume must not set it up */
+	gpu->state = ETNA_GPU_STATE_UNKNOWN;
 	pm_runtime_mark_last_busy(gpu->dev);
 pm_put:
 	pm_runtime_put_autosuspend(gpu->dev);
@@ -1874,6 +1876,9 @@ static void etnaviv_gpu_unbind(struct device *dev, struct device *master,
 		etnaviv_gpu_clk_disable(gpu);
 	}
 
+	/* the GPU is not initialized any more, a resume must not set it up */
+	gpu->state = ETNA_GPU_STATE_UNKNOWN;
+
 	if (gpu->mmu_context)
 		etnaviv_iommu_context_put(gpu->mmu_context);
 
@@ -2019,7 +2024,8 @@ static int etnaviv_gpu_rpm_suspend(struct device *dev)
 
 	etnaviv_gpu_hw_suspend(gpu);
 
-	gpu->state = ETNA_GPU_STATE_IDENTIFIED;
+	if (gpu->state != ETNA_GPU_STATE_UNKNOWN)
+		gpu->state = ETNA_GPU_STATE_IDENTIFIED;
 
 	return etnaviv_gpu_clk_disable(gpu);
 }
