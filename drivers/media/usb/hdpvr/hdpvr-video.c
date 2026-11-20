@@ -246,6 +246,25 @@ static struct hdpvr_buffer *hdpvr_get_next_buffer(struct hdpvr_device *dev)
 	return buf;
 }
 
+/*
+ * Put a consumed buffer back on the free list, unless the worker has
+ * resubmitted it in the meantime: the position and the buffer list of a
+ * buffer with an URB in flight must not be touched.
+ */
+static void hdpvr_recycle_buffer(struct hdpvr_device *dev,
+				 struct hdpvr_buffer *buf)
+{
+	mutex_lock(&dev->io_mutex);
+	if (buf->status == BUFSTAT_READY) {
+		buf->pos = 0;
+		buf->status = BUFSTAT_AVAILABLE;
+		list_move_tail(&buf->buff_list, &dev->free_buff_list);
+	}
+	mutex_unlock(&dev->io_mutex);
+
+	wake_up_interruptible(&dev->wait_buffer);
+}
+
 static void hdpvr_transmit_buffers(struct work_struct *work)
 {
 	struct hdpvr_device *dev = container_of(work, struct hdpvr_device,
@@ -506,17 +525,9 @@ static ssize_t hdpvr_read(struct file *file, char __user *buffer, size_t count,
 
 		/* finished, take next buffer */
 		if (buf->pos == urb->actual_length) {
-			mutex_lock(&dev->io_mutex);
-			buf->pos = 0;
-			buf->status = BUFSTAT_AVAILABLE;
-
-			list_move_tail(&buf->buff_list, &dev->free_buff_list);
+			hdpvr_recycle_buffer(dev, buf);
 
 			print_buffer_status();
-
-			mutex_unlock(&dev->io_mutex);
-
-			wake_up_interruptible(&dev->wait_buffer);
 
 			buf = hdpvr_get_next_buffer(dev);
 		}
