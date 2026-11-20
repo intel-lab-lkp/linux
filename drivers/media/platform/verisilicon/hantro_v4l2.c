@@ -109,6 +109,17 @@ hantro_check_depth_match(const struct hantro_fmt *fmt, int bit_depth)
 	return fmt_depth == bit_depth;
 }
 
+static bool
+hantro_check_fmt_match(const struct hantro_ctx *ctx,
+		       const struct hantro_fmt *fmt, int bit_depth)
+{
+	if (!ctx->is_encoder && fmt->codec_mode == HANTRO_MODE_NONE &&
+	    fmt->monochrome != ctx->monochrome)
+		return false;
+
+	return hantro_check_depth_match(fmt, bit_depth);
+}
+
 static const struct hantro_fmt *
 hantro_find_format(const struct hantro_ctx *ctx, u32 fourcc)
 {
@@ -156,7 +167,7 @@ hantro_get_default_fmt(const struct hantro_ctx *ctx, bool bitstream,
 	for (i = 0; i < num_fmts; i++) {
 		if (bitstream == (formats[i].codec_mode !=
 				  HANTRO_MODE_NONE) &&
-		    hantro_check_depth_match(&formats[i], bit_depth))
+		    hantro_check_fmt_match(ctx, &formats[i], bit_depth))
 			return &formats[i];
 	}
 
@@ -164,7 +175,7 @@ hantro_get_default_fmt(const struct hantro_ctx *ctx, bool bitstream,
 	for (i = 0; i < num_fmts; i++) {
 		if (bitstream == (formats[i].codec_mode !=
 				  HANTRO_MODE_NONE) &&
-		    hantro_check_depth_match(&formats[i], bit_depth))
+		    hantro_check_fmt_match(ctx, &formats[i], bit_depth))
 			return &formats[i];
 	}
 
@@ -253,7 +264,7 @@ static int vidioc_enum_fmt(struct file *file, void *priv,
 
 		if (skip_mode_none == mode_none)
 			continue;
-		if (!hantro_check_depth_match(fmt, ctx->bit_depth) && !enum_all_formats)
+		if (!hantro_check_fmt_match(ctx, fmt, ctx->bit_depth) && !enum_all_formats)
 			continue;
 		if (j == index) {
 			f->pixelformat = fmt->fourcc;
@@ -273,7 +284,7 @@ static int vidioc_enum_fmt(struct file *file, void *priv,
 	for (i = 0; i < num_fmts; i++) {
 		fmt = &formats[i];
 
-		if (!hantro_check_depth_match(fmt, ctx->bit_depth) && !enum_all_formats)
+		if (!hantro_check_fmt_match(ctx, fmt, ctx->bit_depth) && !enum_all_formats)
 			continue;
 		if (j == index) {
 			f->pixelformat = fmt->fourcc;
@@ -337,6 +348,9 @@ static int hantro_try_fmt(const struct hantro_ctx *ctx,
 	vpu_debug(4, "trying format %p4cc\n", &pix_mp->pixelformat);
 
 	fmt = hantro_find_format(ctx, pix_mp->pixelformat);
+	if (fmt && !coded && !ctx->is_encoder &&
+	    fmt->monochrome != ctx->monochrome)
+		fmt = NULL;
 	if (!fmt) {
 		fmt = hantro_get_default_fmt(ctx, coded, HANTRO_DEFAULT_BIT_DEPTH, HANTRO_AUTO_POSTPROC);
 		pix_mp->pixelformat = fmt->fourcc;
@@ -570,10 +584,13 @@ static int hantro_set_fmt_out(struct hantro_ctx *ctx,
 	 * Note that hantro_reset_raw_fmt() also propagates size
 	 * changes to the raw format.
 	 */
-	if (!ctx->is_encoder)
+	if (!ctx->is_encoder) {
+		/* A new stream: assume chroma until its H.264 SPS says otherwise */
+		ctx->monochrome = false;
 		hantro_reset_raw_fmt(ctx,
 				     hantro_get_format_depth(pix_mp->pixelformat),
 				     need_postproc);
+	}
 
 	/* Colorimetry information are always propagated. */
 	ctx->dst_fmt.colorspace = pix_mp->colorspace;

@@ -135,6 +135,19 @@ static const struct hantro_fmt rk3066_vpu_dec_fmts[] = {
 		},
 	},
 	{
+		.fourcc = V4L2_PIX_FMT_GREY,
+		.codec_mode = HANTRO_MODE_NONE,
+		.monochrome = true,
+		.frmsize = {
+			.min_width = FMT_MIN_WIDTH,
+			.max_width = FMT_FHD_WIDTH,
+			.step_width = MB_DIM,
+			.min_height = FMT_MIN_HEIGHT,
+			.max_height = FMT_FHD_HEIGHT,
+			.step_height = MB_DIM,
+		},
+	},
+	{
 		.fourcc = V4L2_PIX_FMT_H264_SLICE,
 		.codec_mode = HANTRO_MODE_H264_DEC,
 		.max_depth = 2,
@@ -189,6 +202,19 @@ static const struct hantro_fmt rk3288_vpu_dec_fmts[] = {
 		},
 	},
 	{
+		.fourcc = V4L2_PIX_FMT_GREY,
+		.codec_mode = HANTRO_MODE_NONE,
+		.monochrome = true,
+		.frmsize = {
+			.min_width = FMT_MIN_WIDTH,
+			.max_width = FMT_4K_WIDTH,
+			.step_width = MB_DIM,
+			.min_height = FMT_MIN_HEIGHT,
+			.max_height = FMT_4K_HEIGHT,
+			.step_height = MB_DIM,
+		},
+	},
+	{
 		.fourcc = V4L2_PIX_FMT_H264_SLICE,
 		.codec_mode = HANTRO_MODE_H264_DEC,
 		.max_depth = 2,
@@ -233,6 +259,19 @@ static const struct hantro_fmt rockchip_vdpu2_dec_fmts[] = {
 	{
 		.fourcc = V4L2_PIX_FMT_NV12,
 		.codec_mode = HANTRO_MODE_NONE,
+		.frmsize = {
+			.min_width = FMT_MIN_WIDTH,
+			.max_width = FMT_FHD_WIDTH,
+			.step_width = MB_DIM,
+			.min_height = FMT_MIN_HEIGHT,
+			.max_height = FMT_FHD_HEIGHT,
+			.step_height = MB_DIM,
+		},
+	},
+	{
+		.fourcc = V4L2_PIX_FMT_GREY,
+		.codec_mode = HANTRO_MODE_NONE,
+		.monochrome = true,
 		.frmsize = {
 			.min_width = FMT_MIN_WIDTH,
 			.max_width = FMT_FHD_WIDTH,

@@ -234,6 +234,7 @@ struct hantro_dev {
  * @ctrl_handler:	Control handler used to register controls.
  * @jpeg_quality:	User-specified JPEG compression quality.
  * @bit_depth:		Bit depth of current frame
+ * @monochrome:		The stream is 4:0:0 (H.264), the decoder writes luma only
  * @need_postproc:	Set to true if the bitstream features require to
  *			use the post-processor.
  *
@@ -263,6 +264,7 @@ struct hantro_ctx {
 	struct v4l2_ctrl_handler ctrl_handler;
 	int jpeg_quality;
 	int bit_depth;
+	bool monochrome;
 
 	const struct hantro_codec_ops *codec_ops;
 	struct hantro_postproc_ctx postproc;
@@ -291,6 +293,7 @@ struct hantro_ctx {
  * @frmsize:	Supported range of frame sizes (only for bitstream formats).
  * @postprocessed: Indicates if this format needs the post-processor.
  * @match_depth: Indicates if format bit depth must match video bit depth
+ * @monochrome: Decoded format for 4:0:0 streams only
  */
 struct hantro_fmt {
 	char *name;
@@ -302,6 +305,7 @@ struct hantro_fmt {
 	struct v4l2_frmsize_stepwise frmsize;
 	bool postprocessed;
 	bool match_depth;
+	bool monochrome;
 };
 
 struct hantro_reg {

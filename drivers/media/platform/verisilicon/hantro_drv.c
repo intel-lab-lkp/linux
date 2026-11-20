@@ -300,6 +300,41 @@ static int hantro_jpeg_s_ctrl(struct v4l2_ctrl *ctrl)
 	return 0;
 }
 
+static int hantro_h264_s_ctrl(struct v4l2_ctrl *ctrl)
+{
+	struct hantro_ctx *ctx;
+	bool monochrome;
+	int ret;
+
+	ctx = container_of(ctrl->handler,
+			   struct hantro_ctx, ctrl_handler);
+
+	switch (ctrl->id) {
+	case V4L2_CID_STATELESS_H264_SPS:
+		monochrome = ctrl->p_new.p_h264_sps->chroma_format_idc == 0;
+		if (ctx->monochrome == monochrome)
+			return 0;
+
+		ctx->monochrome = monochrome;
+		/* Variants without a 4:0:0 format keep their formats */
+		if (!hantro_get_default_fmt(ctx, false, ctx->bit_depth,
+					    HANTRO_AUTO_POSTPROC)) {
+			ctx->monochrome = false;
+			return 0;
+		}
+		if (vb2_is_streaming(v4l2_m2m_get_dst_vq(ctx->fh.m2m_ctx))) {
+			ctx->monochrome = !monochrome;
+			return -EBUSY;
+		}
+		ret = hantro_reset_raw_fmt(ctx, ctx->bit_depth, HANTRO_AUTO_POSTPROC);
+		if (ret)
+			ctx->monochrome = !monochrome;
+		return ret;
+	default:
+		return -EINVAL;
+	}
+}
+
 static int hantro_vp9_s_ctrl(struct v4l2_ctrl *ctrl)
 {
 	struct hantro_ctx *ctx;
@@ -377,8 +412,9 @@ static int hantro_av1_s_ctrl(struct v4l2_ctrl *ctrl)
 	return 0;
 }
 
-static const struct v4l2_ctrl_ops hantro_ctrl_ops = {
+static const struct v4l2_ctrl_ops hantro_h264_ctrl_ops = {
 	.try_ctrl = hantro_try_ctrl,
+	.s_ctrl = hantro_h264_s_ctrl,
 };
 
 static const struct v4l2_ctrl_ops hantro_jpeg_ctrl_ops = {
@@ -460,7 +496,7 @@ static const struct hantro_ctrl controls[] = {
 		.codec = HANTRO_H264_DECODER,
 		.cfg = {
 			.id = V4L2_CID_STATELESS_H264_SPS,
-			.ops = &hantro_ctrl_ops,
+			.ops = &hantro_h264_ctrl_ops,
 		},
 	}, {
 		.codec = HANTRO_H264_DECODER,
