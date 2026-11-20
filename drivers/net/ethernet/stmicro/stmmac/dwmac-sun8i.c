@@ -1236,7 +1236,7 @@ static int sun8i_dwmac_probe(struct platform_device *pdev)
 		ret = sun8i_dwmac_register_mdio_mux(priv);
 		if (ret) {
 			dev_err(&pdev->dev, "Failed to register mux\n");
-			goto dwmac_mux;
+			goto dwmac_remove;
 		}
 	}
 
@@ -1244,12 +1244,11 @@ static int sun8i_dwmac_probe(struct platform_device *pdev)
 
 	return 0;
 
-dwmac_mux:
-	reset_control_put(gmac->rst_ephy);
-	clk_put(gmac->ephy_clk);
 dwmac_remove:
 	pm_runtime_put_noidle(&pdev->dev);
 	stmmac_pltfr_remove(pdev);
+	reset_control_put(gmac->rst_ephy);
+	clk_put(gmac->ephy_clk);
 dwmac_syscon:
 	sun8i_dwmac_unset_syscon(gmac);
 
@@ -1262,14 +1261,12 @@ static void sun8i_dwmac_remove(struct platform_device *pdev)
 	struct stmmac_priv *priv = netdev_priv(ndev);
 	struct sunxi_priv_data *gmac = priv->plat->bsp_priv;
 
-	if (gmac->variant->soc_has_internal_phy) {
+	if (gmac->variant->soc_has_internal_phy)
 		mdio_mux_uninit(gmac->mux_handle);
-		sun8i_dwmac_unpower_internal_phy(gmac);
-		reset_control_put(gmac->rst_ephy);
-		clk_put(gmac->ephy_clk);
-	}
 
 	stmmac_pltfr_remove(pdev);
+	reset_control_put(gmac->rst_ephy);
+	clk_put(gmac->ephy_clk);
 	sun8i_dwmac_unset_syscon(gmac);
 }
 
