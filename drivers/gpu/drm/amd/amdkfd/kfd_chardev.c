@@ -2234,7 +2234,9 @@ static int criu_get_process_object_info(struct kfd_process *p,
 	if (ret)
 		return ret;
 
+	mutex_lock(&p->event_mutex);
 	num_events = kfd_get_num_events(p);
+	mutex_unlock(&p->event_mutex);
 
 	svm_range_get_info(p, &num_svm_ranges, &svm_priv_data_size);
 
