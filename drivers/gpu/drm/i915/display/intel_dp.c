@@ -1984,6 +1984,15 @@ static int intel_dp_sink_dsc_version_minor(const u8 dsc_dpcd[DP_DSC_RECEIVER_CAP
 		DP_DSC_MINOR_SHIFT;
 }
 
+/* The DSC version of the stream the source sends: the lower of the source and sink versions */
+static int intel_dp_dsc_stream_version_minor(const struct intel_connector *connector)
+{
+	struct intel_display *display = to_intel_display(connector);
+
+	return min(intel_dp_source_dsc_version_minor(display),
+		   intel_dp_sink_dsc_version_minor(connector->dp.dsc_dpcd));
+}
+
 static int intel_dp_get_slice_height(int vactive)
 {
 	int slice_height;
@@ -2031,9 +2040,7 @@ static int intel_dp_dsc_compute_params(const struct intel_connector *connector,
 	vdsc_cfg->dsc_version_major =
 		(connector->dp.dsc_dpcd[DP_DSC_REV - DP_DSC_SUPPORT] &
 		 DP_DSC_MAJOR_MASK) >> DP_DSC_MAJOR_SHIFT;
-	vdsc_cfg->dsc_version_minor =
-		min(intel_dp_source_dsc_version_minor(display),
-		    intel_dp_sink_dsc_version_minor(connector->dp.dsc_dpcd));
+	vdsc_cfg->dsc_version_minor = intel_dp_dsc_stream_version_minor(connector);
 	if (vdsc_cfg->convert_rgb)
 		vdsc_cfg->convert_rgb =
 			connector->dp.dsc_dpcd[DP_DSC_DEC_COLOR_FORMAT_CAP - DP_DSC_SUPPORT] &
@@ -2057,7 +2064,6 @@ static int intel_dp_dsc_compute_params(const struct intel_connector *connector,
 static bool intel_dp_dsc_supports_format(const struct intel_connector *connector,
 					 enum intel_output_format output_format)
 {
-	struct intel_display *display = to_intel_display(connector);
 	u8 sink_dsc_format;
 
 	switch (output_format) {
@@ -2068,8 +2074,7 @@ static bool intel_dp_dsc_supports_format(const struct intel_connector *connector
 		sink_dsc_format = DP_DSC_YCbCr444;
 		break;
 	case INTEL_OUTPUT_FORMAT_YCBCR420:
-		if (min(intel_dp_source_dsc_version_minor(display),
-			intel_dp_sink_dsc_version_minor(connector->dp.dsc_dpcd)) < 2)
+		if (intel_dp_dsc_stream_version_minor(connector) < 2)
 			return false;
 		sink_dsc_format = DP_DSC_YCbCr420_Native;
 		break;
