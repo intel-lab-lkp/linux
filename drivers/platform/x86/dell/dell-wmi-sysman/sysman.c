@@ -229,23 +229,21 @@ static const struct kobj_type attr_name_ktype = {
 	.sysfs_ops	= &kobj_sysfs_ops,
 };
 
+
 /**
- * strlcpy_attr - Copy a length-limited, NULL-terminated string with bound checks
+ * strscpy_attr - Copy a length limited, NULL-terminated string with bound checks
  * @dest: Where to copy the string to
  * @src: Where to copy the string from
+ * @size: Size of the destination buffer
  */
-void strlcpy_attr(char *dest, char *src)
+int strscpy_attr(char *dest, char *src, size_t size)
 {
-	size_t len = strlen(src) + 1;
+	ssize_t rc = strscpy(dest, src, size);
 
-	if (len > 1 && len <= MAX_BUFF)
-		strscpy(dest, src, len);
-
-	/*len can be zero because any property not-applicable to attribute can
-	 * be empty so check only for too long buffers and log error
-	 */
-	if (len > MAX_BUFF)
+	if (rc == -E2BIG)
 		pr_err("Source string returned from BIOS is out of bound!\n");
+
+	return rc;
 }
 
 /**
