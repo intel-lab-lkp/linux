@@ -401,6 +401,7 @@ generic_secondary_common_init:
 	 * which logical id maps to our physical one.
 	 */
 #ifndef CONFIG_SMP
+	mr	r3,r24
 	b	kexec_wait		/* wait for next kernel if !SMP	 */
 #else
 	LOAD_REG_ADDR(r8, paca_ptrs)	/* Load paca_ptrs pointe	 */
