@@ -200,6 +200,16 @@ static int fileattr_set_prepare(struct inode *inode,
 		return err;
 
 	/*
+	 * FS_VERITY_FL is settable only via FS_IOC_ENABLE_VERITY; never through
+	 * fileattr
+	 *
+	 * Treat it as a no-op so the FS_IOC_GETFLAGS/SETFLAGS round-trip
+	 * doesn't break for other flags
+	 */
+	fa->flags &= ~FS_VERITY_FL;
+	fa->fsx_xflags &= ~FS_XFLAG_VERITY;
+
+	/*
 	 * Project Quota ID state is only allowed to change from within the init
 	 * namespace. Enforce that restriction only if we are trying to change
 	 * the quota ID state. Everything else is allowed in user namespaces.
