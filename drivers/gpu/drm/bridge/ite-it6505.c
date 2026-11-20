@@ -2639,12 +2639,13 @@ static void it6505_irq_link_train_fail(struct it6505 *it6505)
 	schedule_work(&it6505->link_works);
 }
 
-static bool it6505_test_bit(unsigned int bit, const unsigned int *addr)
+static bool it6505_test_bit(unsigned int bit, const u8 *addr)
 {
 	return 1 & (addr[bit / BITS_PER_BYTE] >> (bit % BITS_PER_BYTE));
 }
 
-static void it6505_irq_video_handler(struct it6505 *it6505, const int *int_status)
+static void it6505_irq_video_handler(struct it6505 *it6505,
+				     const u8 *int_status)
 {
 	struct device *dev = it6505->dev;
 	int reg_0d, reg_int03;
@@ -2655,11 +2656,9 @@ static void it6505_irq_video_handler(struct it6505 *it6505, const int *int_statu
 	 */
 
 	if ((!it6505_get_video_status(it6505) &&
-	     (it6505_test_bit(INT_SCDT_CHANGE, (unsigned int *)int_status))) ||
-	    (it6505_test_bit(BIT_INT_IO_FIFO_OVERFLOW,
-			     (unsigned int *)int_status)) ||
-	    (it6505_test_bit(BIT_INT_VID_FIFO_ERROR,
-			     (unsigned int *)int_status))) {
+	     (it6505_test_bit(INT_SCDT_CHANGE, int_status))) ||
+	    (it6505_test_bit(BIT_INT_IO_FIFO_OVERFLOW, int_status)) ||
+	    (it6505_test_bit(BIT_INT_VID_FIFO_ERROR, int_status))) {
 		it6505->auto_train_retry = AUTO_TRAIN_RETRY;
 		flush_work(&it6505->link_works);
 		it6505_stop_hdcp(it6505);
@@ -2684,7 +2683,7 @@ static void it6505_irq_video_handler(struct it6505 *it6505, const int *int_statu
 		return;
 	}
 
-	if (it6505_test_bit(INT_SCDT_CHANGE, (unsigned int *)int_status))
+	if (it6505_test_bit(INT_SCDT_CHANGE, int_status))
 		it6505_irq_scdt(it6505);
 }
 
@@ -2705,35 +2704,37 @@ static irqreturn_t it6505_int_threaded_handler(int unused, void *data)
 		{ BIT_INT_AUDIO_FIFO_ERROR, it6505_irq_audio_fifo_error },
 		{ BIT_INT_LINK_TRAIN_FAIL, it6505_irq_link_train_fail },
 	};
-	int int_status[3], i;
+	u8 int_status[3];
+	int i;
 
 	if (it6505->enable_drv_hold || !it6505->powered)
 		return IRQ_HANDLED;
 
 	pm_runtime_get_sync(dev);
 
-	int_status[0] = it6505_read(it6505, INT_STATUS_01);
-	int_status[1] = it6505_read(it6505, INT_STATUS_02);
-	int_status[2] = it6505_read(it6505, INT_STATUS_03);
+	if (regmap_bulk_read(it6505->regmap, INT_STATUS_01, int_status,
+			     ARRAY_SIZE(int_status))) {
+		pm_runtime_put_sync(dev);
+		return IRQ_NONE;
+	}
 
-	it6505_write(it6505, INT_STATUS_01, int_status[0]);
-	it6505_write(it6505, INT_STATUS_02, int_status[1]);
-	it6505_write(it6505, INT_STATUS_03, int_status[2]);
+	regmap_bulk_write(it6505->regmap, INT_STATUS_01, int_status,
+			  ARRAY_SIZE(int_status));
 
 	DRM_DEV_DEBUG_DRIVER(dev, "reg06 = 0x%02x", int_status[0]);
 	DRM_DEV_DEBUG_DRIVER(dev, "reg07 = 0x%02x", int_status[1]);
 	DRM_DEV_DEBUG_DRIVER(dev, "reg08 = 0x%02x", int_status[2]);
 	it6505_debug_print(it6505, REG_SYSTEM_STS, "");
 
-	if (it6505_test_bit(irq_vec[0].bit, (unsigned int *)int_status))
+	if (it6505_test_bit(irq_vec[0].bit, int_status))
 		irq_vec[0].handler(it6505);
 
 	if (it6505->hpd_state) {
 		for (i = 1; i < ARRAY_SIZE(irq_vec); i++) {
-			if (it6505_test_bit(irq_vec[i].bit, (unsigned int *)int_status))
+			if (it6505_test_bit(irq_vec[i].bit, int_status))
 				irq_vec[i].handler(it6505);
 		}
-		it6505_irq_video_handler(it6505, (unsigned int *)int_status);
+		it6505_irq_video_handler(it6505, int_status);
 	}
 
 	pm_runtime_put_sync(dev);
