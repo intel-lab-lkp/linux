@@ -505,7 +505,7 @@ int xe_ttm_vram_mgr_alloc_sgt(struct xe_device *xe,
 			      u64 offset, u64 length,
 			      struct device *dev,
 			      enum dma_data_direction dir,
-			      struct sg_table **sgt)
+			      struct sg_table *sgt)
 {
 	struct xe_tile *tile = &xe->tiles[res->mem_type - XE_PL_VRAM0];
 	struct xe_ttm_vram_mgr_resource *vres = to_xe_ttm_vram_mgr_resource(res);
@@ -517,10 +517,6 @@ int xe_ttm_vram_mgr_alloc_sgt(struct xe_device *xe,
 	if (vres->used_visible_size < res->size)
 		return -EOPNOTSUPP;
 
-	*sgt = kmalloc_obj(**sgt);
-	if (!*sgt)
-		return -ENOMEM;
-
 	/* Determine the number of GPU_BUDDY blocks to export */
 	xe_res_first(res, offset, length, &cursor);
 	while (cursor.remaining) {
@@ -529,12 +525,12 @@ int xe_ttm_vram_mgr_alloc_sgt(struct xe_device *xe,
 		xe_res_next(&cursor, min_t(u64, cursor.size, SZ_2G));
 	}
 
-	r = sg_alloc_table(*sgt, num_entries, GFP_KERNEL);
+	r = sg_alloc_table(sgt, num_entries, GFP_KERNEL);
 	if (r)
-		goto error_free;
+		return r;
 
 	/* Initialize scatterlist nodes of sg_table */
-	for_each_sgtable_sg((*sgt), sg, i)
+	for_each_sgtable_sg(sgt, sg, i)
 		sg->length = 0;
 
 	/*
@@ -544,7 +540,7 @@ int xe_ttm_vram_mgr_alloc_sgt(struct xe_device *xe,
 	 * GPU_BUDDY block(s) if more buffer needs to exported
 	 */
 	xe_res_first(res, offset, length, &cursor);
-	for_each_sgtable_sg((*sgt), sg, i) {
+	for_each_sgtable_sg(sgt, sg, i) {
 		phys_addr_t phys = cursor.start + xe_vram_region_io_start(tile->mem.vram);
 		size_t size = min_t(u64, cursor.size, SZ_2G);
 		dma_addr_t addr;
@@ -565,7 +561,7 @@ int xe_ttm_vram_mgr_alloc_sgt(struct xe_device *xe,
 	return 0;
 
 error_unmap:
-	for_each_sgtable_sg((*sgt), sg, i) {
+	for_each_sgtable_sg(sgt, sg, i) {
 		if (!sg->length)
 			continue;
 
@@ -573,10 +569,7 @@ error_unmap:
 				   sg->length, dir,
 				   DMA_ATTR_SKIP_CPU_SYNC);
 	}
-	sg_free_table(*sgt);
-
-error_free:
-	kfree(*sgt);
+	sg_free_table(sgt);
 	return r;
 }
 
@@ -591,7 +584,6 @@ void xe_ttm_vram_mgr_free_sgt(struct device *dev, enum dma_data_direction dir,
 				   sg->length, dir,
 				   DMA_ATTR_SKIP_CPU_SYNC);
 	sg_free_table(sgt);
-	kfree(sgt);
 }
 
 u64 xe_ttm_vram_get_cpu_visible_size(struct ttm_resource_manager *man)

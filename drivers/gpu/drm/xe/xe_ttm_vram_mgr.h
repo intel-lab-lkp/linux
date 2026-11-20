@@ -23,7 +23,7 @@ int xe_ttm_vram_mgr_alloc_sgt(struct xe_device *xe,
 			      u64 offset, u64 length,
 			      struct device *dev,
 			      enum dma_data_direction dir,
-			      struct sg_table **sgt);
+			      struct sg_table *sgt);
 void xe_ttm_vram_mgr_free_sgt(struct device *dev, enum dma_data_direction dir,
 			      struct sg_table *sgt);
 

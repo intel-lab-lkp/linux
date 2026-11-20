@@ -7,6 +7,7 @@
 
 #include <kunit/test.h>
 #include <linux/dma-buf.h>
+#include <linux/dma-buf-mapping.h>
 #include <linux/dynamic_debug.h>
 #include <linux/pci-p2pdma.h>
 
@@ -45,7 +46,9 @@ static int xe_dma_buf_attach(struct dma_buf *dmabuf,
 	xe_dma_buf_p2p_debug_flip(&verbose_p2p_dist);
 
 	if (attach->peer2peer &&
-	    pci_p2pdma_distance(to_pci_dev(obj->dev->dev), attach->dev, verbose_p2p_dist) < 0)
+	    pci_p2pdma_distance(to_pci_dev(obj->dev->dev),
+				dma_buf_sgt_dma_device(attach),
+				verbose_p2p_dist) < 0)
 		attach->peer2peer = false;
 
 	if (!attach->peer2peer && !xe_bo_can_migrate(gem_to_xe_bo(obj), XE_PL_TT))
@@ -111,13 +114,15 @@ static void xe_dma_buf_unpin(struct dma_buf_attachment *attach)
 	xe_bo_unpin_external(bo);
 }
 
-static struct sg_table *xe_dma_buf_map(struct dma_buf_attachment *attach,
-				       enum dma_data_direction dir)
+static struct dma_buf_sgt_mapping *
+xe_dma_buf_map(struct dma_buf_attachment *attach, enum dma_data_direction dir)
 {
+	struct device *dma_dev = dma_buf_sgt_dma_device(attach);
 	struct dma_buf *dma_buf = attach->dmabuf;
 	struct drm_gem_object *obj = dma_buf->priv;
 	struct xe_bo *bo = gem_to_xe_bo(obj);
 	struct drm_exec *exec = XE_VALIDATION_UNSUPPORTED;
+	struct dma_buf_sgt_mapping *mapping;
 	struct sg_table *sgt;
 	int r = 0;
 
@@ -136,51 +141,67 @@ static struct sg_table *xe_dma_buf_map(struct dma_buf_attachment *attach,
 			return ERR_PTR(r);
 	}
 
+	mapping = kzalloc_obj(*mapping);
+	if (!mapping)
+		return ERR_PTR(-ENOMEM);
+
 	switch (bo->ttm.resource->mem_type) {
 	case XE_PL_TT:
 		sgt = drm_prime_pages_to_sg(obj->dev,
 					    bo->ttm.ttm->pages,
 					    obj->size >> PAGE_SHIFT);
-		if (IS_ERR(sgt))
-			return sgt;
+		if (IS_ERR(sgt)) {
+			r = PTR_ERR(sgt);
+			goto error_free_mapping;
+		}
+		/* The mapping takes over the table's entries */
+		mapping->sgt = *sgt;
+		kfree(sgt);
 
-		if (dma_map_sgtable(attach->dev, sgt, dir,
-				    DMA_ATTR_SKIP_CPU_SYNC))
+		if (dma_map_sgtable(dma_dev, &mapping->sgt, dir,
+				    DMA_ATTR_SKIP_CPU_SYNC)) {
+			r = -EBUSY;
 			goto error_free;
+		}
 		break;
 
 	case XE_PL_VRAM0:
 	case XE_PL_VRAM1:
 		r = xe_ttm_vram_mgr_alloc_sgt(xe_bo_device(bo),
 					      bo->ttm.resource, 0,
-					      bo->ttm.base.size, attach->dev,
-					      dir, &sgt);
+					      bo->ttm.base.size, dma_dev,
+					      dir, &mapping->sgt);
 		if (r)
-			return ERR_PTR(r);
+			goto error_free_mapping;
 		break;
 	default:
-		return ERR_PTR(-EINVAL);
+		r = -EINVAL;
+		goto error_free_mapping;
 	}
 
-	return sgt;
+	return mapping;
 
 error_free:
-	sg_free_table(sgt);
-	kfree(sgt);
-	return ERR_PTR(-EBUSY);
+	sg_free_table(&mapping->sgt);
+error_free_mapping:
+	kfree(mapping);
+	return ERR_PTR(r);
 }
 
 static void xe_dma_buf_unmap(struct dma_buf_attachment *attach,
-			     struct sg_table *sgt,
+			     struct dma_buf_sgt_mapping *mapping,
 			     enum dma_data_direction dir)
 {
+	struct device *dma_dev = dma_buf_sgt_mapping_dma_device(mapping);
+	struct sg_table *sgt = &mapping->sgt;
+
 	if (sg_page(sgt->sgl)) {
-		dma_unmap_sgtable(attach->dev, sgt, dir, 0);
+		dma_unmap_sgtable(dma_dev, sgt, dir, 0);
 		sg_free_table(sgt);
-		kfree(sgt);
 	} else {
-		xe_ttm_vram_mgr_free_sgt(attach->dev, dir, sgt);
+		xe_ttm_vram_mgr_free_sgt(dma_dev, dir, sgt);
 	}
+	kfree(mapping);
 }
 
 static int xe_dma_buf_begin_cpu_access(struct dma_buf *dma_buf,
@@ -230,13 +251,12 @@ static const struct dma_buf_ops xe_dmabuf_ops = {
 	.detach = xe_dma_buf_detach,
 	.pin = xe_dma_buf_pin,
 	.unpin = xe_dma_buf_unpin,
-	.map_dma_buf = xe_dma_buf_map,
-	.unmap_dma_buf = xe_dma_buf_unmap,
 	.release = xe_dma_buf_release,
 	.begin_cpu_access = xe_dma_buf_begin_cpu_access,
 	.mmap = drm_gem_dmabuf_mmap,
 	.vmap = drm_gem_dmabuf_vmap,
 	.vunmap = drm_gem_dmabuf_vunmap,
+	DMA_BUF_SIMPLE_SGT_EXP_MATCH(xe_dma_buf_map, xe_dma_buf_unmap),
 };
 
 struct dma_buf *xe_gem_prime_export(struct drm_gem_object *obj, int flags)
