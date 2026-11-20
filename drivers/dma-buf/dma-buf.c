@@ -718,9 +718,13 @@ struct dma_buf *dma_buf_export(const struct dma_buf_export_info *exp_info)
 		    || !exp_info->ops->release))
 		return ERR_PTR(-EINVAL);
 
-	if (exp_info->ops->match_mapping) {
+	if (exp_info->ops->match_mapping ||
+	    exp_info->ops->single_exporter_match) {
 		if (WARN_ON(exp_info->ops->map_dma_buf ||
 			    exp_info->ops->unmap_dma_buf))
+			return ERR_PTR(-EINVAL);
+		if (WARN_ON(exp_info->ops->match_mapping &&
+			    exp_info->ops->single_exporter_match))
 			return ERR_PTR(-EINVAL);
 	} else {
 		if (WARN_ON(!exp_info->ops->map_dma_buf ||
@@ -1094,7 +1098,13 @@ dma_buf_dynamic_attach(struct dma_buf *dmabuf, struct device *dev,
 		if (ret)
 			goto err_attach;
 	} else {
-		ret = dma_buf_sgt_compat_match_mapping(&match_args);
+		const struct dma_buf_mapping_match *exp_match =
+			dmabuf->ops->single_exporter_match;
+
+		if (exp_match)
+			ret = dma_buf_match_mapping(&match_args, exp_match, 1);
+		else
+			ret = dma_buf_sgt_compat_match_mapping(&match_args);
 		if (ret)
 			goto err_attach;
 	}
