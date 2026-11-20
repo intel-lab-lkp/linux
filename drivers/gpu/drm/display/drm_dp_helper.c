@@ -4160,6 +4160,29 @@ int drm_dp_pcon_pps_override_param(struct drm_dp_aux *aux, u8 pps_param[6])
 }
 EXPORT_SYMBOL(drm_dp_pcon_pps_override_param);
 
+/**
+ * drm_dp_pcon_dsc_enc_disable() - Disable the DSC encoder of a PCON
+ * @aux: DisplayPort AUX channel
+ *
+ * Disable the DSC encoder of a PCON, along with the encoder PPS override.
+ *
+ * Returns 0 on success, else returns negative error code.
+ */
+int drm_dp_pcon_dsc_enc_disable(struct drm_dp_aux *aux)
+{
+	u8 buf;
+	int ret;
+
+	ret = drm_dp_dpcd_read_byte(aux, DP_PROTOCOL_CONVERTER_CONTROL_2, &buf);
+	if (ret < 0)
+		return ret;
+
+	buf &= ~(DP_PCON_ENABLE_DSC_ENCODER | DP_PCON_ENCODER_PPS_OVERRIDE_MASK);
+
+	return drm_dp_dpcd_write_byte(aux, DP_PROTOCOL_CONVERTER_CONTROL_2, buf);
+}
+EXPORT_SYMBOL(drm_dp_pcon_dsc_enc_disable);
+
 /*
  * drm_dp_pcon_convert_rgb_to_ycbcr() - Configure the PCon to convert RGB to Ycbcr
  * @aux: displayPort AUX channel

@@ -1019,6 +1019,7 @@ int drm_dp_pcon_dsc_bpp_incr(const u8 pcon_dsc_dpcd[DP_PCON_DSC_ENCODER_CAP_SIZE
 int drm_dp_pcon_pps_default(struct drm_dp_aux *aux);
 int drm_dp_pcon_pps_override_buf(struct drm_dp_aux *aux, u8 pps_buf[128]);
 int drm_dp_pcon_pps_override_param(struct drm_dp_aux *aux, u8 pps_param[6]);
+int drm_dp_pcon_dsc_enc_disable(struct drm_dp_aux *aux);
 bool drm_dp_downstream_rgb_to_ycbcr_conversion(const u8 dpcd[DP_RECEIVER_CAP_SIZE],
 					       const u8 port_cap[4], u8 color_spc);
 int drm_dp_pcon_convert_rgb_to_ycbcr(struct drm_dp_aux *aux, u8 color_spc);
