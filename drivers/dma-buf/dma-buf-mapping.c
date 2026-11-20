@@ -66,12 +66,12 @@ static unsigned int calc_sg_nents(struct dma_iova_state *state,
 
 /**
  * struct dma_buf_dma - holds DMA mapping information
- * @sgt:    Scatter-gather table
+ * @mapping: The SGT mapping handed to the core, with the scatter-gather table
  * @state:  DMA IOVA state relevant in IOMMU-based DMA
  * @size:   Total size of DMA transfer
  */
 struct dma_buf_dma {
-	struct sg_table sgt;
+	struct dma_buf_sgt_mapping mapping;
 	struct dma_iova_state *state;
 	size_t size;
 };
@@ -99,12 +99,13 @@ struct dma_buf_dma {
  * mandatory exporter should call routing pci_p2pdma_map_type() before calling
  * this function.
  */
-struct sg_table *dma_buf_phys_vec_to_sgt(struct dma_buf_attachment *attach,
-					 struct p2pdma_provider *provider,
-					 struct phys_vec *phys_vec,
-					 size_t nr_ranges, size_t size,
-					 enum dma_data_direction dir)
+struct dma_buf_sgt_mapping *
+dma_buf_phys_vec_to_sgt(struct dma_buf_attachment *attach,
+			struct p2pdma_provider *provider,
+			struct phys_vec *phys_vec, size_t nr_ranges,
+			size_t size, enum dma_data_direction dir)
 {
+	struct device *dma_dev = dma_buf_sgt_dma_device(attach);
 	struct dma_buf_dma *dma;
 	struct scatterlist *sgl;
 	size_t mapped_len = 0;
@@ -123,7 +124,7 @@ struct sg_table *dma_buf_phys_vec_to_sgt(struct dma_buf_attachment *attach,
 	if (!dma)
 		return ERR_PTR(-ENOMEM);
 
-	switch (pci_p2pdma_map_type(provider, attach->dev)) {
+	switch (pci_p2pdma_map_type(provider, dma_dev)) {
 	case PCI_P2PDMA_MAP_BUS_ADDR:
 		/*
 		 * There is no need in IOVA at all for this flow.
@@ -136,7 +137,7 @@ struct sg_table *dma_buf_phys_vec_to_sgt(struct dma_buf_attachment *attach,
 			goto err_free_dma;
 		}
 
-		dma_iova_try_alloc(attach->dev, dma->state, 0, size);
+		dma_iova_try_alloc(dma_dev, dma->state, 0, size);
 		break;
 	default:
 		ret = -EINVAL;
@@ -146,18 +147,18 @@ struct sg_table *dma_buf_phys_vec_to_sgt(struct dma_buf_attachment *attach,
 	nents = calc_sg_nents(dma->state, phys_vec, nr_ranges, size);
 
 	/* sg_alloc_table will cleanly fail and return -EINVAL if nents == 0 */
-	ret = sg_alloc_table(&dma->sgt, nents, GFP_KERNEL | __GFP_ZERO);
+	ret = sg_alloc_table(&dma->mapping.sgt, nents, GFP_KERNEL | __GFP_ZERO);
 	if (ret)
 		goto err_free_state;
 
-	sgl = dma->sgt.sgl;
+	sgl = dma->mapping.sgt.sgl;
 
 	for (i = 0; i < nr_ranges; i++) {
 		if (!dma->state) {
 			addr = pci_p2pdma_bus_addr_map(provider,
 						       phys_vec[i].paddr);
 		} else if (dma_use_iova(dma->state)) {
-			ret = dma_iova_link(attach->dev, dma->state,
+			ret = dma_iova_link(dma_dev, dma->state,
 					    phys_vec[i].paddr, 0,
 					    phys_vec[i].len, dir,
 					    DMA_ATTR_MMIO);
@@ -166,10 +167,10 @@ struct sg_table *dma_buf_phys_vec_to_sgt(struct dma_buf_attachment *attach,
 
 			mapped_len += phys_vec[i].len;
 		} else {
-			addr = dma_map_phys(attach->dev, phys_vec[i].paddr,
+			addr = dma_map_phys(dma_dev, phys_vec[i].paddr,
 					    phys_vec[i].len, dir,
 					    DMA_ATTR_MMIO);
-			ret = dma_mapping_error(attach->dev, addr);
+			ret = dma_mapping_error(dma_dev, addr);
 			if (ret)
 				goto err_unmap_dma;
 		}
@@ -180,7 +181,7 @@ struct sg_table *dma_buf_phys_vec_to_sgt(struct dma_buf_attachment *attach,
 
 	if (dma->state && dma_use_iova(dma->state)) {
 		WARN_ON_ONCE(mapped_len != size);
-		ret = dma_iova_sync(attach->dev, dma->state, 0, mapped_len);
+		ret = dma_iova_sync(dma_dev, dma->state, 0, mapped_len);
 		if (ret)
 			goto err_unmap_dma;
 
@@ -193,7 +194,7 @@ struct sg_table *dma_buf_phys_vec_to_sgt(struct dma_buf_attachment *attach,
 	 * No CPU list included — set orig_nents = 0 so others can detect
 	 * this via SG table (use nents only).
 	 */
-	dma->sgt.orig_nents = 0;
+	dma->mapping.sgt.orig_nents = 0;
 
 
 	/*
@@ -201,20 +202,20 @@ struct sg_table *dma_buf_phys_vec_to_sgt(struct dma_buf_attachment *attach,
 	 * and we allocated correct number of entries in sg_alloc_table()
 	 */
 	WARN_ON_ONCE(sgl);
-	return &dma->sgt;
+	return &dma->mapping;
 
 err_unmap_dma:
 	if (!i || !dma->state) {
 		; /* Do nothing */
 	} else if (dma_use_iova(dma->state)) {
-		dma_iova_destroy(attach->dev, dma->state, mapped_len, dir,
+		dma_iova_destroy(dma_dev, dma->state, mapped_len, dir,
 				 DMA_ATTR_MMIO);
 	} else {
-		for_each_sgtable_dma_sg(&dma->sgt, sgl, i)
-			dma_unmap_phys(attach->dev, sg_dma_address(sgl),
+		for_each_sgtable_dma_sg(&dma->mapping.sgt, sgl, i)
+			dma_unmap_phys(dma_dev, sg_dma_address(sgl),
 				       sg_dma_len(sgl), dir, DMA_ATTR_MMIO);
 	}
-	sg_free_table(&dma->sgt);
+	sg_free_table(&dma->mapping.sgt);
 err_free_state:
 	kfree(dma->state);
 err_free_dma:
@@ -226,16 +227,20 @@ EXPORT_SYMBOL_NS_GPL(dma_buf_phys_vec_to_sgt, "DMA_BUF");
 /**
  * dma_buf_free_sgt- unmaps the buffer
  * @attach:	[in]	attachment to unmap buffer from
- * @sgt:	[in]	scatterlist info of the buffer to unmap
+ * @mapping:	[in]	the mapping returned by dma_buf_phys_vec_to_sgt()
  * @dir:	[in]	direction of DMA transfer
  *
  * This unmaps a DMA mapping for @attached obtained
  * by dma_buf_phys_vec_to_sgt().
  */
-void dma_buf_free_sgt(struct dma_buf_attachment *attach, struct sg_table *sgt,
+void dma_buf_free_sgt(struct dma_buf_attachment *attach,
+		      struct dma_buf_sgt_mapping *mapping,
 		      enum dma_data_direction dir)
 {
-	struct dma_buf_dma *dma = container_of(sgt, struct dma_buf_dma, sgt);
+	struct dma_buf_dma *dma =
+		container_of(mapping, struct dma_buf_dma, mapping);
+	struct sg_table *sgt = &mapping->sgt;
+	struct device *dma_dev = dma_buf_sgt_mapping_dma_device(mapping);
 	int i;
 
 	dma_resv_assert_held(attach->dmabuf->resv);
@@ -243,13 +248,13 @@ void dma_buf_free_sgt(struct dma_buf_attachment *attach, struct sg_table *sgt,
 	if (!dma->state) {
 		; /* Do nothing */
 	} else if (dma_use_iova(dma->state)) {
-		dma_iova_destroy(attach->dev, dma->state, dma->size, dir,
+		dma_iova_destroy(dma_dev, dma->state, dma->size, dir,
 				 DMA_ATTR_MMIO);
 	} else {
 		struct scatterlist *sgl;
 
 		for_each_sgtable_dma_sg(sgt, sgl, i)
-			dma_unmap_phys(attach->dev, sg_dma_address(sgl),
+			dma_unmap_phys(dma_dev, sg_dma_address(sgl),
 				       sg_dma_len(sgl), dir, DMA_ATTR_MMIO);
 	}
 

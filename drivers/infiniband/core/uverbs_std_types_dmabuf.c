@@ -21,36 +21,36 @@ static int uverbs_dmabuf_attach(struct dma_buf *dmabuf,
 	return 0;
 }
 
-static struct sg_table *
+static struct dma_buf_sgt_mapping *
 uverbs_dmabuf_map(struct dma_buf_attachment *attachment,
 		  enum dma_data_direction dir)
 {
 	struct ib_uverbs_dmabuf_file *priv = attachment->dmabuf->priv;
-	struct sg_table *ret;
+	struct dma_buf_sgt_mapping *mapping;
 
 	dma_resv_assert_held(attachment->dmabuf->resv);
 
 	if (priv->revoked)
 		return ERR_PTR(-ENODEV);
 
-	ret = dma_buf_phys_vec_to_sgt(attachment, priv->provider,
-				      &priv->phys_vec, 1, priv->phys_vec.len,
-				      dir);
-	if (IS_ERR(ret))
-		return ret;
+	mapping = dma_buf_phys_vec_to_sgt(attachment, priv->provider,
+					  &priv->phys_vec, 1,
+					  priv->phys_vec.len, dir);
+	if (IS_ERR(mapping))
+		return ERR_CAST(mapping);
 
 	kref_get(&priv->kref);
-	return ret;
+	return mapping;
 }
 
 static void uverbs_dmabuf_unmap(struct dma_buf_attachment *attachment,
-				struct sg_table *sgt,
+				struct dma_buf_sgt_mapping *mapping,
 				enum dma_data_direction dir)
 {
 	struct ib_uverbs_dmabuf_file *priv = attachment->dmabuf->priv;
 
 	dma_resv_assert_held(attachment->dmabuf->resv);
-	dma_buf_free_sgt(attachment, sgt, dir);
+	dma_buf_free_sgt(attachment, mapping, dir);
 	kref_put(&priv->kref, ib_uverbs_dmabuf_done);
 }
 
@@ -97,11 +97,10 @@ static void uverbs_dmabuf_release(struct dma_buf *dmabuf)
 
 static const struct dma_buf_ops uverbs_dmabuf_ops = {
 	.attach = uverbs_dmabuf_attach,
-	.map_dma_buf = uverbs_dmabuf_map,
-	.unmap_dma_buf = uverbs_dmabuf_unmap,
 	.pin = uverbs_dmabuf_pin,
 	.unpin = uverbs_dmabuf_unpin,
 	.release = uverbs_dmabuf_release,
+	DMA_BUF_SIMPLE_SGT_EXP_MATCH(uverbs_dmabuf_map, uverbs_dmabuf_unmap),
 };
 
 static int UVERBS_HANDLER(UVERBS_METHOD_DMABUF_ALLOC)(
