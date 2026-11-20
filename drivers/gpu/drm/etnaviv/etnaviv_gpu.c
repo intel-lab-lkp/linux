@@ -1808,19 +1808,9 @@ static int etnaviv_gpu_bind(struct device *dev, struct device *master,
 	struct etnaviv_gpu *gpu = dev_get_drvdata(dev);
 	int ret;
 
-	if (IS_ENABLED(CONFIG_DRM_ETNAVIV_THERMAL)) {
-		gpu->cooling = thermal_of_cooling_device_register(dev->of_node, 0,
-								  dev_name(dev),
-								  gpu, &cooling_ops);
-		if (IS_ERR(gpu->cooling))
-			return PTR_ERR(gpu->cooling);
-	}
-
 	gpu->wq = alloc_ordered_workqueue(dev_name(dev), 0);
-	if (!gpu->wq) {
-		ret = -ENOMEM;
-		goto out_thermal;
-	}
+	if (!gpu->wq)
+		return -ENOMEM;
 
 	ret = etnaviv_sched_init(gpu);
 	if (ret)
@@ -1840,19 +1830,31 @@ static int etnaviv_gpu_bind(struct device *dev, struct device *master,
 	INIT_WORK(&gpu->sync_point_work, sync_point_worker);
 	init_waitqueue_head(&gpu->fence_event);
 
+	if (IS_ENABLED(CONFIG_DRM_ETNAVIV_THERMAL)) {
+		gpu->cooling = thermal_of_cooling_device_register(dev->of_node, 0,
+								  dev_name(dev),
+								  gpu, &cooling_ops);
+		if (IS_ERR(gpu->cooling)) {
+			ret = PTR_ERR(gpu->cooling);
+			gpu->cooling = NULL;
+			goto out_clk;
+		}
+	}
+
 	priv->gpu[priv->num_gpus++] = gpu;
 
 	return 0;
+
+out_clk:
+	gpu->drm = NULL;
+	if (!IS_ENABLED(CONFIG_PM))
+		etnaviv_gpu_clk_disable(gpu);
 
 out_sched:
 	etnaviv_sched_fini(gpu);
 
 out_workqueue:
 	destroy_workqueue(gpu->wq);
-
-out_thermal:
-	if (IS_ENABLED(CONFIG_DRM_ETNAVIV_THERMAL))
-		thermal_cooling_device_unregister(gpu->cooling);
 
 	return ret;
 }
@@ -1863,6 +1865,10 @@ static void etnaviv_gpu_unbind(struct device *dev, struct device *master,
 	struct etnaviv_gpu *gpu = dev_get_drvdata(dev);
 
 	DBG("%s", dev_name(gpu->dev));
+
+	if (IS_ENABLED(CONFIG_DRM_ETNAVIV_THERMAL))
+		thermal_cooling_device_unregister(gpu->cooling);
+	gpu->cooling = NULL;
 
 	destroy_workqueue(gpu->wq);
 
@@ -1887,10 +1893,6 @@ static void etnaviv_gpu_unbind(struct device *dev, struct device *master,
 
 	gpu->drm = NULL;
 	xa_destroy(&gpu->user_fences);
-
-	if (IS_ENABLED(CONFIG_DRM_ETNAVIV_THERMAL))
-		thermal_cooling_device_unregister(gpu->cooling);
-	gpu->cooling = NULL;
 }
 
 static const struct component_ops gpu_ops = {
