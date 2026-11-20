@@ -172,16 +172,77 @@ struct dma_buf_sgt_mapping {
 /**
  * struct dma_buf_mapping_sgt_exp_ops - Exporter ops of the SGT type
  * @ops: Type tag
- * @map_dma_buf: Produce a &struct dma_buf_sgt_mapping for @attach, with
- *               &dma_buf_sgt_mapping.sgt mapped for the device returned by
- *               dma_buf_sgt_dma_device(). Called with the dma_resv lock held.
- *               Returns the mapping, or an ERR_PTR; NULL is taken as -ENOMEM.
- * @unmap_dma_buf: Unmap and release a mapping returned by @map_dma_buf.
  */
 struct dma_buf_mapping_sgt_exp_ops {
 	struct dma_buf_mapping_exp_ops ops;
+
+	/**
+	 * @map_dma_buf:
+	 *
+	 * This is called by dma_buf_map_sgt() and is used to map a
+	 * shared &dma_buf into device address space, and it is mandatory. It
+	 * can only be called if &dma_buf_ops.attach has been called successfully.
+	 *
+	 * This call may sleep, e.g. when the backing storage first needs to be
+	 * allocated, or moved to a location suitable for all currently attached
+	 * devices.
+	 *
+	 * Note that any specific buffer attributes required for this function
+	 * should get added to device_dma_parameters accessible via
+	 * &device.dma_params from the &dma_buf_attachment. The
+	 * &dma_buf_ops.attach callback should also check these constraints.
+	 *
+	 * If this is being called for the first time, the exporter can now
+	 * choose to scan through the list of attachments for this buffer,
+	 * collate the requirements of the attached devices, and choose an
+	 * appropriate backing storage for the buffer.
+	 *
+	 * Based on enum dma_data_direction, it might be possible to have
+	 * multiple users accessing at the same time (for reading, maybe), or
+	 * any other kind of sharing that the exporter might wish to make
+	 * available to buffer-users.
+	 *
+	 * This is always called with the dmabuf->resv object locked.
+	 *
+	 * Note that for non-dynamic exporters the driver must guarantee
+	 * that the memory is available for use and cleared of any old data by
+	 * the time this function returns.  Drivers which pipeline their buffer
+	 * moves internally must wait for all moves and clears to complete.
+	 * Dynamic exporters do not need to follow this rule: For non-dynamic
+	 * importers the buffer is already pinned through &dma_buf_ops.pin,
+	 * which has the same requirements. Dynamic importers otoh are required
+	 * to obey the
+	 * dma_resv fences.
+	 *
+	 * Returns:
+	 *
+	 * A &struct dma_buf_sgt_mapping allocated by the exporter, whose
+	 * &dma_buf_sgt_mapping.sgt is the scatter list of the backing storage
+	 * of the DMA buffer, already mapped into the device address space of
+	 * the &device attached with the provided &dma_buf_attachment. The
+	 * addresses and lengths in the scatter list are PAGE_SIZE aligned.
+	 *
+	 * On failure, returns a negative error value wrapped into a pointer.
+	 * May also return -EINTR when a signal was received while being
+	 * blocked.
+	 *
+	 * The mapping is handed to the DMA-BUF code and comes back through
+	 * @unmap_dma_buf. An exporter that maps an attachment once may keep
+	 * one mapping per attachment and return it on every call, see
+	 * &struct dma_buf_sgt_mapping; the core does any other caching.
+	 */
 	struct dma_buf_sgt_mapping *(*map_dma_buf)(struct dma_buf_attachment *attach,
 						   enum dma_data_direction dir);
+
+	/**
+	 * @unmap_dma_buf:
+	 *
+	 * This is called by dma_buf_unmap_sgt() and should unmap and
+	 * release the &struct dma_buf_sgt_mapping allocated in @map_dma_buf,
+	 * and it is mandatory. For static dma_buf handling this might also
+	 * unpin the backing storage if this is the last mapping of the DMA
+	 * buffer.
+	 */
 	void (*unmap_dma_buf)(struct dma_buf_attachment *attach,
 			      struct dma_buf_sgt_mapping *mapping,
 			      enum dma_data_direction dir);
@@ -242,8 +303,6 @@ dma_buf_sgt_mapping_dma_device(const struct dma_buf_sgt_mapping *mapping)
 	((struct dma_buf_mapping_match){ .type = &dma_buf_mapping_sgt_type, \
 					 .exp_ops = &((_exp_ops)->ops) })
 
-/* Match on behalf of an exporter that has no match_mapping() */
-int dma_buf_sgt_compat_match_mapping(struct dma_buf_match_args *args);
 
 /*
  * dma_buf_ops initializer helper for simple drivers that use a single

@@ -335,8 +335,6 @@ dma_buf_sgt_finish_match(struct dma_buf_match_args *args,
 			 const struct dma_buf_mapping_match *imp,
 			 struct dma_buf_mapping_match *match)
 {
-	struct dma_buf_attachment *attach = args->attach;
-
 	*match = (struct dma_buf_mapping_match) {
 		.type = &dma_buf_mapping_sgt_type,
 		.exp_ops = exp->exp_ops,
@@ -344,14 +342,6 @@ dma_buf_sgt_finish_match(struct dma_buf_match_args *args,
 			.importing_dma_device = args->dev,
 		},
 	};
-
-	/*
-	 * Setup the SGT type variables stored in attach because importers and
-	 * exporters that do not natively use mappings expect them to be there.
-	 * When converting to use mappings users should use the match versions
-	 * of these instead.
-	 */
-	attach->dev = args->dev;
 }
 
 static void dma_buf_sgt_debugfs_dump(struct seq_file *s,
@@ -366,68 +356,3 @@ const struct dma_buf_mapping_type dma_buf_mapping_sgt_type = {
 	.debugfs_dump = dma_buf_sgt_debugfs_dump,
 };
 EXPORT_SYMBOL_NS_GPL(dma_buf_mapping_sgt_type, "DMA_BUF");
-
-/* An unaware exporter's sg_table presented as an SGT mapping */
-struct dma_buf_sgt_compat_mapping {
-	struct dma_buf_sgt_mapping mapping;
-	struct sg_table *sgt;
-};
-
-static struct dma_buf_sgt_mapping *
-dma_buf_sgt_compat_map_dma_buf(struct dma_buf_attachment *attach,
-			       enum dma_data_direction dir)
-{
-	struct dma_buf_sgt_compat_mapping *compat;
-	struct sg_table *sgt;
-
-	sgt = attach->dmabuf->ops->map_dma_buf(attach, dir);
-	if (!sgt)
-		return ERR_PTR(-ENOMEM);
-	if (IS_ERR(sgt))
-		return ERR_CAST(sgt);
-
-	compat = kzalloc_obj(*compat);
-	if (!compat) {
-		attach->dmabuf->ops->unmap_dma_buf(attach, sgt, dir);
-		return ERR_PTR(-ENOMEM);
-	}
-
-	/* The exporter keeps its table; the mapping shares its entries */
-	compat->sgt = sgt;
-	compat->mapping.sgt = *sgt;
-	return &compat->mapping;
-}
-
-static void dma_buf_sgt_compat_unmap_dma_buf(struct dma_buf_attachment *attach,
-					     struct dma_buf_sgt_mapping *mapping,
-					     enum dma_data_direction dir)
-{
-	struct dma_buf_sgt_compat_mapping *compat =
-		container_of(mapping, struct dma_buf_sgt_compat_mapping, mapping);
-
-	attach->dmabuf->ops->unmap_dma_buf(attach, compat->sgt, dir);
-	kfree(compat);
-}
-
-/* Route the classic map/unmap ops through the exp ops for old importers */
-static const struct dma_buf_mapping_sgt_exp_ops dma_buf_sgt_compat_exp_ops = {
-	.map_dma_buf = dma_buf_sgt_compat_map_dma_buf,
-	.unmap_dma_buf = dma_buf_sgt_compat_unmap_dma_buf,
-};
-
-/*
- * This entry is used for unaware exporters that do not support
- * match_mapping(). It wraps the dma_buf ops for SGT mappings into a mapping
- * type so aware importers can transparently work with unaware exporters. This
- * does not require p2p because old exporters will check it through the
- * attach->peer2peer mechanism.
- */
-static const struct dma_buf_mapping_match dma_buf_sgt_exp_compat_matches[] = {
-	DMA_BUF_EMAPPING_SGT(&dma_buf_sgt_compat_exp_ops),
-};
-
-int dma_buf_sgt_compat_match_mapping(struct dma_buf_match_args *args)
-{
-	return dma_buf_match_mapping(args, dma_buf_sgt_exp_compat_matches,
-				     ARRAY_SIZE(dma_buf_sgt_exp_compat_matches));
-}
