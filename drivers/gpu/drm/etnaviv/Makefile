@@ -15,6 +15,9 @@ etnaviv-y := \
 	etnaviv_mmu.o \
 	etnaviv_perfmon.o \
 	etnaviv_flop_reset.o \
-	etnaviv_sched.o
+	etnaviv_sched.o \
+	etnaviv_trace_points.o
 
 obj-$(CONFIG_DRM_ETNAVIV)	+= etnaviv.o
+
+CFLAGS_etnaviv_trace_points.o := -I$(src)

@@ -265,6 +265,25 @@ struct drm_etnaviv_pm_signal {
 	char  name[64];   /* out, name of domain */
 };
 
+/*
+ * Core clock changes, reported by the kernel for userspace that converts
+ * GPU cycle counts to CLOCK_MONOTONIC. These are the flags of the
+ * etnaviv_gpu_clock_change trace event.
+ *
+ * Every report is a rate change: a new cooling state, or the first clock
+ * setup after the GPU is bound. RESUME and RESET are set if the change was
+ * applied while the GPU was resumed or reset, without them it was applied
+ * to a running GPU. A resume or reset that keeps the rate is not reported,
+ * and neither is a cooling request that a resume has already applied.
+ *
+ * A change is made between jobs, so every job runs at a single rate.
+ * ETNA_CLOCK_BUSY marks the exception: jobs were still running when the
+ * kernel gave up waiting for them.
+ */
+#define ETNA_CLOCK_RESUME              0x0001
+#define ETNA_CLOCK_RESET               0x0002
+#define ETNA_CLOCK_BUSY                0x0004
+
 #define DRM_ETNAVIV_GET_PARAM          0x00
 /* placeholder:
 #define DRM_ETNAVIV_SET_PARAM          0x01

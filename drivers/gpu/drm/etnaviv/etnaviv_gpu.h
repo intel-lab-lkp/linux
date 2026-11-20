@@ -163,8 +163,10 @@ struct etnaviv_gpu {
 	struct reset_control *rst;
 
 	unsigned int freq_scale;
+	unsigned int applied_scale;
 	unsigned int fe_waitcycles;
 	unsigned long base_rate_core;
+	unsigned long core_rate;
 	unsigned long base_rate_shader;
 };
 

@@ -25,6 +25,7 @@
 #include "etnaviv_mmu.h"
 #include "etnaviv_perfmon.h"
 #include "etnaviv_sched.h"
+#include "etnaviv_trace.h"
 #include "common.xml.h"
 #include "state.xml.h"
 #include "state_hi.xml.h"
@@ -505,14 +506,24 @@ static void etnaviv_gpu_load_clock(struct etnaviv_gpu *gpu, u32 clock)
 	gpu_write(gpu, VIVS_HI_CLOCK_CONTROL, clock);
 }
 
-static void etnaviv_gpu_update_clock(struct etnaviv_gpu *gpu)
+/* begin_ns is when the switch, or the restart that includes it, began */
+static void etnaviv_gpu_update_clock(struct etnaviv_gpu *gpu, u32 flags,
+				     u64 begin_ns)
 {
+	unsigned long rate_before = gpu->core_rate;
+	bool scaled = gpu->freq_scale != gpu->applied_scale;
+	u64 end_ns;
+
 	if (gpu->identity.minor_features2 &
 	    chipMinorFeatures2_DYNAMIC_FREQUENCY_SCALING) {
 		clk_set_rate(gpu->clk_core,
 			     gpu->base_rate_core >> gpu->freq_scale);
+		end_ns = ktime_get_ns();
 		clk_set_rate(gpu->clk_shader,
 			     gpu->base_rate_shader >> gpu->freq_scale);
+		/* a rate read back may call firmware, do it only on a change */
+		if (!gpu->core_rate || scaled)
+			gpu->core_rate = clk_get_rate(gpu->clk_core);
 	} else {
 		unsigned int fscale = 1 << (6 - gpu->freq_scale);
 		u32 clock = gpu_read(gpu, VIVS_HI_CLOCK_CONTROL);
@@ -520,6 +531,16 @@ static void etnaviv_gpu_update_clock(struct etnaviv_gpu *gpu)
 		clock &= ~VIVS_HI_CLOCK_CONTROL_FSCALE_VAL__MASK;
 		clock |= VIVS_HI_CLOCK_CONTROL_FSCALE_VAL(fscale);
 		etnaviv_gpu_load_clock(gpu, clock);
+		end_ns = ktime_get_ns();
+		gpu->core_rate = gpu->base_rate_core / 64 * fscale;
+	}
+	gpu->applied_scale = gpu->freq_scale;
+
+	/* a resume or reset that keeps the rate is not worth a report */
+	if (scaled || rate_before != gpu->core_rate) {
+		trace_etnaviv_gpu_clock_change(gpu->dev, flags, begin_ns,
+					       end_ns, rate_before,
+					       gpu->core_rate);
 	}
 
 	/*
@@ -536,9 +557,11 @@ static int etnaviv_hw_reset(struct etnaviv_gpu *gpu)
 	u32 control, idle;
 	unsigned long timeout;
 	bool failed = true;
+	u64 reset_ns;
 
 	/* We hope that the GPU resets in under one second */
 	timeout = jiffies + msecs_to_jiffies(1000);
+	reset_ns = ktime_get_ns();
 
 	while (time_is_after_jiffies(timeout)) {
 		unsigned int fscale = 1 << (6 - gpu->freq_scale);
@@ -638,7 +661,7 @@ static int etnaviv_hw_reset(struct etnaviv_gpu *gpu)
 	}
 
 	/* We rely on the GPU running, so program the clock */
-	etnaviv_gpu_update_clock(gpu);
+	etnaviv_gpu_update_clock(gpu, ETNA_CLOCK_RESET, reset_ns);
 
 	gpu->state = ETNA_GPU_STATE_RESET;
 	gpu->exec_state = -1;
@@ -1771,7 +1794,7 @@ static void etnaviv_gpu_hw_suspend(struct etnaviv_gpu *gpu)
 	gpu->exec_state = -1;
 }
 
-static int etnaviv_gpu_hw_resume(struct etnaviv_gpu *gpu)
+static int etnaviv_gpu_hw_resume(struct etnaviv_gpu *gpu, u64 resume_ns)
 {
 	int ret;
 
@@ -1779,7 +1802,7 @@ static int etnaviv_gpu_hw_resume(struct etnaviv_gpu *gpu)
 	if (ret)
 		return ret;
 
-	etnaviv_gpu_update_clock(gpu);
+	etnaviv_gpu_update_clock(gpu, ETNA_CLOCK_RESUME, resume_ns);
 	etnaviv_gpu_hw_init(gpu);
 
 	mutex_unlock(&gpu->lock);
@@ -1812,6 +1835,7 @@ etnaviv_gpu_cooling_set_cur_state(struct thermal_cooling_device *cdev,
 				  unsigned long state)
 {
 	struct etnaviv_gpu *gpu = cdev->devdata;
+	u32 flags = 0;
 	u32 fence;
 
 	mutex_lock(&gpu->lock);
@@ -1833,7 +1857,7 @@ etnaviv_gpu_cooling_set_cur_state(struct thermal_cooling_device *cdev,
 	 * GPU. The wait must be bounded: a hang recovery stops the scheduler,
 	 * which waits for the job held back in etnaviv_gpu_submit(), and that
 	 * job waits for the clock change. So give up after one job timeout and
-	 * change the clock anyway.
+	 * change the clock anyway. Such a change is reported as busy.
 	 */
 	WRITE_ONCE(gpu->clock_change_pending, true);
 	fence = gpu->next_fence;
@@ -1842,12 +1866,12 @@ etnaviv_gpu_cooling_set_cur_state(struct thermal_cooling_device *cdev,
 	if (!wait_event_timeout(gpu->fence_event,
 				!fence_after(fence, READ_ONCE(gpu->completed_fence)),
 				gpu->sched.timeout))
-		dev_dbg(gpu->dev, "clock change while jobs are running\n");
+		flags |= ETNA_CLOCK_BUSY;
 
 	mutex_lock(&gpu->lock);
 	/* the GPU may have suspended while waiting, the resume applies it */
 	if (gpu->state >= ETNA_GPU_STATE_RESET)
-		etnaviv_gpu_update_clock(gpu);
+		etnaviv_gpu_update_clock(gpu, flags, ktime_get_ns());
 	store_release_wake_up(&gpu->clock_change_pending, false);
 	mutex_unlock(&gpu->lock);
 
@@ -1955,6 +1979,8 @@ static void etnaviv_gpu_unbind(struct device *dev, struct device *master,
 
 	gpu->drm = NULL;
 	xa_destroy(&gpu->user_fences);
+
+	gpu->core_rate = 0;
 }
 
 static const struct component_ops gpu_ops = {
@@ -2099,6 +2125,7 @@ static int etnaviv_gpu_rpm_suspend(struct device *dev)
 static int etnaviv_gpu_rpm_resume(struct device *dev)
 {
 	struct etnaviv_gpu *gpu = dev_get_drvdata(dev);
+	u64 resume_ns = ktime_get_ns();
 	int ret;
 
 	ret = etnaviv_gpu_clk_enable(gpu);
@@ -2107,7 +2134,7 @@ static int etnaviv_gpu_rpm_resume(struct device *dev)
 
 	/* Re-initialise the basic hardware state */
 	if (gpu->state == ETNA_GPU_STATE_IDENTIFIED) {
-		ret = etnaviv_gpu_hw_resume(gpu);
+		ret = etnaviv_gpu_hw_resume(gpu, resume_ns);
 		if (ret) {
 			etnaviv_gpu_clk_disable(gpu);
 			return ret;
