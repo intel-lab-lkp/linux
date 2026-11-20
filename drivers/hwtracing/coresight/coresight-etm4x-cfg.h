@@ -25,6 +25,6 @@
 #define ETM4_CFG_RES_MASK	0x00F
 
 /* ETMv4 specific config functions */
-int etm4_cscfg_register(struct coresight_device *csdev);
+int etm4_cscfg_register(struct coresight_device *csdev, bool ete_trcextout);
 
 #endif /* CORESIGHT_ETM4X_CFG_H */

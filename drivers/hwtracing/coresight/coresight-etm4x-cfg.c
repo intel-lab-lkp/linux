@@ -174,11 +174,14 @@ static int etm4_cfg_load_feature(struct coresight_device *csdev,
 #define CS_CFG_ETM4_MATCH_FLAGS	(CS_CFG_MATCH_CLASS_SRC_ALL | \
 				 CS_CFG_MATCH_CLASS_SRC_ETM4)
 
-int etm4_cscfg_register(struct coresight_device *csdev)
+int etm4_cscfg_register(struct coresight_device *csdev, bool ete_trcextout)
 {
 	struct cscfg_csdev_feat_ops ops;
+	u32 match_flags = CS_CFG_ETM4_MATCH_FLAGS;
 
 	ops.load_feat = &etm4_cfg_load_feature;
+	if (ete_trcextout)
+		match_flags |= CS_CFG_MATCH_CAP_ETE_TRCEXTOUT;
 
-	return cscfg_register_csdev(csdev, CS_CFG_ETM4_MATCH_FLAGS, &ops);
+	return cscfg_register_csdev(csdev, match_flags, &ops);
 }

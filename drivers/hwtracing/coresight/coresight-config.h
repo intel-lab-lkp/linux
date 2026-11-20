@@ -38,6 +38,8 @@
  * a device that matches one of its classes and has all of its capabilities.
  */
 #define CS_CFG_MATCH_CAP_MASK		GENMASK_U32(15, 8)
+/* an ETE whose PMU counts its external outputs as TRCEXTOUTn */
+#define CS_CFG_MATCH_CAP_ETE_TRCEXTOUT	BIT(8)
 
 /*
  * Limit number of presets in a configuration
