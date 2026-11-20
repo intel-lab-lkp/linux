@@ -1786,6 +1786,11 @@ etnaviv_gpu_cooling_set_cur_state(struct thermal_cooling_device *cdev,
 	struct etnaviv_gpu *gpu = cdev->devdata;
 
 	mutex_lock(&gpu->lock);
+	if (state == gpu->freq_scale) {
+		mutex_unlock(&gpu->lock);
+		return 0;
+	}
+
 	gpu->freq_scale = state;
 	if (!pm_runtime_suspended(gpu->dev))
 		etnaviv_gpu_update_clock(gpu);
