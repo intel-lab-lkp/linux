@@ -1226,7 +1226,6 @@ intel_dp_frl_bw_valid(struct intel_dp *intel_dp, int target_clock,
 	/* check for MAX FRL BW for both PCON and HDMI2.1 sink */
 	max_frl_bw = intel_dp_hdmi_frl_payload_bw(intel_dp, false);
 
-	/* #FIXME check bandwidth with DSC if both PCON and HDMI sink support DSC */
 	if (target_bw > max_frl_bw)
 		return MODE_CLOCK_HIGH;
 
@@ -1303,6 +1302,23 @@ intel_dp_pcon_dsc_enc_compute(struct intel_dp *intel_dp,
 	return true;
 }
 
+/*
+ * Whether the PCON can compress a stream that doesn't fit the HDMI FRL link
+ * uncompressed. The DP stream has to be compressed for that as well.
+ */
+static bool
+intel_dp_hdmi_dsc_possible(struct intel_dp *intel_dp,
+			   const struct drm_display_mode *mode, int pixel_clock,
+			   int bpc, enum intel_output_format sink_format)
+{
+	struct intel_connector *connector = intel_dp->attached_connector;
+
+	return intel_dp_pcon_sink_support_frl(intel_dp) &&
+		intel_dp_dsc_stream_version_minor(connector) < 2 &&
+		intel_dp_pcon_dsc_enc_compute(intel_dp, mode, pixel_clock, bpc,
+					      sink_format, NULL);
+}
+
 static enum drm_mode_status
 intel_dp_hdmi_bw_valid(struct intel_dp *intel_dp,
 		       int target_clock, int bpc,
@@ -1326,12 +1342,22 @@ intel_dp_mode_valid_downstream(struct intel_connector *connector,
 {
 	struct intel_dp *intel_dp = intel_attached_dp(connector);
 	int bpc = 8; /* Assume 8bpc for the DP++/HDMI/DVI TMDS/FRL bw check */
+	enum drm_mode_status status;
 
 	if (intel_dp->dfp.max_dotclock &&
 	    target_clock > intel_dp->dfp.max_dotclock)
 		return MODE_CLOCK_HIGH;
 
-	return intel_dp_hdmi_bw_valid(intel_dp, target_clock, bpc, sink_format, true);
+	status = intel_dp_hdmi_bw_valid(intel_dp, target_clock, bpc, sink_format, true);
+	if (status != MODE_CLOCK_HIGH)
+		return status;
+
+	/* The PCON may be able to compress the stream for the HDMI link */
+	if (intel_dp_has_dsc(connector) &&
+	    intel_dp_hdmi_dsc_possible(intel_dp, mode, target_clock, bpc, sink_format))
+		return MODE_OK;
+
+	return status;
 }
 
 static enum drm_mode_status
@@ -1836,9 +1862,11 @@ bool intel_dp_supports_dsc(struct intel_dp *intel_dp,
 
 static int intel_dp_hdmi_compute_bpc(struct intel_dp *intel_dp,
 				     const struct intel_crtc_state *crtc_state,
-				     int bpc, bool respect_downstream_limits)
+				     int bpc, bool respect_downstream_limits,
+				     bool dsc)
 {
 	int clock = crtc_state->hw.adjusted_mode.crtc_clock;
+	int max_bpc;
 
 	/*
 	 * Current bpc could already be below 8bpc due to
@@ -1855,6 +1883,8 @@ static int intel_dp_hdmi_compute_bpc(struct intel_dp *intel_dp,
 	if (!respect_downstream_limits)
 		bpc = 8;
 
+	max_bpc = bpc;
+
 	for (; bpc >= 8; bpc -= 2) {
 		if (intel_hdmi_bpc_possible(crtc_state, bpc,
 					    intel_dp_has_hdmi_sink(intel_dp)) &&
@@ -1863,12 +1893,27 @@ static int intel_dp_hdmi_compute_bpc(struct intel_dp *intel_dp,
 			return bpc;
 	}
 
+	/*
+	 * No bpc fits the HDMI link uncompressed. If the DP stream is compressed
+	 * the PCON may be able to compress the stream for the HDMI link as well.
+	 */
+	if (!dsc || !respect_downstream_limits)
+		return -EINVAL;
+
+	for (bpc = max_bpc; bpc >= 8; bpc -= 2) {
+		if (intel_hdmi_bpc_possible(crtc_state, bpc,
+					    intel_dp_has_hdmi_sink(intel_dp)) &&
+		    intel_dp_hdmi_dsc_possible(intel_dp, &crtc_state->hw.adjusted_mode,
+					       clock, bpc, crtc_state->sink_format))
+			return bpc;
+	}
+
 	return -EINVAL;
 }
 
 static int intel_dp_max_bpp(struct intel_dp *intel_dp,
 			    const struct intel_crtc_state *crtc_state,
-			    bool respect_downstream_limits)
+			    bool respect_downstream_limits, bool dsc)
 {
 	struct intel_display *display = to_intel_display(intel_dp);
 	struct intel_connector *connector = intel_dp->attached_connector;
@@ -1883,7 +1928,8 @@ static int intel_dp_max_bpp(struct intel_dp *intel_dp,
 		int max_hdmi_bpc;
 
 		max_hdmi_bpc = intel_dp_hdmi_compute_bpc(intel_dp, crtc_state, bpc,
-							 respect_downstream_limits);
+							 respect_downstream_limits,
+							 dsc);
 		if (max_hdmi_bpc < 0)
 			return 0;
 
@@ -2970,7 +3016,8 @@ intel_dp_compute_config_limits(struct intel_dp *intel_dp,
 		limits->pipe.max_bpp = min(crtc_state->max_pipe_bpp, 24);
 	} else {
 		limits->pipe.max_bpp = intel_dp_max_bpp(intel_dp, crtc_state,
-							respect_downstream_limits);
+							respect_downstream_limits,
+							dsc);
 	}
 
 	if (!dsc && intel_dp_in_hdr_mode(conn_state)) {
