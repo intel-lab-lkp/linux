@@ -350,6 +350,7 @@ etm_event_build_path(struct perf_event *event, int cpu,
 {
 	struct coresight_path *path = NULL;
 	struct coresight_device *source, *sink;
+	u32 cfg_hash = ATTR_CFG_GET_FLD(&event->attr, configid);
 	int ret;
 
 	source = coresight_get_percpu_source_ref(cpu);
@@ -360,6 +361,9 @@ etm_event_build_path(struct perf_event *event, int cpu,
 	 */
 	if (!source)
 		return NULL;
+
+	if (cfg_hash && !cscfg_csdev_can_activate_config(source, cfg_hash))
+		goto out;
 
 	/*
 	 * If AUX pause feature is enabled but the ETM driver does not

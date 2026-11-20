@@ -120,6 +120,8 @@ int cscfg_register_csdev(struct coresight_device *csdev, u32 match_flags,
 void cscfg_unregister_csdev(struct coresight_device *csdev);
 int cscfg_activate_config(unsigned long cfg_hash);
 void cscfg_deactivate_config(unsigned long cfg_hash);
+bool cscfg_csdev_can_activate_config(struct coresight_device *csdev,
+				     unsigned long cfg_hash);
 void cscfg_csdev_reset_feats(struct coresight_device *csdev);
 int cscfg_csdev_enable_active_config(struct coresight_device *csdev,
 				     unsigned long cfg_hash, int preset);

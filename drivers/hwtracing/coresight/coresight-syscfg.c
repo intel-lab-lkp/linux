@@ -1051,6 +1051,38 @@ void cscfg_deactivate_config(unsigned long cfg_hash)
 EXPORT_SYMBOL_GPL(cscfg_deactivate_config);
 
 /**
+ * cscfg_csdev_can_activate_config - Check whether a configuration is loaded on a device.
+ * @csdev: CoreSight device to check.
+ * @cfg_hash: Selector for the configuration.
+ *
+ * Does not activate or program the configuration. May sleep. The caller must
+ * keep the configuration activated while using the result to prevent unloading.
+ */
+bool cscfg_csdev_can_activate_config(struct coresight_device *csdev,
+				     unsigned long cfg_hash)
+{
+	struct cscfg_registered_csdev *csdev_item;
+	struct cscfg_config_csdev *config_csdev;
+
+	guard(mutex)(&cscfg_mutex);
+	if (!cscfg_mgr)
+		return false;
+
+	/* Unregistered devices do not have initialized configuration lists. */
+	list_for_each_entry(csdev_item, &cscfg_mgr->csdev_desc_list, item) {
+		if (csdev_item->csdev != csdev)
+			continue;
+		list_for_each_entry(config_csdev, &csdev->config_csdev_list, node) {
+			if ((unsigned long)config_csdev->config_desc->event_ea->var == cfg_hash)
+				return config_csdev->config_desc->available;
+		}
+		break;
+	}
+	return false;
+}
+EXPORT_SYMBOL_GPL(cscfg_csdev_can_activate_config);
+
+/**
  * cscfg_csdev_enable_active_config - Enable matching active configuration for device.
  *
  * Enables the configuration selected by @cfg_hash if the configuration is supported
