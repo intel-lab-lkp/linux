@@ -1392,8 +1392,9 @@ intel_dp_pcon_dsc_passthrough_ok(struct intel_dp *intel_dp,
 }
 
 /*
- * Whether the PCON can compress a stream that doesn't fit the HDMI FRL link
- * uncompressed. The DP stream has to be compressed for that as well.
+ * Whether the PCON can pass a DSC 1.2a stream through, or compress a stream
+ * that doesn't fit the HDMI FRL link uncompressed. The DP stream has to be
+ * compressed for that as well.
  */
 static bool
 intel_dp_hdmi_dsc_possible(struct intel_dp *intel_dp,
@@ -1401,11 +1402,26 @@ intel_dp_hdmi_dsc_possible(struct intel_dp *intel_dp,
 			   int bpc, enum intel_output_format sink_format)
 {
 	struct intel_connector *connector = intel_dp->attached_connector;
+	const struct drm_display_info *info = &connector->base.display_info;
+	int min_dsc_bpp, max_dsc_bpp;
 
-	return intel_dp_pcon_sink_support_frl(intel_dp) &&
-		intel_dp_dsc_stream_version_minor(connector) < 2 &&
-		intel_dp_pcon_dsc_enc_compute(intel_dp, mode, pixel_clock, bpc,
-					      sink_format, NULL);
+	if (!intel_dp_pcon_sink_support_frl(intel_dp))
+		return false;
+
+	/* A DSC 1.1 stream is re-encoded, a DSC 1.2a stream is passed through */
+	if (intel_dp_dsc_stream_version_minor(connector) < 2)
+		return intel_dp_pcon_dsc_enc_compute(intel_dp, mode, pixel_clock, bpc,
+						     sink_format, NULL);
+
+	if (!intel_dp_pcon_can_passthrough_dsc(intel_dp) ||
+	    intel_dp_output_format(connector, sink_format) != sink_format)
+		return false;
+
+	/* The stream parameters are only known once the DP link is computed */
+	intel_hdmi_dsc_get_min_max_bpp(sink_format, bpc, info->hdmi.dsc_cap.all_bpp,
+				       &min_dsc_bpp, &max_dsc_bpp);
+
+	return intel_dp_hdmi_frl_payload_bw(intel_dp, true) / pixel_clock >= min_dsc_bpp;
 }
 
 static enum drm_mode_status
