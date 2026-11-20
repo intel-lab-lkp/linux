@@ -2396,8 +2396,14 @@ int ucsi_register(struct ucsi *ucsi)
 	if (ret)
 		return ret;
 
-	if (!ucsi->version)
+	/*
+	 * Version of 0 is not valid but some vendors may report it due to bugged
+	 * FW and there may not already be a workaround quirk to correct it.
+	 */
+	if (!ucsi->version) {
+		dev_err(ucsi->dev, "UCSI interface reported version 0.0.0: possible firmware bug.");
 		return -ENODEV;
+	}
 
 	/*
 	 * Version format is JJ.M.N (JJ = Major version, M = Minor version,
