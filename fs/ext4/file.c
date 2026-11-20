@@ -318,7 +318,7 @@ static ssize_t ext4_write_checks(struct kiocb *iocb, struct iov_iter *from)
 	 * partial block that beyond the existing EOF, as it may contains
 	 * stale data written through mmap.
 	 */
-	if (iocb->ki_pos > old_size && !ext4_verity_in_progress(inode)) {
+	if (iocb->ki_pos > old_size && !fsverity_is_building(inode)) {
 		if (iocb->ki_flags & IOCB_NOWAIT)
 			return -EAGAIN;
 

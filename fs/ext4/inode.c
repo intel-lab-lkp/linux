@@ -42,6 +42,7 @@
 #include <linux/bitops.h>
 #include <linux/iomap.h>
 #include <linux/iversion.h>
+#include <linux/fsverity.h>
 
 #include "ext4_jbd2.h"
 #include "ext4_extents.h"
@@ -521,7 +522,7 @@ void ext4_check_map_extents_env(struct inode *inode)
 	    is_special_ino(inode->i_sb, inode->i_ino) ||
 	    (inode_state_read_once(inode) & (I_FREEING | I_WILL_FREE | I_NEW)) ||
 	    ext4_test_inode_flag(inode, EXT4_INODE_EA_INODE) ||
-	    ext4_verity_in_progress(inode))
+	    fsverity_is_building(inode))
 		return;
 
 	WARN_ON_ONCE(!inode_is_locked(inode) &&
@@ -1508,7 +1509,7 @@ retry_journal:
 
 	if (ret) {
 		bool extended = (pos + len > inode->i_size) &&
-				!ext4_verity_in_progress(inode);
+				!fsverity_is_building(inode);
 
 		folio_unlock(folio);
 		/*
@@ -1575,7 +1576,7 @@ static int ext4_write_end(const struct kiocb *iocb,
 	loff_t old_size = inode->i_size;
 	int ret = 0, ret2;
 	int i_size_changed = 0;
-	bool verity = ext4_verity_in_progress(inode);
+	bool verity = fsverity_is_building(inode);
 
 	trace_ext4_write_end(inode, pos, len, copied);
 
@@ -1683,7 +1684,7 @@ static int ext4_journalled_write_end(const struct kiocb *iocb,
 	int partial = 0;
 	unsigned from, to;
 	int size_changed = 0;
-	bool verity = ext4_verity_in_progress(inode);
+	bool verity = fsverity_is_building(inode);
 
 	trace_ext4_journalled_write_end(inode, pos, len, copied);
 	from = pos & (PAGE_SIZE - 1);
@@ -2230,7 +2231,7 @@ static void mpage_submit_folio(struct mpage_da_data *mpd, struct folio *folio)
 	size = i_size_read(mpd->inode);
 	len = folio_size(folio);
 	if (folio_pos(folio) + len > size &&
-	    !ext4_verity_in_progress(mpd->inode))
+	    !fsverity_is_building(mpd->inode))
 		len = size & (len - 1);
 	ext4_bio_write_folio(&mpd->io_submit, folio, len);
 }
@@ -2320,7 +2321,7 @@ static int mpage_process_page_bufs(struct mpage_da_data *mpd,
 	ext4_lblk_t blocks = (i_size_read(inode) + i_blocksize(inode) - 1)
 							>> inode->i_blkbits;
 
-	if (ext4_verity_in_progress(inode))
+	if (fsverity_is_building(inode))
 		blocks = EXT_MAX_BLOCKS;
 
 	do {
@@ -2738,7 +2739,7 @@ static int mpage_journal_page_buffers(handle_t *handle,
 	mpd->wbc->nr_to_write -= folio_nr_pages(folio);
 
 	if (folio_pos(folio) + len > size &&
-	    !ext4_verity_in_progress(inode))
+	    !fsverity_is_building(inode))
 		len = size & (len - 1);
 
 	return ext4_journal_folio_buffers(handle, folio, len);
@@ -3304,7 +3305,7 @@ static int ext4_da_write_begin(const struct kiocb *iocb,
 
 	index = pos >> PAGE_SHIFT;
 
-	if (ext4_nonda_switch(inode->i_sb) || ext4_verity_in_progress(inode)) {
+	if (ext4_nonda_switch(inode->i_sb) || fsverity_is_building(inode)) {
 		*fsdata = (void *)FALL_BACK_TO_NONDELALLOC;
 		return ext4_write_begin(iocb, mapping, pos,
 					len, foliop, fsdata);

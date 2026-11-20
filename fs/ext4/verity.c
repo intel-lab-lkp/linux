@@ -83,9 +83,6 @@ static int ext4_begin_enable_verity(struct file *filp)
 	if (IS_DAX(inode) || ext4_test_inode_flag(inode, EXT4_INODE_DAX))
 		return -EINVAL;
 
-	if (ext4_verity_in_progress(inode))
-		return -EBUSY;
-
 	/*
 	 * Since the file was opened readonly, we have to initialize the jbd
 	 * inode and quotas here and not rely on ->open() doing it.  This must
@@ -123,8 +120,6 @@ static int ext4_begin_enable_verity(struct file *filp)
 		return PTR_ERR(handle);
 
 	err = ext4_orphan_add(handle, inode);
-	if (err == 0)
-		ext4_set_inode_state(inode, EXT4_STATE_VERITY_IN_PROGRESS);
 
 	ext4_journal_stop(handle);
 	return err;
@@ -185,10 +180,10 @@ static int ext4_end_enable_verity(struct file *filp, const void *desc,
 		goto cleanup;
 
 	/*
-	 * Write all pages (both data and verity metadata).  Note that this must
-	 * happen before clearing EXT4_STATE_VERITY_IN_PROGRESS; otherwise pages
-	 * beyond i_size won't be written properly.  For crash consistency, this
-	 * also must happen before the verity inode flag gets persisted.
+	 * Write all pages (both data and verity metadata). Note that this must
+	 * happen before I_VERITY_BUILDING is cleared; otherwise pages beyond
+	 * i_size won't be written properly.  For crash consistency, this also
+	 * must happen before the verity inode flag gets persisted.
 	 */
 	err = filemap_write_and_wait(inode->i_mapping);
 	if (err)
@@ -224,7 +219,6 @@ static int ext4_end_enable_verity(struct file *filp, const void *desc,
 
 	/* Now that rollback is no longer possible, set S_VERITY. */
 	ext4_set_inode_flags(inode, false);
-	ext4_clear_inode_state(inode, EXT4_STATE_VERITY_IN_PROGRESS);
 	return 0;
 
 stop_and_cleanup:
@@ -234,13 +228,12 @@ cleanup:
 	/*
 	 * Verity failed to be enabled, so clean up by truncating any verity
 	 * metadata that was written beyond i_size (both from cache and from
-	 * disk), removing the inode from the orphan list (if it wasn't done
-	 * already), and clearing EXT4_STATE_VERITY_IN_PROGRESS.
+	 * disk) and removing the inode from the orphan list (if it wasn't done
+	 * already).
 	 */
 	truncate_inode_pages(inode->i_mapping, inode->i_size);
 	ext4_truncate(inode);
 	ext4_orphan_del(NULL, inode);
-	ext4_clear_inode_state(inode, EXT4_STATE_VERITY_IN_PROGRESS);
 	return err;
 }
 
