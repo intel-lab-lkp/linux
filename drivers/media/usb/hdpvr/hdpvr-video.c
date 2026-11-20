@@ -92,6 +92,8 @@ int hdpvr_cancel_queue(struct hdpvr_device *dev)
 	list_for_each_entry(buf, &dev->rec_buff_list, buff_list) {
 		usb_kill_urb(buf->urb);
 		buf->status = BUFSTAT_AVAILABLE;
+		/* the data is discarded, the next transfer starts at 0 */
+		buf->pos = 0;
 	}
 
 	list_splice_init(&dev->rec_buff_list, dev->free_buff_list.prev);
@@ -244,6 +246,43 @@ static struct hdpvr_buffer *hdpvr_get_next_buffer(struct hdpvr_device *dev)
 	mutex_unlock(&dev->io_mutex);
 
 	return buf;
+}
+
+/*
+ * Account the bytes consumed from a buffer and hand it back to the worker
+ * once it has been read completely.
+ *
+ * The buffer may have been recycled and resubmitted, either by another
+ * reader or after a stream restart, while copy_to_user() slept. Its
+ * position and its place in the buffer lists then belong to the newer
+ * transfer and must not be touched, so only act if the buffer is still
+ * the one that was read from.
+ *
+ * Returns true if the buffer was handed back to the worker.
+ */
+static bool hdpvr_account_buffer(struct hdpvr_device *dev,
+				 struct hdpvr_buffer *buf,
+				 unsigned int pos, unsigned int new_pos)
+{
+	bool recycled = false;
+
+	mutex_lock(&dev->io_mutex);
+	if (buf->status == BUFSTAT_READY && buf->pos == pos) {
+		buf->pos = new_pos;
+		if (new_pos >= buf->urb->actual_length) {
+			buf->pos = 0;
+			buf->status = BUFSTAT_AVAILABLE;
+			list_move_tail(&buf->buff_list, &dev->free_buff_list);
+			print_buffer_status();
+			recycled = true;
+		}
+	}
+	mutex_unlock(&dev->io_mutex);
+
+	if (recycled)
+		wake_up_interruptible(&dev->wait_buffer);
+
+	return recycled;
 }
 
 static void hdpvr_transmit_buffers(struct work_struct *work)
@@ -415,6 +454,7 @@ static ssize_t hdpvr_read(struct file *file, char __user *buffer, size_t count,
 	struct urb *urb;
 	int ret = 0;
 	int rem, cnt;
+	unsigned int buf_pos;
 
 	if (*pos)
 		return -ESPIPE;
@@ -488,10 +528,23 @@ static ssize_t hdpvr_read(struct file *file, char __user *buffer, size_t count,
 
 		/* set remaining bytes to copy */
 		urb = buf->urb;
-		rem = urb->actual_length - buf->pos;
-		cnt = rem > count ? count : rem;
+		buf_pos = buf->pos;
+		rem = urb->actual_length - buf_pos;
+		if (rem <= 0) {
+			/*
+			 * The buffer was recycled and refilled with less data
+			 * than this reader already consumed from it, so there
+			 * is nothing left to copy. Give it back to the worker
+			 * if it is still the buffer we were reading from.
+			 */
+			hdpvr_account_buffer(dev, buf, buf_pos, buf_pos);
 
-		if (copy_to_user(buffer, urb->transfer_buffer + buf->pos,
+			buf = hdpvr_get_next_buffer(dev);
+			continue;
+		}
+		cnt = min_t(int, rem, count);
+
+		if (copy_to_user(buffer, urb->transfer_buffer + buf_pos,
 				 cnt)) {
 			v4l2_err(&dev->v4l2_dev, "read: copy_to_user failed\n");
 			if (!ret)
@@ -499,27 +552,13 @@ static ssize_t hdpvr_read(struct file *file, char __user *buffer, size_t count,
 			goto err;
 		}
 
-		buf->pos += cnt;
 		count -= cnt;
 		buffer += cnt;
 		ret += cnt;
 
 		/* finished, take next buffer */
-		if (buf->pos == urb->actual_length) {
-			mutex_lock(&dev->io_mutex);
-			buf->pos = 0;
-			buf->status = BUFSTAT_AVAILABLE;
-
-			list_move_tail(&buf->buff_list, &dev->free_buff_list);
-
-			print_buffer_status();
-
-			mutex_unlock(&dev->io_mutex);
-
-			wake_up_interruptible(&dev->wait_buffer);
-
+		if (hdpvr_account_buffer(dev, buf, buf_pos, buf_pos + cnt))
 			buf = hdpvr_get_next_buffer(dev);
-		}
 	}
 err:
 	if (!ret && !buf)
