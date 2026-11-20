@@ -14,24 +14,6 @@
 #include <linux/uaccess.h>
 #include "leds.h"
 
-static unsigned int led_mc_get_max_intensity(struct led_classdev_mc *mcled_cdev, size_t index)
-{
-	unsigned int max_intensity;
-
-	/*
-	 * The maximum global brightness value might still be changed by
-	 * led_classdev_register_ext() using devicetree properties. This
-	 * prevents us from changing subled_info[X].max_intensity when
-	 * registering a multicolor LED class device, so we have to do
-	 * this during runtime.
-	 */
-	max_intensity = mcled_cdev->subled_info[index].max_intensity;
-	if (max_intensity)
-		return max_intensity;
-
-	return mcled_cdev->led_cdev.max_brightness;
-}
-
 int led_mc_calc_color_components(struct led_classdev_mc *mcled_cdev,
 				 enum led_brightness brightness)
 {
@@ -53,12 +35,10 @@ static ssize_t multi_max_intensity_show(struct device *dev,
 {
 	struct led_classdev *led_cdev = dev_get_drvdata(dev);
 	struct led_classdev_mc *mcled_cdev = lcdev_to_mccdev(led_cdev);
-	unsigned int max_intensity;
 	int len = 0;
 
-	for (int i = 0; i < mcled_cdev->num_colors; i++) {
-		max_intensity = led_mc_get_max_intensity(mcled_cdev, i);
-		len += sysfs_emit_at(buf, len, "%u", max_intensity);
+	for (unsigned int i = 0; i < mcled_cdev->num_colors; i++) {
+		len += sysfs_emit_at(buf, len, "%u", mcled_cdev->subled_info[i].max_intensity);
 		if (i < mcled_cdev->num_colors - 1)
 			len += sprintf(buf + len, " ");
 	}
@@ -98,8 +78,8 @@ static ssize_t multi_intensity_store(struct device *dev,
 		goto err_out;
 	}
 
-	for (int i = 0; i < mcled_cdev->num_colors; i++) {
-		max_intensity = led_mc_get_max_intensity(mcled_cdev, i);
+	for (unsigned int i = 0; i < mcled_cdev->num_colors; i++) {
+		max_intensity = mcled_cdev->subled_info[i].max_intensity;
 		mcled_cdev->subled_info[i].intensity = min(intensity_value[i], max_intensity);
 	}
 
@@ -186,6 +166,18 @@ int led_classdev_multicolor_register_ext(struct device *parent,
 	ret = led_classdev_init(parent, led_cdev, init_data);
 	if (ret < 0)
 		return ret;
+
+	/*
+	 * The maximum global brightness value might have been changed by
+	 * led_classdev_init() using devicetree properties. Because of this
+	 * we can only adjust subled_info[X].max_intensity after said function
+	 * was called.
+	 */
+	for (unsigned int i = 0; i < mcled_cdev->num_colors; i++)
+	{
+		if (!mcled_cdev->subled_info[i].max_intensity)
+			mcled_cdev->subled_info[i].max_intensity = led_cdev->max_brightness;
+	}
 
 	led_cdev->dev->type = &led_multicolor_device_type;
 
