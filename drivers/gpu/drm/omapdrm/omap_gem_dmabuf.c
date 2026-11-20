@@ -5,6 +5,7 @@
  */
 
 #include <linux/dma-buf.h>
+#include <linux/dma-buf-mapping.h>
 #include <linux/highmem.h>
 
 #include <drm/drm_prime.h>
@@ -17,24 +18,50 @@ MODULE_IMPORT_NS("DMA_BUF");
  * DMABUF Export
  */
 
-static struct sg_table *omap_gem_map_dma_buf(
-		struct dma_buf_attachment *attachment,
-		enum dma_data_direction dir)
+/*
+ * The object caches one sg_table and hands it to every attachment, so each
+ * mapping only carries a copy of the table header and remembers the table it
+ * was taken from for omap_gem_put_sg().
+ */
+struct omap_gem_dmabuf_mapping {
+	struct dma_buf_sgt_mapping base;
+	struct sg_table *sg;
+};
+
+static struct dma_buf_sgt_mapping *
+omap_gem_map_dma_buf(struct dma_buf_attachment *attachment,
+		     enum dma_data_direction dir)
 {
 	struct drm_gem_object *obj = attachment->dmabuf->priv;
+	struct omap_gem_dmabuf_mapping *mapping;
 	struct sg_table *sg;
-	sg = omap_gem_get_sg(obj, dir);
-	if (IS_ERR(sg))
-		return sg;
 
-	return sg;
+	mapping = kzalloc_obj(*mapping);
+	if (!mapping)
+		return ERR_PTR(-ENOMEM);
+
+	sg = omap_gem_get_sg(obj, dir);
+	if (IS_ERR(sg)) {
+		kfree(mapping);
+		return ERR_CAST(sg);
+	}
+
+	/* Header copy only; the table stays owned by the object. */
+	mapping->sg = sg;
+	mapping->base.sgt = *sg;
+
+	return &mapping->base;
 }
 
 static void omap_gem_unmap_dma_buf(struct dma_buf_attachment *attachment,
-		struct sg_table *sg, enum dma_data_direction dir)
+		struct dma_buf_sgt_mapping *base, enum dma_data_direction dir)
 {
 	struct drm_gem_object *obj = attachment->dmabuf->priv;
-	omap_gem_put_sg(obj, sg);
+	struct omap_gem_dmabuf_mapping *mapping =
+		container_of(base, struct omap_gem_dmabuf_mapping, base);
+
+	omap_gem_put_sg(obj, mapping->sg);
+	kfree(mapping);
 }
 
 static int omap_gem_dmabuf_begin_cpu_access(struct dma_buf *buffer,
@@ -69,12 +96,12 @@ static int omap_gem_dmabuf_mmap(struct dma_buf *buffer,
 }
 
 static const struct dma_buf_ops omap_dmabuf_ops = {
-	.map_dma_buf = omap_gem_map_dma_buf,
-	.unmap_dma_buf = omap_gem_unmap_dma_buf,
 	.release = drm_gem_dmabuf_release,
 	.begin_cpu_access = omap_gem_dmabuf_begin_cpu_access,
 	.end_cpu_access = omap_gem_dmabuf_end_cpu_access,
 	.mmap = omap_gem_dmabuf_mmap,
+	DMA_BUF_SIMPLE_SGT_EXP_MATCH(omap_gem_map_dma_buf,
+				     omap_gem_unmap_dma_buf),
 };
 
 struct dma_buf *omap_gem_prime_export(struct drm_gem_object *obj, int flags)
