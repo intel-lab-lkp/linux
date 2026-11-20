@@ -72,6 +72,6 @@
 #endif
 
 /* We may be processing more files */
-#define CREATE_CUSTOM_TRACE_POINTS
+#define CREATE_CUSTOM_TRACE_EVENTS
 
-#endif /* CREATE_CUSTOM_TRACE_POINTS */
+#endif /* CREATE_CUSTOM_TRACE_EVENTS */
