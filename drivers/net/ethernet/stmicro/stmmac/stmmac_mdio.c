@@ -682,8 +682,16 @@ int stmmac_mdio_register(struct net_device *ndev)
 bus_register_done:
 	priv->mii = new_bus;
 
+	if (priv->plat->mdio_init) {
+		err = priv->plat->mdio_init(priv);
+		if (err)
+			goto mdio_init_fail;
+	}
+
 	return 0;
 
+mdio_init_fail:
+	priv->mii = NULL;
 no_phy_found:
 	mdiobus_unregister(new_bus);
 bus_register_fail:
@@ -702,6 +710,9 @@ int stmmac_mdio_unregister(struct net_device *ndev)
 
 	if (!priv->mii)
 		return 0;
+
+	if (priv->plat->mdio_exit)
+		priv->plat->mdio_exit(priv);
 
 	mdiobus_unregister(priv->mii);
 	priv->mii->priv = NULL;
