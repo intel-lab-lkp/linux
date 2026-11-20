@@ -506,6 +506,20 @@ static unsigned int calc_samples_room(const struct intel_crtc_state *crtc_state)
 		(pixel_clk * (48 / lanes + 2));
 }
 
+static int symbol_tg_hblank_start_count(const struct intel_dp_symbol_tg *tg)
+{
+	if (tg->hactive >= 96)
+		return HBLANK_START_COUNT_96;
+	else if (tg->hactive >= 64)
+		return HBLANK_START_COUNT_64;
+	else if (tg->hactive >= 32)
+		return HBLANK_START_COUNT_32;
+	else if (tg->hactive >= 16)
+		return HBLANK_START_COUNT_16;
+	else
+		return HBLANK_START_COUNT_8;
+}
+
 static void enable_audio_dsc_wa(struct intel_encoder *encoder,
 				const struct intel_crtc_state *crtc_state)
 {
@@ -524,9 +538,17 @@ static void enable_audio_dsc_wa(struct intel_encoder *encoder,
 	else if (DISPLAY_VER(display) >= 12)
 		val |= HBLANK_EARLY_ENABLE_TGL(cpu_transcoder);
 
-	if (crtc_state->dsc.compression_enable &&
-	    crtc_state->hw.adjusted_mode.hdisplay >= 3840 &&
-	    crtc_state->hw.adjusted_mode.vdisplay >= 2160) {
+	if (crtc_state->dp_symbol_tg.enable) {
+		/*
+		 * The Hblank Early count and the Early Count Scaling (x1,
+		 * programmed in intel_enable_transcoder()) are a pair.
+		 */
+		val &= ~HBLANK_START_COUNT_MASK(cpu_transcoder);
+		val |= HBLANK_START_COUNT(cpu_transcoder,
+					  symbol_tg_hblank_start_count(&crtc_state->dp_symbol_tg));
+	} else if (crtc_state->dsc.compression_enable &&
+		   crtc_state->hw.adjusted_mode.hdisplay >= 3840 &&
+		   crtc_state->hw.adjusted_mode.vdisplay >= 2160) {
 		/* Get hblank early enable value required */
 		val &= ~HBLANK_START_COUNT_MASK(cpu_transcoder);
 		hblank_early_prog = calc_hblank_early_prog(encoder, crtc_state);
