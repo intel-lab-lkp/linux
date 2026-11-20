@@ -550,8 +550,16 @@ int siw_proc_write(struct siw_qp *qp)
 	int bytes, rv;
 
 	if (srx->state == SIW_GET_DATA_START) {
-		if (!srx->fpdu_part_rem) /* zero length WRITE */
+		if (!srx->fpdu_part_rem) { /* zero length WRITE */
+			/* A zero length DDP message is a single segment. */
+			if (unlikely(frx->first_ddp_seg && frx->more_ddp_segs)) {
+				siw_init_terminate(qp, TERM_ERROR_LAYER_DDP,
+						   DDP_ETYPE_TAGGED_BUF,
+						   DDP_ECODE_T_INVALID_STAG, 0);
+				return -EINVAL;
+			}
 			return 0;
+		}
 
 		rv = siw_write_check_ntoh(srx, frx);
 		if (unlikely(rv)) {
