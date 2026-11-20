@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 
-#ifndef _ROCKCHIP_AV1_ENTROPYMODE_H_
-#define _ROCKCHIP_AV1_ENTROPYMODE_H_
+#ifndef _HANTRO_AV1_ENTROPYMODE_H_
+#define _HANTRO_AV1_ENTROPYMODE_H_
 
 #include <linux/types.h>
 
@@ -262,11 +262,11 @@ struct av1cdfs {
 	u16 dummy3[16];
 };
 
-void rockchip_av1_store_cdfs(struct hantro_ctx *ctx,
-			     u32 refresh_frame_flags);
-void rockchip_av1_get_cdfs(struct hantro_ctx *ctx, u32 ref_idx);
-void rockchip_av1_set_default_cdfs(struct av1cdfs *cdfs,
-				   struct mvcdfs *cdfs_ndvc);
-void rockchip_av1_default_coeff_probs(u32 base_qindex, void *ptr);
+void hantro_av1_store_cdfs(struct hantro_ctx *ctx,
+			   u32 refresh_frame_flags);
+void hantro_av1_get_cdfs(struct hantro_ctx *ctx, u32 ref_idx);
+void hantro_av1_set_default_cdfs(struct av1cdfs *cdfs,
+				 struct mvcdfs *cdfs_ndvc);
+void hantro_av1_default_coeff_probs(u32 base_qindex, void *ptr);
 
-#endif /* _ROCKCHIP_AV1_ENTROPYMODE_H_ */
+#endif /* _HANTRO_AV1_ENTROPYMODE_H_ */

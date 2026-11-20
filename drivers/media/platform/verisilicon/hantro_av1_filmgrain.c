@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only OR Apache-2.0
 
-#include "rockchip_av1_filmgrain.h"
+#include "hantro_av1_filmgrain.h"
 
 static const s32 gaussian_sequence[2048] = {
 	56, 568, -180, 172, 124, -84, 172, -64, -900, 24, 820,
@@ -204,8 +204,8 @@ static inline s32 round_power_of_two(const s32 val, s32 n)
 	return (val + a) >> n;
 }
 
-static void rockchip_av1_init_random_generator(u8 luma_num, u16 seed,
-					       u16 *random_register)
+static void hantro_av1_init_random_generator(u8 luma_num, u16 seed,
+					     u16 *random_register)
 {
 	u16 random_reg = seed;
 
@@ -214,7 +214,7 @@ static void rockchip_av1_init_random_generator(u8 luma_num, u16 seed,
 	*random_register = random_reg;
 }
 
-static inline void rockchip_av1_update_random_register(u16 *random_register)
+static inline void hantro_av1_update_random_register(u16 *random_register)
 {
 	u16 bit;
 	u16 random_reg = *random_register;
@@ -224,21 +224,20 @@ static inline void rockchip_av1_update_random_register(u16 *random_register)
 	*random_register = (random_reg >> 1) | (bit << 15);
 }
 
-static inline s32 rockchip_av1_get_random_number(u16 random_register)
+static inline s32 hantro_av1_get_random_number(u16 random_register)
 {
 	return (random_register >> 5) & ((1 << 11) - 1);
 }
 
-void rockchip_av1_generate_luma_grain_block(s32 (*luma_grain_block)[73][82],
-					    s32 bitdepth,
-					    u8 num_y_points,
-					    s32 grain_scale_shift,
-					    s32 ar_coeff_lag,
-					    s32 (*ar_coeffs_y)[24],
-					    s32 ar_coeff_shift,
-					    s32 grain_min,
-					    s32 grain_max,
-					    u16 random_seed)
+void hantro_av1_generate_luma_grain_block(struct hantro_av1_coeffs_grain_block *coeffs,
+					  s32 bitdepth,
+					  u8 num_y_points,
+					  s32 grain_scale_shift,
+					  s32 ar_coeff_lag,
+					  s32 ar_coeff_shift,
+					  s32 grain_min,
+					  s32 grain_max,
+					  u16 random_seed)
 {
 	s32 gauss_sec_shift = 12 - bitdepth + grain_scale_shift;
 	u16 grain_random_register = random_seed;
@@ -247,15 +246,15 @@ void rockchip_av1_generate_luma_grain_block(s32 (*luma_grain_block)[73][82],
 	for (i = 0; i < 73; i++) {
 		for (j = 0; j < 82; j++) {
 			if (num_y_points > 0) {
-				rockchip_av1_update_random_register
+				hantro_av1_update_random_register
 				    (&grain_random_register);
-				(*luma_grain_block)[i][j] =
+				coeffs->luma_grain_block[i][j] =
 				    round_power_of_two(gaussian_sequence
-					     [rockchip_av1_get_random_number
+					     [hantro_av1_get_random_number
 					      (grain_random_register)],
 					     gauss_sec_shift);
 			} else {
-				(*luma_grain_block)[i][j] = 0;
+				coeffs->luma_grain_block[i][j] = 0;
 			}
 		}
 	}
@@ -272,72 +271,68 @@ void rockchip_av1_generate_luma_grain_block(s32 (*luma_grain_block)[73][82],
 				     deltacol <= ar_coeff_lag; deltacol++) {
 					if (deltarow == 0 && deltacol == 0)
 						break;
-					wsum = wsum + (*ar_coeffs_y)[pos] *
-					    (*luma_grain_block)[i + deltarow][j + deltacol];
+					wsum = wsum + coeffs->ar_coeffs_y[pos] *
+					    coeffs->luma_grain_block[i + deltarow][j + deltacol];
 					++pos;
 				}
 			}
-			(*luma_grain_block)[i][j] =
-				clamp((*luma_grain_block)[i][j] +
+			coeffs->luma_grain_block[i][j] =
+				clamp(coeffs->luma_grain_block[i][j] +
 				      round_power_of_two(wsum, ar_coeff_shift),
 				      grain_min, grain_max);
 		}
 }
 
 // Calculate chroma grain noise once per frame
-void rockchip_av1_generate_chroma_grain_block(s32 (*luma_grain_block)[73][82],
-					      s32 (*cb_grain_block)[38][44],
-					      s32 (*cr_grain_block)[38][44],
-					      s32 bitdepth,
-					      u8 num_y_points,
-					      u8 num_cb_points,
-					      u8 num_cr_points,
-					      s32 grain_scale_shift,
-					      s32 ar_coeff_lag,
-					      s32 (*ar_coeffs_cb)[25],
-					      s32 (*ar_coeffs_cr)[25],
-					      s32 ar_coeff_shift,
-					      s32 grain_min,
-					      s32 grain_max,
-					      u8 chroma_scaling_from_luma,
-					      u16 random_seed)
+void hantro_av1_generate_chroma_grain_block(struct hantro_av1_coeffs_grain_block *coeffs,
+					    s32 bitdepth,
+					    u8 num_y_points,
+					    u8 num_cb_points,
+					    u8 num_cr_points,
+					    s32 grain_scale_shift,
+					    s32 ar_coeff_lag,
+					    s32 ar_coeff_shift,
+					    s32 grain_min,
+					    s32 grain_max,
+					    u8 chroma_scaling_from_luma,
+					    u16 random_seed)
 {
 	s32 gauss_sec_shift = 12 - bitdepth + grain_scale_shift;
 	u16 grain_random_register = 0;
 	s32 i, j;
 
-	rockchip_av1_init_random_generator(7, random_seed,
-					   &grain_random_register);
+	hantro_av1_init_random_generator(7, random_seed,
+					 &grain_random_register);
 	for (i = 0; i < 38; i++) {
 		for (j = 0; j < 44; j++) {
 			if (num_cb_points || chroma_scaling_from_luma) {
-				rockchip_av1_update_random_register
+				hantro_av1_update_random_register
 				    (&grain_random_register);
-				(*cb_grain_block)[i][j] =
+				coeffs->cb_grain_block[i][j] =
 				    round_power_of_two(gaussian_sequence
-					     [rockchip_av1_get_random_number
+					     [hantro_av1_get_random_number
 					      (grain_random_register)],
 					     gauss_sec_shift);
 			} else {
-				(*cb_grain_block)[i][j] = 0;
+				coeffs->cb_grain_block[i][j] = 0;
 			}
 		}
 	}
 
-	rockchip_av1_init_random_generator(11, random_seed,
-					   &grain_random_register);
+	hantro_av1_init_random_generator(11, random_seed,
+					 &grain_random_register);
 	for (i = 0; i < 38; i++) {
 		for (j = 0; j < 44; j++) {
 			if (num_cr_points || chroma_scaling_from_luma) {
-				rockchip_av1_update_random_register
+				hantro_av1_update_random_register
 				    (&grain_random_register);
-				(*cr_grain_block)[i][j] =
+				coeffs->cr_grain_block[i][j] =
 				    round_power_of_two(gaussian_sequence
-					     [rockchip_av1_get_random_number
+					     [hantro_av1_get_random_number
 					      (grain_random_register)],
 					     gauss_sec_shift);
 			} else {
-				(*cr_grain_block)[i][j] = 0;
+				coeffs->cr_grain_block[i][j] = 0;
 			}
 		}
 	}
@@ -355,12 +350,12 @@ void rockchip_av1_generate_chroma_grain_block(s32 (*luma_grain_block)[73][82],
 				     deltacol <= ar_coeff_lag; deltacol++) {
 					if (deltarow == 0 && deltacol == 0)
 						break;
-					wsum_cb = wsum_cb + (*ar_coeffs_cb)[pos] *
-					    (*cb_grain_block)[i + deltarow][j + deltacol];
+					wsum_cb = wsum_cb + coeffs->ar_coeffs_cb[pos] *
+					    coeffs->cb_grain_block[i + deltarow][j + deltacol];
 					wsum_cr =
 					    wsum_cr +
-					    (*ar_coeffs_cr)[pos] *
-					    (*cr_grain_block)[i + deltarow][j + deltacol];
+					    coeffs->ar_coeffs_cr[pos] *
+					    coeffs->cr_grain_block[i + deltarow][j + deltacol];
 					++pos;
 				}
 			}
@@ -371,28 +366,28 @@ void rockchip_av1_generate_chroma_grain_block(s32 (*luma_grain_block)[73][82],
 				s32 luma_coord_x = (j << 1) - 3;
 
 				av_luma +=
-				    (*luma_grain_block)[luma_coord_y][luma_coord_x];
+				    coeffs->luma_grain_block[luma_coord_y][luma_coord_x];
 				av_luma +=
-				    (*luma_grain_block)[luma_coord_y][luma_coord_x + 1];
+				    coeffs->luma_grain_block[luma_coord_y][luma_coord_x + 1];
 				av_luma +=
-				    (*luma_grain_block)[luma_coord_y + 1][luma_coord_x];
+				    coeffs->luma_grain_block[luma_coord_y + 1][luma_coord_x];
 				av_luma +=
-				    (*luma_grain_block)[(luma_coord_y + 1)][luma_coord_x + 1];
+				    coeffs->luma_grain_block[(luma_coord_y + 1)][luma_coord_x + 1];
 				av_luma = round_power_of_two(av_luma, 2);
 
-				wsum_cb = wsum_cb + (*ar_coeffs_cb)[pos] * av_luma;
-				wsum_cr = wsum_cr + (*ar_coeffs_cr)[pos] * av_luma;
+				wsum_cb = wsum_cb + coeffs->ar_coeffs_cb[pos] * av_luma;
+				wsum_cr = wsum_cr + coeffs->ar_coeffs_cr[pos] * av_luma;
 			}
 
 			if (num_cb_points || chroma_scaling_from_luma) {
-				(*cb_grain_block)[i][j] =
-				    clamp((*cb_grain_block)[i][j] +
+				coeffs->cb_grain_block[i][j] =
+				    clamp(coeffs->cb_grain_block[i][j] +
 					  round_power_of_two(wsum_cb, ar_coeff_shift),
 					  grain_min, grain_max);
 			}
 			if (num_cr_points || chroma_scaling_from_luma) {
-				(*cr_grain_block)[i][j] =
-				    clamp((*cr_grain_block)[i][j] +
+				coeffs->cr_grain_block[i][j] =
+				    clamp(coeffs->cr_grain_block[i][j] +
 					  round_power_of_two(wsum_cr, ar_coeff_shift),
 					  grain_min, grain_max);
 			}
