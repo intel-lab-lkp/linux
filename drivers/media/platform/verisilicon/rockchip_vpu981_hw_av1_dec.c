@@ -121,7 +121,12 @@ static int rockchip_vpu981_get_frame_index(struct hantro_ctx *ctx, int ref)
 	struct hantro_av1_dec_ctrls *ctrls = &av1_dec->ctrls;
 	const struct v4l2_ctrl_av1_frame *frame = ctrls->frame;
 	u64 timestamp;
-	int i, idx = frame->ref_frame_idx[ref];
+	int i, idx;
+
+	if (ref < 0 || ref >= V4L2_AV1_REFS_PER_FRAME)
+		return AV1_INVALID_IDX;
+
+	idx = frame->ref_frame_idx[ref];
 
 	if (idx >= V4L2_AV1_TOTAL_REFS_PER_FRAME || idx < 0)
 		return AV1_INVALID_IDX;
@@ -1262,6 +1267,10 @@ static void rockchip_vpu981_av1_dec_set_prob(struct hantro_ctx *ctx)
 		rockchip_av1_default_coeff_probs(quantization->base_q_idx,
 						 av1_dec->cdfs);
 	} else {
+		if (frame->primary_ref_frame < 0 ||
+		    frame->primary_ref_frame >= V4L2_AV1_REFS_PER_FRAME)
+			return;
+
 		rockchip_av1_get_cdfs(ctx, frame->ref_frame_idx[frame->primary_ref_frame]);
 	}
 	rockchip_av1_store_cdfs(ctx, frame->refresh_frame_flags);
