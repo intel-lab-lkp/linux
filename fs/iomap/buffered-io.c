@@ -1930,7 +1930,7 @@ static bool iomap_writeback_handle_eof(struct folio *folio,
 	struct inode *inode = wpc->inode;
 	u64 isize = i_size_read(inode);
 
-	if (wpc->iomap.flags & IOMAP_F_FSVERITY) {
+	if (fsverity_is_building(inode)) {
 		WARN_ON_ONCE(folio_pos(folio) < isize);
 		return true;
 	}
