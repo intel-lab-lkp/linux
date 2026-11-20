@@ -678,6 +678,7 @@ struct lru_gen_memcg {
 void lru_gen_init_pgdat(struct pglist_data *pgdat);
 void lru_gen_init_lruvec(struct lruvec *lruvec);
 bool lru_gen_look_around(struct page_vma_mapped_walk *pvmw, unsigned int nr);
+void lru_gen_mark_pud(struct mm_struct *mm, struct folio *folio, unsigned long addr);
 
 void lru_gen_init_memcg(struct mem_cgroup *memcg);
 void lru_gen_exit_memcg(struct mem_cgroup *memcg);
@@ -701,6 +702,11 @@ static inline bool lru_gen_look_around(struct page_vma_mapped_walk *pvmw,
 		unsigned int nr)
 {
 	return false;
+}
+
+static inline void lru_gen_mark_pud(struct mm_struct *mm, struct folio *folio,
+				    unsigned long addr)
+{
 }
 
 static inline void lru_gen_init_memcg(struct mem_cgroup *memcg)
