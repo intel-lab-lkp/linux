@@ -250,8 +250,9 @@ void intel_crtc_state_dump(const struct intel_crtc_state *pipe_config,
 			   str_enabled_disabled(pipe_config->fec_enable),
 			   str_enabled_disabled(pipe_config->enhanced_framing));
 
-		drm_printf(&p, "pcon: dsc op %s\n",
-			   pcon_dsc_op_str[pipe_config->pcon_config.dsc_op]);
+		drm_printf(&p, "pcon: dsc op %s, frl rate: %d Gbps\n",
+			   pcon_dsc_op_str[pipe_config->pcon_config.dsc_op],
+			   pipe_config->pcon_config.frl_rate_gbps);
 		if (pipe_config->pcon_config.dsc_op == INTEL_PCON_DSC_DECODE_ENCODE)
 			drm_printf(&p,
 				   "pcon dsc encoder: slice height: %u, slice width: %u, bpp_x16: %u\n",

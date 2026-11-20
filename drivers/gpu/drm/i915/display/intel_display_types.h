@@ -1407,6 +1407,8 @@ struct intel_crtc_state {
 		enum intel_pcon_dsc_op dsc_op;
 		/* Only valid for INTEL_PCON_DSC_DECODE_ENCODE */
 		struct intel_pcon_dsc_enc_config dsc_enc;
+		/* Max FRL rate in Gbps to train the HDMI link at, 0 if no FRL */
+		int frl_rate_gbps;
 	} pcon_config;
 
 	/* DP tunnel used for BW allocation. */

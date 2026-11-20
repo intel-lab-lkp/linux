@@ -709,7 +709,7 @@ static void intel_enable_dp(struct intel_atomic_state *state,
 
 	intel_dp_set_power(intel_dp, DP_SET_POWER_D0);
 	intel_dp_configure_protocol_converter(intel_dp, pipe_config);
-	intel_dp_check_frl_training(intel_dp);
+	intel_dp_check_frl_training(intel_dp, pipe_config);
 	intel_dp_pcon_dsc_configure(intel_dp, pipe_config);
 	intel_dp_start_link_train(state, intel_dp, pipe_config);
 	intel_dp_stop_link_train(intel_dp, pipe_config);

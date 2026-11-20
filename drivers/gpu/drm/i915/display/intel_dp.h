@@ -187,7 +187,8 @@ bool intel_dp_initial_fastset_check(struct intel_encoder *encoder,
 void intel_dp_sync_state(struct intel_encoder *encoder,
 			 const struct intel_crtc_state *crtc_state);
 
-void intel_dp_check_frl_training(struct intel_dp *intel_dp);
+void intel_dp_check_frl_training(struct intel_dp *intel_dp,
+				 const struct intel_crtc_state *crtc_state);
 int intel_dp_pcon_frl_recover(struct intel_encoder *encoder,
 			      struct drm_modeset_acquire_ctx *ctx);
 void intel_dp_pcon_dsc_configure(struct intel_dp *intel_dp,

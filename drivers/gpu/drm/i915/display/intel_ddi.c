@@ -2714,7 +2714,7 @@ static void mtl_ddi_pre_enable_dp(struct intel_atomic_state *state,
 	 */
 	intel_dp_sink_set_fec_ready(intel_dp, crtc_state, true);
 
-	intel_dp_check_frl_training(intel_dp);
+	intel_dp_check_frl_training(intel_dp, crtc_state);
 	intel_dp_pcon_dsc_configure(intel_dp, crtc_state);
 
 	/*
@@ -2876,7 +2876,7 @@ static void tgl_ddi_pre_enable_dp(struct intel_atomic_state *state,
 	 */
 	intel_dp_sink_set_fec_ready(intel_dp, crtc_state, true);
 
-	intel_dp_check_frl_training(intel_dp);
+	intel_dp_check_frl_training(intel_dp, crtc_state);
 	intel_dp_pcon_dsc_configure(intel_dp, crtc_state);
 
 	/*

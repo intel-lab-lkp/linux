@@ -3101,6 +3101,9 @@ intel_dp_pcon_compute_config(struct intel_dp *intel_dp,
 	if (!intel_dp_is_hdmi_2_1_sink(intel_dp))
 		return 0;
 
+	crtc_state->pcon_config.frl_rate_gbps =
+		min(intel_dp->dfp.pcon_max_frl_bw, intel_dp_hdmi_sink_max_frl(intel_dp));
+
 	if (crtc_state->dsc.compression_enable)
 		crtc_state->pcon_config.dsc_op = INTEL_PCON_DSC_DECODE;
 
@@ -4510,23 +4513,19 @@ intel_dp_pcon_is_frl_trained(struct intel_dp *intel_dp,
 	return false;
 }
 
-static int intel_dp_pcon_start_frl_training(struct intel_dp *intel_dp)
+static int intel_dp_pcon_start_frl_training(struct intel_dp *intel_dp,
+					    const struct intel_crtc_state *crtc_state)
 {
 	struct intel_display *display = to_intel_display(intel_dp);
 #define TIMEOUT_FRL_READY_MS 500
 #define TIMEOUT_HDMI_LINK_ACTIVE_MS 1000
-	int max_frl_bw, max_pcon_frl_bw, max_edid_frl_bw, ret;
+	int max_frl_bw, ret;
 	u8 max_frl_bw_mask = 0, frl_trained_mask;
 	bool is_active;
 
-	max_pcon_frl_bw = intel_dp->dfp.pcon_max_frl_bw;
-	drm_dbg(display->drm, "PCON max rate = %d Gbps\n", max_pcon_frl_bw);
-
-	max_edid_frl_bw = intel_dp_hdmi_sink_max_frl(intel_dp);
-	drm_dbg(display->drm, "Sink max rate from EDID = %d Gbps\n",
-		max_edid_frl_bw);
-
-	max_frl_bw = min(max_edid_frl_bw, max_pcon_frl_bw);
+	max_frl_bw = crtc_state->pcon_config.frl_rate_gbps;
+	drm_dbg(display->drm, "FRL max rate = %d Gbps (PCON max rate = %d Gbps)\n",
+		max_frl_bw, intel_dp->dfp.pcon_max_frl_bw);
 
 	if (max_frl_bw <= 0)
 		return -EINVAL;
@@ -4610,7 +4609,8 @@ int intel_dp_pcon_set_tmds_mode(struct intel_dp *intel_dp)
 	return 0;
 }
 
-void intel_dp_check_frl_training(struct intel_dp *intel_dp)
+void intel_dp_check_frl_training(struct intel_dp *intel_dp,
+				 const struct intel_crtc_state *crtc_state)
 {
 	struct intel_display *display = to_intel_display(intel_dp);
 
@@ -4620,11 +4620,15 @@ void intel_dp_check_frl_training(struct intel_dp *intel_dp)
 	 * -sink is HDMI2.1
 	 */
 	if (!(intel_dp->downstream_ports[2] & DP_PCON_SOURCE_CTL_MODE) ||
-	    !intel_dp_is_hdmi_2_1_sink(intel_dp) ||
-	    intel_dp->frl.is_trained)
+	    !intel_dp_is_hdmi_2_1_sink(intel_dp))
 		return;
 
-	if (intel_dp_pcon_start_frl_training(intel_dp) < 0) {
+	/* A link trained at a lower rate than the stream needs has to be retrained */
+	if (intel_dp->frl.is_trained &&
+	    intel_dp->frl.trained_rate_gbps >= crtc_state->pcon_config.frl_rate_gbps)
+		return;
+
+	if (intel_dp_pcon_start_frl_training(intel_dp, crtc_state) < 0) {
 		int ret, mode;
 
 		drm_dbg(display->drm,
@@ -4649,6 +4653,7 @@ int intel_dp_pcon_frl_recover(struct intel_encoder *encoder,
 {
 	struct intel_display *display = to_intel_display(encoder);
 	struct intel_dp *intel_dp = enc_to_intel_dp(encoder);
+	struct intel_crtc *crtc;
 	u8 pipe_mask;
 	int ret;
 
@@ -4671,7 +4676,10 @@ int intel_dp_pcon_frl_recover(struct intel_encoder *encoder,
 	if (pipe_mask == 0)
 		return 0;
 
-	intel_dp_check_frl_training(intel_dp);
+	/* The stream is on the pipe of the connector's CRTC, locked above */
+	crtc = intel_crtc_for_pipe(display, ffs(pipe_mask) - 1);
+
+	intel_dp_check_frl_training(intel_dp, to_intel_crtc_state(crtc->base.state));
 
 	return 0;
 }
