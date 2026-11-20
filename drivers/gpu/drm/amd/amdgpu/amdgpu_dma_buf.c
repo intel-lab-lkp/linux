@@ -41,6 +41,7 @@
 #include <drm/amdgpu_drm.h>
 #include <drm/ttm/ttm_tt.h>
 #include <linux/dma-buf.h>
+#include <linux/dma-buf-mapping.h>
 #include <linux/dma-fence-array.h>
 #include <linux/pci-p2pdma.h>
 #include <linux/pm_runtime.h>
@@ -98,7 +99,8 @@ static int amdgpu_dma_buf_attach(struct dma_buf *dmabuf,
 		attach->peer2peer = false;
 
 	if (!amdgpu_dmabuf_is_xgmi_accessible(attach_adev, bo) &&
-	    pci_p2pdma_distance(adev->pdev, attach->dev, false) < 0)
+	    pci_p2pdma_distance(adev->pdev, dma_buf_sgt_dma_device(attach),
+				false) < 0)
 		attach->peer2peer = false;
 
 	/*
@@ -203,7 +205,7 @@ static void amdgpu_dma_buf_unpin(struct dma_buf_attachment *attach)
 }
 
 /**
- * amdgpu_dma_buf_map - &dma_buf_ops.map_dma_buf implementation
+ * amdgpu_dma_buf_map - &dma_buf_mapping_sgt_exp_ops.map_dma_buf implementation
  * @attach: DMA-buf attachment
  * @dir: DMA direction
  *
@@ -215,13 +217,16 @@ static void amdgpu_dma_buf_unpin(struct dma_buf_attachment *attach)
  * sg_table filled with the DMA addresses to use or ERR_PRT with negative error
  * code.
  */
-static struct sg_table *amdgpu_dma_buf_map(struct dma_buf_attachment *attach,
-					   enum dma_data_direction dir)
+static struct dma_buf_sgt_mapping *
+amdgpu_dma_buf_map(struct dma_buf_attachment *attach,
+		   enum dma_data_direction dir)
 {
+	struct device *dma_dev = dma_buf_sgt_dma_device(attach);
 	struct dma_buf *dma_buf = attach->dmabuf;
 	struct drm_gem_object *obj = dma_buf->priv;
 	struct amdgpu_bo *bo = gem_to_amdgpu_bo(obj);
 	struct amdgpu_device *adev = amdgpu_ttm_adev(bo->tbo.bdev);
+	struct dma_buf_sgt_mapping *mapping;
 	struct sg_table *sgt;
 	long r;
 
@@ -241,80 +246,95 @@ static struct sg_table *amdgpu_dma_buf_map(struct dma_buf_attachment *attach,
 			return ERR_PTR(r);
 	}
 
+	mapping = kzalloc_obj(*mapping);
+	if (!mapping)
+		return ERR_PTR(-ENOMEM);
+
 	switch (bo->tbo.resource->mem_type) {
 	case TTM_PL_TT:
 		sgt = drm_prime_pages_to_sg(obj->dev,
 					    bo->tbo.ttm->pages,
 					    bo->tbo.ttm->num_pages);
-		if (IS_ERR(sgt))
-			return sgt;
+		if (IS_ERR(sgt)) {
+			r = PTR_ERR(sgt);
+			goto error_free_mapping;
+		}
+		/* The mapping takes over the table's entries */
+		mapping->sgt = *sgt;
+		kfree(sgt);
 
-		if (dma_map_sgtable(attach->dev, sgt, dir,
-				    DMA_ATTR_SKIP_CPU_SYNC))
+		if (dma_map_sgtable(dma_dev, &mapping->sgt, dir,
+				    DMA_ATTR_SKIP_CPU_SYNC)) {
+			r = -EBUSY;
 			goto error_free;
+		}
 		break;
 
 	case TTM_PL_VRAM:
 		/* XGMI-accessible memory should never be DMA-mapped */
 		if (WARN_ON(amdgpu_dmabuf_is_xgmi_accessible(
-				dma_buf_attach_adev(attach), bo)))
-			return ERR_PTR(-EINVAL);
+				dma_buf_attach_adev(attach), bo))) {
+			r = -EINVAL;
+			goto error_free_mapping;
+		}
 
 		r = amdgpu_vram_mgr_alloc_sgt(adev, bo->tbo.resource, 0,
-					      bo->tbo.base.size, attach->dev,
-					      dir, &sgt);
+					      bo->tbo.base.size, dma_dev,
+					      dir, &mapping->sgt);
 		if (r)
-			return ERR_PTR(r);
+			goto error_free_mapping;
 		break;
 
 	case AMDGPU_PL_MMIO_REMAP:
 		r = amdgpu_ttm_mmio_remap_alloc_sgt(adev, bo->tbo.resource,
-						    attach->dev, dir, &sgt);
+						    dma_dev, dir,
+						    &mapping->sgt);
 		if (r)
-			return ERR_PTR(r);
+			goto error_free_mapping;
 		break;
 
 	default:
-		return ERR_PTR(-EINVAL);
+		r = -EINVAL;
+		goto error_free_mapping;
 	}
 
-	return sgt;
+	return mapping;
 
 error_free:
-	sg_free_table(sgt);
-	kfree(sgt);
-	return ERR_PTR(-EBUSY);
+	sg_free_table(&mapping->sgt);
+error_free_mapping:
+	kfree(mapping);
+	return ERR_PTR(r);
 }
 
 /**
- * amdgpu_dma_buf_unmap - &dma_buf_ops.unmap_dma_buf implementation
+ * amdgpu_dma_buf_unmap - &dma_buf_mapping_sgt_exp_ops.unmap_dma_buf implementation
  * @attach: DMA-buf attachment
- * @sgt: sg_table to unmap
+ * @mapping: mapping to unmap
  * @dir: DMA direction
  *
  * This is called when a shared DMA buffer no longer needs to be accessible by
  * another device. For now, simply unpins the buffer from GTT.
  */
 static void amdgpu_dma_buf_unmap(struct dma_buf_attachment *attach,
-				 struct sg_table *sgt,
+				 struct dma_buf_sgt_mapping *mapping,
 				 enum dma_data_direction dir)
 {
+	struct device *dma_dev = dma_buf_sgt_mapping_dma_device(mapping);
 	struct drm_gem_object *obj = attach->dmabuf->priv;
 	struct amdgpu_bo *bo = gem_to_amdgpu_bo(obj);
+	struct sg_table *sgt = &mapping->sgt;
 
 	if (bo->tbo.resource &&
 	    bo->tbo.resource->mem_type == AMDGPU_PL_MMIO_REMAP) {
-		amdgpu_ttm_mmio_remap_free_sgt(attach->dev, dir, sgt);
-		return;
-	}
-
-	if (sg_page(sgt->sgl)) {
-		dma_unmap_sgtable(attach->dev, sgt, dir, 0);
+		amdgpu_ttm_mmio_remap_free_sgt(dma_dev, dir, sgt);
+	} else if (sg_page(sgt->sgl)) {
+		dma_unmap_sgtable(dma_dev, sgt, dir, 0);
 		sg_free_table(sgt);
-		kfree(sgt);
 	} else {
-		amdgpu_vram_mgr_free_sgt(attach->dev, dir, sgt);
+		amdgpu_vram_mgr_free_sgt(dma_dev, dir, sgt);
 	}
+	kfree(mapping);
 }
 
 /**
@@ -393,13 +413,12 @@ const struct dma_buf_ops amdgpu_dmabuf_ops = {
 	.detach = amdgpu_dma_buf_detach,
 	.pin = amdgpu_dma_buf_pin,
 	.unpin = amdgpu_dma_buf_unpin,
-	.map_dma_buf = amdgpu_dma_buf_map,
-	.unmap_dma_buf = amdgpu_dma_buf_unmap,
 	.release = drm_gem_dmabuf_release,
 	.begin_cpu_access = amdgpu_dma_buf_begin_cpu_access,
 	.mmap = drm_gem_dmabuf_mmap,
 	.vmap = amdgpu_dma_buf_vmap,
 	.vunmap = amdgpu_dma_buf_vunmap,
+	DMA_BUF_SIMPLE_SGT_EXP_MATCH(amdgpu_dma_buf_map, amdgpu_dma_buf_unmap),
 };
 
 /**

@@ -671,25 +671,21 @@ static void amdgpu_vram_mgr_del(struct ttm_resource_manager *man,
  * @length: number of bytes to export in sg_table
  * @dev: the other device
  * @dir: dma direction
- * @sgt: resulting sg table
+ * @sgt: sg table to fill
  *
- * Allocate and fill a sg table from a VRAM allocation.
+ * Fill a sg table from a VRAM allocation.
  */
 int amdgpu_vram_mgr_alloc_sgt(struct amdgpu_device *adev,
 			      struct ttm_resource *res,
 			      u64 offset, u64 length,
 			      struct device *dev,
 			      enum dma_data_direction dir,
-			      struct sg_table **sgt)
+			      struct sg_table *sgt)
 {
 	struct amdgpu_res_cursor cursor;
 	struct scatterlist *sg;
 	int num_entries = 0;
 	int i, r;
-
-	*sgt = kmalloc_obj(**sgt);
-	if (!*sgt)
-		return -ENOMEM;
 
 	/* Determine the number of GPU_BUDDY blocks to export */
 	amdgpu_res_first(res, offset, length, &cursor);
@@ -698,12 +694,12 @@ int amdgpu_vram_mgr_alloc_sgt(struct amdgpu_device *adev,
 		amdgpu_res_next(&cursor, min(cursor.size, AMDGPU_MAX_SG_SEGMENT_SIZE));
 	}
 
-	r = sg_alloc_table(*sgt, num_entries, GFP_KERNEL);
+	r = sg_alloc_table(sgt, num_entries, GFP_KERNEL);
 	if (r)
-		goto error_free;
+		return r;
 
 	/* Initialize scatterlist nodes of sg_table */
-	for_each_sgtable_sg((*sgt), sg, i)
+	for_each_sgtable_sg(sgt, sg, i)
 		sg->length = 0;
 
 	/*
@@ -713,7 +709,7 @@ int amdgpu_vram_mgr_alloc_sgt(struct amdgpu_device *adev,
 	 * GPU_BUDDY block(s) if more buffer needs to exported
 	 */
 	amdgpu_res_first(res, offset, length, &cursor);
-	for_each_sgtable_sg((*sgt), sg, i) {
+	for_each_sgtable_sg(sgt, sg, i) {
 		phys_addr_t phys = cursor.start + adev->gmc.aper_base;
 		unsigned long size = min(cursor.size, AMDGPU_MAX_SG_SEGMENT_SIZE);
 		dma_addr_t addr;
@@ -734,7 +730,7 @@ int amdgpu_vram_mgr_alloc_sgt(struct amdgpu_device *adev,
 	return 0;
 
 error_unmap:
-	for_each_sgtable_sg((*sgt), sg, i) {
+	for_each_sgtable_sg(sgt, sg, i) {
 		if (!sg->length)
 			continue;
 
@@ -742,10 +738,7 @@ error_unmap:
 				   sg->length, dir,
 				   DMA_ATTR_SKIP_CPU_SYNC);
 	}
-	sg_free_table(*sgt);
-
-error_free:
-	kfree(*sgt);
+	sg_free_table(sgt);
 	return r;
 }
 
@@ -754,9 +747,9 @@ error_free:
  *
  * @dev: device pointer
  * @dir: data direction of resource to unmap
- * @sgt: sg table to free
+ * @sgt: sg table to tear down
  *
- * Free a previously allocate sg table.
+ * Unmap and free the entries of a table filled by amdgpu_vram_mgr_alloc_sgt().
  */
 void amdgpu_vram_mgr_free_sgt(struct device *dev,
 			      enum dma_data_direction dir,
@@ -770,7 +763,6 @@ void amdgpu_vram_mgr_free_sgt(struct device *dev,
 				   sg->length, dir,
 				   DMA_ATTR_SKIP_CPU_SYNC);
 	sg_free_table(sgt);
-	kfree(sgt);
 }
 
 /**

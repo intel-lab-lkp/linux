@@ -164,7 +164,7 @@ int amdgpu_vram_mgr_alloc_sgt(struct amdgpu_device *adev,
 			      u64 offset, u64 size,
 			      struct device *dev,
 			      enum dma_data_direction dir,
-			      struct sg_table **sgt);
+			      struct sg_table *sgt);
 void amdgpu_vram_mgr_free_sgt(struct device *dev,
 			      enum dma_data_direction dir,
 			      struct sg_table *sgt);
@@ -266,7 +266,7 @@ int amdgpu_ttm_mmio_remap_alloc_sgt(struct amdgpu_device *adev,
 				    struct ttm_resource *res,
 				    struct device *dev,
 				    enum dma_data_direction dir,
-				    struct sg_table **sgt);
+				    struct sg_table *sgt);
 void amdgpu_ttm_mmio_remap_free_sgt(struct device *dev,
 				    enum dma_data_direction dir,
 				    struct sg_table *sgt);
