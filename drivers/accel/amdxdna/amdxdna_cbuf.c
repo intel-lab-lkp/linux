@@ -5,6 +5,7 @@
 
 #include <drm/drm_mm.h>
 #include <drm/drm_prime.h>
+#include <linux/dma-buf-mapping.h>
 
 #include "amdxdna_cbuf.h"
 #include "amdxdna_pci_drv.h"
@@ -81,11 +82,13 @@ struct amdxdna_cbuf_priv {
 	struct drm_mm_node node;
 };
 
-static struct sg_table *amdxdna_cbuf_map(struct dma_buf_attachment *attach,
-					 enum dma_data_direction direction)
+static struct dma_buf_sgt_mapping *
+amdxdna_cbuf_map(struct dma_buf_attachment *attach,
+		 enum dma_data_direction direction)
 {
 	struct amdxdna_cbuf_priv *cbuf = attach->dmabuf->priv;
-	struct device *dev = attach->dev;
+	struct device *dev = dma_buf_sgt_dma_device(attach);
+	struct dma_buf_sgt_mapping *mapping;
 	struct scatterlist *sgl, *sg;
 	int ret, n_entries, i;
 	struct sg_table *sgt;
@@ -93,9 +96,10 @@ static struct sg_table *amdxdna_cbuf_map(struct dma_buf_attachment *attach,
 	size_t dma_size;
 	size_t max_seg;
 
-	sgt = kzalloc_obj(*sgt);
-	if (!sgt)
+	mapping = kzalloc_obj(*mapping);
+	if (!mapping)
 		return ERR_PTR(-ENOMEM);
+	sgt = &mapping->sgt;
 
 	max_seg = min_t(size_t, UINT_MAX, dma_max_mapping_size(dev));
 	n_entries = (cbuf->node.size + max_seg - 1) / max_seg;
@@ -127,24 +131,27 @@ static struct sg_table *amdxdna_cbuf_map(struct dma_buf_attachment *attach,
 		dma_size -= len;
 	}
 
-	return sgt;
+	return mapping;
 
 free_sgl:
 	kfree(sgl);
 free_sgt:
-	kfree(sgt);
+	kfree(mapping);
 	return ERR_PTR(ret);
 }
 
 static void amdxdna_cbuf_unmap(struct dma_buf_attachment *attach,
-			       struct sg_table *sgt,
+			       struct dma_buf_sgt_mapping *mapping,
 			       enum dma_data_direction direction)
 {
-	dma_unmap_resource(attach->dev, sg_dma_address(sgt->sgl),
+	struct sg_table *sgt = &mapping->sgt;
+
+	dma_unmap_resource(dma_buf_sgt_mapping_dma_device(mapping),
+			   sg_dma_address(sgt->sgl),
 			   drm_prime_get_contiguous_size(sgt), direction,
 			   DMA_ATTR_SKIP_CPU_SYNC);
 	sg_free_table(sgt);
-	kfree(sgt);
+	kfree(mapping);
 }
 
 static void amdxdna_cbuf_release(struct dma_buf *dbuf)
@@ -210,12 +217,11 @@ static void amdxdna_cbuf_vunmap(struct dma_buf *dbuf, struct iosys_map *map)
 }
 
 static const struct dma_buf_ops amdxdna_cbuf_dmabuf_ops = {
-	.map_dma_buf = amdxdna_cbuf_map,
-	.unmap_dma_buf = amdxdna_cbuf_unmap,
 	.release = amdxdna_cbuf_release,
 	.mmap = amdxdna_cbuf_mmap,
 	.vmap = amdxdna_cbuf_vmap,
 	.vunmap = amdxdna_cbuf_vunmap,
+	DMA_BUF_SIMPLE_SGT_EXP_MATCH(amdxdna_cbuf_map, amdxdna_cbuf_unmap),
 };
 
 static int amdxdna_cbuf_clear(struct dma_buf *dbuf)

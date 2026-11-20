@@ -9,6 +9,7 @@
 #include "habanalabs.h"
 #include "../include/hw_ip/mmu/mmu_general.h"
 
+#include <linux/dma-buf-mapping.h>
 #include <linux/uaccess.h>
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
@@ -1531,13 +1532,15 @@ static int set_dma_sg(struct scatterlist *sg, u64 bar_address, u64 chunk_size,
 	return 0;
 }
 
-static struct sg_table *alloc_sgt_from_device_pages(struct hl_device *hdev, u64 *pages, u64 npages,
-						u64 page_size, u64 exported_size, u64 offset,
-						struct device *dev, enum dma_data_direction dir)
+static struct dma_buf_sgt_mapping *
+alloc_sgt_from_device_pages(struct hl_device *hdev, u64 *pages, u64 npages, u64 page_size,
+			    u64 exported_size, u64 offset, struct device *dev,
+			    enum dma_data_direction dir)
 {
 	u64 dma_max_seg_size, curr_page, size, chunk_size, left_size_to_export, left_size_in_page,
 		left_size_in_dma_seg, device_address, bar_address, start_page;
 	struct asic_fixed_properties *prop = &hdev->asic_prop;
+	struct dma_buf_sgt_mapping *mapping;
 	struct scatterlist *sg;
 	unsigned int nents, i;
 	struct sg_table *sgt;
@@ -1553,9 +1556,10 @@ static struct sg_table *alloc_sgt_from_device_pages(struct hl_device *hdev, u64 
 		return ERR_PTR(-EINVAL);
 	}
 
-	sgt = kzalloc_obj(*sgt);
-	if (!sgt)
+	mapping = kzalloc_obj(*mapping);
+	if (!mapping)
 		return ERR_PTR(-ENOMEM);
+	sgt = &mapping->sgt;
 
 	/* Use the offset to move to the actual first page that is exported */
 	for (start_page = 0 ; start_page < npages ; ++start_page) {
@@ -1686,7 +1690,7 @@ static struct sg_table *alloc_sgt_from_device_pages(struct hl_device *hdev, u64 
 			"SG entry %d: address %#llx, length %#x\n",
 			i, sg_dma_address(sg), sg_dma_len(sg));
 
-	return sgt;
+	return mapping;
 
 err_unmap:
 	for_each_sgtable_dma_sg(sgt, sg, i) {
@@ -1700,7 +1704,7 @@ err_unmap:
 	sg_free_table(sgt);
 
 err_free_sgt:
-	kfree(sgt);
+	kfree(mapping);
 	return ERR_PTR(rc);
 }
 
@@ -1714,22 +1718,22 @@ static int hl_dmabuf_attach(struct dma_buf *dmabuf,
 	hl_dmabuf = dmabuf->priv;
 	hdev = hl_dmabuf->ctx->hdev;
 
-	rc = pci_p2pdma_distance(hdev->pdev, attachment->dev, true);
+	rc = pci_p2pdma_distance(hdev->pdev, dma_buf_sgt_dma_device(attachment), true);
 
 	if (rc < 0)
 		attachment->peer2peer = false;
 	return 0;
 }
 
-static struct sg_table *hl_map_dmabuf(struct dma_buf_attachment *attachment,
-					enum dma_data_direction dir)
+static struct dma_buf_sgt_mapping *
+hl_map_dmabuf(struct dma_buf_attachment *attachment, enum dma_data_direction dir)
 {
 	u64 *pages, npages, page_size, exported_size, offset;
 	struct dma_buf *dma_buf = attachment->dmabuf;
 	struct hl_vm_phys_pg_pack *phys_pg_pack;
+	struct dma_buf_sgt_mapping *mapping;
 	struct hl_dmabuf_priv *hl_dmabuf;
 	struct hl_device *hdev;
-	struct sg_table *sgt;
 
 	hl_dmabuf = dma_buf->priv;
 	hdev = hl_dmabuf->ctx->hdev;
@@ -1753,18 +1757,21 @@ static struct sg_table *hl_map_dmabuf(struct dma_buf_attachment *attachment,
 		page_size = hl_dmabuf->dmabuf->size;
 	}
 
-	sgt = alloc_sgt_from_device_pages(hdev, pages, npages, page_size, exported_size, offset,
-						attachment->dev, dir);
-	if (IS_ERR(sgt))
-		dev_err(hdev->dev, "failed (%ld) to initialize sgt for dmabuf\n", PTR_ERR(sgt));
+	mapping = alloc_sgt_from_device_pages(hdev, pages, npages, page_size,
+					      exported_size, offset,
+					      dma_buf_sgt_dma_device(attachment),
+					      dir);
+	if (IS_ERR(mapping))
+		dev_err(hdev->dev, "failed (%ld) to initialize sgt for dmabuf\n", PTR_ERR(mapping));
 
-	return sgt;
+	return mapping;
 }
 
 static void hl_unmap_dmabuf(struct dma_buf_attachment *attachment,
-				  struct sg_table *sgt,
+				  struct dma_buf_sgt_mapping *mapping,
 				  enum dma_data_direction dir)
 {
+	struct sg_table *sgt = &mapping->sgt;
 	struct scatterlist *sg;
 	int i;
 
@@ -1776,14 +1783,14 @@ static void hl_unmap_dmabuf(struct dma_buf_attachment *attachment,
 	 * a sync of the memory to the CPU's cache, as it never resided inside that cache.
 	 */
 	for_each_sgtable_dma_sg(sgt, sg, i)
-		dma_unmap_resource(attachment->dev, sg_dma_address(sg),
-					sg_dma_len(sg), dir,
-					DMA_ATTR_SKIP_CPU_SYNC);
+		dma_unmap_resource(dma_buf_sgt_mapping_dma_device(mapping),
+				   sg_dma_address(sg), sg_dma_len(sg), dir,
+				   DMA_ATTR_SKIP_CPU_SYNC);
 
 	/* Need to restore orig_nents because sg_free_table use that field */
 	sgt->orig_nents = sgt->nents;
 	sg_free_table(sgt);
-	kfree(sgt);
+	kfree(mapping);
 }
 
 static struct hl_vm_hash_node *memhash_node_export_get(struct hl_ctx *ctx, u64 addr)
@@ -1850,9 +1857,8 @@ static void hl_release_dmabuf(struct dma_buf *dmabuf)
 
 static const struct dma_buf_ops habanalabs_dmabuf_ops = {
 	.attach = hl_dmabuf_attach,
-	.map_dma_buf = hl_map_dmabuf,
-	.unmap_dma_buf = hl_unmap_dmabuf,
 	.release = hl_release_dmabuf,
+	DMA_BUF_SIMPLE_SGT_EXP_MATCH(hl_map_dmabuf, hl_unmap_dmabuf),
 };
 
 static int export_dmabuf(struct hl_ctx *ctx,

@@ -4,20 +4,24 @@
  * Copyright © 2016 Intel Corporation
  */
 
+#include <linux/dma-buf-mapping.h>
 #include <linux/vmalloc.h>
 #include "mock_dmabuf.h"
 
-static struct sg_table *mock_map_dma_buf(struct dma_buf_attachment *attachment,
-					 enum dma_data_direction dir)
+static struct dma_buf_sgt_mapping *
+mock_map_dma_buf(struct dma_buf_attachment *attachment,
+		 enum dma_data_direction dir)
 {
 	struct mock_dmabuf *mock = to_mock(attachment->dmabuf);
+	struct dma_buf_sgt_mapping *mapping;
 	struct sg_table *st;
 	struct scatterlist *sg;
 	int i, err;
 
-	st = kmalloc_obj(*st);
-	if (!st)
+	mapping = kzalloc_obj(*mapping);
+	if (!mapping)
 		return ERR_PTR(-ENOMEM);
+	st = &mapping->sgt;
 
 	err = sg_alloc_table(st, mock->npages, GFP_KERNEL);
 	if (err)
@@ -29,26 +33,27 @@ static struct sg_table *mock_map_dma_buf(struct dma_buf_attachment *attachment,
 		sg = sg_next(sg);
 	}
 
-	err = dma_map_sgtable(attachment->dev, st, dir, 0);
+	err = dma_map_sgtable(dma_buf_sgt_dma_device(attachment), st, dir, 0);
 	if (err)
 		goto err_st;
 
-	return st;
+	return mapping;
 
 err_st:
 	sg_free_table(st);
 err_free:
-	kfree(st);
+	kfree(mapping);
 	return ERR_PTR(err);
 }
 
 static void mock_unmap_dma_buf(struct dma_buf_attachment *attachment,
-			       struct sg_table *st,
+			       struct dma_buf_sgt_mapping *mapping,
 			       enum dma_data_direction dir)
 {
-	dma_unmap_sgtable(attachment->dev, st, dir, 0);
-	sg_free_table(st);
-	kfree(st);
+	dma_unmap_sgtable(dma_buf_sgt_mapping_dma_device(mapping),
+			  &mapping->sgt, dir, 0);
+	sg_free_table(&mapping->sgt);
+	kfree(mapping);
 }
 
 static void mock_dmabuf_release(struct dma_buf *dma_buf)
@@ -88,12 +93,11 @@ static int mock_dmabuf_mmap(struct dma_buf *dma_buf, struct vm_area_struct *vma)
 }
 
 static const struct dma_buf_ops mock_dmabuf_ops =  {
-	.map_dma_buf = mock_map_dma_buf,
-	.unmap_dma_buf = mock_unmap_dma_buf,
 	.release = mock_dmabuf_release,
 	.mmap = mock_dmabuf_mmap,
 	.vmap = mock_dmabuf_vmap,
 	.vunmap = mock_dmabuf_vunmap,
+	DMA_BUF_SIMPLE_SGT_EXP_MATCH(mock_map_dma_buf, mock_unmap_dma_buf),
 };
 
 static struct dma_buf *mock_dmabuf(int npages)

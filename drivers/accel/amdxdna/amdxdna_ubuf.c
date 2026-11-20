@@ -7,6 +7,7 @@
 #include <drm/drm_device.h>
 #include <drm/drm_print.h>
 #include <linux/dma-buf.h>
+#include <linux/dma-buf-mapping.h>
 #include <linux/overflow.h>
 #include <linux/pagemap.h>
 #include <linux/vmalloc.h>
@@ -20,42 +21,48 @@ struct amdxdna_ubuf_priv {
 	struct mm_struct *mm;
 };
 
-static struct sg_table *amdxdna_ubuf_map(struct dma_buf_attachment *attach,
-					 enum dma_data_direction direction)
+static struct dma_buf_sgt_mapping *
+amdxdna_ubuf_map(struct dma_buf_attachment *attach,
+		 enum dma_data_direction direction)
 {
 	struct amdxdna_ubuf_priv *ubuf = attach->dmabuf->priv;
+	struct dma_buf_sgt_mapping *mapping;
 	struct sg_table *sg;
 	int ret;
 
-	sg = kzalloc_obj(*sg);
-	if (!sg)
+	mapping = kzalloc_obj(*mapping);
+	if (!mapping)
 		return ERR_PTR(-ENOMEM);
+	sg = &mapping->sgt;
 
 	ret = sg_alloc_table_from_pages(sg, ubuf->pages, ubuf->nr_pages, 0,
 					ubuf->nr_pages << PAGE_SHIFT, GFP_KERNEL);
 	if (ret)
-		goto err_free_sg;
+		goto err_free_mapping;
 
-	ret = dma_map_sgtable(attach->dev, sg, direction, 0);
+	ret = dma_map_sgtable(dma_buf_sgt_dma_device(attach), sg, direction, 0);
 	if (ret)
 		goto err_free_table;
 
-	return sg;
+	return mapping;
 
 err_free_table:
 	sg_free_table(sg);
-err_free_sg:
-	kfree(sg);
+err_free_mapping:
+	kfree(mapping);
 	return ERR_PTR(ret);
 }
 
 static void amdxdna_ubuf_unmap(struct dma_buf_attachment *attach,
-			       struct sg_table *sg,
+			       struct dma_buf_sgt_mapping *mapping,
 			       enum dma_data_direction direction)
 {
-	dma_unmap_sgtable(attach->dev, sg, direction, 0);
+	struct sg_table *sg = &mapping->sgt;
+
+	dma_unmap_sgtable(dma_buf_sgt_mapping_dma_device(mapping), sg,
+			  direction, 0);
 	sg_free_table(sg);
-	kfree(sg);
+	kfree(mapping);
 }
 
 static void amdxdna_ubuf_release(struct dma_buf *dbuf)
@@ -70,9 +77,8 @@ static void amdxdna_ubuf_release(struct dma_buf *dbuf)
 }
 
 static const struct dma_buf_ops amdxdna_ubuf_dmabuf_ops = {
-	.map_dma_buf = amdxdna_ubuf_map,
-	.unmap_dma_buf = amdxdna_ubuf_unmap,
 	.release = amdxdna_ubuf_release,
+	DMA_BUF_SIMPLE_SGT_EXP_MATCH(amdxdna_ubuf_map, amdxdna_ubuf_unmap),
 };
 
 struct dma_buf *amdxdna_get_ubuf(struct drm_device *dev,

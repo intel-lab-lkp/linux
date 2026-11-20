@@ -4,6 +4,7 @@
  */
 
 #include <linux/dma-buf.h>
+#include <linux/dma-buf-mapping.h>
 #include <linux/dma-mapping.h>
 #include <linux/mman.h>
 #include <linux/shmem_fs.h>
@@ -383,41 +384,44 @@ int armada_gem_pwrite_ioctl(struct drm_device *dev, void *data,
 }
 
 /* Prime support */
-static struct sg_table *
+static struct dma_buf_sgt_mapping *
 armada_gem_prime_map_dma_buf(struct dma_buf_attachment *attach,
 	enum dma_data_direction dir)
 {
+	struct device *dma_dev = dma_buf_sgt_dma_device(attach);
 	struct drm_gem_object *obj = attach->dmabuf->priv;
 	struct armada_gem_object *dobj = drm_to_armada_gem(obj);
+	struct dma_buf_sgt_mapping *mapping;
 	struct scatterlist *sg;
 	struct sg_table *sgt;
 	int i;
 
-	sgt = kmalloc_obj(*sgt);
-	if (!sgt)
+	mapping = kzalloc_obj(*mapping);
+	if (!mapping)
 		return NULL;
+	sgt = &mapping->sgt;
 
 	if (dobj->obj.filp) {
-		struct address_space *mapping;
+		struct address_space *file_mapping;
 		int count;
 
 		count = dobj->obj.size / PAGE_SIZE;
 		if (sg_alloc_table(sgt, count, GFP_KERNEL))
 			goto free_sgt;
 
-		mapping = dobj->obj.filp->f_mapping;
+		file_mapping = dobj->obj.filp->f_mapping;
 
 		for_each_sgtable_sg(sgt, sg, i) {
 			struct page *page;
 
-			page = shmem_read_mapping_page(mapping, i);
+			page = shmem_read_mapping_page(file_mapping, i);
 			if (IS_ERR(page))
 				goto release;
 
 			sg_set_page(sg, page, PAGE_SIZE, 0);
 		}
 
-		if (dma_map_sgtable(attach->dev, sgt, dir, 0))
+		if (dma_map_sgtable(dma_dev, sgt, dir, 0))
 			goto release;
 	} else if (dobj->page) {
 		/* Single contiguous page */
@@ -426,7 +430,7 @@ armada_gem_prime_map_dma_buf(struct dma_buf_attachment *attach,
 
 		sg_set_page(sgt->sgl, dobj->page, dobj->obj.size, 0);
 
-		if (dma_map_sgtable(attach->dev, sgt, dir, 0))
+		if (dma_map_sgtable(dma_dev, sgt, dir, 0))
 			goto free_table;
 	} else if (dobj->linear) {
 		/* Single contiguous physical region - no struct page */
@@ -437,7 +441,7 @@ armada_gem_prime_map_dma_buf(struct dma_buf_attachment *attach,
 	} else {
 		goto free_sgt;
 	}
-	return sgt;
+	return mapping;
 
  release:
 	for_each_sgtable_sg(sgt, sg, i)
@@ -446,19 +450,21 @@ armada_gem_prime_map_dma_buf(struct dma_buf_attachment *attach,
  free_table:
 	sg_free_table(sgt);
  free_sgt:
-	kfree(sgt);
+	kfree(mapping);
 	return NULL;
 }
 
 static void armada_gem_prime_unmap_dma_buf(struct dma_buf_attachment *attach,
-	struct sg_table *sgt, enum dma_data_direction dir)
+	struct dma_buf_sgt_mapping *mapping, enum dma_data_direction dir)
 {
 	struct drm_gem_object *obj = attach->dmabuf->priv;
 	struct armada_gem_object *dobj = drm_to_armada_gem(obj);
+	struct sg_table *sgt = &mapping->sgt;
 	int i;
 
 	if (!dobj->linear)
-		dma_unmap_sgtable(attach->dev, sgt, dir, 0);
+		dma_unmap_sgtable(dma_buf_sgt_mapping_dma_device(mapping), sgt,
+				  dir, 0);
 
 	if (dobj->obj.filp) {
 		struct scatterlist *sg;
@@ -468,7 +474,7 @@ static void armada_gem_prime_unmap_dma_buf(struct dma_buf_attachment *attach,
 	}
 
 	sg_free_table(sgt);
-	kfree(sgt);
+	kfree(mapping);
 }
 
 static int
@@ -478,10 +484,10 @@ armada_gem_dmabuf_mmap(struct dma_buf *buf, struct vm_area_struct *vma)
 }
 
 static const struct dma_buf_ops armada_gem_prime_dmabuf_ops = {
-	.map_dma_buf	= armada_gem_prime_map_dma_buf,
-	.unmap_dma_buf	= armada_gem_prime_unmap_dma_buf,
 	.release	= drm_gem_dmabuf_release,
 	.mmap		= armada_gem_dmabuf_mmap,
+	DMA_BUF_SIMPLE_SGT_EXP_MATCH(armada_gem_prime_map_dma_buf,
+				     armada_gem_prime_unmap_dma_buf),
 };
 
 struct dma_buf *
