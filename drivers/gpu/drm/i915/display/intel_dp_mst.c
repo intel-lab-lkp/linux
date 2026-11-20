@@ -1647,6 +1647,14 @@ mst_connector_mode_valid_ctx(struct drm_connector *_connector,
 		if (*status != MODE_OK)
 			continue;
 
+		if (!intel_dp_mode_valid_symbol_tg(connector, intel_dp, true, mode,
+						   max_link_clock, INTEL_OUTPUT_FORMAT_RGB,
+						   mode_rate <= max_rate,
+						   dsc ? dsc_slice_count : 0)) {
+			*status = MODE_H_ILLEGAL;
+			continue;
+		}
+
 		if (!dsc)
 			dsc_slice_count = 0;
 

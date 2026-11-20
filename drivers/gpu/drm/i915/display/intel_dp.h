@@ -16,6 +16,7 @@ enum port;
 struct drm_connector_state;
 struct drm_dp_desc;
 struct drm_dp_vsc_sdp;
+struct drm_display_mode;
 struct drm_encoder;
 struct drm_modeset_acquire_ctx;
 struct intel_atomic_state;
@@ -216,6 +217,12 @@ int intel_dp_dsc_min_src_compressed_bpp(void);
 int intel_dp_compute_min_hblank(struct intel_crtc_state *crtc_state,
 				const struct drm_connector_state *conn_state);
 bool intel_dp_use_symbol_tg(struct intel_display *display, bool is_mst, bool is_uhbr);
+bool intel_dp_mode_valid_symbol_tg(struct intel_connector *connector,
+				   struct intel_dp *intel_dp, bool is_mst,
+				   const struct drm_display_mode *mode,
+				   int link_rate,
+				   enum intel_output_format output_format,
+				   bool uncompressed_ok, int dsc_slice_count);
 void intel_dp_symbol_tg_select_mn(struct intel_crtc_state *crtc_state);
 int intel_dp_compute_symbol_tg(struct intel_dp *intel_dp,
 			       struct intel_crtc_state *crtc_state,

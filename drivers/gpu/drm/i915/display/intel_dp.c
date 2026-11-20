@@ -1540,6 +1540,14 @@ intel_dp_mode_valid_format(struct intel_connector *connector,
 		if (status != MODE_OK)
 			continue;
 
+		if (!intel_dp_mode_valid_symbol_tg(connector, intel_dp, false, mode,
+						   max_link_clock, output_format,
+						   mode_rate <= max_rate,
+						   dsc ? dsc_slice_count : 0)) {
+			status = MODE_H_ILLEGAL;
+			continue;
+		}
+
 		if (!dsc)
 			dsc_slice_count = 0;
 
@@ -3762,6 +3770,88 @@ int intel_dp_compute_min_hblank(struct intel_crtc_state *crtc_state,
 /* Number of symbols the transcoder link layer processes in a symbol cycle */
 #define LL_SYMBOLS_PER_CYCLE	4
 
+struct intel_dp_symbol_tg_cycles {
+	int hactive;
+	int hblank;
+	int chunk;
+};
+
+/* dsc_slices is 0 for an uncompressed stream */
+static void intel_dp_symbol_tg_calc_cycles(struct intel_dp *intel_dp,
+					   int hdisplay, int htotal,
+					   int link_bpp_x16, int dsc_slices,
+					   enum intel_output_format output_format,
+					   bool is_uhbr,
+					   struct intel_dp_symbol_tg_cycles *cycles)
+{
+	int symbol_size = is_uhbr ? 32 : 8;
+	u8 rx_min_hblank;
+	int hblank_pixels;
+
+	cycles->chunk = 0;
+
+	if (dsc_slices) {
+		int slice_width = DIV_ROUND_UP(hdisplay, dsc_slices);
+		int chunk_bytes = DIV_ROUND_UP(slice_width * link_bpp_x16, 16 * 8);
+
+		cycles->chunk = DIV_ROUND_UP(chunk_bytes * 8,
+					     LL_SYMBOLS_PER_CYCLE * symbol_size);
+		cycles->hactive = dsc_slices * (cycles->chunk + 1);
+	} else {
+		int hact_width = hdisplay;
+		int pix_bpp_x16 = link_bpp_x16;
+
+		/* YUV 4:2:0 without DSC: half the Hactive at twice the bpp */
+		if (output_format == INTEL_OUTPUT_FORMAT_YCBCR420) {
+			hact_width /= 2;
+			pix_bpp_x16 *= 2;
+		}
+
+		cycles->hactive = DIV_ROUND_UP(DIV_ROUND_UP(hact_width, LL_SYMBOLS_PER_CYCLE) *
+					       pix_bpp_x16, 16 * symbol_size);
+	}
+
+	hblank_pixels = htotal - hdisplay;
+	cycles->hblank = DIV_ROUND_UP(DIV_ROUND_UP(hblank_pixels, LL_SYMBOLS_PER_CYCLE) *
+				      link_bpp_x16, 16 * symbol_size);
+
+	/* DP 2.1: the minimum Hblank is 5 LL symbol cycles for 8b/10b, 3 for 128b/132b */
+	cycles->hblank = max(cycles->hblank, is_uhbr ? 3 : 5);
+
+	/* The Rx minimum Hblank, if the sink enumerates it */
+	rx_min_hblank = intel_dp->rx_min_hblank[is_uhbr];
+	if (rx_min_hblank & DP_RX_MIN_HBLANK_ENABLE)
+		cycles->hblank = max(cycles->hblank,
+				     (rx_min_hblank & DP_RX_MIN_HBLANK_MASK) +
+				     (is_uhbr ? 3 : 5));
+}
+
+static bool intel_dp_symbol_tg_cycles_in_range(const struct intel_dp_symbol_tg_cycles *cycles)
+{
+	return cycles->hactive + cycles->hblank <= TRANS_LLSYM_HTOTAL_MASK + 1 &&
+		cycles->chunk <= TRANS_LLSYM_CHUNK_SIZE_MASK;
+}
+
+/*
+ * Check if the LL symbol timings of a mode fit the symbol based timing
+ * generator registers, for the given link rate and link bpp. The lower the
+ * bpp, the fewer cycles, so this can be called with the minimum bpp to prune
+ * the modes which can't be supported with any bpp.
+ */
+static bool intel_dp_symbol_tg_mode_valid(struct intel_dp *intel_dp,
+					  const struct drm_display_mode *mode,
+					  int link_rate, int link_bpp_x16, int dsc_slices,
+					  enum intel_output_format output_format)
+{
+	struct intel_dp_symbol_tg_cycles cycles;
+
+	intel_dp_symbol_tg_calc_cycles(intel_dp, mode->hdisplay, mode->htotal,
+				       link_bpp_x16, dsc_slices, output_format,
+				       drm_dp_is_uhbr_rate(link_rate), &cycles);
+
+	return intel_dp_symbol_tg_cycles_in_range(&cycles);
+}
+
 /* 64 x 64 -> 128 bit multiplication, result as {lo, hi} */
 static void intel_dp_mul_u64_u64(u64 a, u64 b, u64 res[2])
 {
@@ -3808,6 +3898,40 @@ void intel_dp_symbol_tg_select_mn(struct intel_crtc_state *crtc_state)
 								      &crtc_state->dpll_hw_state));
 }
 
+/*
+ * Check if the LL symbol timings of a mode can be supported by the symbol
+ * based timing generator, if that is used for the given link, either with an
+ * uncompressed stream (if @uncompressed_ok) or with DSC (if @dsc_slice_count
+ * is not 0), at the minimum link bpp.
+ */
+bool intel_dp_mode_valid_symbol_tg(struct intel_connector *connector,
+				   struct intel_dp *intel_dp, bool is_mst,
+				   const struct drm_display_mode *mode,
+				   int link_rate,
+				   enum intel_output_format output_format,
+				   bool uncompressed_ok, int dsc_slice_count)
+{
+	struct intel_display *display = to_intel_display(connector);
+	int min_bpp_x16, min_compressed_bpp_x16;
+
+	if (!intel_dp_use_symbol_tg(display, is_mst, drm_dp_is_uhbr_rate(link_rate)))
+		return true;
+
+	min_bpp_x16 = intel_dp_mode_min_link_bpp_x16(connector, mode, output_format);
+	if (uncompressed_ok &&
+	    intel_dp_symbol_tg_mode_valid(intel_dp, mode, link_rate,
+					  min_bpp_x16, 0, output_format))
+		return true;
+
+	min_compressed_bpp_x16 = intel_dp_compute_min_compressed_bpp_x16(connector,
+									 output_format);
+
+	return dsc_slice_count &&
+		intel_dp_symbol_tg_mode_valid(intel_dp, mode, link_rate,
+					      min_compressed_bpp_x16,
+					      dsc_slice_count, output_format);
+}
+
 /* Compute the DP link layer (LL) symbol based timing generator parameters */
 int intel_dp_compute_symbol_tg(struct intel_dp *intel_dp,
 			       struct intel_crtc_state *crtc_state,
@@ -3820,9 +3944,8 @@ int intel_dp_compute_symbol_tg(struct intel_dp *intel_dp,
 	struct intel_dp_symbol_tg *tg = &crtc_state->dp_symbol_tg;
 	bool is_uhbr = intel_dp_is_uhbr(crtc_state);
 	int symbol_size = is_uhbr ? 32 : 8;
-	int hactive_cycles, hblank_cycles, chunk_cycles = 0;
-	int hblank_pixels;
-	u8 rx_min_hblank;
+	struct intel_dp_symbol_tg_cycles cycles;
+	int hactive_cycles, hblank_cycles, chunk_cycles;
 	int dsc_slices, link_bpp_x16;
 	u32 ch_num, ch_den, ssc_num, ssc_den, spread_x1000, link_rate_mbps;
 	u32 rate_gcd, ssc_gcd;
@@ -3847,43 +3970,15 @@ int intel_dp_compute_symbol_tg(struct intel_dp *intel_dp,
 	if (ret)
 		return ret;
 
-	if (crtc_state->dsc.compression_enable) {
-		int slice_width = DIV_ROUND_UP(adjusted_mode->crtc_hdisplay, dsc_slices);
-		int chunk_bytes = DIV_ROUND_UP(slice_width * link_bpp_x16, 16 * 8);
+	intel_dp_symbol_tg_calc_cycles(intel_dp, adjusted_mode->crtc_hdisplay,
+				       adjusted_mode->crtc_htotal, link_bpp_x16,
+				       dsc_slices, crtc_state->output_format,
+				       is_uhbr, &cycles);
+	hactive_cycles = cycles.hactive;
+	hblank_cycles = cycles.hblank;
+	chunk_cycles = cycles.chunk;
 
-		chunk_cycles = DIV_ROUND_UP(chunk_bytes * 8,
-					    LL_SYMBOLS_PER_CYCLE * symbol_size);
-		hactive_cycles = dsc_slices * (chunk_cycles + 1);
-	} else {
-		int hact_width = adjusted_mode->crtc_hdisplay;
-		int pix_bpp_x16 = link_bpp_x16;
-
-		/* YUV 4:2:0 without DSC: half the Hactive at twice the bpp */
-		if (crtc_state->output_format == INTEL_OUTPUT_FORMAT_YCBCR420) {
-			hact_width /= 2;
-			pix_bpp_x16 *= 2;
-		}
-
-		hactive_cycles = DIV_ROUND_UP(DIV_ROUND_UP(hact_width, LL_SYMBOLS_PER_CYCLE) *
-					      pix_bpp_x16, 16 * symbol_size);
-	}
-
-	hblank_pixels = adjusted_mode->crtc_htotal - adjusted_mode->crtc_hdisplay;
-	hblank_cycles = DIV_ROUND_UP(DIV_ROUND_UP(hblank_pixels, LL_SYMBOLS_PER_CYCLE) *
-				     link_bpp_x16, 16 * symbol_size);
-
-	/* DP 2.1: the minimum Hblank is 5 LL symbol cycles for 8b/10b, 3 for 128b/132b */
-	hblank_cycles = max(hblank_cycles, is_uhbr ? 3 : 5);
-
-	/* The Rx minimum Hblank, if the sink enumerates it */
-	rx_min_hblank = intel_dp->rx_min_hblank[is_uhbr];
-	if (rx_min_hblank & DP_RX_MIN_HBLANK_ENABLE)
-		hblank_cycles = max(hblank_cycles,
-				    (rx_min_hblank & DP_RX_MIN_HBLANK_MASK) +
-				    (is_uhbr ? 3 : 5));
-
-	if (hactive_cycles + hblank_cycles > TRANS_LLSYM_HTOTAL_MASK + 1 ||
-	    chunk_cycles > TRANS_LLSYM_CHUNK_SIZE_MASK) {
+	if (!intel_dp_symbol_tg_cycles_in_range(&cycles)) {
 		drm_dbg_kms(display->drm,
 			    "LL symbol timings out of range (hactive %d, hblank %d, chunk %d), using pixel TG\n",
 			    hactive_cycles, hblank_cycles, chunk_cycles);
