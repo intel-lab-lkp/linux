@@ -127,6 +127,28 @@ static int etm4_cfg_map_reg_offset(struct etmv4_drvdata *drvdata,
 	return err;
 }
 
+static int etm4_cfg_check_eventctl0_support(const struct cscfg_regval_desc *reg_desc,
+					    unsigned int nr_event)
+{
+	u32 requested;
+
+	if (reg_desc->offset != TRCEVENTCTL0R)
+		return 0;
+
+	/* Parameters can change after loading, so check all writable fields. */
+	if (reg_desc->type & CS_CFG_REG_TYPE_VAL_PARAM)
+		requested = reg_desc->type & CS_CFG_REG_TYPE_VAL_MASK ?
+			    reg_desc->mask32 : U32_MAX;
+	else
+		requested = reg_desc->type & CS_CFG_REG_TYPE_VAL_MASK ?
+			    reg_desc->val32 & reg_desc->mask32 : reg_desc->val32;
+
+	/* Four events use the full register: do not shift a u32 by 32. */
+	if (nr_event < 4 && (requested >> (8 * nr_event)))
+		return -EOPNOTSUPP;
+	return 0;
+}
+
 /**
  * etm4_cfg_load_feature - load a feature into a device instance.
  *
@@ -149,6 +171,7 @@ static int etm4_cfg_load_feature(struct coresight_device *csdev,
 	struct device *dev = csdev->dev.parent;
 	struct etmv4_drvdata *drvdata = dev_get_drvdata(dev);
 	const struct cscfg_feature_desc *feat_desc = feat_csdev->feat_desc;
+	const struct cscfg_regval_desc *reg_desc;
 	u32 offset;
 	int i = 0, err = 0;
 
@@ -162,12 +185,28 @@ static int etm4_cfg_load_feature(struct coresight_device *csdev,
 	 */
 	feat_csdev->drv_spinlock = NULL;
 
-	/* process the register descriptions */
-	for (i = 0; i < feat_csdev->nr_regs && !err; i++) {
-		offset = feat_desc->regs_desc[i].offset;
+	/* Validate every description before deciding whether to skip a device. */
+	for (i = 0; i < feat_csdev->nr_regs; i++) {
+		reg_desc = &feat_desc->regs_desc[i];
+		offset = reg_desc->offset;
+		if ((reg_desc->type & CS_CFG_REG_TYPE_VAL_PARAM) &&
+		    reg_desc->param_idx >= (u32)feat_csdev->nr_params)
+			return -EINVAL;
+		if (offset == TRCEVENTCTL0R &&
+		    (reg_desc->type & CS_CFG_REG_TYPE_VAL_64BIT))
+			return -EINVAL;
 		err = etm4_cfg_map_reg_offset(drvdata, &feat_csdev->regs_csdev[i], offset);
+		if (err)
+			return err;
 	}
-	return err;
+
+	for (i = 0; i < feat_csdev->nr_regs; i++) {
+		err = etm4_cfg_check_eventctl0_support(&feat_desc->regs_desc[i],
+						       drvdata->caps.nr_event);
+		if (err)
+			return err;
+	}
+	return 0;
 }
 
 /* match information when loading configurations */

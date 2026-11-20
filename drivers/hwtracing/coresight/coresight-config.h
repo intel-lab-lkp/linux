@@ -245,6 +245,9 @@ struct cscfg_config_csdev {
  *
  * @load_feat:	Pass a feature descriptor into the device and create the
  *		loaded feature instance (struct cscfg_feature_csdev).
+ *		Return -EOPNOTSUPP if the device lacks required resources; the
+ *		manager skips that device. Other errors abort loading. An
+ *		unsupported feature must leave device state unchanged.
  */
 struct cscfg_csdev_feat_ops {
 	int (*load_feat)(struct coresight_device *csdev,

@@ -176,6 +176,7 @@ static int cscfg_load_feat_csdev(struct coresight_device *csdev,
 				 struct cscfg_feature_desc *feat_desc,
 				 struct cscfg_csdev_feat_ops *ops)
 {
+	struct device *dev = csdev->dev.parent;
 	struct cscfg_feature_csdev *feat_csdev;
 	unsigned long flags;
 	int err;
@@ -189,6 +190,12 @@ static int cscfg_load_feat_csdev(struct coresight_device *csdev,
 
 	/* load the feature into the device */
 	err = ops->load_feat(csdev, feat_csdev);
+	if (err == -EOPNOTSUPP) {
+		devm_kfree(dev, feat_csdev->regs_csdev);
+		devm_kfree(dev, feat_csdev->params_csdev);
+		devm_kfree(dev, feat_csdev);
+		return 0;
+	}
 	if (err)
 		return err;
 
