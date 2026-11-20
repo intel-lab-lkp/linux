@@ -3080,7 +3080,8 @@ intel_dp_compute_m_n_ratio_limits(struct intel_dp *intel_dp,
 
 /*
  * The stream of a PCON passing DSC through is not recompressed, so it has to
- * fit the HDMI FRL link as is. Limit the compressed bpp of the DP stream.
+ * fit the HDMI link and be one the HDMI sink can decode as is. Limit the DSC
+ * parameters of the DP stream accordingly.
  *
  * This applies only if the HDMI link needs DSC and the DP stream is a DSC 1.2a
  * stream, as passing it through is the only PCON operation possible then.
@@ -3103,6 +3104,13 @@ intel_dp_pcon_dsc_compute_passthrough_limits(struct intel_dp *intel_dp,
 				  limits->pipe.max_bpp / 3, crtc_state->sink_format,
 				  true) == MODE_OK)
 		return true;
+
+	if (!intel_dp_pcon_dsc_hdmi_slice_limits(connector, adjusted_mode,
+						 adjusted_mode->crtc_clock,
+						 crtc_state->sink_format,
+						 &limits->dfp_dsc.min_slices,
+						 &limits->dfp_dsc.max_slices))
+		return false;
 
 	limits->link.max_bpp_x16 =
 		min(limits->link.max_bpp_x16,
