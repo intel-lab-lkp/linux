@@ -1913,18 +1913,24 @@ static void ice_lag_monitor_act_act(struct ice_lag *lag,
 				struct ice_vsi_cfg_params params = {};
 				struct ice_vsi *nvsi;
 				struct ice_vf *vf;
-				unsigned int bkt;
 
 				params.type = ICE_VSI_VF;
 				params.port_info = event_pf->hw.port_info;
 				params.flags = ICE_VSI_FLAG_INIT;
 
-				ice_for_each_vf(lag->pf, bkt, vf) {
+				for (u16 vf_id = 0;
+				     vf_id < lag->pf->vfs.num_supported;
+				     vf_id++) {
+					vf = ice_get_vf_by_id(lag->pf, vf_id);
+					if (!vf)
+						continue;
+
 					params.vf = vf;
 					nvsi = ice_vsi_setup(event_pf,
 							     &params);
 					ice_lag_aa_clear_spoof(nvsi);
 					lag->sec_vf[vf->vf_id] = nvsi;
+					ice_put_vf(vf);
 				}
 			}
 
