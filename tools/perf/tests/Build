@@ -2,6 +2,7 @@
 
 perf-test-y += builtin-test.o
 perf-test-y += tests-scripts.o
+perf-test-y += annotate-ops.o
 perf-test-y += parse-events.o
 perf-test-y += uncore-event-sorting.o
 perf-test-y += dso-data.o

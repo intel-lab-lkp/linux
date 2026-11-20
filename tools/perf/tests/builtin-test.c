@@ -117,6 +117,7 @@ static struct test_suite *generic_tests[] = {
 	&suite__openat_syscall_event_on_all_cpus,
 	&suite__basic_mmap,
 	&suite__mem,
+	&suite__annotate_ops,
 	&suite__parse_events,
 	&suite__uncore_event_sorting,
 	&suite__expr,
