@@ -29,6 +29,7 @@ Video4Linux (V4L) driver-specific documentation
 	rcar-fdp1
 	rkcif
 	rkisp1
+	rockchip-iep2
 	raspberrypi-rp1-cfe
 	saa7134
 	si470x
