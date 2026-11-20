@@ -215,6 +215,7 @@ int intel_dp_dsc_min_src_input_bpc(void);
 int intel_dp_dsc_min_src_compressed_bpp(void);
 int intel_dp_compute_min_hblank(struct intel_crtc_state *crtc_state,
 				const struct drm_connector_state *conn_state);
+bool intel_dp_use_symbol_tg(struct intel_display *display, bool is_mst, bool is_uhbr);
 int intel_dp_compute_symbol_tg(struct intel_dp *intel_dp,
 			       struct intel_crtc_state *crtc_state,
 			       const struct drm_connector_state *conn_state);
