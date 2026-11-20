@@ -4125,8 +4125,18 @@ static int igb_sw_init(struct igb_adapter *adapter)
 	return 0;
 }
 
+static void igb_link_queue_napis(struct igb_adapter *adapter)
+{
+	int i;
+
+	for (i = 0; i < adapter->num_q_vectors; i++)
+		igb_set_queue_napi(adapter, i, &adapter->q_vector[i]->napi);
+}
+
 /* Some settings need RTNL, which isn't held when resuming from runtime
- * suspend: apply them from here instead, if the device is still up.
+ * suspend: apply them from here instead, if the device is still up. The
+ * q_vectors are only freed while __IGB_DOWN is set, which is cleared once
+ * they are allocated again, so checking it under RTNL is safe.
  */
 static void igb_rtnl_resume_task(struct work_struct *work)
 {
@@ -4141,6 +4151,7 @@ static void igb_rtnl_resume_task(struct work_struct *work)
 					      adapter->num_rx_queues))
 			netdev_err(adapter->netdev,
 				   "error setting real queue count\n");
+		igb_link_queue_napis(adapter);
 	}
 	rtnl_unlock();
 }
@@ -4219,7 +4230,8 @@ static int __igb_open(struct net_device *netdev, bool resuming,
 	for (i = 0; i < adapter->num_q_vectors; i++) {
 		napi = &adapter->q_vector[i]->napi;
 		napi_enable(napi);
-		igb_set_queue_napi(adapter, i, napi);
+		if (rtnl_held)
+			igb_set_queue_napi(adapter, i, napi);
 	}
 
 	/* Clear any pending interrupts. */
