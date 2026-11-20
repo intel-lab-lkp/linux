@@ -129,6 +129,7 @@ bool intel_dp_is_edp(struct intel_dp *intel_dp)
 
 static void intel_dp_unset_edid(struct intel_dp *intel_dp);
 static int intel_dp_hdmi_sink_max_frl(struct intel_dp *intel_dp);
+static bool intel_dp_is_hdmi_2_1_sink(struct intel_dp *intel_dp);
 
 /* Is link rate UHBR and thus 128b/132b? */
 bool intel_dp_is_uhbr(const struct intel_crtc_state *crtc_state)
@@ -3014,6 +3015,19 @@ bool intel_dp_joiner_needs_dsc(struct intel_display *display,
 }
 
 static int
+intel_dp_pcon_compute_config(struct intel_dp *intel_dp,
+			     struct intel_crtc_state *crtc_state)
+{
+	if (!intel_dp_is_hdmi_2_1_sink(intel_dp))
+		return 0;
+
+	if (crtc_state->dsc.compression_enable)
+		crtc_state->pcon_config.dsc_op = INTEL_PCON_DSC_DECODE;
+
+	return 0;
+}
+
+static int
 intel_dp_compute_link_for_joined_pipes(struct intel_encoder *encoder,
 				       struct intel_crtc_state *pipe_config,
 				       struct drm_connector_state *conn_state,
@@ -3097,6 +3111,10 @@ intel_dp_compute_link_for_joined_pipes(struct intel_encoder *encoder,
 					   num_joined_pipes))
 			return -EINVAL;
 	}
+
+	ret = intel_dp_pcon_compute_config(intel_dp, pipe_config);
+	if (ret)
+		return ret;
 
 	drm_dbg_kms(display->drm,
 		    "DP lane count %d clock %d bpp input %d compressed " FXP_Q4_FMT " HDR %s link rate required %d available %d\n",
