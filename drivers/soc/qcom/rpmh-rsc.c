@@ -1169,12 +1169,35 @@ static const struct of_device_id rpmh_drv_match[] = {
 };
 MODULE_DEVICE_TABLE(of, rpmh_drv_match);
 
+/*
+ * A hibernation image is restored by another kernel, which filled the sleep
+ * and wake TCSes with its own votes. Our cache still says they hold ours, so
+ * rpmh_flush() would never write them again and the next power collapse would
+ * use what the other kernel left behind. Write them again before that.
+ */
+static int rpmh_rsc_restore_early(struct device *dev)
+{
+	struct rsc_drv *drv = dev_get_drvdata(dev);
+	unsigned long flags;
+
+	spin_lock_irqsave(&drv->client.cache_lock, flags);
+	drv->client.dirty = true;
+	spin_unlock_irqrestore(&drv->client.cache_lock, flags);
+
+	return 0;
+}
+
+static const struct dev_pm_ops rpmh_rsc_pm_ops = {
+	.restore_early = pm_sleep_ptr(rpmh_rsc_restore_early),
+};
+
 static struct platform_driver rpmh_driver = {
 	.probe = rpmh_rsc_probe,
 	.driver = {
 		  .name = "rpmh",
 		  .of_match_table = rpmh_drv_match,
 		  .suppress_bind_attrs = true,
+		  .pm = pm_sleep_ptr(&rpmh_rsc_pm_ops),
 	},
 };
 
