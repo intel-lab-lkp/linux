@@ -4578,7 +4578,7 @@ intel_dp_pcon_dsc_enc_bpp(struct intel_dp *intel_dp,
 
 	return intel_hdmi_dsc_get_bpp(pcon_fractional_bpp, slice_width,
 				      num_slices, output_format, bpc, hdmi_all_bpp,
-				      hdmi_max_chunk_bytes);
+				      hdmi_max_chunk_bytes, 0);
 }
 
 void
