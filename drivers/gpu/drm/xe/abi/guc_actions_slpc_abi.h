@@ -119,6 +119,7 @@ enum slpc_param_id {
 	SLPC_PARAM_STRATEGIES = 26,
 	SLPC_PARAM_POWER_PROFILE = 27,
 	SLPC_PARAM_IGNORE_EFFICIENT_FREQUENCY = 28,
+	SLPC_PARAM_SET_IBC_VERSION = 29,
 	SLPC_MAX_PARAM = 32,
 };
 
@@ -209,6 +210,11 @@ struct slpc_shared_data {
 	/* PAGE 2 (4096 bytes), mode based parameter will be removed soon */
 	u8 reserved_mode_definition[4096];
 } __packed;
+
+enum slpc_power_profile {
+	SLPC_POWER_PROFILE_BASE = 0x0,
+	SLPC_POWER_PROFILE_POWER_SAVING = 0x1
+};
 
 /**
  * DOC: SLPC H2G MESSAGE FORMAT

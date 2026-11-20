@@ -14,6 +14,8 @@
 #include <linux/exportfs.h>
 #include <linux/nfs4.h>
 
+#include "export.h"
+
 /*
  * The file handle starts with a sequence of four-byte words.
  * The first word contains a version number (1) and three descriptor bytes
@@ -49,17 +51,18 @@ struct knfsd_fh {
 					 * Points to the current size while
 					 * building a new file handle.
 					 */
-	union {
-		char			fh_raw[NFS4_FHSIZE];
-		struct {
-			u8		fh_version;	/* == 1 */
-			u8		fh_auth_type;	/* deprecated */
-			u8		fh_fsid_type;
-			u8		fh_fileid_type;
-			u32		fh_fsid[]; /* flexible-array member */
-		};
-	};
+	u8		fh_raw[NFS4_FHSIZE];
 };
+
+#define fh_version		fh_raw[0]
+#define fh_auth_type		fh_raw[1]
+#define fh_fsid_type		fh_raw[2]
+#define fh_fileid_type		fh_raw[3]
+
+static inline u32 *fh_fsid(const struct knfsd_fh *fh)
+{
+	return (u32 *)&fh->fh_raw[4];
+}
 
 static inline __u32 ino_t_to_u32(ino_t ino)
 {
@@ -108,6 +111,11 @@ typedef struct svc_fh {
 	struct kstat		fh_post_attr;	/* full attrs after operation */
 	u64			fh_post_change; /* nfsv4 change; see above */
 } svc_fh;
+
+struct nfsd_fhandle {
+	struct svc_fh		fh;
+};
+
 #define NFSD4_FH_FOREIGN (1<<0)
 #define SET_FH_FLAG(c, f) ((c)->fh_flags |= (f))
 #define HAS_FH_FLAG(c, f) ((c)->fh_flags & (f))
@@ -128,6 +136,8 @@ enum fsid_source {
 	FSIDSOURCE_FSID,
 	FSIDSOURCE_UUID,
 };
+extern enum fsid_source fsid_source_fh(const struct knfsd_fh *fh,
+				       struct svc_export *exp);
 extern enum fsid_source fsid_source(const struct svc_fh *fhp);
 
 
@@ -219,9 +229,11 @@ extern char * SVCFH_fmt(struct svc_fh *fhp);
 __be32	fh_verify(struct svc_rqst *, struct svc_fh *, umode_t, int);
 __be32	fh_verify_local(struct net *, struct svc_cred *, struct auth_domain *,
 			struct svc_fh *, umode_t, int);
+__be32	fh_getattr(const struct svc_fh *fhp, struct kstat *stat);
 __be32	fh_compose(struct svc_fh *, struct svc_export *, struct dentry *, struct svc_fh *);
 __be32	fh_update(struct svc_fh *);
 void	fh_put(struct svc_fh *);
+bool	fh_append_mac(struct knfsd_fh *fh, int fh_maxsize, struct net *net);
 
 static __inline__ struct svc_fh *
 fh_copy(struct svc_fh *dst, const struct svc_fh *src)
@@ -239,6 +251,20 @@ fh_copy_shallow(struct knfsd_fh *dst, const struct knfsd_fh *src)
 	memcpy(&dst->fh_raw, &src->fh_raw, src->fh_size);
 }
 
+#define NFSD_FHSIZE_UNSPEC	0
+
+/**
+ * fh_init - Prepare a file handle for fh_compose() or fh_verify()
+ * @fhp: File handle to initialize
+ * @maxsize: Largest file handle, in bytes, to build in @fhp
+ *
+ * @maxsize bounds the handle fh_compose() may build: NFS_FHSIZE,
+ * NFS3_FHSIZE, and NFS4_FHSIZE additionally select version-specific
+ * handling in fh_verify(). Callers that only verify an incoming
+ * handle pass NFSD_FHSIZE_UNSPEC, which cannot be composed.
+ *
+ * Return: @fhp
+ */
 static __inline__ struct svc_fh *
 fh_init(struct svc_fh *fhp, int maxsize)
 {
@@ -260,11 +286,49 @@ static inline bool fh_match(const struct knfsd_fh *fh1,
 static inline bool fh_fsid_match(const struct knfsd_fh *fh1,
 				 const struct knfsd_fh *fh2)
 {
+	u32 *fsid1 = fh_fsid(fh1);
+	u32 *fsid2 = fh_fsid(fh2);
+
 	if (fh1->fh_fsid_type != fh2->fh_fsid_type)
 		return false;
-	if (memcmp(fh1->fh_fsid, fh2->fh_fsid, key_len(fh1->fh_fsid_type)) != 0)
+	if (memcmp(fsid1, fsid2, key_len(fh1->fh_fsid_type)) != 0)
 		return false;
 	return true;
+}
+
+/**
+ * fh_want_write - Get write access to an export
+ * @fhp: File handle of file to be written
+ *
+ * Caller must invoke fh_drop_write() when its write operation
+ * is complete.
+ *
+ * Returns 0 if the file handle's export can be written to. Otherwise
+ * the export is not prepared for updates, and the returned negative
+ * errno value reflects the reason for the failure.
+ */
+static inline int fh_want_write(struct svc_fh *fhp)
+{
+	int ret;
+
+	if (fhp->fh_want_write)
+		return 0;
+	ret = mnt_want_write(fhp->fh_export->ex_path.mnt);
+	if (!ret)
+		fhp->fh_want_write = true;
+	return ret;
+}
+
+/**
+ * fh_drop_write - Release write access on an export
+ * @fhp: File handle of file on which fh_want_write() was previously called
+ */
+static inline void fh_drop_write(struct svc_fh *fhp)
+{
+	if (fhp->fh_want_write) {
+		fhp->fh_want_write = false;
+		mnt_drop_write(fhp->fh_export->ex_path.mnt);
+	}
 }
 
 /**
@@ -292,6 +356,18 @@ static inline void fh_clear_pre_post_attrs(struct svc_fh *fhp)
 
 u64 nfsd4_change_attribute(const struct kstat *stat);
 __be32 __must_check fh_fill_pre_attrs(struct svc_fh *fhp);
+__be32 __must_check fh_fill_pre_attrs_unlocked(struct svc_fh *fhp);
 __be32 fh_fill_post_attrs(struct svc_fh *fhp);
-__be32 __must_check fh_fill_both_attrs(struct svc_fh *fhp);
+
+/**
+ * fh_fill_post_noop - Copy pre attrs to post attrs
+ * @fhp: file handle to be updated
+ *
+ * This is used when the directory wasn't changed, but wcc attributes
+ * are needed anyway.
+ */
+static inline void fh_fill_post_noop(struct svc_fh *fhp)
+{
+	fhp->fh_post_saved = true;
+}
 #endif /* _LINUX_NFSD_NFSFH_H */

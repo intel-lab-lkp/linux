@@ -71,7 +71,7 @@ int hfs_ext_keycmp(const btree_key *key1, const btree_key *key2)
  *
  * Find a block within an extent record
  */
-static u16 hfs_ext_find_block(struct hfs_extent *ext, u16 off)
+u16 hfs_ext_find_block(struct hfs_extent *ext, u16 off)
 {
 	int i;
 	u16 count;
@@ -121,12 +121,18 @@ static int __hfs_ext_write_extent(struct inode *inode, struct hfs_find_data *fd)
 		res = hfs_bmap_reserve(fd->tree, fd->tree->depth + 1);
 		if (res)
 			return res;
-		hfs_brec_insert(fd, HFS_I(inode)->cached_extents, sizeof(hfs_extent_rec));
+		res = hfs_brec_insert(fd, HFS_I(inode)->cached_extents,
+				      sizeof(hfs_extent_rec));
+		if (res)
+			return res;
 		HFS_I(inode)->flags &= ~(HFS_FLG_EXT_DIRTY|HFS_FLG_EXT_NEW);
 	} else {
 		if (res)
 			return res;
-		hfs_bnode_write(fd->bnode, HFS_I(inode)->cached_extents, fd->entryoffset, fd->entrylength);
+		if (!is_hfs_bnode_range_valid(fd, sizeof(hfs_extent_rec)))
+			return -ERANGE;
+		hfs_bnode_write(fd->bnode, HFS_I(inode)->cached_extents,
+				fd->entryoffset, fd->entrylength);
 		HFS_I(inode)->flags &= ~HFS_FLG_EXT_DIRTY;
 	}
 	return 0;
@@ -209,12 +215,12 @@ static void hfs_dump_extent(struct hfs_extent *extent)
 {
 	int i;
 
-	hfs_dbg(EXTENT, "   ");
+	hfs_dbg("extent:   ");
 	for (i = 0; i < 3; i++)
-		hfs_dbg_cont(EXTENT, " %u:%u",
-			     be16_to_cpu(extent[i].block),
-			     be16_to_cpu(extent[i].count));
-	hfs_dbg_cont(EXTENT, "\n");
+		hfs_dbg(" block %u, count %u",
+			be16_to_cpu(extent[i].block),
+			be16_to_cpu(extent[i].count));
+	hfs_dbg("\n");
 }
 
 static int hfs_add_extent(struct hfs_extent *extent, u16 offset,
@@ -411,10 +417,11 @@ int hfs_extend_file(struct inode *inode)
 		goto out;
 	}
 
-	hfs_dbg(EXTENT, "extend %lu: %u,%u\n", inode->i_ino, start, len);
+	hfs_dbg("ino %llu, start %u, len %u\n", inode->i_ino, start, len);
 	if (HFS_I(inode)->alloc_blocks == HFS_I(inode)->first_blocks) {
 		if (!HFS_I(inode)->first_blocks) {
-			hfs_dbg(EXTENT, "first extents\n");
+			hfs_dbg("first_extent: start %u, len %u\n",
+				start, len);
 			/* no extents yet */
 			HFS_I(inode)->first_extents[0].block = cpu_to_be16(start);
 			HFS_I(inode)->first_extents[0].count = cpu_to_be16(len);
@@ -456,7 +463,7 @@ out:
 	return res;
 
 insert_extent:
-	hfs_dbg(EXTENT, "insert new extent\n");
+	hfs_dbg("insert new extent\n");
 	res = hfs_ext_write_extent(inode);
 	if (res)
 		goto out;
@@ -481,7 +488,7 @@ void hfs_file_truncate(struct inode *inode)
 	u32 size;
 	int res;
 
-	hfs_dbg(INODE, "truncate: %lu, %Lu -> %Lu\n",
+	hfs_dbg("ino %llu, phys_size %llu -> i_size %llu\n",
 		inode->i_ino, (long long)HFS_I(inode)->phys_size,
 		inode->i_size);
 	if (inode->i_size > HFS_I(inode)->phys_size) {

@@ -15,6 +15,7 @@ struct dso;
 struct dso_id;
 struct evsel;
 struct perf_sample;
+struct perf_session;
 struct symbol;
 struct target;
 struct thread;
@@ -148,12 +149,19 @@ int machine__process_event(struct machine *machine, union perf_event *event,
 typedef void (*machine__process_t)(struct machine *machine, void *data);
 
 struct machines {
+	/** @session: back link to owning session if there is one. */
+	struct perf_session *session;
 	struct machine host;
 	struct rb_root_cached guests;
 };
 
-void machines__init(struct machines *machines);
+int machines__init(struct machines *machines, struct perf_session *session);
 void machines__exit(struct machines *machines);
+
+static inline struct perf_session *machines__session(struct machines *machines)
+{
+	return machines->session;
+}
 
 void machines__process_guests(struct machines *machines,
 			      machine__process_t process, void *data);
@@ -169,9 +177,9 @@ struct thread *machine__findnew_guest_code(struct machine *machine, pid_t pid);
 void machines__set_id_hdr_size(struct machines *machines, u16 id_hdr_size);
 void machines__set_comm_exec(struct machines *machines, bool comm_exec);
 
-struct machine *machine__new_host(void);
-struct machine *machine__new_kallsyms(void);
-struct machine *machine__new_live(bool kernel_maps, pid_t pid);
+struct machine *machine__new_host(struct perf_env *host_env);
+struct machine *machine__new_kallsyms(struct perf_env *host_env);
+struct machine *machine__new_live(struct perf_env *host_env, bool kernel_maps, pid_t pid);
 int machine__init(struct machine *machine, const char *root_dir, pid_t pid);
 void machine__exit(struct machine *machine);
 void machine__delete_threads(struct machine *machine);
@@ -187,7 +195,6 @@ struct callchain_cursor;
 
 int __thread__resolve_callchain(struct thread *thread,
 				struct callchain_cursor *cursor,
-				struct evsel *evsel,
 				struct perf_sample *sample,
 				struct symbol **parent,
 				struct addr_location *root_al,
@@ -196,7 +203,6 @@ int __thread__resolve_callchain(struct thread *thread,
 
 static inline int thread__resolve_callchain(struct thread *thread,
 					    struct callchain_cursor *cursor,
-					    struct evsel *evsel,
 					    struct perf_sample *sample,
 					    struct symbol **parent,
 					    struct addr_location *root_al,
@@ -204,7 +210,6 @@ static inline int thread__resolve_callchain(struct thread *thread,
 {
 	return __thread__resolve_callchain(thread,
 					   cursor,
-					   evsel,
 					   sample,
 					   parent,
 					   root_al,
@@ -227,8 +232,6 @@ static inline bool machine__is_host(struct machine *machine)
 }
 
 bool machine__is_lock_function(struct machine *machine, u64 addr);
-bool machine__is(struct machine *machine, const char *arch);
-bool machine__normalized_is(struct machine *machine, const char *arch);
 int machine__nr_cpus_avail(struct machine *machine);
 
 struct thread *machine__findnew_thread(struct machine *machine, pid_t pid, pid_t tid);

@@ -4,6 +4,7 @@
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #endif
+#include <assert.h>
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -20,6 +21,7 @@
 #include <sys/resource.h>
 #include <sys/stat.h>
 #include <sys/vfs.h>
+#include <sys/utsname.h>
 
 #include <linux/filter.h>
 #include <linux/limits.h>
@@ -29,7 +31,9 @@
 #include <bpf/bpf.h>
 #include <bpf/hashmap.h>
 #include <bpf/libbpf.h> /* libbpf_num_possible_cpus */
+#include <bpf/libbpf_internal.h>
 #include <bpf/btf.h>
+#include <zlib.h>
 
 #include "main.h"
 
@@ -66,6 +70,17 @@ void p_info(const char *fmt, ...)
 	vfprintf(stderr, fmt, ap);
 	fprintf(stderr, "\n");
 	va_end(ap);
+}
+
+/*
+ * Like strerror(), but also knows ENOTSUPP (524), which the kernel returns
+ * to user space from some BPF commands although it is not a userspace errno.
+ */
+const char *bpf_strerror(int err)
+{
+	if (err == 524 /* ENOTSUPP */)
+		return "Operation not supported";
+	return strerror(err);
 }
 
 static bool is_bpffs(const char *path)
@@ -193,7 +208,8 @@ int mount_tracefs(const char *target)
 	return err;
 }
 
-int open_obj_pinned(const char *path, bool quiet)
+int open_obj_pinned(const char *path, bool quiet,
+		    const struct bpf_obj_get_opts *opts)
 {
 	char *pname;
 	int fd = -1;
@@ -205,7 +221,7 @@ int open_obj_pinned(const char *path, bool quiet)
 		goto out_ret;
 	}
 
-	fd = bpf_obj_get(pname);
+	fd = bpf_obj_get_opts(pname, opts);
 	if (fd < 0) {
 		if (!quiet)
 			p_err("bpf obj get (%s): %s", pname,
@@ -221,12 +237,13 @@ out_ret:
 	return fd;
 }
 
-int open_obj_pinned_any(const char *path, enum bpf_obj_type exp_type)
+int open_obj_pinned_any(const char *path, enum bpf_obj_type exp_type,
+			const struct bpf_obj_get_opts *opts)
 {
 	enum bpf_obj_type type;
 	int fd;
 
-	fd = open_obj_pinned(path, false);
+	fd = open_obj_pinned(path, false, opts);
 	if (fd < 0)
 		return -1;
 
@@ -555,7 +572,7 @@ static int do_build_table_cb(const char *fpath, const struct stat *sb,
 	if (typeflag != FTW_F)
 		goto out_ret;
 
-	fd = open_obj_pinned(fpath, true);
+	fd = open_obj_pinned(fpath, true, NULL);
 	if (fd < 0)
 		goto out_ret;
 
@@ -648,6 +665,45 @@ unsigned int get_possible_cpus(void)
 		exit(-1);
 	}
 	return cpus;
+}
+
+int get_possible_cpu_ids(int **cpu_ids)
+{
+	const char *possible_cpus_file = "/sys/devices/system/cpu/possible";
+	bool *mask = NULL;
+	int mask_sz, nr_cpus = 0;
+	int *ids = NULL;
+	int i, res;
+
+	*cpu_ids = NULL;
+
+	res = parse_cpu_mask_file(possible_cpus_file, &mask, &mask_sz);
+	if (res) {
+		p_err("failed to parse possible CPU mask: %s", strerror(-res));
+		return res;
+	}
+
+	for (i = 0; i < mask_sz; i++)
+		nr_cpus += mask[i];
+
+	ids = calloc(nr_cpus, sizeof(*ids));
+	if (!ids) {
+		p_err("mem alloc failed");
+		res = -ENOMEM;
+		goto out;
+	}
+
+	for (i = 0, nr_cpus = 0; i < mask_sz; i++) {
+		if (mask[i])
+			ids[nr_cpus++] = i;
+	}
+	*cpu_ids = ids;
+	ids = NULL;
+	res = nr_cpus;
+out:
+	free(ids);
+	free(mask);
+	return res;
 }
 
 static char *
@@ -827,6 +883,8 @@ static int prog_fd_by_nametag(void *nametag, int **fds, bool tag)
 
 		fd = bpf_prog_get_fd_by_id(id);
 		if (fd < 0) {
+			if (errno == ENOENT)
+				continue;
 			p_err("can't get prog by id (%u): %s",
 			      id, strerror(errno));
 			goto err_close_fds;
@@ -928,7 +986,7 @@ int prog_parse_fds(int *argc, char ***argv, int **fds)
 		path = **argv;
 		NEXT_ARGP();
 
-		(*fds)[0] = open_obj_pinned_any(path, BPF_OBJ_PROG);
+		(*fds)[0] = open_obj_pinned_any(path, BPF_OBJ_PROG, NULL);
 		if ((*fds)[0] < 0)
 			return -1;
 		return 1;
@@ -965,7 +1023,8 @@ exit_free:
 	return fd;
 }
 
-static int map_fd_by_name(char *name, int **fds)
+static int map_fd_by_name(char *name, int **fds,
+			  const struct bpf_get_fd_by_id_opts *opts)
 {
 	unsigned int id = 0;
 	int fd, nb_fds = 0;
@@ -973,6 +1032,7 @@ static int map_fd_by_name(char *name, int **fds)
 	int err;
 
 	while (true) {
+		LIBBPF_OPTS(bpf_get_fd_by_id_opts, opts_ro);
 		struct bpf_map_info info = {};
 		__u32 len = sizeof(info);
 
@@ -985,8 +1045,12 @@ static int map_fd_by_name(char *name, int **fds)
 			return nb_fds;
 		}
 
-		fd = bpf_map_get_fd_by_id(id);
+		/* Request a read-only fd to query the map info */
+		opts_ro.open_flags = BPF_F_RDONLY;
+		fd = bpf_map_get_fd_by_id_opts(id, &opts_ro);
 		if (fd < 0) {
+			if (errno == ENOENT)
+				continue;
 			p_err("can't get map by id (%u): %s",
 			      id, strerror(errno));
 			goto err_close_fds;
@@ -1002,6 +1066,19 @@ static int map_fd_by_name(char *name, int **fds)
 		if (strncmp(name, info.name, BPF_OBJ_NAME_LEN)) {
 			close(fd);
 			continue;
+		}
+
+		/* Get an fd with the requested options, if they differ
+		 * from the read-only options used to get the fd above.
+		 */
+		if (memcmp(opts, &opts_ro, sizeof(opts_ro))) {
+			close(fd);
+			fd = bpf_map_get_fd_by_id_opts(id, opts);
+			if (fd < 0) {
+				p_err("can't get map by id (%u): %s", id,
+					strerror(errno));
+				goto err_close_fds;
+			}
 		}
 
 		if (nb_fds > 0) {
@@ -1023,8 +1100,13 @@ err_close_fds:
 	return -1;
 }
 
-int map_parse_fds(int *argc, char ***argv, int **fds)
+int map_parse_fds(int *argc, char ***argv, int **fds, __u32 open_flags)
 {
+	LIBBPF_OPTS(bpf_get_fd_by_id_opts, opts);
+
+	assert((open_flags & ~BPF_F_RDONLY) == 0);
+	opts.open_flags = open_flags;
+
 	if (is_prefix(**argv, "id")) {
 		unsigned int id;
 		char *endptr;
@@ -1038,7 +1120,7 @@ int map_parse_fds(int *argc, char ***argv, int **fds)
 		}
 		NEXT_ARGP();
 
-		(*fds)[0] = bpf_map_get_fd_by_id(id);
+		(*fds)[0] = bpf_map_get_fd_by_id_opts(id, &opts);
 		if ((*fds)[0] < 0) {
 			p_err("get map by id (%u): %s", id, strerror(errno));
 			return -1;
@@ -1056,16 +1138,18 @@ int map_parse_fds(int *argc, char ***argv, int **fds)
 		}
 		NEXT_ARGP();
 
-		return map_fd_by_name(name, fds);
+		return map_fd_by_name(name, fds, &opts);
 	} else if (is_prefix(**argv, "pinned")) {
 		char *path;
+		LIBBPF_OPTS(bpf_obj_get_opts, get_opts);
+		get_opts.file_flags = open_flags;
 
 		NEXT_ARGP();
 
 		path = **argv;
 		NEXT_ARGP();
 
-		(*fds)[0] = open_obj_pinned_any(path, BPF_OBJ_MAP);
+		(*fds)[0] = open_obj_pinned_any(path, BPF_OBJ_MAP, &get_opts);
 		if ((*fds)[0] < 0)
 			return -1;
 		return 1;
@@ -1075,7 +1159,7 @@ int map_parse_fds(int *argc, char ***argv, int **fds)
 	return -1;
 }
 
-int map_parse_fd(int *argc, char ***argv)
+int map_parse_fd(int *argc, char ***argv, __u32 open_flags)
 {
 	int *fds = NULL;
 	int nb_fds, fd;
@@ -1085,7 +1169,7 @@ int map_parse_fd(int *argc, char ***argv)
 		p_err("mem alloc failed");
 		return -1;
 	}
-	nb_fds = map_parse_fds(argc, argv, &fds);
+	nb_fds = map_parse_fds(argc, argv, &fds, open_flags);
 	if (nb_fds != 1) {
 		if (nb_fds > 1) {
 			p_err("several maps match this handle");
@@ -1103,12 +1187,12 @@ exit_free:
 }
 
 int map_parse_fd_and_info(int *argc, char ***argv, struct bpf_map_info *info,
-			  __u32 *info_len)
+			  __u32 *info_len, __u32 open_flags)
 {
 	int err;
 	int fd;
 
-	fd = map_parse_fd(argc, argv);
+	fd = map_parse_fd(argc, argv, open_flags);
 	if (fd < 0)
 		return -1;
 
@@ -1162,6 +1246,7 @@ const char *bpf_attach_type_input_str(enum bpf_attach_type t)
 	case BPF_TRACE_FENTRY:			return "fentry";
 	case BPF_TRACE_FEXIT:			return "fexit";
 	case BPF_MODIFY_RETURN:			return "mod_ret";
+	case BPF_TRACE_FSESSION:		return "fsession";
 	case BPF_SK_REUSEPORT_SELECT:		return "sk_skb_reuseport_select";
 	case BPF_SK_REUSEPORT_SELECT_OR_MIGRATE:	return "sk_skb_reuseport_select_or_migrate";
 	default:	return libbpf_bpf_attach_type_str(t);
@@ -1180,4 +1265,95 @@ int pathname_concat(char *buf, int buf_sz, const char *path,
 		return -ENAMETOOLONG;
 
 	return 0;
+}
+
+static bool read_next_kernel_config_option(gzFile file, char *buf, size_t n,
+					   char **value)
+{
+	char *sep;
+
+	while (gzgets(file, buf, n)) {
+		if (strncmp(buf, "CONFIG_", 7))
+			continue;
+
+		sep = strchr(buf, '=');
+		if (!sep)
+			continue;
+
+		/* Trim ending '\n' */
+		buf[strlen(buf) - 1] = '\0';
+
+		/* Split on '=' and ensure that a value is present. */
+		*sep = '\0';
+		if (!sep[1])
+			continue;
+
+		*value = sep + 1;
+		return true;
+	}
+
+	return false;
+}
+
+int read_kernel_config(const struct kernel_config_option *requested_options,
+		       size_t num_options, char **out_values,
+		       const char *define_prefix)
+{
+	struct utsname utsn;
+	char path[PATH_MAX];
+	gzFile file = NULL;
+	char buf[4096];
+	char *value;
+	size_t i;
+	int ret = 0;
+
+	if (!requested_options || !out_values || num_options == 0)
+		return -1;
+
+	if (!uname(&utsn)) {
+		snprintf(path, sizeof(path), "/boot/config-%s", utsn.release);
+
+		/* gzopen also accepts uncompressed files. */
+		file = gzopen(path, "r");
+	}
+
+	if (!file) {
+		/* Some distributions build with CONFIG_IKCONFIG=y and put the
+		 * config file at /proc/config.gz.
+		 */
+		file = gzopen("/proc/config.gz", "r");
+	}
+
+	if (!file) {
+		p_info("skipping kernel config, can't open file: %s",
+			strerror(errno));
+		return -1;
+	}
+
+	if (!gzgets(file, buf, sizeof(buf)) || !gzgets(file, buf, sizeof(buf))) {
+		p_info("skipping kernel config, can't read from file: %s",
+			strerror(errno));
+		ret = -1;
+		goto end_parse;
+	}
+
+	if (strcmp(buf, "# Automatically generated file; DO NOT EDIT.\n")) {
+		p_info("skipping kernel config, can't find correct file");
+		ret = -1;
+		goto end_parse;
+	}
+
+	while (read_next_kernel_config_option(file, buf, sizeof(buf), &value)) {
+		for (i = 0; i < num_options; i++) {
+			if ((define_prefix && !requested_options[i].macro_dump) ||
+			     out_values[i] || strcmp(buf, requested_options[i].name))
+				continue;
+
+			out_values[i] = strdup(value);
+		}
+	}
+
+end_parse:
+	gzclose(file);
+	return ret;
 }

@@ -2,6 +2,13 @@
 // Copyright (c) 2025 Miklos Szeredi <miklos@szeredi.hu>
 
 #define _GNU_SOURCE
+
+// Needed for linux/fanotify.h
+typedef struct {
+	int	val[2];
+} __kernel_fsid_t;
+#define __kernel_fsid_t __kernel_fsid_t
+
 #include <fcntl.h>
 #include <sched.h>
 #include <stdio.h>
@@ -10,19 +17,11 @@
 #include <sys/mount.h>
 #include <unistd.h>
 #include <sys/syscall.h>
+#include <sys/fanotify.h>
 
-#include "../../kselftest_harness.h"
+#include "kselftest_harness.h"
 #include "../statmount/statmount.h"
 #include "../utils.h"
-
-// Needed for linux/fanotify.h
-#ifndef __kernel_fsid_t
-typedef struct {
-	int	val[2];
-} __kernel_fsid_t;
-#endif
-
-#include <sys/fanotify.h>
 
 static const char root_mntpoint_templ[] = "/tmp/mount-notify_test_root.XXXXXX";
 
@@ -338,18 +337,18 @@ TEST_F(fanotify, fsmount)
 	fs = fsopen("tmpfs", 0);
 	ASSERT_GE(fs, 0);
 
-        ret = fsconfig(fs, FSCONFIG_CMD_CREATE, 0, 0, 0);
+	ret = fsconfig(fs, FSCONFIG_CMD_CREATE, 0, 0, 0);
 	ASSERT_EQ(ret, 0);
 
-        mnt = fsmount(fs, 0, 0);
+	mnt = fsmount(fs, 0, 0);
 	ASSERT_GE(mnt, 0);
 
-        close(fs);
+	close(fs);
 
 	ret = move_mount(mnt, "", AT_FDCWD, "/a", MOVE_MOUNT_F_EMPTY_PATH);
 	ASSERT_EQ(ret, 0);
 
-        close(mnt);
+	close(mnt);
 
 	mnts[1] = expect_notify_mask(_metadata, self, FAN_MNT_ATTACH);
 	ASSERT_NE(mnts[0], mnts[1]);

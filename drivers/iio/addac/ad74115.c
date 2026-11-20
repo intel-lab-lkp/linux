@@ -1539,8 +1539,7 @@ static int ad74115_setup_iio_channels(struct iio_dev *indio_dev)
 	struct device *dev = &st->spi->dev;
 	struct iio_chan_spec *channels;
 
-	channels = devm_kcalloc(dev, sizeof(*channels),
-				indio_dev->num_channels, GFP_KERNEL);
+	channels = devm_kzalloc_objs(dev, *channels, indio_dev->num_channels);
 	if (!channels)
 		return -ENOMEM;
 
@@ -1577,7 +1576,7 @@ static int ad74115_setup_gpio_chip(struct ad74115_state *st)
 		.direction_input = ad74115_gpio_direction_input,
 		.direction_output = ad74115_gpio_direction_output,
 		.get = ad74115_gpio_get,
-		.set_rv = ad74115_gpio_set,
+		.set = ad74115_gpio_set,
 	};
 
 	return devm_gpiochip_add_data(dev, &st->gc, st);
@@ -1835,7 +1834,10 @@ static int ad74115_probe(struct spi_device *spi)
 	st = iio_priv(indio_dev);
 
 	st->spi = spi;
-	mutex_init(&st->lock);
+	ret = devm_mutex_init(dev, &st->lock);
+	if (ret)
+		return ret;
+
 	init_completion(&st->adc_data_completion);
 
 	indio_dev->name = AD74115_NAME;
@@ -1901,7 +1903,7 @@ static int __init ad74115_register_driver(struct spi_driver *spi)
 }
 
 static const struct spi_device_id ad74115_spi_id[] = {
-	{ "ad74115h" },
+	{ .name = "ad74115h" },
 	{ }
 };
 

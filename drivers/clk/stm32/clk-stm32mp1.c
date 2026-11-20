@@ -490,7 +490,7 @@ static struct clk_hw *_get_stm32_mux(struct device *dev, void __iomem *base,
 	struct clk_hw *mux_hw;
 
 	if (cfg->mmux) {
-		mmux = devm_kzalloc(dev, sizeof(*mmux), GFP_KERNEL);
+		mmux = devm_kzalloc_obj(dev, *mmux);
 		if (!mmux)
 			return ERR_PTR(-ENOMEM);
 
@@ -505,7 +505,7 @@ static struct clk_hw *_get_stm32_mux(struct device *dev, void __iomem *base,
 		cfg->mmux->hws[cfg->mmux->nbr_clk++] = mux_hw;
 
 	} else {
-		mux = devm_kzalloc(dev, sizeof(*mux), GFP_KERNEL);
+		mux = devm_kzalloc_obj(dev, *mux);
 		if (!mux)
 			return ERR_PTR(-ENOMEM);
 
@@ -527,7 +527,7 @@ static struct clk_hw *_get_stm32_div(struct device *dev, void __iomem *base,
 {
 	struct clk_divider *div;
 
-	div = devm_kzalloc(dev, sizeof(*div), GFP_KERNEL);
+	div = devm_kzalloc_obj(dev, *div);
 
 	if (!div)
 		return ERR_PTR(-ENOMEM);
@@ -551,7 +551,7 @@ static struct clk_hw *_get_stm32_gate(struct device *dev, void __iomem *base,
 	struct clk_hw *gate_hw;
 
 	if (cfg->mgate) {
-		mgate = devm_kzalloc(dev, sizeof(*mgate), GFP_KERNEL);
+		mgate = devm_kzalloc_obj(dev, *mgate);
 		if (!mgate)
 			return ERR_PTR(-ENOMEM);
 
@@ -566,7 +566,7 @@ static struct clk_hw *_get_stm32_gate(struct device *dev, void __iomem *base,
 		gate_hw = &mgate->gate.hw;
 
 	} else {
-		gate = devm_kzalloc(dev, sizeof(*gate), GFP_KERNEL);
+		gate = devm_kzalloc_obj(dev, *gate);
 		if (!gate)
 			return ERR_PTR(-ENOMEM);
 
@@ -902,12 +902,12 @@ static struct clk_hw *clk_register_pll(struct device *dev, const char *name,
 				       unsigned long flags,
 				       spinlock_t *lock)
 {
+	struct clk_init_data init = {};
 	struct stm32_pll_obj *element;
-	struct clk_init_data init;
 	struct clk_hw *hw;
 	int err;
 
-	element = devm_kzalloc(dev, sizeof(*element), GFP_KERNEL);
+	element = devm_kzalloc_obj(dev, *element);
 	if (!element)
 		return ERR_PTR(-ENOMEM);
 
@@ -970,12 +970,15 @@ static unsigned long __bestmult(struct clk_hw *hw, unsigned long rate,
 	return mult;
 }
 
-static long timer_ker_round_rate(struct clk_hw *hw, unsigned long rate,
-				 unsigned long *parent_rate)
+static int timer_ker_determine_rate(struct clk_hw *hw,
+				    struct clk_rate_request *req)
 {
-	unsigned long factor = __bestmult(hw, rate, *parent_rate);
+	unsigned long factor = __bestmult(hw, req->rate,
+					  req->best_parent_rate);
 
-	return *parent_rate * factor;
+	req->rate = req->best_parent_rate * factor;
+
+	return 0;
 }
 
 static int timer_ker_set_rate(struct clk_hw *hw, unsigned long rate,
@@ -1026,7 +1029,7 @@ static unsigned long timer_ker_recalc_rate(struct clk_hw *hw,
 
 static const struct clk_ops timer_ker_ops = {
 	.recalc_rate	= timer_ker_recalc_rate,
-	.round_rate	= timer_ker_round_rate,
+	.determine_rate = timer_ker_determine_rate,
 	.set_rate	= timer_ker_set_rate,
 
 };
@@ -1038,12 +1041,12 @@ static struct clk_hw *clk_register_cktim(struct device *dev, const char *name,
 					 void __iomem *timpre,
 					 spinlock_t *lock)
 {
+	struct clk_init_data init = {};
 	struct timer_cker *tim_ker;
-	struct clk_init_data init;
 	struct clk_hw *hw;
 	int err;
 
-	tim_ker = devm_kzalloc(dev, sizeof(*tim_ker), GFP_KERNEL);
+	tim_ker = devm_kzalloc_obj(dev, *tim_ker);
 	if (!tim_ker)
 		return ERR_PTR(-ENOMEM);
 
@@ -2041,7 +2044,7 @@ static const struct clock_config stm32mp1_clock_cfg[] = {
 	KCLK(ADFSDM_K, "adfsdm_k", sai_src, 0, G_ADFSDM, M_SAI1),
 	KCLK(USBO_K, "usbo_k", usbo_src, 0, G_USBO, M_USBO),
 
-	/* Particulary Kernel Clocks (no mux or no gate) */
+	/* Particularly Kernel Clocks (no mux or no gate) */
 	MGATE_MP1(DFSDM_K, "dfsdm_k", "ck_mcu", 0, G_DFSDM),
 	MGATE_MP1(DSI_PX, "dsi_px", "pll4_q", CLK_SET_RATE_PARENT, G_DSI),
 	MGATE_MP1(LTDC_PX, "ltdc_px", "pll4_q", CLK_SET_RATE_PARENT, G_LTDC),
@@ -2212,8 +2215,7 @@ static int stm32_rcc_clock_init(struct device *dev, void __iomem *base,
 
 	max_binding =  data->maxbinding;
 
-	clk_data = devm_kzalloc(dev, struct_size(clk_data, hws, max_binding),
-				GFP_KERNEL);
+	clk_data = devm_kzalloc_flex(dev, *clk_data, hws, max_binding);
 	if (!clk_data)
 		return -ENOMEM;
 

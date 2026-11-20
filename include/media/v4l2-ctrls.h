@@ -2,7 +2,7 @@
 /*
  *  V4L2 controls support header.
  *
- *  Copyright (C) 2010  Hans Verkuil <hverkuil@xs4all.nl>
+ *  Copyright (C) 2010  Hans Verkuil <hverkuil@kernel.org>
  */
 
 #ifndef _V4L2_CTRLS_H
@@ -579,8 +579,10 @@ int v4l2_ctrl_handler_init_class(struct v4l2_ctrl_handler *hdl,
  * @hdl:	The control handler.
  *
  * Does nothing if @hdl == NULL.
+ *
+ * Return: @hdl's error field or 0 if @hdl is NULL.
  */
-void v4l2_ctrl_handler_free(struct v4l2_ctrl_handler *hdl);
+int v4l2_ctrl_handler_free(struct v4l2_ctrl_handler *hdl);
 
 /**
  * v4l2_ctrl_lock() - Helper function to lock the handler
@@ -832,6 +834,9 @@ bool v4l2_ctrl_radio_filter(const struct v4l2_ctrl *ctrl);
  *
  * @ncontrols:	The number of controls in this cluster.
  * @controls:	The cluster control array of size @ncontrols.
+ *
+ *		If controls[0] is NULL, then this function does nothing and just
+ *		returns.
  */
 void v4l2_ctrl_cluster(unsigned int ncontrols, struct v4l2_ctrl **controls);
 
@@ -843,6 +848,9 @@ void v4l2_ctrl_cluster(unsigned int ncontrols, struct v4l2_ctrl **controls);
  * @ncontrols:	The number of controls in this cluster.
  * @controls:	The cluster control array of size @ncontrols. The first control
  *		must be the 'auto' control (e.g. autogain, autoexposure, etc.)
+ *
+ *		If controls[0] is NULL, then this function does nothing and just
+ *		returns.
  * @manual_val: The value for the first control in the cluster that equals the
  *		manual setting.
  * @set_volatile: If true, then all controls except the first auto control will
@@ -1311,13 +1319,13 @@ void v4l2_ctrl_merge(const struct v4l2_event *old, struct v4l2_event *new);
  * v4l2_ctrl_log_status - helper function to implement %VIDIOC_LOG_STATUS ioctl
  *
  * @file: pointer to struct file
- * @fh: unused. Kept just to be compatible to the arguments expected by
+ * @priv: unused. Kept just to be compatible to the arguments expected by
  *	&struct v4l2_ioctl_ops.vidioc_log_status.
  *
  * Can be used as a vidioc_log_status function that just dumps all controls
  * associated with the filehandle.
  */
-int v4l2_ctrl_log_status(struct file *file, void *fh);
+int v4l2_ctrl_log_status(struct file *file, void *priv);
 
 /**
  * v4l2_ctrl_subscribe_event - Subscribes to an event
@@ -1578,6 +1586,9 @@ int v4l2_ctrl_subdev_log_status(struct v4l2_subdev *sd);
  * Controls already registered by the caller with the @hdl control handler are
  * not overwritten. Callers should register the controls they want to handle
  * themselves before calling this function.
+ *
+ * This function will set the control handler's error field on failure, just as
+ * other functions adding controls to the handler.
  *
  * Return: 0 on success, a negative error code on failure.
  */

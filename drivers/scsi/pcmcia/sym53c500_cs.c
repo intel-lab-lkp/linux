@@ -360,7 +360,7 @@ SYM53C500_intr(int irq, void *dev_id)
 	struct sym53c500_cmd_priv *scp = scsi_cmd_priv(curSC);
 	int fast_pio = data->fast_pio;
 
-	spin_lock_irqsave(dev->host_lock, flags);
+	spin_lock_irqsave(&dev->host_lock, flags);
 
 	VDEB(printk("SYM53C500_intr called\n"));
 
@@ -494,7 +494,7 @@ SYM53C500_intr(int irq, void *dev_id)
 		break;
 	}
 out:
-	spin_unlock_irqrestore(dev->host_lock, flags);
+	spin_unlock_irqrestore(&dev->host_lock, flags);
 	return IRQ_HANDLED;
 
 idle_out:
@@ -544,7 +544,7 @@ SYM53C500_info(struct Scsi_Host *SChost)
 	return (info_msg);
 }
 
-static int SYM53C500_queue_lck(struct scsi_cmnd *SCpnt)
+static enum scsi_qc_status SYM53C500_queue_lck(struct scsi_cmnd *SCpnt)
 {
 	struct sym53c500_cmd_priv *scp = scsi_cmd_priv(SCpnt);
 	int i;
@@ -588,16 +588,16 @@ SYM53C500_host_reset(struct scsi_cmnd *SCpnt)
 	int port_base = SCpnt->device->host->io_port;
 
 	DEB(printk("SYM53C500_host_reset called\n"));
-	spin_lock_irq(SCpnt->device->host->host_lock);
+	spin_lock_irq(&SCpnt->device->host->host_lock);
 	SYM53C500_int_host_reset(port_base);
-	spin_unlock_irq(SCpnt->device->host->host_lock);
+	spin_unlock_irq(&SCpnt->device->host->host_lock);
 
 	return SUCCESS;
 }
 
 static int 
 SYM53C500_biosparm(struct scsi_device *disk,
-    struct block_device *dev,
+    struct gendisk *unused,
     sector_t capacity, int *info_array)
 {
 	int size;
@@ -849,7 +849,7 @@ SYM53C500_probe(struct pcmcia_device *link)
 	dev_dbg(&link->dev, "SYM53C500_attach()\n");
 
 	/* Create new SCSI device */
-	info = kzalloc(sizeof(*info), GFP_KERNEL);
+	info = kzalloc_obj(*info);
 	if (!info)
 		return -ENOMEM;
 	info->p_dev = link;

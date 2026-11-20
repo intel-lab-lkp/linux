@@ -36,18 +36,18 @@ static int tps65910_gpio_get(struct gpio_chip *gc, unsigned offset)
 	return 0;
 }
 
-static void tps65910_gpio_set(struct gpio_chip *gc, unsigned offset,
-			      int value)
+static int tps65910_gpio_set(struct gpio_chip *gc, unsigned int offset,
+			     int value)
 {
 	struct tps65910_gpio *tps65910_gpio = gpiochip_get_data(gc);
 	struct tps65910 *tps65910 = tps65910_gpio->tps65910;
 
 	if (value)
-		regmap_set_bits(tps65910->regmap, TPS65910_GPIO0 + offset,
-						GPIO_SET_MASK);
-	else
-		regmap_clear_bits(tps65910->regmap, TPS65910_GPIO0 + offset,
-						GPIO_SET_MASK);
+		return regmap_set_bits(tps65910->regmap,
+				       TPS65910_GPIO0 + offset, GPIO_SET_MASK);
+
+	return regmap_clear_bits(tps65910->regmap, TPS65910_GPIO0 + offset,
+				 GPIO_SET_MASK);
 }
 
 static int tps65910_gpio_output(struct gpio_chip *gc, unsigned offset,
@@ -55,9 +55,12 @@ static int tps65910_gpio_output(struct gpio_chip *gc, unsigned offset,
 {
 	struct tps65910_gpio *tps65910_gpio = gpiochip_get_data(gc);
 	struct tps65910 *tps65910 = tps65910_gpio->tps65910;
+	int ret;
 
 	/* Set the initial value */
-	tps65910_gpio_set(gc, offset, value);
+	ret = tps65910_gpio_set(gc, offset, value);
+	if (ret)
+		return ret;
 
 	return regmap_set_bits(tps65910->regmap, TPS65910_GPIO0 + offset,
 						GPIO_CFG_MASK);
@@ -113,8 +116,7 @@ static int tps65910_gpio_probe(struct platform_device *pdev)
 
 	device_set_node(&pdev->dev, dev_fwnode(pdev->dev.parent));
 
-	tps65910_gpio = devm_kzalloc(&pdev->dev,
-				sizeof(*tps65910_gpio), GFP_KERNEL);
+	tps65910_gpio = devm_kzalloc_obj(&pdev->dev, *tps65910_gpio);
 	if (!tps65910_gpio)
 		return -ENOMEM;
 

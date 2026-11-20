@@ -31,7 +31,7 @@ static int buildid__map_cb(struct map *map, void *arg __maybe_unused)
 
 	memset(bid_buf, 0, sizeof(bid_buf));
 	if (dso__has_build_id(dso))
-		build_id__sprintf(dso__bid_const(dso), bid_buf);
+		build_id__snprintf(dso__bid(dso), bid_buf, sizeof(bid_buf));
 	printf("%s %16" PRIx64 " %16" PRIx64, bid_buf, map__start(map), map__end(map));
 	if (dso_long_name != NULL)
 		printf(" %s", dso_long_name);
@@ -45,11 +45,14 @@ static int buildid__map_cb(struct map *map, void *arg __maybe_unused)
 
 static void buildid__show_kernel_maps(void)
 {
+	struct perf_env host_env;
 	struct machine *machine;
 
-	machine = machine__new_host();
+	perf_env__init(&host_env);
+	machine = machine__new_host(&host_env);
 	machine__for_each_kernel_map(machine, buildid__map_cb, NULL);
 	machine__delete(machine);
+	perf_env__exit(&host_env);
 }
 
 static int sysfs__fprintf_build_id(FILE *fp)
@@ -57,8 +60,8 @@ static int sysfs__fprintf_build_id(FILE *fp)
 	char sbuild_id[SBUILD_ID_SIZE];
 	int ret;
 
-	ret = sysfs__sprintf_build_id("/", sbuild_id);
-	if (ret != sizeof(sbuild_id))
+	ret = sysfs__snprintf_build_id("/", sbuild_id, sizeof(sbuild_id));
+	if (ret + 1 != sizeof(sbuild_id))
 		return ret < 0 ? ret : -EINVAL;
 
 	return fprintf(fp, "%s\n", sbuild_id);
@@ -69,8 +72,8 @@ static int filename__fprintf_build_id(const char *name, FILE *fp)
 	char sbuild_id[SBUILD_ID_SIZE];
 	int ret;
 
-	ret = filename__sprintf_build_id(name, sbuild_id);
-	if (ret != sizeof(sbuild_id))
+	ret = filename__snprintf_build_id(name, sbuild_id, sizeof(sbuild_id));
+	if (ret + 1 != sizeof(sbuild_id))
 		return ret < 0 ? ret : -EINVAL;
 
 	return fprintf(fp, "%s\n", sbuild_id);
@@ -84,6 +87,7 @@ static bool dso__skip_buildid(struct dso *dso, int with_hits)
 static int perf_session__list_build_ids(bool force, bool with_hits)
 {
 	struct perf_session *session;
+	bool has_auxtrace, has_build_id;
 	struct perf_data data = {
 		.path  = input_name,
 		.mode  = PERF_DATA_MODE_READ,
@@ -115,11 +119,19 @@ static int perf_session__list_build_ids(bool force, bool with_hits)
 	 * We take all buildids when the file contains AUX area tracing data
 	 * because we do not decode the trace because it would take too long.
 	 */
-	if (!perf_data__is_pipe(&data) &&
-	    perf_header__has_feat(&session->header, HEADER_AUXTRACE))
+	has_auxtrace = !perf_data__is_pipe(&data) &&
+		perf_header__has_feat(&session->header, HEADER_AUXTRACE);
+	has_build_id = perf_header__has_feat(&session->header, HEADER_BUILD_ID);
+
+	if (has_auxtrace)
 		with_hits = false;
 
-	if (!perf_header__has_feat(&session->header, HEADER_BUILD_ID))
+	/*
+	 * Without a build-ID header, the event stream is processed below to find
+	 * build IDs in MMAP2 records. For AUX data keep all DSOs because the trace
+	 * is not decoded and consequently none of them can be marked as hit.
+	 */
+	if (!has_build_id && !has_auxtrace)
 		with_hits = true;
 
 	if (zstd_init(&(session->zstd_data), 0) < 0)
@@ -129,7 +141,7 @@ static int perf_session__list_build_ids(bool force, bool with_hits)
 	 * in pipe-mode, the only way to get the buildids is to parse
 	 * the record stream. Buildids are stored as RECORD_HEADER_BUILD_ID
 	 */
-	if (with_hits || perf_data__is_pipe(&data))
+	if (with_hits || perf_data__is_pipe(&data) || !has_build_id)
 		perf_session__process_events(session);
 
 	perf_session__fprintf_dsos_buildid(session, stdout, dso__skip_buildid, with_hits);

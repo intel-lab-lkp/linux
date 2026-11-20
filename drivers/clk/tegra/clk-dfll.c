@@ -882,7 +882,7 @@ static void dfll_set_frequency_request(struct tegra_dfll *td,
 {
 	u32 val = 0;
 	int force_val;
-	int coef = 128; /* FIXME: td->cg_scale? */;
+	int coef = 128; /* FIXME: td->cg_scale? */
 
 	force_val = (req->lut_index - td->lut_safe) * coef / td->cg;
 	force_val = clamp(force_val, FORCE_MIN, FORCE_MAX);
@@ -1948,7 +1948,7 @@ int tegra_dfll_register(struct platform_device *pdev,
 		return -EINVAL;
 	}
 
-	td = devm_kzalloc(&pdev->dev, sizeof(*td), GFP_KERNEL);
+	td = devm_kzalloc_obj(&pdev->dev, *td);
 	if (!td)
 		return -ENOMEM;
 	td->dev = &pdev->dev;

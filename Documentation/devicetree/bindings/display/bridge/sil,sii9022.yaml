@@ -109,7 +109,10 @@ required:
   - compatible
   - reg
 
-additionalProperties: false
+allOf:
+  - $ref: /schemas/sound/dai-common.yaml#
+
+unevaluatedProperties: false
 
 examples:
   - |
@@ -125,7 +128,7 @@ examples:
             cvcc12-supply = <&v1v2_hdmi>;
 
             #sound-dai-cells = <0>;
-            sil,i2s-data-lanes = < 0 1 2 >;
+            sil,i2s-data-lanes = <0 1 2>;
             clocks = <&mclk>;
             clock-names = "mclk";
 

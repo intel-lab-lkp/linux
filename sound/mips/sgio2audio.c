@@ -16,6 +16,7 @@
 #include <linux/platform_device.h>
 #include <linux/io.h>
 #include <linux/slab.h>
+#include <linux/string.h>
 #include <linux/module.h>
 
 #include <asm/ip32/ip32_ints.h>
@@ -102,9 +103,8 @@ static int read_ad1843_reg(void *priv, int reg)
 {
 	struct snd_sgio2audio *chip = priv;
 	int val;
-	unsigned long flags;
 
-	spin_lock_irqsave(&chip->ad1843_lock, flags);
+	guard(spinlock_irqsave)(&chip->ad1843_lock);
 
 	writeq((reg << CODEC_CONTROL_ADDRESS_SHIFT) |
 	       CODEC_CONTROL_READ, &mace->perif.audio.codec_control);
@@ -114,7 +114,6 @@ static int read_ad1843_reg(void *priv, int reg)
 
 	val = readq(&mace->perif.audio.codec_read);
 
-	spin_unlock_irqrestore(&chip->ad1843_lock, flags);
 	return val;
 }
 
@@ -125,9 +124,8 @@ static int write_ad1843_reg(void *priv, int reg, int word)
 {
 	struct snd_sgio2audio *chip = priv;
 	int val;
-	unsigned long flags;
 
-	spin_lock_irqsave(&chip->ad1843_lock, flags);
+	guard(spinlock_irqsave)(&chip->ad1843_lock);
 
 	writeq((reg << CODEC_CONTROL_ADDRESS_SHIFT) |
 	       (word << CODEC_CONTROL_WORD_SHIFT),
@@ -136,7 +134,6 @@ static int write_ad1843_reg(void *priv, int reg, int word)
 	val = readq(&mace->perif.audio.codec_control); /* flush bus */
 	udelay(200);
 
-	spin_unlock_irqrestore(&chip->ad1843_lock, flags);
 	return 0;
 }
 
@@ -350,10 +347,9 @@ static int snd_sgio2audio_dma_pull_frag(struct snd_sgio2audio *chip,
 	u64 *src;
 	s16 *dst;
 	u64 x;
-	unsigned long flags;
 	struct snd_pcm_runtime *runtime = chip->channel[ch].substream->runtime;
 
-	spin_lock_irqsave(&chip->channel[ch].lock, flags);
+	guard(spinlock_irqsave)(&chip->channel[ch].lock);
 
 	src_base = (unsigned long) chip->ring_base | (ch << CHANNEL_RING_SHIFT);
 	src_pos = readq(&mace->perif.audio.chan[ch].read_ptr);
@@ -382,7 +378,6 @@ static int snd_sgio2audio_dma_pull_frag(struct snd_sgio2audio *chip,
 	writeq(src_pos, &mace->perif.audio.chan[ch].read_ptr); /* in bytes */
 	chip->channel[ch].pos = dst_pos;
 
-	spin_unlock_irqrestore(&chip->channel[ch].lock, flags);
 	return ret;
 }
 
@@ -398,10 +393,9 @@ static int snd_sgio2audio_dma_push_frag(struct snd_sgio2audio *chip,
 	int src_pos;
 	u64 *dst;
 	s16 *src;
-	unsigned long flags;
 	struct snd_pcm_runtime *runtime = chip->channel[ch].substream->runtime;
 
-	spin_lock_irqsave(&chip->channel[ch].lock, flags);
+	guard(spinlock_irqsave)(&chip->channel[ch].lock);
 
 	dst_base = (unsigned long)chip->ring_base | (ch << CHANNEL_RING_SHIFT);
 	dst_pos = readq(&mace->perif.audio.chan[ch].write_ptr);
@@ -432,7 +426,6 @@ static int snd_sgio2audio_dma_push_frag(struct snd_sgio2audio *chip,
 	writeq(dst_pos, &mace->perif.audio.chan[ch].write_ptr); /* in bytes */
 	chip->channel[ch].pos = src_pos;
 
-	spin_unlock_irqrestore(&chip->channel[ch].lock, flags);
 	return ret;
 }
 
@@ -583,9 +576,8 @@ static int snd_sgio2audio_pcm_prepare(struct snd_pcm_substream *substream)
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct snd_sgio2audio_chan *chan = substream->runtime->private_data;
 	int ch = chan->idx;
-	unsigned long flags;
 
-	spin_lock_irqsave(&chip->channel[ch].lock, flags);
+	guard(spinlock_irqsave)(&chip->channel[ch].lock);
 
 	/* Setup the pseudo-dma transfer pointers.  */
 	chip->channel[ch].pos = 0;
@@ -609,7 +601,6 @@ static int snd_sgio2audio_pcm_prepare(struct snd_pcm_substream *substream)
 				 runtime->channels);
 		break;
 	}
-	spin_unlock_irqrestore(&chip->channel[ch].lock, flags);
 	return 0;
 }
 
@@ -685,7 +676,7 @@ static int snd_sgio2audio_new_pcm(struct snd_sgio2audio *chip)
 		return err;
 
 	pcm->private_data = chip;
-	strcpy(pcm->name, "SGI O2 DAC1");
+	strscpy(pcm->name, "SGI O2 DAC1");
 
 	/* set operators */
 	snd_pcm_set_ops(pcm, SNDRV_PCM_STREAM_PLAYBACK,
@@ -700,7 +691,7 @@ static int snd_sgio2audio_new_pcm(struct snd_sgio2audio *chip)
 		return err;
 
 	pcm->private_data = chip;
-	strcpy(pcm->name, "SGI O2 DAC2");
+	strscpy(pcm->name, "SGI O2 DAC2");
 
 	/* set operators */
 	snd_pcm_set_ops(pcm, SNDRV_PCM_STREAM_PLAYBACK,
@@ -751,7 +742,8 @@ static struct {
 
 /* ALSA driver */
 
-static int snd_sgio2audio_free(struct snd_sgio2audio *chip)
+static int snd_sgio2audio_free(struct snd_sgio2audio *chip,
+			       unsigned int irq_count)
 {
 	int i;
 
@@ -761,7 +753,7 @@ static int snd_sgio2audio_free(struct snd_sgio2audio *chip)
 	writeq(0, &mace->perif.audio.control);
 
 	/* release IRQ's */
-	for (i = 0; i < ARRAY_SIZE(snd_sgio2_isr_table); i++)
+	for (i = 0; i < irq_count; i++)
 		free_irq(snd_sgio2_isr_table[i].irq,
 			 &chip->channel[snd_sgio2_isr_table[i].idx]);
 
@@ -777,7 +769,7 @@ static int snd_sgio2audio_dev_free(struct snd_device *device)
 {
 	struct snd_sgio2audio *chip = device->device_data;
 
-	return snd_sgio2audio_free(chip);
+	return snd_sgio2audio_free(chip, ARRAY_SIZE(snd_sgio2_isr_table));
 }
 
 static const struct snd_device_ops ops = {
@@ -797,7 +789,7 @@ static int snd_sgio2audio_create(struct snd_card *card,
 	if (!(readq(&mace->perif.audio.control) & AUDIO_CONTROL_CODEC_PRESENT))
 		return -ENOENT;
 
-	chip = kzalloc(sizeof(*chip), GFP_KERNEL);
+	chip = kzalloc_obj(*chip);
 	if (chip == NULL)
 		return -ENOMEM;
 
@@ -828,7 +820,7 @@ static int snd_sgio2audio_create(struct snd_card *card,
 				0,
 				snd_sgio2_isr_table[i].desc,
 				&chip->channel[snd_sgio2_isr_table[i].idx])) {
-			snd_sgio2audio_free(chip);
+			snd_sgio2audio_free(chip, i);
 			printk(KERN_ERR "sgio2audio: cannot allocate irq %d\n",
 			       snd_sgio2_isr_table[i].irq);
 			return -EBUSY;
@@ -852,13 +844,13 @@ static int snd_sgio2audio_create(struct snd_card *card,
 	/* initialize the AD1843 codec */
 	err = ad1843_init(&chip->ad1843);
 	if (err < 0) {
-		snd_sgio2audio_free(chip);
+		snd_sgio2audio_free(chip, ARRAY_SIZE(snd_sgio2_isr_table));
 		return err;
 	}
 
 	err = snd_device_new(card, SNDRV_DEV_LOWLEVEL, chip, &ops);
 	if (err < 0) {
-		snd_sgio2audio_free(chip);
+		snd_sgio2audio_free(chip, ARRAY_SIZE(snd_sgio2_isr_table));
 		return err;
 	}
 	*rchip = chip;
@@ -867,57 +859,43 @@ static int snd_sgio2audio_create(struct snd_card *card,
 
 static int snd_sgio2audio_probe(struct platform_device *pdev)
 {
-	struct snd_card *card;
+	struct snd_card *card __free(snd_card_free) = NULL;
 	struct snd_sgio2audio *chip;
 	int err;
 
-	err = snd_card_new(&pdev->dev, index, id, THIS_MODULE, 0, &card);
+	err = snd_devm_card_new(&pdev->dev, index, id, THIS_MODULE, 0, &card);
 	if (err < 0)
 		return err;
 
 	err = snd_sgio2audio_create(card, &chip);
-	if (err < 0) {
-		snd_card_free(card);
+	if (err < 0)
 		return err;
-	}
 
 	err = snd_sgio2audio_new_pcm(chip);
-	if (err < 0) {
-		snd_card_free(card);
+	if (err < 0)
 		return err;
-	}
 	err = snd_sgio2audio_new_mixer(chip);
-	if (err < 0) {
-		snd_card_free(card);
+	if (err < 0)
 		return err;
-	}
 
-	strcpy(card->driver, "SGI O2 Audio");
-	strcpy(card->shortname, "SGI O2 Audio");
+	strscpy(card->driver, "SGI O2 Audio");
+	strscpy(card->shortname, "SGI O2 Audio");
 	sprintf(card->longname, "%s irq %i-%i",
 		card->shortname,
 		MACEISA_AUDIO1_DMAT_IRQ,
 		MACEISA_AUDIO3_MERR_IRQ);
 
 	err = snd_card_register(card);
-	if (err < 0) {
-		snd_card_free(card);
+	if (err < 0)
 		return err;
-	}
+
 	platform_set_drvdata(pdev, card);
+	card = NULL; /* probe succeeded, don't release as error */
 	return 0;
-}
-
-static void snd_sgio2audio_remove(struct platform_device *pdev)
-{
-	struct snd_card *card = platform_get_drvdata(pdev);
-
-	snd_card_free(card);
 }
 
 static struct platform_driver sgio2audio_driver = {
 	.probe	= snd_sgio2audio_probe,
-	.remove	= snd_sgio2audio_remove,
 	.driver	= {
 		.name	= "sgio2audio",
 	}

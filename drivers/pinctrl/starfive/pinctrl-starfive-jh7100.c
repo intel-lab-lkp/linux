@@ -10,7 +10,6 @@
 #include <linux/clk.h>
 #include <linux/gpio/driver.h>
 #include <linux/io.h>
-#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
@@ -513,11 +512,11 @@ static int starfive_dt_node_to_map(struct pinctrl_dev *pctldev,
 		ngroups += 1;
 	}
 
-	pgnames = devm_kcalloc(dev, ngroups, sizeof(*pgnames), GFP_KERNEL);
+	pgnames = devm_kzalloc_objs(dev, *pgnames, ngroups);
 	if (!pgnames)
 		return -ENOMEM;
 
-	map = kcalloc(nmaps, sizeof(*map), GFP_KERNEL);
+	map = kzalloc_objs(*map, nmaps);
 	if (!map)
 		return -ENOMEM;
 
@@ -537,13 +536,13 @@ static int starfive_dt_node_to_map(struct pinctrl_dev *pctldev,
 		pgnames[ngroups++] = grpname;
 
 		if ((npins = of_property_count_u32_elems(child, "pinmux")) > 0) {
-			pins = devm_kcalloc(dev, npins, sizeof(*pins), GFP_KERNEL);
+			pins = devm_kzalloc_objs(dev, *pins, npins);
 			if (!pins) {
 				ret = -ENOMEM;
 				goto free_map;
 			}
 
-			pinmux = devm_kcalloc(dev, npins, sizeof(*pinmux), GFP_KERNEL);
+			pinmux = devm_kzalloc_objs(dev, *pinmux, npins);
 			if (!pinmux) {
 				ret = -ENOMEM;
 				goto free_map;
@@ -564,7 +563,7 @@ static int starfive_dt_node_to_map(struct pinctrl_dev *pctldev,
 			map[nmaps].data.mux.group = grpname;
 			nmaps += 1;
 		} else if ((npins = of_property_count_u32_elems(child, "pins")) > 0) {
-			pins = devm_kcalloc(dev, npins, sizeof(*pins), GFP_KERNEL);
+			pins = devm_kzalloc_objs(dev, *pins, npins);
 			if (!pins) {
 				ret = -ENOMEM;
 				goto free_map;
@@ -898,7 +897,7 @@ static const struct pinconf_ops starfive_pinconf_ops = {
 	.is_generic = true,
 };
 
-static struct pinctrl_desc starfive_desc = {
+static const struct pinctrl_desc starfive_desc = {
 	.name = DRIVER_NAME,
 	.pins = starfive_pins,
 	.npins = ARRAY_SIZE(starfive_pins),
@@ -969,8 +968,8 @@ static int starfive_gpio_get(struct gpio_chip *gc, unsigned int gpio)
 	return !!(readl_relaxed(din) & BIT(gpio % 32));
 }
 
-static void starfive_gpio_set(struct gpio_chip *gc, unsigned int gpio,
-			      int value)
+static int starfive_gpio_set(struct gpio_chip *gc, unsigned int gpio,
+			     int value)
 {
 	struct starfive_pinctrl *sfp = container_of(gc, struct starfive_pinctrl, gc);
 	void __iomem *dout = sfp->base + GPON_DOUT_CFG + 8 * gpio;
@@ -979,6 +978,8 @@ static void starfive_gpio_set(struct gpio_chip *gc, unsigned int gpio,
 	raw_spin_lock_irqsave(&sfp->lock, flags);
 	writel_relaxed(value, dout);
 	raw_spin_unlock_irqrestore(&sfp->lock, flags);
+
+	return 0;
 }
 
 static int starfive_gpio_set_config(struct gpio_chip *gc, unsigned int gpio,
@@ -1219,7 +1220,7 @@ static int starfive_probe(struct platform_device *pdev)
 	u32 value;
 	int ret;
 
-	sfp = devm_kzalloc(dev, sizeof(*sfp), GFP_KERNEL);
+	sfp = devm_kzalloc_obj(dev, *sfp);
 	if (!sfp)
 		return -ENOMEM;
 
@@ -1309,8 +1310,8 @@ static int starfive_probe(struct platform_device *pdev)
 	gpio_irq_chip_set_chip(&sfp->gc.irq, &starfive_irq_chip);
 	sfp->gc.irq.parent_handler = starfive_gpio_irq_handler;
 	sfp->gc.irq.num_parents = 1;
-	sfp->gc.irq.parents = devm_kcalloc(dev, sfp->gc.irq.num_parents,
-					   sizeof(*sfp->gc.irq.parents), GFP_KERNEL);
+	sfp->gc.irq.parents = devm_kzalloc_objs(dev, *sfp->gc.irq.parents,
+						sfp->gc.irq.num_parents);
 	if (!sfp->gc.irq.parents)
 		return -ENOMEM;
 	sfp->gc.irq.default_type = IRQ_TYPE_NONE;

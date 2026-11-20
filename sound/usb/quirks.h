@@ -48,6 +48,12 @@ void snd_usb_audioformat_attributes_quirk(struct snd_usb_audio *chip,
 					  struct audioformat *fp,
 					  int stream);
 
-void snd_usb_init_quirk_flags(struct snd_usb_audio *chip);
+void snd_usb_apply_flag_dbg(const char *reason,
+			    struct snd_usb_audio *chip,
+			    unsigned long flag);
+
+void snd_usb_init_quirk_flags_table(struct snd_usb_audio *chip);
+void snd_usb_init_quirk_flags_parse_string(struct snd_usb_audio *chip,
+					   const char *str);
 
 #endif /* __USBAUDIO_QUIRKS_H */

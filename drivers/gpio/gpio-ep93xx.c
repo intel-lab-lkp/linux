@@ -9,16 +9,17 @@
  *  linux/arch/arm/mach-ep93xx/core.c
  */
 
+#include <linux/bitops.h>
+#include <linux/gpio/driver.h>
+#include <linux/gpio/generic.h>
 #include <linux/init.h>
-#include <linux/module.h>
-#include <linux/platform_device.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/irq.h>
-#include <linux/slab.h>
-#include <linux/gpio/driver.h>
-#include <linux/bitops.h>
+#include <linux/module.h>
+#include <linux/platform_device.h>
 #include <linux/seq_file.h>
+#include <linux/slab.h>
 
 struct ep93xx_gpio_irq_chip {
 	void __iomem *base;
@@ -31,11 +32,14 @@ struct ep93xx_gpio_irq_chip {
 
 struct ep93xx_gpio_chip {
 	void __iomem			*base;
-	struct gpio_chip		gc;
+	struct gpio_generic_chip	chip;
 	struct ep93xx_gpio_irq_chip	*eic;
 };
 
-#define to_ep93xx_gpio_chip(x) container_of(x, struct ep93xx_gpio_chip, gc)
+static struct ep93xx_gpio_chip *to_ep93xx_gpio_chip(struct gpio_chip *gc)
+{
+	return container_of(to_gpio_generic_chip(gc), struct ep93xx_gpio_chip, chip);
+}
 
 static struct ep93xx_gpio_irq_chip *to_ep93xx_gpio_irq_chip(struct gpio_chip *gc)
 {
@@ -267,7 +271,7 @@ static const struct irq_chip gpio_eic_irq_chip = {
 static int ep93xx_setup_irqs(struct platform_device *pdev,
 			     struct ep93xx_gpio_chip *egc)
 {
-	struct gpio_chip *gc = &egc->gc;
+	struct gpio_chip *gc = &egc->chip.gc;
 	struct device *dev = &pdev->dev;
 	struct gpio_irq_chip *girq = &gc->irq;
 	int ret, irq, i;
@@ -278,7 +282,7 @@ static int ep93xx_setup_irqs(struct platform_device *pdev,
 		return PTR_ERR(intr);
 
 	gc->set_config = ep93xx_gpio_set_config;
-	egc->eic = devm_kzalloc(dev, sizeof(*egc->eic), GFP_KERNEL);
+	egc->eic = devm_kzalloc_obj(dev, *egc->eic);
 	if (!egc->eic)
 		return -ENOMEM;
 
@@ -288,8 +292,8 @@ static int ep93xx_setup_irqs(struct platform_device *pdev,
 	if (girq->num_parents == 0)
 		return -EINVAL;
 
-	girq->parents = devm_kcalloc(dev, girq->num_parents, sizeof(*girq->parents),
-				     GFP_KERNEL);
+	girq->parents = devm_kzalloc_objs(dev, *girq->parents,
+					  girq->num_parents);
 	if (!girq->parents)
 		return -ENOMEM;
 
@@ -319,21 +323,21 @@ static int ep93xx_setup_irqs(struct platform_device *pdev,
 	}
 
 	girq->default_type = IRQ_TYPE_NONE;
-	/* TODO: replace with handle_bad_irq() once we are fully hierarchical */
-	girq->handler = handle_simple_irq;
+	girq->handler = handle_bad_irq;
 
 	return 0;
 }
 
 static int ep93xx_gpio_probe(struct platform_device *pdev)
 {
+	struct gpio_generic_chip_config config;
 	struct ep93xx_gpio_chip *egc;
 	struct gpio_chip *gc;
 	void __iomem *data;
 	void __iomem *dir;
 	int ret;
 
-	egc = devm_kzalloc(&pdev->dev, sizeof(*egc), GFP_KERNEL);
+	egc = devm_kzalloc_obj(&pdev->dev, *egc);
 	if (!egc)
 		return -ENOMEM;
 
@@ -345,8 +349,16 @@ static int ep93xx_gpio_probe(struct platform_device *pdev)
 	if (IS_ERR(dir))
 		return PTR_ERR(dir);
 
-	gc = &egc->gc;
-	ret = bgpio_init(gc, &pdev->dev, 1, data, NULL, NULL, dir, NULL, 0);
+	gc = &egc->chip.gc;
+
+	config = (struct gpio_generic_chip_config) {
+		.dev = &pdev->dev,
+		.sz = 1,
+		.dat = data,
+		.dirout = dir,
+	};
+
+	ret = gpio_generic_chip_init(&egc->chip, &config);
 	if (ret)
 		return dev_err_probe(&pdev->dev, ret, "unable to init generic GPIO\n");
 

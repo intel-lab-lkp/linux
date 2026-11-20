@@ -609,6 +609,18 @@
 #define CS35L41_DSP_NG_DELAY_MASK	0x0F00
 #define CS35L41_DSP_NG_DELAY_SHIFT	8
 
+#define CS35L41_ASP_RX1_EN_MASK		0x00010000
+#define CS35L41_ASP_RX1_EN_SHIFT	16
+#define CS35L41_ASP_RX2_EN_MASK		0x00020000
+#define CS35L41_ASP_RX2_EN_SHIFT	17
+#define CS35L41_ASP_TX1_EN_MASK		0x00000001
+#define CS35L41_ASP_TX1_EN_SHIFT	0
+#define CS35L41_ASP_TX2_EN_MASK		0x00000002
+#define CS35L41_ASP_TX2_EN_SHIFT	1
+#define CS35L41_ASP_TX3_EN_MASK		0x00000004
+#define CS35L41_ASP_TX3_EN_SHIFT	2
+#define CS35L41_ASP_TX4_EN_MASK		0x00000008
+#define CS35L41_ASP_TX4_EN_SHIFT	3
 #define CS35L41_ASP_FMT_MASK		0x0700
 #define CS35L41_ASP_FMT_SHIFT		8
 #define CS35L41_ASP_DOUT_HIZ_MASK	0x03
@@ -912,5 +924,7 @@ bool cs35l41_safe_reset(struct regmap *regmap, enum cs35l41_boost_type b_type);
 int cs35l41_mdsync_up(struct regmap *regmap);
 int cs35l41_global_enable(struct device *dev, struct regmap *regmap, enum cs35l41_boost_type b_type,
 			  int enable, struct cs_dsp *dsp);
+int cs35l41_wait_boot_done(struct device *dev, struct regmap *regmap);
+int cs35l41_reset_and_boot(struct device *dev, struct regmap *regmap);
 
 #endif /* __CS35L41_H */

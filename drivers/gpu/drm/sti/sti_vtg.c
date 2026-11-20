@@ -143,12 +143,17 @@ struct sti_vtg {
 struct sti_vtg *of_vtg_find(struct device_node *np)
 {
 	struct platform_device *pdev;
+	struct sti_vtg *vtg;
 
 	pdev = of_find_device_by_node(np);
 	if (!pdev)
 		return NULL;
 
-	return (struct sti_vtg *)platform_get_drvdata(pdev);
+	vtg = platform_get_drvdata(pdev);
+
+	put_device(&pdev->dev);
+
+	return vtg;
 }
 
 static void vtg_reset(struct sti_vtg *vtg)
@@ -382,7 +387,7 @@ static int vtg_probe(struct platform_device *pdev)
 	struct sti_vtg *vtg;
 	int ret;
 
-	vtg = devm_kzalloc(dev, sizeof(*vtg), GFP_KERNEL);
+	vtg = devm_kzalloc_obj(dev, *vtg);
 	if (!vtg)
 		return -ENOMEM;
 	vtg->regs = devm_platform_ioremap_resource(pdev, 0);

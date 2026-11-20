@@ -69,7 +69,7 @@ static const struct reg_default twl6040_defaults[] = {
 	{ 0x2E, 0x00 }, /* REG_STATUS	(ro) */
 };
 
-static struct reg_sequence twl6040_patch[] = {
+static const struct reg_sequence twl6040_patch[] = {
 	/*
 	 * Select I2C bus access to dual access registers
 	 * Interrupt register is cleared on read
@@ -648,8 +648,7 @@ static int twl6040_probe(struct i2c_client *client)
 		return -EINVAL;
 	}
 
-	twl6040 = devm_kzalloc(&client->dev, sizeof(struct twl6040),
-			       GFP_KERNEL);
+	twl6040 = devm_kzalloc_obj(&client->dev, struct twl6040);
 	if (!twl6040)
 		return -ENOMEM;
 

@@ -9,6 +9,7 @@
 #include <crypto/aria.h>
 #include <linux/crypto.h>
 #include <linux/err.h>
+#include <linux/export.h>
 #include <linux/module.h>
 #include <linux/types.h>
 
@@ -25,7 +26,6 @@ asmlinkage void aria_aesni_avx_ctr_crypt_16way(const void *ctx, u8 *dst,
 					       const u8 *src,
 					       u8 *keystream, u8 *iv);
 EXPORT_SYMBOL_GPL(aria_aesni_avx_ctr_crypt_16way);
-#ifdef CONFIG_AS_GFNI
 asmlinkage void aria_aesni_avx_gfni_encrypt_16way(const void *ctx, u8 *dst,
 						  const u8 *src);
 EXPORT_SYMBOL_GPL(aria_aesni_avx_gfni_encrypt_16way);
@@ -36,7 +36,6 @@ asmlinkage void aria_aesni_avx_gfni_ctr_crypt_16way(const void *ctx, u8 *dst,
 						    const u8 *src,
 						    u8 *keystream, u8 *iv);
 EXPORT_SYMBOL_GPL(aria_aesni_avx_gfni_ctr_crypt_16way);
-#endif /* CONFIG_AS_GFNI */
 
 static struct aria_avx_ops aria_ops;
 
@@ -183,22 +182,13 @@ static struct skcipher_alg aria_algs[] = {
 
 static int __init aria_avx_init(void)
 {
-	const char *feature_name;
-
 	if (!boot_cpu_has(X86_FEATURE_AVX) ||
-	    !boot_cpu_has(X86_FEATURE_AES) ||
-	    !boot_cpu_has(X86_FEATURE_OSXSAVE)) {
+	    !boot_cpu_has(X86_FEATURE_AES)) {
 		pr_info("AVX or AES-NI instructions are not detected.\n");
 		return -ENODEV;
 	}
 
-	if (!cpu_has_xfeatures(XFEATURE_MASK_SSE | XFEATURE_MASK_YMM,
-				&feature_name)) {
-		pr_info("CPU feature '%s' is not supported.\n", feature_name);
-		return -ENODEV;
-	}
-
-	if (boot_cpu_has(X86_FEATURE_GFNI) && IS_ENABLED(CONFIG_AS_GFNI)) {
+	if (boot_cpu_has(X86_FEATURE_GFNI)) {
 		aria_ops.aria_encrypt_16way = aria_aesni_avx_gfni_encrypt_16way;
 		aria_ops.aria_decrypt_16way = aria_aesni_avx_gfni_decrypt_16way;
 		aria_ops.aria_ctr_crypt_16way = aria_aesni_avx_gfni_ctr_crypt_16way;

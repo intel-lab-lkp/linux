@@ -8,12 +8,20 @@
 /**
  * DOC: page_pool allocator
  *
- * The page_pool allocator is optimized for recycling page or page fragment used
- * by skb packet and xdp frame.
+ * The page_pool allocator is optimized for recycling network memory
+ * (netmem_ref) or fragments used by skb packets and xdp frames.
  *
- * Basic use involves replacing any alloc_pages() calls with page_pool_alloc(),
- * which allocate memory with or without page splitting depending on the
- * requested memory size.
+ * page_pool natively operates on netmem_ref, which abstracts the underlying
+ * memory type (struct page or struct net_iov) supplied by the page allocator
+ * or a memory provider. Drivers and core networking code should use the
+ * netmem-based APIs (e.g. page_pool_alloc_netmem(), page_pool_put_netmem()).
+ * The struct page-based APIs (e.g. page_pool_alloc(), page_pool_alloc_pages(),
+ * page_pool_put_page()) are legacy compatibility wrappers for drivers not yet
+ * converted to netmem.
+ *
+ * Basic use involves replacing any alloc_pages() calls with
+ * page_pool_alloc_netmem() (or legacy page_pool_alloc()), which allocate memory
+ * with or without splitting depending on the requested memory size.
  *
  * If the driver knows that it always requires full pages or its allocations are
  * always smaller than half a page, it can use one of the more specific API
@@ -64,7 +72,7 @@ int page_pool_ethtool_stats_get_count(void);
 u8 *page_pool_ethtool_stats_get_strings(u8 *data);
 u64 *page_pool_ethtool_stats_get(u64 *data, const void *stats);
 
-bool page_pool_get_stats(const struct page_pool *pool,
+void page_pool_get_stats(const struct page_pool *pool,
 			 struct page_pool_stats *stats);
 #else
 static inline int page_pool_ethtool_stats_get_count(void)
@@ -408,16 +416,13 @@ static inline void page_pool_recycle_direct_netmem(struct page_pool *pool,
 	page_pool_put_full_netmem(pool, netmem, true);
 }
 
-#define PAGE_POOL_32BIT_ARCH_WITH_64BIT_DMA	\
-		(sizeof(dma_addr_t) > sizeof(unsigned long))
-
 /**
  * page_pool_free_va() - free a va into the page_pool
  * @pool: pool from which va was allocated
  * @va: va to be freed
  * @allow_direct: freed by the consumer, allow lockless caching
  *
- * Free a va allocated from page_pool_allo_va().
+ * Free a va allocated from page_pool_alloc_va().
  */
 static inline void page_pool_free_va(struct page_pool *pool, void *va,
 				     bool allow_direct)
@@ -427,12 +432,7 @@ static inline void page_pool_free_va(struct page_pool *pool, void *va,
 
 static inline dma_addr_t page_pool_get_dma_addr_netmem(netmem_ref netmem)
 {
-	dma_addr_t ret = netmem_get_dma_addr(netmem);
-
-	if (PAGE_POOL_32BIT_ARCH_WITH_64BIT_DMA)
-		ret <<= PAGE_SHIFT;
-
-	return ret;
+	return netmem_dma_addr_decode(netmem_get_dma_addr(netmem));
 }
 
 /**
@@ -444,12 +444,7 @@ static inline dma_addr_t page_pool_get_dma_addr_netmem(netmem_ref netmem)
  */
 static inline dma_addr_t page_pool_get_dma_addr(const struct page *page)
 {
-	dma_addr_t ret = page->dma_addr;
-
-	if (PAGE_POOL_32BIT_ARCH_WITH_64BIT_DMA)
-		ret <<= PAGE_SHIFT;
-
-	return ret;
+	return page_pool_get_dma_addr_netmem(page_to_netmem(page));
 }
 
 static inline void __page_pool_dma_sync_for_cpu(const struct page_pool *pool,
@@ -494,6 +489,11 @@ page_pool_dma_sync_netmem_for_cpu(const struct page_pool *pool,
 				     offset, dma_sync_size);
 }
 
+static inline void page_pool_get(struct page_pool *pool)
+{
+	refcount_inc(&pool->user_cnt);
+}
+
 static inline bool page_pool_put(struct page_pool *pool)
 {
 	return refcount_dec_and_test(&pool->user_cnt);
@@ -505,6 +505,18 @@ static inline void page_pool_nid_changed(struct page_pool *pool, int new_nid)
 		page_pool_update_nid(pool, new_nid);
 }
 
+/**
+ * page_pool_is_unreadable() - will allocated buffers be unreadable for the CPU
+ * @pool: queried page pool
+ *
+ * Check if page pool will return buffers which are unreadable to the CPU /
+ * kernel. This will only be the case if user space bound a memory provider (mp)
+ * which returns unreadable memory to the queue served by the page pool.
+ * If %PP_FLAG_ALLOW_UNREADABLE_NETMEM was set but there is no mp bound
+ * this helper will return false. See also netif_rxq_has_unreadable_mp().
+ *
+ * Return: true if memory allocated by the page pool may be unreadable
+ */
 static inline bool page_pool_is_unreadable(struct page_pool *pool)
 {
 	return !!pool->mp_ops;

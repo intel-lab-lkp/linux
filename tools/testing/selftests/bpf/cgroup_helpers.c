@@ -4,6 +4,7 @@
 #include <sys/mount.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/xattr.h>
 #include <linux/limits.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -85,7 +86,7 @@ static int __enable_controllers(const char *cgroup_path, const char *controllers
 		enable[len] = 0;
 		close(fd);
 	} else {
-		bpf_strlcpy(enable, controllers, sizeof(enable));
+		strscpy(enable, controllers);
 	}
 
 	snprintf(path, sizeof(path), "%s/cgroup.subtree_control", cgroup_path);
@@ -185,6 +186,73 @@ int write_cgroup_file_parent(const char *relative_path, const char *file,
 
 	format_parent_cgroup_path(cgroup_path, relative_path);
 	return __write_cgroup_file(cgroup_path, file, buf);
+}
+
+static int __read_cgroup_file(const char *cgroup_path, const char *file,
+			      char *buf, size_t len)
+{
+	char file_path[PATH_MAX + 1];
+	ssize_t got;
+	int fd;
+
+	snprintf(file_path, sizeof(file_path), "%s/%s", cgroup_path, file);
+	fd = open(file_path, O_RDONLY);
+	if (fd < 0) {
+		log_err("Opening %s", file_path);
+		return 1;
+	}
+
+	got = read(fd, buf, len - 1);
+	if (got < 0) {
+		log_err("Reading %s", file_path);
+		close(fd);
+		return 1;
+	}
+	buf[got] = '\0';
+	close(fd);
+	return 0;
+}
+
+/**
+ * read_cgroup_file() - Read from a cgroup file
+ * @relative_path: The cgroup path, relative to the workdir
+ * @file: The name of the file in cgroupfs to read from
+ * @buf: Buffer to read into, NUL-terminated on success
+ * @len: Size of @buf
+ *
+ * Read from a file in the given cgroup's directory.
+ *
+ * If successful, 0 is returned.
+ */
+int read_cgroup_file(const char *relative_path, const char *file,
+		     char *buf, size_t len)
+{
+	char cgroup_path[PATH_MAX - 24];
+
+	format_cgroup_path(cgroup_path, relative_path);
+	return __read_cgroup_file(cgroup_path, file, buf, len);
+}
+
+/**
+ * read_cgroup_file_parent() - Read from a cgroup file in the parent process
+ *                             workdir
+ * @relative_path: The cgroup path, relative to the parent process workdir
+ * @file: The name of the file in cgroupfs to read from
+ * @buf: Buffer to read into, NUL-terminated on success
+ * @len: Size of @buf
+ *
+ * Read from a file in the given cgroup's directory under the parent process
+ * workdir.
+ *
+ * If successful, 0 is returned.
+ */
+int read_cgroup_file_parent(const char *relative_path, const char *file,
+			    char *buf, size_t len)
+{
+	char cgroup_path[PATH_MAX - 24];
+
+	format_parent_cgroup_path(cgroup_path, relative_path);
+	return __read_cgroup_file(cgroup_path, file, buf, len);
 }
 
 /**
@@ -319,6 +387,26 @@ int join_parent_cgroup(const char *relative_path)
 }
 
 /**
+ * set_cgroup_xattr() - Set xattr on a cgroup dir
+ * @relative_path: The cgroup path, relative to the workdir, to set xattr
+ * @name: xattr name
+ * @value: xattr value
+ *
+ * This function set xattr on cgroup dir.
+ *
+ * On success, it returns 0, otherwise on failure it returns -1.
+ */
+int set_cgroup_xattr(const char *relative_path,
+		     const char *name,
+		     const char *value)
+{
+	char cgroup_path[PATH_MAX + 1];
+
+	format_cgroup_path(cgroup_path, relative_path);
+	return setxattr(cgroup_path, name, value, strlen(value) + 1, 0);
+}
+
+/**
  * __cleanup_cgroup_environment() - Delete temporary cgroups
  *
  * This is a helper for cleanup_cgroup_environment() that is responsible for
@@ -387,6 +475,26 @@ void remove_cgroup(const char *relative_path)
 	char cgroup_path[PATH_MAX + 1];
 
 	format_cgroup_path(cgroup_path, relative_path);
+	if (rmdir(cgroup_path))
+		log_err("rmdiring cgroup %s .. %s", relative_path, cgroup_path);
+}
+
+/*
+ * remove_cgroup_pid() - Remove a cgroup setup by process identified by PID
+ * @relative_path: The cgroup path, relative to the workdir, to remove
+ * @pid: PID to be used to find cgroup_path
+ *
+ * This function expects a cgroup to already be created, relative to the cgroup
+ * work dir. It also expects the cgroup doesn't have any children or live
+ * processes and it removes the cgroup.
+ *
+ * On failure, it will print an error to stderr.
+ */
+void remove_cgroup_pid(const char *relative_path, int pid)
+{
+	char cgroup_path[PATH_MAX + 1];
+
+	format_cgroup_path_pid(cgroup_path, relative_path, pid);
 	if (rmdir(cgroup_path))
 		log_err("rmdiring cgroup %s .. %s", relative_path, cgroup_path);
 }

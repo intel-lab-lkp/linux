@@ -10,6 +10,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/statfs.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
@@ -366,7 +367,7 @@ int parse_cgroups(const struct option *opt, const char *str,
 	char *s;
 	int ret, i;
 
-	if (list_empty(&evlist->core.entries)) {
+	if (list_empty(&evlist__core(evlist)->entries)) {
 		fprintf(stderr, "must define events before cgroups\n");
 		return -1;
 	}
@@ -413,18 +414,16 @@ static bool has_pattern_string(const char *str)
 	return !!strpbrk(str, "{}[]()|*+?^$");
 }
 
-int evlist__expand_cgroup(struct evlist *evlist, const char *str,
-			  struct rblist *metric_events, bool open_cgroup)
+int evlist__expand_cgroup(struct evlist *evlist, const char *str, bool open_cgroup)
 {
 	struct evlist *orig_list, *tmp_list;
-	struct evsel *pos, *evsel, *leader;
 	struct rblist orig_metric_events;
 	struct cgroup *cgrp = NULL;
 	struct cgroup_name *cn;
 	int ret = -1;
 	int prefix_len;
 
-	if (evlist->core.nr_entries == 0) {
+	if (evlist__nr_entries(evlist) == 0) {
 		fprintf(stderr, "must define events before cgroups\n");
 		return -EINVAL;
 	}
@@ -437,15 +436,11 @@ int evlist__expand_cgroup(struct evlist *evlist, const char *str,
 	}
 
 	/* save original events and init evlist */
-	evlist__splice_list_tail(orig_list, &evlist->core.entries);
-	evlist->core.nr_entries = 0;
+	evlist__splice_list_tail(orig_list, &evlist__core(evlist)->entries);
+	evlist__core(evlist)->nr_entries = 0;
 
-	if (metric_events) {
-		orig_metric_events = *metric_events;
-		rblist__init(metric_events);
-	} else {
-		rblist__init(&orig_metric_events);
-	}
+	orig_metric_events = *evlist__metric_events(evlist);
+	metricgroup__rblist_init(evlist__metric_events(evlist));
 
 	if (has_pattern_string(str))
 		prefix_len = match_cgroups(str);
@@ -456,6 +451,7 @@ int evlist__expand_cgroup(struct evlist *evlist, const char *str,
 		goto out_err;
 
 	list_for_each_entry(cn, &cgroup_list, list) {
+		struct evsel *pos;
 		char *name;
 
 		if (!cn->used)
@@ -471,37 +467,51 @@ int evlist__expand_cgroup(struct evlist *evlist, const char *str,
 		if (cgrp == NULL)
 			continue;
 
-		leader = NULL;
+		/* copy the list and set to the new cgroup. */
 		evlist__for_each_entry(orig_list, pos) {
-			evsel = evsel__clone(/*dest=*/NULL, pos);
+			struct evsel *evsel = evsel__clone(pos);
+
 			if (evsel == NULL)
 				goto out_err;
 
+			/* stash the copy during the copying. */
+			pos->priv = evsel;
 			cgroup__put(evsel->cgrp);
 			evsel->cgrp = cgroup__get(cgrp);
 
-			if (evsel__is_group_leader(pos))
-				leader = evsel;
-			evsel__set_leader(evsel, leader);
-
 			evlist__add(tmp_list, evsel);
 		}
+		/* update leader information using stashed pointer to copy. */
+		evlist__for_each_entry(orig_list, pos) {
+			struct evsel *evsel = pos->priv;
+
+			if (evsel__leader(pos))
+				evsel__set_leader(evsel, evsel__leader(pos)->priv);
+
+			if (pos->metric_leader)
+				evsel->metric_leader = pos->metric_leader->priv;
+
+			if (pos->first_wildcard_match)
+				evsel->first_wildcard_match = pos->first_wildcard_match->priv;
+		}
+		/* the stashed copy is no longer used. */
+		evlist__for_each_entry(orig_list, pos)
+			pos->priv = NULL;
+
 		/* cgroup__new() has a refcount, release it here */
 		cgroup__put(cgrp);
 		nr_cgroups++;
 
-		if (metric_events) {
-			if (metricgroup__copy_metric_events(tmp_list, cgrp,
-							    metric_events,
-							    &orig_metric_events) < 0)
-				goto out_err;
-		}
+		if (metricgroup__copy_metric_events(tmp_list, cgrp,
+						    evlist__metric_events(evlist),
+						    &orig_metric_events) < 0)
+			goto out_err;
 
-		evlist__splice_list_tail(evlist, &tmp_list->core.entries);
-		tmp_list->core.nr_entries = 0;
+		evlist__splice_list_tail(evlist, &evlist__core(tmp_list)->entries);
+		evlist__core(tmp_list)->nr_entries = 0;
 	}
 
-	if (list_empty(&evlist->core.entries)) {
+	if (list_empty(&evlist__core(evlist)->entries)) {
 		fprintf(stderr, "no cgroup matched: %s\n", str);
 		goto out_err;
 	}
@@ -510,9 +520,9 @@ int evlist__expand_cgroup(struct evlist *evlist, const char *str,
 	cgrp_event_expanded = true;
 
 out_err:
-	evlist__delete(orig_list);
-	evlist__delete(tmp_list);
-	rblist__exit(&orig_metric_events);
+	evlist__put(orig_list);
+	evlist__put(tmp_list);
+	metricgroup__rblist_exit(&orig_metric_events);
 	release_cgroup_list();
 
 	return ret;

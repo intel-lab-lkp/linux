@@ -1089,10 +1089,11 @@ cleanup() {
 
 	cleanup_all_ns
 
-	ip link del veth_A-C		2>/dev/null
-	ip link del veth_A-R1		2>/dev/null
-	cleanup_del_ovs_internal
-	cleanup_del_ovs_vswitchd
+	[ -e "/sys/class/net/veth_A-C"  ] && ip link del veth_A-C
+	[ -e "/sys/class/net/veth_A-R1" ] && ip link del veth_A-R1
+	[ -e "/sys/class/net/ovs_br0"   ] && cleanup_del_ovs_internal
+	[ -e "/sys/class/net/ovs_br0"   ] && cleanup_del_ovs_vswitchd
+
 	rm -f "$tmpoutfile"
 }
 
@@ -1456,7 +1457,7 @@ test_pmtu_ipvX_over_bridged_vxlanY_or_geneveY_exception() {
 	mtu "${ns_b}" ${type}_b $((${ll_mtu} + 1000))
 
 	run_cmd ${ns_c} ${ping} -q -M want -i 0.1 -c 10 -s $((${ll_mtu} + 500)) ${dst} || return 1
-	run_cmd ${ns_a} ${ping} -q -M want -i 0.1 -w 1  -s $((${ll_mtu} + 500)) ${dst} || return 1
+	run_cmd ${ns_a} ${ping} -q -M want -i 0.1 -c 10 -s $((${ll_mtu} + 500)) ${dst} || return 1
 
 	# Check that exceptions were created
 	pmtu="$(route_get_dst_pmtu_from_exception "${ns_c}" ${dst})"

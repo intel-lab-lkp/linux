@@ -10,6 +10,7 @@
 
 #include <dt-bindings/pinctrl/mt65xx.h>
 #include <linux/gpio/driver.h>
+#include <linux/module.h>
 
 #include <linux/pinctrl/consumer.h>
 
@@ -43,7 +44,7 @@ static int mtk_pinmux_set_mux(struct pinctrl_dev *pctldev,
 			      unsigned int selector, unsigned int group)
 {
 	struct mtk_pinctrl *hw = pinctrl_dev_get_drvdata(pctldev);
-	struct function_desc *func;
+	const struct function_desc *func;
 	struct group_desc *grp;
 	int i, err;
 
@@ -56,7 +57,7 @@ static int mtk_pinmux_set_mux(struct pinctrl_dev *pctldev,
 		return -EINVAL;
 
 	dev_dbg(pctldev->dev, "enable function %s group %s\n",
-		func->func.name, grp->grp.name);
+		func->func->name, grp->grp.name);
 
 	for (i = 0; i < grp->grp.npins; i++) {
 		const struct mtk_pin_desc *desc;
@@ -332,7 +333,7 @@ static int mtk_pinconf_set(struct pinctrl_dev *pctldev, unsigned int pin,
 				goto err;
 
 			break;
-		case PIN_CONFIG_OUTPUT:
+		case PIN_CONFIG_LEVEL:
 			err = mtk_hw_set_value(hw, desc, PINCTRL_PIN_REG_DIR,
 					       MTK_OUTPUT);
 			if (err)
@@ -402,7 +403,8 @@ static int mtk_pinconf_group_get(struct pinctrl_dev *pctldev,
 				 unsigned int group, unsigned long *config)
 {
 	const unsigned int *pins;
-	unsigned int i, npins, old = 0;
+	unsigned int i, npins;
+	unsigned long old = 0;
 	int ret;
 
 	ret = pinctrl_generic_get_group_pins(pctldev, group, &pins, &npins);
@@ -520,6 +522,23 @@ static int mtk_gpio_direction_output(struct gpio_chip *chip, unsigned int gpio,
 	return pinctrl_gpio_direction_output(chip, gpio);
 }
 
+static int mtk_gpio_get_direction(struct gpio_chip *chip, unsigned int offset)
+{
+	struct mtk_pinctrl *hw = gpiochip_get_data(chip);
+	const struct mtk_pin_desc *desc;
+	int ret, dir;
+
+	desc = (const struct mtk_pin_desc *)&hw->soc->pins[offset];
+	if (!desc->name)
+		return -ENOTSUPP;
+
+	ret = mtk_hw_get_value(hw, desc, PINCTRL_PIN_REG_DIR, &dir);
+	if (ret)
+		return ret;
+
+	return dir ? GPIO_LINE_DIRECTION_OUT : GPIO_LINE_DIRECTION_IN;
+}
+
 static int mtk_gpio_to_irq(struct gpio_chip *chip, unsigned int offset)
 {
 	struct mtk_pinctrl *hw = gpiochip_get_data(chip);
@@ -566,16 +585,17 @@ static int mtk_build_gpiochip(struct mtk_pinctrl *hw)
 	chip->parent		= hw->dev;
 	chip->request		= gpiochip_generic_request;
 	chip->free		= gpiochip_generic_free;
+	chip->get_direction	= mtk_gpio_get_direction;
 	chip->direction_input	= pinctrl_gpio_direction_input;
 	chip->direction_output	= mtk_gpio_direction_output;
 	chip->get		= mtk_gpio_get;
-	chip->set_rv		= mtk_gpio_set;
+	chip->set		= mtk_gpio_set;
 	chip->to_irq		= mtk_gpio_to_irq;
 	chip->set_config	= mtk_gpio_set_config;
 	chip->base		= -1;
 	chip->ngpio		= hw->soc->npins;
 
-	ret = gpiochip_add_data(chip, hw);
+	ret = devm_gpiochip_add_data(hw->dev, chip, hw);
 	if (ret < 0)
 		return ret;
 
@@ -589,10 +609,8 @@ static int mtk_build_gpiochip(struct mtk_pinctrl *hw)
 	if (!of_property_present(hw->dev->of_node, "gpio-ranges")) {
 		ret = gpiochip_add_pin_range(chip, dev_name(hw->dev), 0, 0,
 					     chip->ngpio);
-		if (ret < 0) {
-			gpiochip_remove(chip);
+		if (ret < 0)
 			return ret;
-		}
 	}
 
 	return 0;
@@ -622,12 +640,9 @@ static int mtk_build_functions(struct mtk_pinctrl *hw)
 	int i, err;
 
 	for (i = 0; i < hw->soc->nfuncs ; i++) {
-		const struct function_desc *function = hw->soc->funcs + i;
-		const struct pinfunction *func = &function->func;
+		const struct pinfunction *func = hw->soc->funcs + i;
 
-		err = pinmux_generic_add_function(hw->pctrl, func->name,
-						  func->groups, func->ngroups,
-						  function->data);
+		err = pinmux_generic_add_pinfunction(hw->pctrl, func, NULL);
 		if (err < 0) {
 			dev_err(hw->dev, "Failed to register function %s\n",
 				func->name);
@@ -646,7 +661,7 @@ int mtk_moore_pinctrl_probe(struct platform_device *pdev,
 	struct mtk_pinctrl *hw;
 	int err, i;
 
-	hw = devm_kzalloc(&pdev->dev, sizeof(*hw), GFP_KERNEL);
+	hw = devm_kzalloc_obj(&pdev->dev, *hw);
 	if (!hw)
 		return -ENOMEM;
 
@@ -657,8 +672,8 @@ int mtk_moore_pinctrl_probe(struct platform_device *pdev,
 		return dev_err_probe(dev, -EINVAL,
 			"SoC should be assigned at least one register base\n");
 
-	hw->base = devm_kmalloc_array(&pdev->dev, hw->soc->nbase_names,
-				      sizeof(*hw->base), GFP_KERNEL);
+	hw->base = devm_kmalloc_objs(&pdev->dev, *hw->base,
+				     hw->soc->nbase_names);
 	if (!hw->base)
 		return -ENOMEM;
 
@@ -674,8 +689,7 @@ int mtk_moore_pinctrl_probe(struct platform_device *pdev,
 	spin_lock_init(&hw->lock);
 
 	/* Copy from internal struct mtk_pin_desc to register to the core */
-	pins = devm_kmalloc_array(&pdev->dev, hw->soc->npins, sizeof(*pins),
-				  GFP_KERNEL);
+	pins = devm_kmalloc_objs(&pdev->dev, *pins, hw->soc->npins);
 	if (!pins)
 		return -ENOMEM;
 
@@ -729,3 +743,7 @@ int mtk_moore_pinctrl_probe(struct platform_device *pdev,
 
 	return 0;
 }
+EXPORT_SYMBOL_NS_GPL(mtk_moore_pinctrl_probe, "MTK_PINCTRL");
+
+MODULE_DESCRIPTION("MediaTek Pinctrl Common Driver V2 Moore");
+MODULE_LICENSE("GPL v2");

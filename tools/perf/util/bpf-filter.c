@@ -52,9 +52,12 @@
 #include <internal/xyarray.h>
 #include <perf/threadmap.h>
 
+#include "util/cap.h"
 #include "util/debug.h"
 #include "util/evsel.h"
 #include "util/target.h"
+#include "util/thread_map.h"
+#include "util/bpf-utils.h"
 
 #include "util/bpf-filter.h"
 #include <util/bpf-filter-flex.h>
@@ -198,31 +201,6 @@ static int get_filter_entries(struct evsel *evsel, struct perf_bpf_filter_entry 
 		i++;
 	}
 	return 0;
-}
-
-static int convert_to_tgid(int tid)
-{
-	char path[128];
-	char *buf, *p, *q;
-	int tgid;
-	size_t len;
-
-	scnprintf(path, sizeof(path), "%d/status", tid);
-	if (procfs__read_str(path, &buf, &len) < 0)
-		return -1;
-
-	p = strstr(buf, "Tgid:");
-	if (p == NULL) {
-		free(buf);
-		return -1;
-	}
-
-	tgid = strtol(p + 6, &q, 0);
-	free(buf);
-	if (*q != '\n')
-		return -1;
-
-	return tgid;
 }
 
 /*
@@ -405,14 +383,13 @@ static int create_idx_hash(struct evsel *evsel, struct perf_bpf_filter_entry *en
 	last = -1;
 	nr = perf_thread_map__nr(threads);
 	for (int i = 0; i < nr; i++) {
-		int pid = perf_thread_map__pid(threads, i);
 		int tgid;
 		struct idx_hash_key key = {
 			.evt_id = event_id,
 		};
 
 		/* it actually needs tgid, let's get tgid from /proc. */
-		tgid = convert_to_tgid(pid);
+		tgid = thread_map__tgid(threads, i);
 		if (tgid < 0) {
 			/* the thread may be dead, ignore. */
 			continue;
@@ -449,7 +426,13 @@ int perf_bpf_filter__prepare(struct evsel *evsel, struct target *target)
 	struct bpf_program *prog;
 	struct bpf_link *link;
 	struct perf_bpf_filter_entry *entry;
-	bool needs_idx_hash = !target__has_cpu(target) && !target->uid_str;
+	bool needs_idx_hash = !target__has_cpu(target);
+#if LIBBPF_CURRENT_VERSION_GEQ(1, 7)
+	DECLARE_LIBBPF_OPTS(bpf_perf_event_opts, pe_opts,
+			    .dont_enable = true);
+#else
+	DECLARE_LIBBPF_OPTS(bpf_perf_event_opts, pe_opts);
+#endif
 
 	entry = calloc(MAX_FILTERS, sizeof(*entry));
 	if (entry == NULL)
@@ -521,7 +504,8 @@ int perf_bpf_filter__prepare(struct evsel *evsel, struct target *target)
 	prog = skel->progs.perf_sample_filter;
 	for (x = 0; x < xyarray__max_x(evsel->core.fd); x++) {
 		for (y = 0; y < xyarray__max_y(evsel->core.fd); y++) {
-			link = bpf_program__attach_perf_event(prog, FD(evsel, x, y));
+			link = bpf_program__attach_perf_event_opts(prog, FD(evsel, x, y),
+								   &pe_opts);
 			if (IS_ERR(link)) {
 				pr_err("Failed to attach perf sample-filter program\n");
 				ret = PTR_ERR(link);
@@ -618,10 +602,33 @@ struct perf_bpf_filter_expr *perf_bpf_filter_expr__new(enum perf_bpf_filter_term
 	return expr;
 }
 
+static bool check_bpf_filter_capable(void)
+{
+	int fd;
+
+	if (perf_cap__capable(CAP_BPF))
+		return true;
+
+	/* Check if root already pinned the filter programs and maps */
+	fd = get_pinned_fd("filters");
+	if (fd >= 0) {
+		close(fd);
+		return true;
+	}
+
+	pr_err("Error: BPF filter only works for users with the CAP_BPF capability!\n"
+	       "\tPlease run 'perf record --setup-filter pin' as root first.\n");
+
+	return false;
+}
+
 int perf_bpf_filter__parse(struct list_head *expr_head, const char *str)
 {
 	YY_BUFFER_STATE buffer;
 	int ret;
+
+	if (!check_bpf_filter_capable())
+		return -EPERM;
 
 	buffer = perf_bpf_filter__scan_string(str);
 

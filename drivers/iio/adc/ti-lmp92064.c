@@ -200,10 +200,8 @@ static irqreturn_t lmp92064_trigger_handler(int irq, void *p)
 	struct {
 		u16 values[2];
 		aligned_s64 timestamp;
-	} data;
+	} data = { };
 	int ret;
-
-	memset(&data, 0, sizeof(data));
 
 	ret = lmp92064_read_meas(priv, data.values);
 	if (ret)
@@ -359,7 +357,7 @@ static int lmp92064_adc_probe(struct spi_device *spi)
 }
 
 static const struct spi_device_id lmp92064_id_table[] = {
-	{ "lmp92064" },
+	{ .name = "lmp92064" },
 	{ }
 };
 MODULE_DEVICE_TABLE(spi, lmp92064_id_table);

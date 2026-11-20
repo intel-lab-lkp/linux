@@ -102,29 +102,29 @@ static u32 microamp_to_reg(u32 *val)
 	return *val /= 10000;
 };
 
-static struct vcnl3020_property vcnl3020_led_current_property = {
+static const struct vcnl3020_property vcnl3020_led_current_property = {
 	.name = "vishay,led-current-microamp",
 	.reg = VCNL_LED_CURRENT,
 	.conversion_func = microamp_to_reg,
 };
 
 static int vcnl3020_get_and_apply_property(struct vcnl3020_data *data,
-					   struct vcnl3020_property prop)
+					   const struct vcnl3020_property *prop)
 {
 	int rc;
 	u32 val;
 
-	rc = device_property_read_u32(data->dev, prop.name, &val);
+	rc = device_property_read_u32(data->dev, prop->name, &val);
 	if (rc)
 		return 0;
 
-	if (prop.conversion_func)
-		prop.conversion_func(&val);
+	if (prop->conversion_func)
+		prop->conversion_func(&val);
 
-	rc = regmap_write(data->regmap, prop.reg, val);
+	rc = regmap_write(data->regmap, prop->reg, val);
 	if (rc) {
 		dev_err(data->dev, "Error (%d) setting property (%s)\n",
-			rc, prop.name);
+			rc, prop->name);
 	}
 
 	return rc;
@@ -153,7 +153,7 @@ static int vcnl3020_init(struct vcnl3020_data *data)
 	mutex_init(&data->lock);
 
 	return vcnl3020_get_and_apply_property(data,
-					       vcnl3020_led_current_property);
+					       &vcnl3020_led_current_property);
 };
 
 static bool vcnl3020_is_in_periodic_mode(struct vcnl3020_data *data)
@@ -584,16 +584,26 @@ static irqreturn_t vcnl3020_handle_irq_thread(int irq, void *p)
 		return IRQ_HANDLED;
 	}
 
-	if (!(isr & VCNL_ICR_THRES_EN))
+	if (!(isr & (VCNL_INT_TH_HI | VCNL_INT_TH_LOW)))
 		return IRQ_NONE;
 
-	iio_push_event(indio_dev,
-		       IIO_UNMOD_EVENT_CODE(IIO_PROXIMITY, 1,
-				            IIO_EV_TYPE_THRESH,
-				            IIO_EV_DIR_RISING),
-		       iio_get_time_ns(indio_dev));
+	if (isr & VCNL_INT_TH_HI) {
+		iio_push_event(indio_dev,
+			       IIO_UNMOD_EVENT_CODE(IIO_PROXIMITY, 0,
+						    IIO_EV_TYPE_THRESH,
+						    IIO_EV_DIR_RISING),
+			       iio_get_time_ns(indio_dev));
+	}
 
-	rc = regmap_write(data->regmap, VCNL_ISR, isr & VCNL_ICR_THRES_EN);
+	if (isr & VCNL_INT_TH_LOW) {
+		iio_push_event(indio_dev,
+			       IIO_UNMOD_EVENT_CODE(IIO_PROXIMITY, 0,
+						    IIO_EV_TYPE_THRESH,
+						    IIO_EV_DIR_FALLING),
+			       iio_get_time_ns(indio_dev));
+	}
+
+	rc = regmap_write(data->regmap, VCNL_ISR, isr & (VCNL_INT_TH_HI | VCNL_INT_TH_LOW));
 	if (rc)
 		dev_err(data->dev, "Error (%d) writing in reg (0x%x)\n",
 			rc, VCNL_ISR);
@@ -638,12 +648,8 @@ static int vcnl3020_probe(struct i2c_client *client)
 					       NULL, vcnl3020_handle_irq_thread,
 					       IRQF_ONESHOT, indio_dev->name,
 					       indio_dev);
-		if (rc) {
-			dev_err(&client->dev,
-				"Error (%d) irq request failed (%u)\n", rc,
-				client->irq);
+		if (rc)
 			return rc;
-		}
 	}
 
 	return devm_iio_device_register(&client->dev, indio_dev);

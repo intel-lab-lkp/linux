@@ -103,8 +103,7 @@ static int gpio_setup_data_regs(struct sh_pfc_chip *chip)
 	for (i = 0; pfc->info->data_regs[i].reg_width; ++i)
 		;
 
-	chip->regs = devm_kcalloc(pfc->dev, i, sizeof(*chip->regs),
-				  GFP_KERNEL);
+	chip->regs = devm_kzalloc_objs(pfc->dev, *chip->regs, i);
 	if (chip->regs == NULL)
 		return -ENOMEM;
 
@@ -189,9 +188,11 @@ static int gpio_pin_get(struct gpio_chip *gc, unsigned offset)
 	return (gpio_read_data_reg(chip, reg->info) >> pos) & 1;
 }
 
-static void gpio_pin_set(struct gpio_chip *gc, unsigned offset, int value)
+static int gpio_pin_set(struct gpio_chip *gc, unsigned int offset, int value)
 {
 	gpio_pin_set_value(gpiochip_get_data(gc), offset, value);
+
+	return 0;
 }
 
 static int gpio_pin_to_irq(struct gpio_chip *gc, unsigned offset)
@@ -217,9 +218,8 @@ static int gpio_pin_setup(struct sh_pfc_chip *chip)
 	struct gpio_chip *gc = &chip->gpio_chip;
 	int ret;
 
-	chip->pins = devm_kcalloc(pfc->dev,
-				  pfc->info->nr_pins, sizeof(*chip->pins),
-				  GFP_KERNEL);
+	chip->pins = devm_kzalloc_objs(pfc->dev, *chip->pins,
+				       pfc->info->nr_pins);
 	if (chip->pins == NULL)
 		return -ENOMEM;
 
@@ -296,7 +296,7 @@ sh_pfc_add_gpiochip(struct sh_pfc *pfc, int(*setup)(struct sh_pfc_chip *),
 	struct sh_pfc_chip *chip;
 	int ret;
 
-	chip = devm_kzalloc(pfc->dev, sizeof(*chip), GFP_KERNEL);
+	chip = devm_kzalloc_obj(pfc->dev, *chip);
 	if (unlikely(!chip))
 		return ERR_PTR(-ENOMEM);
 

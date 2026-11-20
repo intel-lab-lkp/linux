@@ -105,7 +105,7 @@ static int adp5520_gpio_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
-	dev = devm_kzalloc(&pdev->dev, sizeof(*dev), GFP_KERNEL);
+	dev = devm_kzalloc_obj(&pdev->dev, *dev);
 	if (dev == NULL)
 		return -ENOMEM;
 
@@ -122,7 +122,7 @@ static int adp5520_gpio_probe(struct platform_device *pdev)
 	gc->direction_input  = adp5520_gpio_direction_input;
 	gc->direction_output = adp5520_gpio_direction_output;
 	gc->get = adp5520_gpio_get_value;
-	gc->set_rv = adp5520_gpio_set_value;
+	gc->set = adp5520_gpio_set_value;
 	gc->can_sleep = true;
 
 	gc->base = pdata->gpio_start;

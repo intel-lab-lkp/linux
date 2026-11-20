@@ -16,11 +16,11 @@
 #define ZPCI_PCI_ST_FUNC_NOT_AVAIL		40
 #define ZPCI_PCI_ST_ALREADY_IN_RQ_STATE		44
 
-/* Load/Store return codes */
-#define ZPCI_PCI_LS_OK				0
-#define ZPCI_PCI_LS_ERR				1
-#define ZPCI_PCI_LS_BUSY			2
-#define ZPCI_PCI_LS_INVAL_HANDLE		3
+/* PCI instruction condition codes */
+#define ZPCI_CC_OK				0
+#define ZPCI_CC_ERR				1
+#define ZPCI_CC_BUSY				2
+#define ZPCI_CC_INVAL_HANDLE			3
 
 /* Load/Store address space identifiers */
 #define ZPCI_PCIAS_MEMIO_0			0
@@ -147,7 +147,7 @@ union zpci_sic_iib {
 DECLARE_STATIC_KEY_FALSE(have_mio);
 
 u8 zpci_mod_fc(u64 req, struct zpci_fib *fib, u8 *status);
-int zpci_refresh_trans(u64 fn, u64 addr, u64 range);
+int zpci_refresh_trans(u32 fh, u64 addr, u64 range);
 int __zpci_load(u64 *data, u64 req, u64 offset);
 int zpci_load(u64 *data, const volatile void __iomem *addr, unsigned long len);
 int __zpci_store(u64 data, u64 req, u64 offset);

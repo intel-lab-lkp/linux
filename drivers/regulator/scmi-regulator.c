@@ -257,7 +257,8 @@ static int process_scmi_regulator_of_node(struct scmi_device *sdev,
 					  struct device_node *np,
 					  struct scmi_regulator_info *rinfo)
 {
-	u32 dom, ret;
+	u32 dom;
+	int ret;
 
 	ret = of_property_read_u32(np, "reg", &dom);
 	if (ret)
@@ -273,9 +274,7 @@ static int process_scmi_regulator_of_node(struct scmi_device *sdev,
 		return -EINVAL;
 	}
 
-	rinfo->sregv[dom] = devm_kzalloc(&sdev->dev,
-					 sizeof(struct scmi_regulator),
-					 GFP_KERNEL);
+	rinfo->sregv[dom] = devm_kzalloc_obj(&sdev->dev, struct scmi_regulator);
 	if (!rinfo->sregv[dom])
 		return -ENOMEM;
 
@@ -321,7 +320,7 @@ static int scmi_regulator_probe(struct scmi_device *sdev)
 		return num_doms;
 	}
 
-	rinfo = devm_kzalloc(&sdev->dev, sizeof(*rinfo), GFP_KERNEL);
+	rinfo = devm_kzalloc_obj(&sdev->dev, *rinfo);
 	if (!rinfo)
 		return -ENOMEM;
 
@@ -344,8 +343,10 @@ static int scmi_regulator_probe(struct scmi_device *sdev)
 	for_each_child_of_node_scoped(np, child) {
 		ret = process_scmi_regulator_of_node(sdev, ph, child, rinfo);
 		/* abort on any mem issue */
-		if (ret == -ENOMEM)
+		if (ret == -ENOMEM) {
+			of_node_put(np);
 			return ret;
+		}
 	}
 	of_node_put(np);
 	/*

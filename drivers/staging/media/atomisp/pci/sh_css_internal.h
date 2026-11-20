@@ -8,6 +8,7 @@
 #define _SH_CSS_INTERNAL_H_
 
 #include <linux/build_bug.h>
+#include <linux/math.h>
 #include <linux/stdarg.h>
 
 #include <system_global.h>
@@ -79,7 +80,7 @@
 
 #define SH_CSS_MAX_SP_THREADS		5
 
-/**
+/*
  * The C99 standard does not specify the exact object representation of structs;
  * the representation is compiler dependent.
  *
@@ -95,7 +96,6 @@
  * the SIZE_OF_XXX macro of the corresponding struct. If they are not
  * equal, functionality will break.
  */
-#define CALC_ALIGNMENT_MEMBER(x, y)	(CEIL_MUL(x, y) - x)
 #define SIZE_OF_HRT_VADDRESS		sizeof(hive_uint32)
 
 /* Number of SP's */
@@ -638,7 +638,7 @@ struct sh_css_sp_output {
 	unsigned int		sw_interrupt_value[SH_CSS_NUM_SDW_IRQS];
 };
 
-/**
+/*
  * @brief Data structure for the circular buffer.
  * The circular buffer is empty if "start == end". The
  * circular buffer is full if "(end + 1) % size == start".
@@ -704,13 +704,11 @@ struct sh_css_hmm_buffer {
 
 /* Do not use sizeof(uint64_t) since that does not exist of SP */
 #define SIZE_OF_SH_CSS_HMM_BUFFER_STRUCT				\
-	(SIZE_OF_PAYLOAD_UNION +					\
-	CALC_ALIGNMENT_MEMBER(SIZE_OF_PAYLOAD_UNION, 8) +		\
+	(round_up(SIZE_OF_PAYLOAD_UNION, 8) +		\
 	8 +						\
 	8 +						\
 	SIZE_OF_IA_CSS_TIME_MEAS_STRUCT +				\
-	SIZE_OF_IA_CSS_CLOCK_TICK_STRUCT +			\
-	CALC_ALIGNMENT_MEMBER(SIZE_OF_IA_CSS_CLOCK_TICK_STRUCT, 8))
+	round_up(SIZE_OF_IA_CSS_CLOCK_TICK_STRUCT, 8))
 
 static_assert(sizeof(struct sh_css_hmm_buffer) == SIZE_OF_SH_CSS_HMM_BUFFER_STRUCT);
 

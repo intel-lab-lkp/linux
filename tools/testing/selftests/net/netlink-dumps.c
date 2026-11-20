@@ -2,9 +2,12 @@
 
 #define _GNU_SOURCE
 
+#include <errno.h>
 #include <fcntl.h>
+#include <sched.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
@@ -18,7 +21,7 @@
 #include <linux/mqueue.h>
 #include <linux/rtnetlink.h>
 
-#include "../kselftest_harness.h"
+#include "kselftest_harness.h"
 
 #include <ynl.h>
 
@@ -31,9 +34,18 @@ struct ext_ack {
 	const char *str;
 };
 
-/* 0: no done, 1: done found, 2: extack found, -1: error */
-static int nl_get_extack(char *buf, size_t n, struct ext_ack *ea)
+enum get_ea_ret {
+	ERROR = -1,
+	NO_CTRL = 0,
+	FOUND_DONE,
+	FOUND_ERR,
+	FOUND_EXTACK,
+};
+
+static enum get_ea_ret
+nl_get_extack(char *buf, size_t n, struct ext_ack *ea)
 {
+	enum get_ea_ret ret = NO_CTRL;
 	const struct nlmsghdr *nlh;
 	const struct nlattr *attr;
 	ssize_t rem;
@@ -41,15 +53,19 @@ static int nl_get_extack(char *buf, size_t n, struct ext_ack *ea)
 	for (rem = n; rem > 0; NLMSG_NEXT(nlh, rem)) {
 		nlh = (struct nlmsghdr *)&buf[n - rem];
 		if (!NLMSG_OK(nlh, rem))
-			return -1;
+			return ERROR;
 
-		if (nlh->nlmsg_type != NLMSG_DONE)
+		if (nlh->nlmsg_type == NLMSG_ERROR)
+			ret = FOUND_ERR;
+		else if (nlh->nlmsg_type == NLMSG_DONE)
+			ret = FOUND_DONE;
+		else
 			continue;
 
 		ea->err = -*(int *)NLMSG_DATA(nlh);
 
 		if (!(nlh->nlmsg_flags & NLM_F_ACK_TLVS))
-			return 1;
+			return ret;
 
 		ynl_attr_for_each(attr, nlh, sizeof(int)) {
 			switch (ynl_attr_type(attr)) {
@@ -68,10 +84,10 @@ static int nl_get_extack(char *buf, size_t n, struct ext_ack *ea)
 			}
 		}
 
-		return 2;
+		return FOUND_EXTACK;
 	}
 
-	return 0;
+	return ret;
 }
 
 static const struct {
@@ -99,9 +115,9 @@ static const struct {
 TEST(dump_extack)
 {
 	int netlink_sock;
+	int i, cnt, ret;
 	char buf[8192];
 	int one = 1;
-	int i, cnt;
 	ssize_t n;
 
 	netlink_sock = socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
@@ -118,7 +134,7 @@ TEST(dump_extack)
 	ASSERT_EQ(n, 0);
 
 	/* Dump so many times we fill up the buffer */
-	cnt = 64;
+	cnt = 80;
 	for (i = 0; i < cnt; i++) {
 		n = send(netlink_sock, &dump_neigh_bad,
 			 sizeof(dump_neigh_bad), 0);
@@ -130,6 +146,7 @@ TEST(dump_extack)
 	EXPECT_EQ(n, -1);
 	EXPECT_EQ(errno, ENOBUFS);
 
+	ret = NO_CTRL;
 	for (i = 0; i < cnt; i++) {
 		struct ext_ack ea = {};
 
@@ -140,10 +157,20 @@ TEST(dump_extack)
 		}
 		ASSERT_GE(n, (ssize_t)sizeof(struct nlmsghdr));
 
-		EXPECT_EQ(nl_get_extack(buf, n, &ea), 2);
+		ret = nl_get_extack(buf, n, &ea);
+		/* Once we fill the buffer we'll see one ENOBUFS followed
+		 * by a number of EBUSYs. Then the last recv() will finally
+		 * trigger and complete the dump.
+		 */
+		if (ret == FOUND_ERR && (ea.err == ENOBUFS || ea.err == EBUSY))
+			continue;
+		EXPECT_EQ(ret, FOUND_EXTACK);
+		EXPECT_EQ(ea.err, EINVAL);
 		EXPECT_EQ(ea.attr_offs,
 			  sizeof(struct nlmsghdr) + sizeof(struct ndmsg));
 	}
+	/* Make sure last message was a full DONE+extack */
+	EXPECT_EQ(ret, FOUND_EXTACK);
 }
 
 static const struct {
@@ -234,6 +261,105 @@ TEST(close_with_ref)
 
 	// give mqueue time to fire
 	usleep(100 * 1000);
+}
+
+static int lo_set_up(int sock, bool up)
+{
+	struct ifreq ifr = {};
+
+	strcpy(ifr.ifr_name, "lo");
+	if (ioctl(sock, SIOCGIFFLAGS, &ifr))
+		return -1;
+	if (up)
+		ifr.ifr_flags |= IFF_UP;
+	else
+		ifr.ifr_flags &= ~IFF_UP;
+	return ioctl(sock, SIOCSIFFLAGS, &ifr);
+}
+
+static const struct {
+	struct nlmsghdr nlhdr;
+	struct ifinfomsg ifm;
+} dump_links = {
+	.nlhdr = {
+		.nlmsg_len	= sizeof(dump_links),
+		.nlmsg_type	= RTM_GETLINK,
+		.nlmsg_flags	= NLM_F_REQUEST | NLM_F_ACK | NLM_F_DUMP,
+		.nlmsg_seq	= 1,
+	},
+	.ifm = {
+		.ifi_family	= AF_UNSPEC,
+	},
+};
+
+// A dump started while a notification is still queued must make progress
+// for a reader which peeks before reading, like libnl does
+TEST(dump_with_queued_ntf)
+{
+	struct sockaddr_nl addr = {
+		.nl_family	= AF_NETLINK,
+		.nl_groups	= RTMGRP_LINK,
+	};
+	int netlink_sock, inet_sock, i, ret, links = 0;
+	int rcvbuf = 2048;
+	bool done = false;
+	char buf[32768];
+	ssize_t n;
+
+	ret = unshare(CLONE_NEWNET);
+	if (ret && errno == EPERM)
+		SKIP(return, "Needs CAP_SYS_ADMIN for a netns");
+	ASSERT_EQ(ret, 0);
+
+	inet_sock = socket(AF_INET, SOCK_DGRAM, 0);
+	ASSERT_GE(inet_sock, 0);
+	netlink_sock = socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
+	ASSERT_GE(netlink_sock, 0);
+	ASSERT_EQ(setsockopt(netlink_sock, SOL_SOCKET, SO_RCVBUF,
+			     &rcvbuf, sizeof(rcvbuf)), 0);
+	ASSERT_EQ(bind(netlink_sock, (struct sockaddr *)&addr,
+		       sizeof(addr)), 0);
+
+	// A large read makes the kernel attempt large dump skbs
+	ASSERT_EQ(lo_set_up(inet_sock, true), 0);
+	n = recv(netlink_sock, buf, sizeof(buf), 0);
+	ASSERT_GE(n, (ssize_t)sizeof(struct nlmsghdr));
+
+	// Leave one notification queued, then start the dump
+	ASSERT_EQ(lo_set_up(inet_sock, false), 0);
+	n = send(netlink_sock, &dump_links, sizeof(dump_links), 0);
+	ASSERT_EQ(n, sizeof(dump_links));
+
+	for (i = 0; i < 100 && !done; i++) {
+		struct nlmsghdr *nlh;
+
+		n = recv(netlink_sock, buf, sizeof(buf),
+			 MSG_PEEK | MSG_TRUNC | MSG_DONTWAIT);
+		if (n < 0)
+			continue;
+		n = recv(netlink_sock, buf, sizeof(buf), MSG_DONTWAIT);
+		if (n < 0)
+			continue;
+
+		for (nlh = (struct nlmsghdr *)buf; NLMSG_OK(nlh, n);
+		     nlh = NLMSG_NEXT(nlh, n)) {
+			if (nlh->nlmsg_seq != dump_links.nlhdr.nlmsg_seq)
+				continue;
+			if (nlh->nlmsg_type == NLMSG_ERROR)
+				EXPECT_EQ(*(int *)NLMSG_DATA(nlh), 0);
+			if (nlh->nlmsg_type == RTM_NEWLINK)
+				links++;
+			if (nlh->nlmsg_type == NLMSG_DONE) {
+				EXPECT_EQ(*(int *)NLMSG_DATA(nlh), 0);
+				done = true;
+			}
+		}
+	}
+	EXPECT_TRUE(done);
+	EXPECT_GE(links, 1);
+
+	close(netlink_sock);
+	close(inet_sock);
 }
 
 TEST_HARNESS_MAIN

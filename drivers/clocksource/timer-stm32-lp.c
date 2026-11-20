@@ -211,6 +211,7 @@ static void stm32_clkevent_lp_init(struct stm32_lp_private *priv,
 	priv->clkevt.rating = STM32_LP_RATING;
 	priv->clkevt.suspend = stm32_clkevent_lp_suspend;
 	priv->clkevt.resume = stm32_clkevent_lp_resume;
+	priv->clkevt.owner = THIS_MODULE;
 
 	clockevents_config_and_register(&priv->clkevt, rate, 0x1,
 					STM32_LPTIM_MAX_ARR);
@@ -223,7 +224,7 @@ static int stm32_clkevent_lp_probe(struct platform_device *pdev)
 	unsigned long rate;
 	int ret, irq;
 
-	priv = devm_kzalloc(&pdev->dev, sizeof(*priv), GFP_KERNEL);
+	priv = devm_kzalloc_obj(&pdev->dev, *priv);
 	if (!priv)
 		return -ENOMEM;
 
@@ -288,5 +289,4 @@ static struct platform_driver stm32_clkevent_lp_driver = {
 };
 module_platform_driver(stm32_clkevent_lp_driver);
 
-MODULE_ALIAS("platform:stm32-lptimer-timer");
 MODULE_DESCRIPTION("STMicroelectronics STM32 clockevent low power driver");

@@ -267,11 +267,7 @@ static int iscsi_iser_task_init(struct iscsi_task *task)
 static int iscsi_iser_mtask_xmit(struct iscsi_conn *conn,
 				 struct iscsi_task *task)
 {
-	int error = 0;
-
 	iser_dbg("mtask xmit [cid %d itt 0x%x]\n", conn->id, task->itt);
-
-	error = iser_send_control(conn, task);
 
 	/* since iser xmits control with zero copy, tasks can not be recycled
 	 * right after sending them.
@@ -279,7 +275,7 @@ static int iscsi_iser_mtask_xmit(struct iscsi_conn *conn,
 	 * - if yes, the task is recycled at iscsi_complete_pdu
 	 * - if no,  the task is recycled at iser_snd_completion
 	 */
-	return error;
+	return iser_send_control(conn, task);
 }
 
 static int iscsi_iser_task_xmit_unsol_data(struct iscsi_conn *conn,
@@ -502,7 +498,7 @@ out:
  * iscsi_iser_conn_start() - start iscsi-iser connection
  * @cls_conn: iscsi class connection
  *
- * Notes: Here iser intialize (or re-initialize) stop_completion as
+ * Notes: Here iser initialize (or re-initialize) stop_completion as
  *        from this point iscsi must call conn_stop in session/connection
  *        teardown so iser transport must wait for it.
  */
@@ -597,7 +593,7 @@ static inline unsigned int iser_dif_prot_caps(int prot_caps)
  * @qdepth:         session command queue depth
  * @initial_cmdsn:  initiator command sequnce number
  *
- * Allocates and adds a scsi host, expose DIF supprot if
+ * Allocates and adds a scsi host, expose DIF support if
  * exists, and sets up an iscsi session.
  */
 static struct iscsi_cls_session *
@@ -806,7 +802,7 @@ static struct iscsi_endpoint *iscsi_iser_ep_connect(struct Scsi_Host *shost,
 	if (!ep)
 		return ERR_PTR(-ENOMEM);
 
-	iser_conn = kzalloc(sizeof(*iser_conn), GFP_KERNEL);
+	iser_conn = kzalloc_obj(*iser_conn);
 	if (!iser_conn) {
 		err = -ENOMEM;
 		goto failure;
@@ -870,7 +866,7 @@ static int iscsi_iser_ep_poll(struct iscsi_endpoint *ep, int timeout_ms)
  * @ep:    iscsi endpoint handle
  *
  * This routine is not blocked by iser and RDMA termination process
- * completion as we queue a deffered work for iser/RDMA destruction
+ * completion as we queue a deferred work for iser/RDMA destruction
  * and cleanup or actually call it immediately in case we didn't pass
  * iscsi conn bind/start stage, thus it is safe.
  */
@@ -1033,7 +1029,7 @@ static int __init iser_init(void)
 	mutex_init(&ig.connlist_mutex);
 	INIT_LIST_HEAD(&ig.connlist);
 
-	release_wq = alloc_workqueue("release workqueue", 0, 0);
+	release_wq = alloc_workqueue("release workqueue", WQ_PERCPU, 0);
 	if (!release_wq) {
 		iser_err("failed to allocate release workqueue\n");
 		err = -ENOMEM;

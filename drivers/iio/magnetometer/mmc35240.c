@@ -10,7 +10,6 @@
  */
 
 #include <linux/module.h>
-#include <linux/mod_devicetable.h>
 #include <linux/init.h>
 #include <linux/i2c.h>
 #include <linux/delay.h>
@@ -21,7 +20,6 @@
 #include <linux/iio/sysfs.h>
 
 #define MMC35240_DRV_NAME "mmc35240"
-#define MMC35240_REGMAP_NAME "mmc35240_regmap"
 
 #define MMC35240_REG_XOUT_L	0x00
 #define MMC35240_REG_XOUT_H	0x01
@@ -463,7 +461,7 @@ static const struct reg_default mmc35240_reg_defaults[] = {
 };
 
 static const struct regmap_config mmc35240_regmap_config = {
-	.name = MMC35240_REGMAP_NAME,
+	.name = "mmc35240_regmap",
 
 	.reg_bits = 8,
 	.val_bits = 8,
@@ -534,13 +532,12 @@ static int mmc35240_resume(struct device *dev)
 	struct mmc35240_data *data = iio_priv(indio_dev);
 	int ret;
 
+	regcache_cache_only(data->regmap, false);
 	regcache_mark_dirty(data->regmap);
 	ret = regcache_sync_region(data->regmap, MMC35240_REG_CTRL0,
 				   MMC35240_REG_CTRL1);
 	if (ret < 0)
 		dev_err(dev, "Failed to restore control registers\n");
-
-	regcache_cache_only(data->regmap, false);
 
 	return 0;
 }
@@ -561,7 +558,7 @@ static const struct acpi_device_id mmc35240_acpi_match[] = {
 MODULE_DEVICE_TABLE(acpi, mmc35240_acpi_match);
 
 static const struct i2c_device_id mmc35240_id[] = {
-	{ "mmc35240" },
+	{ .name = "mmc35240" },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, mmc35240_id);

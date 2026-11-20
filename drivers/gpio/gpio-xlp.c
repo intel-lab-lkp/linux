@@ -206,7 +206,6 @@ static int xlp_gpio_dir_output(struct gpio_chip *gc, unsigned gpio, int state)
 {
 	struct xlp_gpio_priv *priv = gpiochip_get_data(gc);
 
-	BUG_ON(gpio >= gc->ngpio);
 	xlp_gpio_set_reg(priv->gpio_out_en, gpio, 0x1);
 
 	return 0;
@@ -216,7 +215,6 @@ static int xlp_gpio_dir_input(struct gpio_chip *gc, unsigned gpio)
 {
 	struct xlp_gpio_priv *priv = gpiochip_get_data(gc);
 
-	BUG_ON(gpio >= gc->ngpio);
 	xlp_gpio_set_reg(priv->gpio_out_en, gpio, 0x0);
 
 	return 0;
@@ -226,16 +224,16 @@ static int xlp_gpio_get(struct gpio_chip *gc, unsigned gpio)
 {
 	struct xlp_gpio_priv *priv = gpiochip_get_data(gc);
 
-	BUG_ON(gpio >= gc->ngpio);
 	return xlp_gpio_get_reg(priv->gpio_paddrv, gpio);
 }
 
-static void xlp_gpio_set(struct gpio_chip *gc, unsigned gpio, int state)
+static int xlp_gpio_set(struct gpio_chip *gc, unsigned int gpio, int state)
 {
 	struct xlp_gpio_priv *priv = gpiochip_get_data(gc);
 
-	BUG_ON(gpio >= gc->ngpio);
 	xlp_gpio_set_reg(priv->gpio_paddrv, gpio, state);
+
+	return 0;
 }
 
 static int xlp_gpio_probe(struct platform_device *pdev)
@@ -246,7 +244,7 @@ static int xlp_gpio_probe(struct platform_device *pdev)
 	void __iomem *gpio_base;
 	int irq, err;
 
-	priv = devm_kzalloc(&pdev->dev,	sizeof(*priv), GFP_KERNEL);
+	priv = devm_kzalloc_obj(&pdev->dev, *priv);
 	if (!priv)
 		return -ENOMEM;
 
@@ -285,9 +283,7 @@ static int xlp_gpio_probe(struct platform_device *pdev)
 	gpio_irq_chip_set_chip(girq, &xlp_gpio_irq_chip);
 	girq->parent_handler = xlp_gpio_generic_handler;
 	girq->num_parents = 1;
-	girq->parents = devm_kcalloc(&pdev->dev, 1,
-				     sizeof(*girq->parents),
-				     GFP_KERNEL);
+	girq->parents = devm_kzalloc_objs(&pdev->dev, *girq->parents, 1);
 	if (!girq->parents)
 		return -ENOMEM;
 	girq->parents[0] = irq;

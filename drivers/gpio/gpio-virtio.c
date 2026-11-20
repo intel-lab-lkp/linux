@@ -10,6 +10,7 @@
  */
 
 #include <linux/completion.h>
+#include <linux/dma-mapping.h>
 #include <linux/err.h>
 #include <linux/gpio/driver.h>
 #include <linux/io.h>
@@ -24,9 +25,13 @@
 struct virtio_gpio_line {
 	struct mutex lock; /* Protects line operation */
 	struct completion completion;
-	struct virtio_gpio_request req ____cacheline_aligned;
-	struct virtio_gpio_response res ____cacheline_aligned;
+
 	unsigned int rxlen;
+
+	__dma_from_device_group_begin();
+	struct virtio_gpio_request req;
+	struct virtio_gpio_response res;
+	__dma_from_device_group_end();
 };
 
 struct vgpio_irq_line {
@@ -37,8 +42,10 @@ struct vgpio_irq_line {
 	bool update_pending;
 	bool queue_pending;
 
-	struct virtio_gpio_irq_request ireq ____cacheline_aligned;
-	struct virtio_gpio_irq_response ires ____cacheline_aligned;
+	__dma_from_device_group_begin();
+	struct virtio_gpio_irq_request ireq;
+	struct virtio_gpio_irq_response ires;
+	__dma_from_device_group_end();
 };
 
 struct virtio_gpio {
@@ -194,11 +201,12 @@ static int virtio_gpio_get(struct gpio_chip *gc, unsigned int gpio)
 	return ret ? ret : value;
 }
 
-static void virtio_gpio_set(struct gpio_chip *gc, unsigned int gpio, int value)
+static int virtio_gpio_set(struct gpio_chip *gc, unsigned int gpio, int value)
 {
 	struct virtio_gpio *vgpio = gpiochip_get_data(gc);
 
-	virtio_gpio_req(vgpio, VIRTIO_GPIO_MSG_SET_VALUE, gpio, value, NULL);
+	return virtio_gpio_req(vgpio, VIRTIO_GPIO_MSG_SET_VALUE, gpio, value,
+			       NULL);
 }
 
 /* Interrupt handling */
@@ -504,7 +512,7 @@ static const char **virtio_gpio_get_names(struct virtio_gpio *vgpio,
 		return NULL;
 	}
 
-	names = devm_kcalloc(dev, ngpio, sizeof(*names), GFP_KERNEL);
+	names = devm_kzalloc_objs(dev, *names, ngpio);
 	if (!names)
 		return NULL;
 
@@ -526,7 +534,6 @@ static const char **virtio_gpio_get_names(struct virtio_gpio *vgpio,
 
 static int virtio_gpio_probe(struct virtio_device *vdev)
 {
-	struct virtio_gpio_config config;
 	struct device *dev = &vdev->dev;
 	struct virtio_gpio *vgpio;
 	struct irq_chip *gpio_irq_chip;
@@ -534,20 +541,22 @@ static int virtio_gpio_probe(struct virtio_device *vdev)
 	u16 ngpio;
 	int ret, i;
 
-	vgpio = devm_kzalloc(dev, sizeof(*vgpio), GFP_KERNEL);
+	vgpio = devm_kzalloc_obj(dev, *vgpio);
 	if (!vgpio)
 		return -ENOMEM;
 
 	/* Read configuration */
-	virtio_cread_bytes(vdev, 0, &config, sizeof(config));
-	gpio_names_size = le32_to_cpu(config.gpio_names_size);
-	ngpio = le16_to_cpu(config.ngpio);
+	gpio_names_size =
+		virtio_cread32(vdev, offsetof(struct virtio_gpio_config,
+					      gpio_names_size));
+	ngpio =  virtio_cread16(vdev, offsetof(struct virtio_gpio_config,
+					       ngpio));
 	if (!ngpio) {
 		dev_err(dev, "Number of GPIOs can't be zero\n");
 		return -EINVAL;
 	}
 
-	vgpio->lines = devm_kcalloc(dev, ngpio, sizeof(*vgpio->lines), GFP_KERNEL);
+	vgpio->lines = devm_kzalloc_objs(dev, *vgpio->lines, ngpio);
 	if (!vgpio->lines)
 		return -ENOMEM;
 
@@ -575,11 +584,12 @@ static int virtio_gpio_probe(struct virtio_device *vdev)
 
 	/* Interrupt support */
 	if (virtio_has_feature(vdev, VIRTIO_GPIO_F_IRQ)) {
-		vgpio->irq_lines = devm_kcalloc(dev, ngpio, sizeof(*vgpio->irq_lines), GFP_KERNEL);
+		vgpio->irq_lines = devm_kzalloc_objs(dev, *vgpio->irq_lines,
+						     ngpio);
 		if (!vgpio->irq_lines)
 			return -ENOMEM;
 
-		gpio_irq_chip = devm_kzalloc(dev, sizeof(*gpio_irq_chip), GFP_KERNEL);
+		gpio_irq_chip = devm_kzalloc_obj(dev, *gpio_irq_chip);
 		if (!gpio_irq_chip)
 			return -ENOMEM;
 

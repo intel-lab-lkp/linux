@@ -411,7 +411,6 @@ static const struct regmap_config cpu_msm8996_regmap_config = {
 	.reg_stride		= 4,
 	.val_bits		= 32,
 	.max_register		= 0x80210,
-	.fast_io		= true,
 	.val_format_endian	= REGMAP_ENDIAN_LITTLE,
 };
 
@@ -587,7 +586,7 @@ static int qcom_cpu_clk_msm8996_driver_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	int ret;
 
-	data = devm_kzalloc(dev, struct_size(data, hws, 2), GFP_KERNEL);
+	data = devm_kzalloc_flex(dev, *data, hws, 2);
 	if (!data)
 		return -ENOMEM;
 	data->num = 2;

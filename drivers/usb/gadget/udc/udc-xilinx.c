@@ -813,10 +813,10 @@ static int __xudc_ep_enable(struct xusb_ep *ep,
 
 	ep->is_in = ((desc->bEndpointAddress & USB_DIR_IN) != 0);
 	/* Bit 3...0:endpoint number */
-	ep->epnumber = (desc->bEndpointAddress & 0x0f);
+	ep->epnumber = usb_endpoint_num(desc);
 	ep->desc = desc;
 	ep->ep_usb.desc = desc;
-	tmp = desc->bmAttributes & USB_ENDPOINT_XFERTYPE_MASK;
+	tmp = usb_endpoint_type(desc);
 	ep->ep_usb.maxpacket = maxpacket = le16_to_cpu(desc->wMaxPacketSize);
 
 	switch (tmp) {
@@ -970,7 +970,7 @@ static struct usb_request *xudc_ep_alloc_request(struct usb_ep *_ep,
 	struct xusb_ep *ep = to_xusb_ep(_ep);
 	struct xusb_req *req;
 
-	req = kzalloc(sizeof(*req), gfp_flags);
+	req = kzalloc_obj(*req, gfp_flags);
 	if (!req)
 		return NULL;
 
@@ -2067,13 +2067,12 @@ static int xudc_probe(struct platform_device *pdev)
 	u32 ier;
 	u8 *buff;
 
-	udc = devm_kzalloc(&pdev->dev, sizeof(*udc), GFP_KERNEL);
+	udc = devm_kzalloc_obj(&pdev->dev, *udc);
 	if (!udc)
 		return -ENOMEM;
 
 	/* Create a dummy request for GET_STATUS, SET_ADDRESS */
-	udc->req = devm_kzalloc(&pdev->dev, sizeof(struct xusb_req),
-				GFP_KERNEL);
+	udc->req = devm_kzalloc_obj(&pdev->dev, struct xusb_req);
 	if (!udc->req)
 		return -ENOMEM;
 

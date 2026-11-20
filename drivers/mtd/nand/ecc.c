@@ -159,6 +159,13 @@ int nand_ecc_finish_io_req(struct nand_device *nand,
 }
 EXPORT_SYMBOL(nand_ecc_finish_io_req);
 
+bool nand_ecc_is_pipelined(const struct nand_device *nand)
+{
+	return nand->ecc.engine &&
+	       nand->ecc.engine->integration == NAND_ECC_ENGINE_INTEGRATION_PIPELINED;
+}
+EXPORT_SYMBOL(nand_ecc_is_pipelined);
+
 /* Define default OOB placement schemes for large and small page devices */
 static int nand_ooblayout_ecc_sp(struct mtd_info *mtd, int section,
 				 struct mtd_oob_region *oobregion)
@@ -552,7 +559,7 @@ void nand_ecc_tweak_req(struct nand_ecc_req_tweak_ctx *ctx,
 		memset(tweak->oobbuf.in, 0xFF, ctx->oob_buffer_size);
 	}
 
-	/* Copy the data that must be writen in the bounce buffers, if needed */
+	/* Copy the data that must be written in the bounce buffers, if needed */
 	if (orig->type == NAND_PAGE_WRITE) {
 		if (ctx->bounce_data)
 			memcpy((void *)tweak->databuf.out + orig->dataoffs,

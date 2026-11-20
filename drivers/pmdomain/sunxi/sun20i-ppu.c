@@ -114,16 +114,15 @@ static int sun20i_ppu_probe(struct platform_device *pdev)
 	if (!desc)
 		return -EINVAL;
 
-	pds = devm_kcalloc(dev, desc->num_domains, sizeof(*pds), GFP_KERNEL);
+	pds = devm_kzalloc_objs(dev, *pds, desc->num_domains);
 	if (!pds)
 		return -ENOMEM;
 
-	ppu = devm_kzalloc(dev, sizeof(*ppu), GFP_KERNEL);
+	ppu = devm_kzalloc_obj(dev, *ppu);
 	if (!ppu)
 		return -ENOMEM;
 
-	ppu->domains = devm_kcalloc(dev, desc->num_domains,
-				    sizeof(*ppu->domains), GFP_KERNEL);
+	ppu->domains = devm_kzalloc_objs(dev, *ppu->domains, desc->num_domains);
 	if (!ppu->domains)
 		return -ENOMEM;
 
@@ -193,6 +192,19 @@ static const struct sun20i_ppu_desc sun8i_v853_ppu_desc = {
 	.num_domains	= ARRAY_SIZE(sun8i_v853_ppu_pd_names),
 };
 
+static const char *const sun55i_a523_ppu_pd_names[] = {
+	"DSP",
+	"NPU",
+	"AUDIO",
+	"SRAM",
+	"RISCV",
+};
+
+static const struct sun20i_ppu_desc sun55i_a523_ppu_desc = {
+	.names		= sun55i_a523_ppu_pd_names,
+	.num_domains	= ARRAY_SIZE(sun55i_a523_ppu_pd_names),
+};
+
 static const struct of_device_id sun20i_ppu_of_match[] = {
 	{
 		.compatible	= "allwinner,sun20i-d1-ppu",
@@ -201,6 +213,10 @@ static const struct of_device_id sun20i_ppu_of_match[] = {
 	{
 		.compatible	= "allwinner,sun8i-v853-ppu",
 		.data		= &sun8i_v853_ppu_desc,
+	},
+	{
+		.compatible	= "allwinner,sun55i-a523-ppu",
+		.data		= &sun55i_a523_ppu_desc,
 	},
 	{ }
 };

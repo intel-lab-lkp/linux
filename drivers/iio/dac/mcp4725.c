@@ -16,15 +16,12 @@
 #include <linux/err.h>
 #include <linux/delay.h>
 #include <linux/regulator/consumer.h>
-#include <linux/mod_devicetable.h>
 #include <linux/property.h>
 
 #include <linux/iio/iio.h>
 #include <linux/iio/sysfs.h>
 
 #include <linux/iio/dac/mcp4725.h>
-
-#define MCP4725_DRV_NAME "mcp4725"
 
 #define MCP472X_REF_VDD			0x00
 #define MCP472X_REF_VREF_UNBUFFERED	0x02
@@ -359,6 +356,8 @@ static int mcp4725_write_raw(struct iio_dev *indio_dev,
 	switch (mask) {
 	case IIO_CHAN_INFO_RAW:
 		ret = mcp4725_set_value(indio_dev, val);
+		if (ret)
+			return ret;
 		data->dac_value = val;
 		break;
 	default:
@@ -525,8 +524,8 @@ static const struct mcp4725_chip_info mcp4726 = {
 };
 
 static const struct i2c_device_id mcp4725_id[] = {
-	{ "mcp4725", (kernel_ulong_t)&mcp4725 },
-	{ "mcp4726", (kernel_ulong_t)&mcp4726 },
+	{ .name = "mcp4725", .driver_data = (kernel_ulong_t)&mcp4725 },
+	{ .name = "mcp4726", .driver_data = (kernel_ulong_t)&mcp4726 },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, mcp4725_id);
@@ -546,7 +545,7 @@ MODULE_DEVICE_TABLE(of, mcp4725_of_match);
 
 static struct i2c_driver mcp4725_driver = {
 	.driver = {
-		.name	= MCP4725_DRV_NAME,
+		.name	= "mcp4725",
 		.of_match_table = mcp4725_of_match,
 		.pm	= pm_sleep_ptr(&mcp4725_pm_ops),
 	},

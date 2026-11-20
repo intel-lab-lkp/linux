@@ -487,7 +487,7 @@ static int qcom_ipq806x_usb_phy_probe(struct platform_device *pdev)
 	const struct phy_drvdata *data;
 	struct phy_provider *phy_provider;
 
-	phy_dwc3 = devm_kzalloc(&pdev->dev, sizeof(*phy_dwc3), GFP_KERNEL);
+	phy_dwc3 = devm_kzalloc_obj(&pdev->dev, *phy_dwc3);
 	if (!phy_dwc3)
 		return -ENOMEM;
 
@@ -559,7 +559,6 @@ static struct platform_driver qcom_ipq806x_usb_phy_driver = {
 
 module_platform_driver(qcom_ipq806x_usb_phy_driver);
 
-MODULE_ALIAS("platform:phy-qcom-ipq806x-usb");
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR("Andy Gross <agross@codeaurora.org>");
 MODULE_AUTHOR("Ivan T. Ivanov <iivanov@mm-sol.com>");

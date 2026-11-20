@@ -6,7 +6,6 @@
  */
 
 #include <linux/clk-provider.h>
-#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
@@ -148,6 +147,7 @@ static const struct qcom_cc_desc tcsr_cc_sm8650_desc = {
 };
 
 static const struct of_device_id tcsr_cc_sm8650_match_table[] = {
+	{ .compatible = "qcom,milos-tcsr" },
 	{ .compatible = "qcom,sm8650-tcsr" },
 	{ }
 };
@@ -155,6 +155,13 @@ MODULE_DEVICE_TABLE(of, tcsr_cc_sm8650_match_table);
 
 static int tcsr_cc_sm8650_probe(struct platform_device *pdev)
 {
+	if (of_device_is_compatible(pdev->dev.of_node, "qcom,milos-tcsr")) {
+		tcsr_ufs_clkref_en.halt_reg = 0x31118;
+		tcsr_ufs_clkref_en.clkr.enable_reg = 0x31118;
+		tcsr_cc_sm8650_clocks[TCSR_USB2_CLKREF_EN] = NULL;
+		tcsr_cc_sm8650_clocks[TCSR_USB3_CLKREF_EN] = NULL;
+	}
+
 	return qcom_cc_probe(pdev, &tcsr_cc_sm8650_desc);
 }
 
@@ -166,17 +173,7 @@ static struct platform_driver tcsr_cc_sm8650_driver = {
 	},
 };
 
-static int __init tcsr_cc_sm8650_init(void)
-{
-	return platform_driver_register(&tcsr_cc_sm8650_driver);
-}
-subsys_initcall(tcsr_cc_sm8650_init);
-
-static void __exit tcsr_cc_sm8650_exit(void)
-{
-	platform_driver_unregister(&tcsr_cc_sm8650_driver);
-}
-module_exit(tcsr_cc_sm8650_exit);
+subsys_platform_driver(tcsr_cc_sm8650_driver);
 
 MODULE_DESCRIPTION("QTI TCSRCC SM8650 Driver");
 MODULE_LICENSE("GPL");

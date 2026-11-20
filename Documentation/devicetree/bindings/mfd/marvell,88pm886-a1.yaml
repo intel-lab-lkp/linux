@@ -29,11 +29,14 @@ properties:
     type: object
     additionalProperties: false
     patternProperties:
-      "^(ldo(1[0-6]|[1-9])|buck[1-5])$":
+      "^(ldo(1[0-6]|[1-9])|buck[1-5]|vbus)$":
         type: object
         $ref: /schemas/regulator/regulator.yaml#
         description: LDO or buck regulator.
         unevaluatedProperties: false
+
+  '#io-channel-cells':
+    const: 1
 
 required:
   - compatible
@@ -53,6 +56,7 @@ examples:
         reg = <0x30>;
         interrupts = <0 4 IRQ_TYPE_LEVEL_HIGH>;
         interrupt-parent = <&gic>;
+        #io-channel-cells = <1>;
         wakeup-source;
 
         regulators {

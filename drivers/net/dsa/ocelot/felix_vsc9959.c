@@ -34,7 +34,8 @@
 					 OCELOT_PORT_MODE_QSGMII | \
 					 OCELOT_PORT_MODE_1000BASEX | \
 					 OCELOT_PORT_MODE_2500BASEX | \
-					 OCELOT_PORT_MODE_USXGMII)
+					 OCELOT_PORT_MODE_USXGMII | \
+					 OCELOT_PORT_MODE_10G_QXGMII)
 
 static const u32 vsc9959_port_modes[VSC9959_NUM_PORTS] = {
 	VSC9959_PORT_MODE_SERDES,
@@ -967,9 +968,8 @@ static int vsc9959_mdio_bus_alloc(struct ocelot *ocelot)
 	int port;
 	int rc;
 
-	felix->pcs = devm_kcalloc(dev, felix->info->num_ports,
-				  sizeof(struct phylink_pcs *),
-				  GFP_KERNEL);
+	felix->pcs = devm_kzalloc_objs(dev, struct phylink_pcs *,
+				       felix->info->num_ports);
 	if (!felix->pcs) {
 		dev_err(dev, "failed to allocate array for PCS PHYs\n");
 		return -ENOMEM;
@@ -2200,7 +2200,7 @@ static int vsc9959_psfp_sgi_table_add(struct ocelot *ocelot,
 			return 0;
 		}
 
-	tmp = kzalloc(sizeof(*tmp), GFP_KERNEL);
+	tmp = kzalloc_obj(*tmp);
 	if (!tmp)
 		return -ENOMEM;
 

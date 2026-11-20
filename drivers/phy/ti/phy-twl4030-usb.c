@@ -690,7 +690,7 @@ static int twl4030_usb_probe(struct platform_device *pdev)
 	struct device_node	*np = pdev->dev.of_node;
 	struct phy_provider	*phy_provider;
 
-	twl = devm_kzalloc(&pdev->dev, sizeof(*twl), GFP_KERNEL);
+	twl = devm_kzalloc_obj(&pdev->dev, *twl);
 	if (!twl)
 		return -ENOMEM;
 
@@ -704,7 +704,7 @@ static int twl4030_usb_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
-	otg = devm_kzalloc(&pdev->dev, sizeof(*otg), GFP_KERNEL);
+	otg = devm_kzalloc_obj(&pdev->dev, *otg);
 	if (!otg)
 		return -ENOMEM;
 
@@ -784,7 +784,6 @@ static int twl4030_usb_probe(struct platform_device *pdev)
 	pm_runtime_mark_last_busy(&pdev->dev);
 	pm_runtime_put_autosuspend(twl->dev);
 
-	dev_info(&pdev->dev, "Initialized TWL4030 USB module\n");
 	return 0;
 }
 

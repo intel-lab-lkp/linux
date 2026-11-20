@@ -270,8 +270,7 @@ static int omap_control_phy_probe(struct platform_device *pdev)
 {
 	struct omap_control_phy *control_phy;
 
-	control_phy = devm_kzalloc(&pdev->dev, sizeof(*control_phy),
-		GFP_KERNEL);
+	control_phy = devm_kzalloc_obj(&pdev->dev, *control_phy);
 	if (!control_phy)
 		return -ENOMEM;
 
@@ -334,7 +333,6 @@ static void __exit omap_control_phy_exit(void)
 }
 module_exit(omap_control_phy_exit);
 
-MODULE_ALIAS("platform:omap_control_phy");
 MODULE_AUTHOR("Texas Instruments Inc.");
 MODULE_DESCRIPTION("OMAP Control Module PHY Driver");
 MODULE_LICENSE("GPL v2");

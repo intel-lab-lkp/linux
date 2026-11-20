@@ -129,7 +129,7 @@ static int ad5592r_gpio_init(struct ad5592r_state *st)
 	st->gpiochip.direction_input = ad5592r_gpio_direction_input;
 	st->gpiochip.direction_output = ad5592r_gpio_direction_output;
 	st->gpiochip.get = ad5592r_gpio_get;
-	st->gpiochip.set_rv = ad5592r_gpio_set;
+	st->gpiochip.set = ad5592r_gpio_set;
 	st->gpiochip.request = ad5592r_gpio_request;
 	st->gpiochip.owner = THIS_MODULE;
 	st->gpiochip.names = ad5592r_gpio_names;
@@ -510,9 +510,7 @@ static int ad5592r_alloc_channels(struct iio_dev *iio_dev)
 			st->channel_offstate[reg] = tmp;
 	}
 
-	channels = devm_kcalloc(st->dev,
-			1 + 2 * num_channels, sizeof(*channels),
-			GFP_KERNEL);
+	channels = devm_kzalloc_objs(st->dev, *channels, 1 + 2 * num_channels);
 	if (!channels)
 		return -ENOMEM;
 

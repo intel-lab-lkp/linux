@@ -143,6 +143,7 @@ struct atmel_pmecc_caps {
 	int nstrengths;
 	int el_offset;
 	bool correct_erased_chunks;
+	bool clk_ctrl;
 };
 
 struct atmel_pmecc {
@@ -827,7 +828,7 @@ static struct atmel_pmecc *atmel_pmecc_create(struct platform_device *pdev,
 	struct device *dev = &pdev->dev;
 	struct atmel_pmecc *pmecc;
 
-	pmecc = devm_kzalloc(dev, sizeof(*pmecc), GFP_KERNEL);
+	pmecc = devm_kzalloc_obj(dev, *pmecc);
 	if (!pmecc)
 		return ERR_PTR(-ENOMEM);
 
@@ -842,6 +843,10 @@ static struct atmel_pmecc *atmel_pmecc_create(struct platform_device *pdev,
 	pmecc->regs.errloc = devm_platform_ioremap_resource(pdev, errloc_res_idx);
 	if (IS_ERR(pmecc->regs.errloc))
 		return ERR_CAST(pmecc->regs.errloc);
+
+	/* pmecc data setup time */
+	if (caps->clk_ctrl)
+		writel(PMECC_CLK_133MHZ, pmecc->regs.base + ATMEL_PMECC_CLK);
 
 	/* Disable all interrupts before registering the PMECC handler. */
 	writel(0xffffffff, pmecc->regs.base + ATMEL_PMECC_IDR);
@@ -896,6 +901,7 @@ static struct atmel_pmecc_caps at91sam9g45_caps = {
 	.strengths = atmel_pmecc_strengths,
 	.nstrengths = 5,
 	.el_offset = 0x8c,
+	.clk_ctrl = true,
 };
 
 static struct atmel_pmecc_caps sama5d4_caps = {
@@ -1004,4 +1010,3 @@ module_platform_driver(atmel_pmecc_driver);
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Boris Brezillon <boris.brezillon@free-electrons.com>");
 MODULE_DESCRIPTION("PMECC engine driver");
-MODULE_ALIAS("platform:atmel_pmecc");

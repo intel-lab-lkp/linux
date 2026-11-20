@@ -4,7 +4,14 @@
 //!
 //! C header: [`include/linux/firmware.h`](srctree/include/linux/firmware.h)
 
-use crate::{bindings, device::Device, error::Error, error::Result, ffi, str::CStr};
+use crate::{
+    bindings,
+    device::Device,
+    error::to_result,
+    ffi,
+    prelude::*,
+    str::{CStr, CStrExt as _},
+};
 use core::ptr::NonNull;
 
 /// # Invariants
@@ -44,13 +51,9 @@ impl FwFunc {
 /// # Examples
 ///
 /// ```no_run
-/// # use kernel::{c_str, device::Device, firmware::Firmware};
-///
-/// # fn no_run() -> Result<(), Error> {
-/// # // SAFETY: *NOT* safe, just for the example to get an `ARef<Device>` instance
-/// # let dev = unsafe { Device::get_device(core::ptr::null_mut()) };
-///
-/// let fw = Firmware::request(c_str!("path/to/firmware.bin"), &dev)?;
+/// # use kernel::{device::Device, firmware::Firmware, sync::aref::ARef};
+/// # fn no_run(dev: ARef<Device>) -> Result<(), Error> {
+/// let fw = Firmware::request(c"path/to/firmware.bin", &dev)?;
 /// let blob = fw.data();
 ///
 /// # Ok(())
@@ -62,10 +65,11 @@ impl Firmware {
     fn request_internal(name: &CStr, dev: &Device, func: FwFunc) -> Result<Self> {
         let mut fw: *mut bindings::firmware = core::ptr::null_mut();
         let pfw: *mut *mut bindings::firmware = &mut fw;
+        let pfw: *mut *const bindings::firmware = pfw.cast();
 
         // SAFETY: `pfw` is a valid pointer to a NULL initialized `bindings::firmware` pointer.
         // `name` and `dev` are valid as by their type invariants.
-        let ret = unsafe { func.0(pfw as _, name.as_char_ptr(), dev.as_raw()) };
+        let ret = unsafe { func.0(pfw, name.as_char_ptr(), dev.as_raw()) };
         if ret != 0 {
             return Err(Error::from_errno(ret));
         }
@@ -112,6 +116,48 @@ impl Drop for Firmware {
     }
 }
 
+/// Load firmware directly into the caller-provided `buf`.
+///
+/// On success the firmware image has been copied into `buf`; the caller accesses the data
+/// through `buf` itself.
+///
+/// This is intentionally a stand-alone function rather than a `Firmware` constructor. For
+/// the `into_buf` path, the firmware data lives in the caller's `buf`, not in a
+/// kernel-owned buffer, so returning a `Firmware` would expose `Firmware::data()` as a
+/// second handle aliasing `buf` (and `release_firmware()` does not free `buf` anyway).
+pub fn request_into_buf(name: &CStr, dev: &Device, buf: &mut [u8]) -> Result {
+    // `as_mut_ptr()` on an empty slice returns a non-NULL pointer to
+    // memory which the loader does not own. Passing that pointer with `size == 0`
+    // makes the loader believe that it is buffer it allocated itself, so when
+    // `release_firmware()` is called, it will vfree the pointer and trigger a
+    // bug. Reject empty slices to avoid this situation.
+    if buf.is_empty() {
+        return Err(EINVAL);
+    }
+
+    let mut fw: *const bindings::firmware = core::ptr::null();
+
+    // SAFETY: `&raw mut fw` is a valid pointer to a NULL initialized `bindings::firmware` pointer.
+    // `name` and `dev` are valid as by their type invariants. `buf` is a valid writable
+    // buffer of `buf.len()` bytes.
+    to_result(unsafe {
+        bindings::request_firmware_into_buf(
+            &raw mut fw,
+            name.as_char_ptr(),
+            dev.as_raw(),
+            buf.as_mut_ptr().cast(),
+            buf.len(),
+        )
+    })?;
+
+    // The firmware bytes are now in `buf`, which the caller owns, so we don't need
+    // the kernel to hang on to it any more.
+    // SAFETY: `fw` is a valid pointer returned by `request_firmware_into_buf`.
+    unsafe { bindings::release_firmware(fw) };
+
+    Ok(())
+}
+
 // SAFETY: `Firmware` only holds a pointer to a C `struct firmware`, which is safe to be used from
 // any thread.
 unsafe impl Send for Firmware {}
@@ -139,7 +185,7 @@ unsafe impl Sync for Firmware {}
 /// Typically, such contracts would be enforced by a trait, however traits do not (yet) support
 /// const functions.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```
 /// # mod module_firmware_test {
@@ -181,7 +227,7 @@ unsafe impl Sync for Firmware {}
 /// module! {
 ///    type: MyModule,
 ///    name: "module_firmware_test",
-///    author: "Rust for Linux",
+///    authors: ["Rust for Linux"],
 ///    description: "module_firmware! test module",
 ///    license: "GPL",
 /// }
@@ -196,13 +242,13 @@ macro_rules! module_firmware {
     ($($builder:tt)*) => {
         const _: () = {
             const __MODULE_FIRMWARE_PREFIX: &'static $crate::str::CStr = if cfg!(MODULE) {
-                $crate::c_str!("")
+                c""
             } else {
                 <LocalModule as $crate::ModuleMetadata>::NAME
             };
 
             #[link_section = ".modinfo"]
-            #[used]
+            #[used(compiler)]
             static __MODULE_FIRMWARE: [u8; $($builder)*::create(__MODULE_FIRMWARE_PREFIX)
                 .build_length()] = $($builder)*::create(__MODULE_FIRMWARE_PREFIX).build();
         };
@@ -261,7 +307,7 @@ impl<const N: usize> ModInfoBuilder<N> {
     /// Append path components to the [`ModInfoBuilder`] instance. Paths need to be separated
     /// with [`ModInfoBuilder::new_entry`].
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```
     /// use kernel::firmware::ModInfoBuilder;
@@ -290,7 +336,7 @@ impl<const N: usize> ModInfoBuilder<N> {
         let module_name = this.module_name;
 
         if !this.module_name.is_empty() {
-            this = this.push_internal(module_name.as_bytes_with_nul());
+            this = this.push_internal(module_name.to_bytes_with_nul());
 
             if N != 0 {
                 // Re-use the space taken by the NULL terminator and swap it with the '.' separator.

@@ -6,12 +6,14 @@
 #include <linux/static_key.h>
 #include <linux/objtool.h>
 #include <linux/linkage.h>
+#include <linux/types.h>
 
 #include <asm/alternative.h>
 #include <asm/cpufeatures.h>
 #include <asm/msr-index.h>
 #include <asm/unwind_hints.h>
 #include <asm/percpu.h>
+#include <asm/ptrace-abi.h>
 
 /*
  * Call depth tracking for Intel SKL CPUs to address the RSB underflow
@@ -176,6 +178,50 @@
 	add	$(BITS_PER_LONG/8), %_ASM_SP;		\
 	lfence;
 
+/*
+ * Helper for detecting if an interrupt occurred at an unsafe location within
+ * Safe-RET.  If Safe-RET is interrupted after the CALL or LEA the RSB may get
+ * poisoned by the interrupt handler.
+ *
+ * The Safe-RET sequence is:
+ *
+ * CALL
+ * LEA 8(%RSP), %RSP
+ * RET
+ *
+ * The two CMPs below check whether RIP points to after the CALL or after the
+ * LEA.
+ *
+ * The LFENCE below is to address this particular speculation case:
+ *
+ * 1. Userspace runs and poisons the BTB around the safe-RET routine
+ *
+ * 2. Userspace triggers some kind of exception
+ *
+ * 3. Kernel executes error_entry() and mis-speculates the branch into thinking
+ *    it actually came from kernel space
+ *
+ * 4. The kernel then further mis-speculates that the exception occurred due
+ *    to an interrupted safe-RET
+ *
+ * 5. The handle_interrupted_saferet() routine speculatively executes and
+ *    speculatively does a safe-RET. But this is unsafe since it was never
+ *    untrained.
+ *
+ * The LFENCE fixes this by ensuring step 5 is never reached speculatively.
+ * Note that this LFENCE only occurs if safe-RET was actually interrupted (so
+ * it's outside of the normal path).
+ */
+#define __HANDLE_INTR_SAFERET(name, pt_regs)		\
+	cmpq	$(name), RIP+pt_regs;			\
+	jb	1f;					\
+	cmpq	$(name)+5, RIP+pt_regs;			\
+	ja	1f;					\
+	lfence;						\
+	leaq	pt_regs, %rdi;				\
+	call	handle_interrupted_saferet;		\
+	1:
+
 #ifdef __ASSEMBLER__
 
 /*
@@ -293,6 +339,14 @@
 #define UNTRAIN_RET_FROM_CALL \
 	__UNTRAIN_RET X86_FEATURE_ENTRY_IBPB, __stringify(RESET_CALL_DEPTH_FROM_CALL)
 
+.macro HANDLE_INTR_SAFERET pt_regs
+#ifdef CONFIG_MITIGATION_SRSO
+	ALTERNATIVE_2 "", \
+	__stringify(__HANDLE_INTR_SAFERET(srso_safe_ret, \pt_regs)), X86_FEATURE_SRSO, \
+	__stringify(__HANDLE_INTR_SAFERET(srso_alias_safe_ret, \pt_regs)), X86_FEATURE_SRSO_ALIAS
+
+#endif
+.endm
 
 .macro CALL_DEPTH_ACCOUNT
 #ifdef CONFIG_MITIGATION_CALL_DEPTH_TRACKING
@@ -302,24 +356,32 @@
 .endm
 
 /*
- * Macro to execute VERW instruction that mitigate transient data sampling
- * attacks such as MDS. On affected systems a microcode update overloaded VERW
- * instruction to also clear the CPU buffers. VERW clobbers CFLAGS.ZF.
- *
+ * Macro to execute VERW insns that mitigate transient data sampling
+ * attacks such as MDS or TSA. On affected systems a microcode update
+ * overloaded VERW insns to also clear the CPU buffers. VERW clobbers
+ * CFLAGS.ZF.
  * Note: Only the memory operand variant of VERW clears the CPU buffers.
  */
-.macro CLEAR_CPU_BUFFERS
 #ifdef CONFIG_X86_64
-	ALTERNATIVE "", "verw mds_verw_sel(%rip)", X86_FEATURE_CLEAR_CPU_BUF
+#define VERW	verw x86_verw_sel(%rip)
 #else
-	/*
-	 * In 32bit mode, the memory operand must be a %cs reference. The data
-	 * segments may not be usable (vm86 mode), and the stack segment may not
-	 * be flat (ESPFIX32).
-	 */
-	ALTERNATIVE "", "verw %cs:mds_verw_sel", X86_FEATURE_CLEAR_CPU_BUF
+/*
+ * In 32bit mode, the memory operand must be a %cs reference. The data segments
+ * may not be usable (vm86 mode), and the stack segment may not be flat (ESPFIX32).
+ */
+#define VERW	verw %cs:x86_verw_sel
 #endif
-.endm
+
+/*
+ * Provide a stringified VERW macro for simple usage, and a non-stringified
+ * VERW macro for use in more elaborate sequences, e.g. to encode a conditional
+ * VERW within an ALTERNATIVE.
+ */
+#define __CLEAR_CPU_BUFFERS	__stringify(VERW)
+
+/* If necessary, emit VERW on exit-to-userspace to clear CPU buffers. */
+#define CLEAR_CPU_BUFFERS \
+	ALTERNATIVE "", __CLEAR_CPU_BUFFERS, X86_FEATURE_CLEAR_CPU_BUF
 
 #ifdef CONFIG_X86_64
 .macro CLEAR_BRANCH_HISTORY
@@ -379,6 +441,10 @@ extern void srso_alias_return_thunk(void);
 
 extern void entry_untrain_ret(void);
 extern void write_ibpb(void);
+
+#ifdef CONFIG_BPF_JIT
+extern void bpf_arch_ibpb(void);
+#endif
 
 #ifdef CONFIG_X86_64
 extern void clear_bhb_loop(void);
@@ -458,7 +524,7 @@ static inline void call_depth_return_thunk(void) {}
  */
 # define CALL_NOSPEC						\
 	ALTERNATIVE_2(						\
-	ANNOTATE_RETPOLINE_SAFE					\
+	ANNOTATE_RETPOLINE_SAFE "\n"				\
 	"call *%[thunk_target]\n",				\
 	"       jmp    904f;\n"					\
 	"       .align 16\n"					\
@@ -474,7 +540,7 @@ static inline void call_depth_return_thunk(void) {}
 	"904:	call   901b;\n",				\
 	X86_FEATURE_RETPOLINE,					\
 	"lfence;\n"						\
-	ANNOTATE_RETPOLINE_SAFE					\
+	ANNOTATE_RETPOLINE_SAFE "\n"				\
 	"call *%[thunk_target]\n",				\
 	X86_FEATURE_RETPOLINE_LFENCE)
 
@@ -508,6 +574,7 @@ enum spectre_v2_user_mitigation {
 /* The Speculative Store Bypass disable variants */
 enum ssb_mitigation {
 	SPEC_STORE_BYPASS_NONE,
+	SPEC_STORE_BYPASS_AUTO,
 	SPEC_STORE_BYPASS_DISABLE,
 	SPEC_STORE_BYPASS_PRCTL,
 	SPEC_STORE_BYPASS_SECCOMP,
@@ -523,6 +590,8 @@ void alternative_msr_write(unsigned int msr, u64 val, unsigned int feature)
 		    [feature] "i" (feature)
 		: "memory");
 }
+
+DECLARE_PER_CPU(bool, x86_ibpb_exit_to_user);
 
 static inline void indirect_branch_prediction_barrier(void)
 {
@@ -567,24 +636,22 @@ DECLARE_STATIC_KEY_FALSE(switch_mm_always_ibpb);
 
 DECLARE_STATIC_KEY_FALSE(switch_vcpu_ibpb);
 
-DECLARE_STATIC_KEY_FALSE(mds_idle_clear);
+DECLARE_STATIC_KEY_FALSE(cpu_buf_idle_clear);
 
 DECLARE_STATIC_KEY_FALSE(switch_mm_cond_l1d_flush);
 
-DECLARE_STATIC_KEY_FALSE(cpu_buf_vm_clear);
-
-extern u16 mds_verw_sel;
+extern u16 x86_verw_sel;
 
 #include <asm/segment.h>
 
 /**
- * mds_clear_cpu_buffers - Mitigation for MDS and TAA vulnerability
+ * x86_clear_cpu_buffers - Buffer clearing support for different x86 CPU vulns
  *
  * This uses the otherwise unused and obsolete VERW instruction in
  * combination with microcode which triggers a CPU buffer flush when the
  * instruction is executed.
  */
-static __always_inline void mds_clear_cpu_buffers(void)
+static __always_inline void x86_clear_cpu_buffers(void)
 {
 	static const u16 ds = __KERNEL_DS;
 
@@ -601,15 +668,20 @@ static __always_inline void mds_clear_cpu_buffers(void)
 }
 
 /**
- * mds_idle_clear_cpu_buffers - Mitigation for MDS vulnerability
+ * x86_idle_clear_cpu_buffers - Buffer clearing support in idle for the MDS
+ * and TSA vulnerabilities.
  *
  * Clear CPU buffers if the corresponding static key is enabled
  */
-static __always_inline void mds_idle_clear_cpu_buffers(void)
+static __always_inline void x86_idle_clear_cpu_buffers(void)
 {
-	if (static_branch_likely(&mds_idle_clear))
-		mds_clear_cpu_buffers();
+	if (static_branch_likely(&cpu_buf_idle_clear))
+		x86_clear_cpu_buffers();
 }
+
+void srso_safe_ret(void);
+void srso_alias_safe_ret(void);
+void handle_interrupted_saferet(struct pt_regs *regs);
 
 #endif /* __ASSEMBLER__ */
 

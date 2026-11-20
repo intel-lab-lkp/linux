@@ -181,10 +181,10 @@ int __init berlin2_avpll_vco_register(void __iomem *base,
 			       const char *name, const char *parent_name,
 			       u8 vco_flags, unsigned long flags)
 {
+	struct clk_init_data init = {};
 	struct berlin2_avpll_vco *vco;
-	struct clk_init_data init;
 
-	vco = kzalloc(sizeof(*vco), GFP_KERNEL);
+	vco = kzalloc_obj(*vco);
 	if (!vco)
 		return -ENOMEM;
 
@@ -319,7 +319,7 @@ berlin2_avpll_channel_recalc_rate(struct clk_hw *hw, unsigned long parent_rate)
 
 	/*
 	 * AV3 divider start at VCO_CTRL14, bit 7; each 4 bits wide.
-	 * AV2/AV3 form a fractional divider, where only specfic values for AV3
+	 * AV2/AV3 form a fractional divider, where only specific values for AV3
 	 * are allowed. AV3 != 0 divides by AV2/2, AV3=0 is bypass.
 	 */
 	if (ch->index < 6) {
@@ -358,9 +358,9 @@ int __init berlin2_avpll_channel_register(void __iomem *base,
 			   u8 ch_flags, unsigned long flags)
 {
 	struct berlin2_avpll_channel *ch;
-	struct clk_init_data init;
+	struct clk_init_data init = {};
 
-	ch = kzalloc(sizeof(*ch), GFP_KERNEL);
+	ch = kzalloc_obj(*ch);
 	if (!ch)
 		return -ENOMEM;
 

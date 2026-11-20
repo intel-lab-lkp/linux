@@ -756,10 +756,7 @@ static void rtl8821ae_dm_dig(struct ieee80211_hw *hw)
 		rtl_dbg(rtlpriv, COMP_DIG, DBG_LOUD,
 			"DIG AfterLink\n");
 		if (first_connect) {
-			if (dm_digtable->rssi_val_min <= dig_max_of_min)
-				current_igi = dm_digtable->rssi_val_min;
-			else
-				current_igi = dig_max_of_min;
+			current_igi = min(dm_digtable->rssi_val_min, dig_max_of_min);
 			rtl_dbg(rtlpriv, COMP_DIG, DBG_LOUD,
 				"First Connect\n");
 		} else {
@@ -1153,7 +1150,7 @@ u8 rtl8821ae_hw_rate_to_mrate(struct ieee80211_hw *hw, u8 rate)
 /*-----------------------------------------------------------------------------
  * Function:	odm_TxPwrTrackSetPwr88E()
  *
- * Overview:	88E change all channel tx power accordign to flag.
+ * Overview:	88E change all channel tx power according to flag.
  *				OFDM & CCK are all different.
  *
  * Input:		NONE
@@ -1462,7 +1459,7 @@ void rtl8812ae_dm_txpower_tracking_callback_thermalmeter(
 	const u8 *delta_swing_table_idx_tup_b;
 	const u8 *delta_swing_table_idx_tdown_b;
 
-	/*2. Initialization ( 7 steps in total )*/
+	/* 2. Initialization ( 7 steps in total ) */
 	rtl8812ae_get_delta_swing_table(hw,
 		&delta_swing_table_idx_tup_a,
 		&delta_swing_table_idx_tdown_a,
@@ -1549,7 +1546,7 @@ void rtl8812ae_dm_txpower_tracking_callback_thermalmeter(
 
 	if (delta > 0 && rtldm->txpower_track_control) {
 		/* "delta" here is used to record the
-		 * absolute value of differrence.
+		 * absolute value of difference.
 		 */
 		delta = thermal_value > rtlefuse->eeprom_thermalmeter ?
 			(thermal_value - rtlefuse->eeprom_thermalmeter) :
@@ -1832,7 +1829,7 @@ static void rtl8821ae_get_delta_swing_table(struct ieee80211_hw *hw,
 /*-----------------------------------------------------------------------------
  * Function:	odm_TxPwrTrackSetPwr88E()
  *
- * Overview:	88E change all channel tx power accordign to flag.
+ * Overview:	88E change all channel tx power according to flag.
  *				OFDM & CCK are all different.
  *
  * Input:		NONE
@@ -2032,7 +2029,7 @@ void rtl8821ae_dm_txpower_tracking_callback_thermalmeter(
 	const u8 *delta_swing_table_idx_tup_a;
 	const u8 *delta_swing_table_idx_tdown_a;
 
-	/*2. Initilization ( 7 steps in total )*/
+	/* 2. Initialization ( 7 steps in total ) */
 	rtl8821ae_get_delta_swing_table(hw,
 					&delta_swing_table_idx_tup_a,
 					&delta_swing_table_idx_tdown_a);
@@ -2114,7 +2111,7 @@ void rtl8821ae_dm_txpower_tracking_callback_thermalmeter(
 
 	if (delta > 0 && rtldm->txpower_track_control) {
 		/*"delta" here is used to record the
-		 * absolute value of differrence.
+		 * absolute value of difference.
 		 */
 		delta = thermal_value > rtlefuse->eeprom_thermalmeter ?
 			(thermal_value - rtlefuse->eeprom_thermalmeter) :

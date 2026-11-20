@@ -117,7 +117,6 @@ static int pwm_ir_tx_atomic(struct rc_dev *dev, unsigned int *txbuf,
 static enum hrtimer_restart pwm_ir_timer(struct hrtimer *timer)
 {
 	struct pwm_ir *pwm_ir = container_of(timer, struct pwm_ir, timer);
-	ktime_t now;
 
 	/*
 	 * If we happen to hit an odd latency spike, loop through the
@@ -139,9 +138,7 @@ static enum hrtimer_restart pwm_ir_timer(struct hrtimer *timer)
 		hrtimer_add_expires_ns(timer, ns);
 
 		pwm_ir->txbuf_index++;
-
-		now = timer->base->get_time();
-	} while (hrtimer_get_expires_tv64(timer) < now);
+	} while (hrtimer_expires_remaining(timer) > 0);
 
 	return HRTIMER_RESTART;
 }
@@ -152,7 +149,7 @@ static int pwm_ir_probe(struct platform_device *pdev)
 	struct rc_dev *rcdev;
 	int rc;
 
-	pwm_ir = devm_kmalloc(&pdev->dev, sizeof(*pwm_ir), GFP_KERNEL);
+	pwm_ir = devm_kmalloc_obj(&pdev->dev, *pwm_ir);
 	if (!pwm_ir)
 		return -ENOMEM;
 

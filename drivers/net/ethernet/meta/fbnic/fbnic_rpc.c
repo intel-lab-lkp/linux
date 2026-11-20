@@ -6,6 +6,7 @@
 #include <net/ipv6.h>
 
 #include "fbnic.h"
+#include "fbnic_fw.h"
 #include "fbnic_netdev.h"
 #include "fbnic_rpc.h"
 
@@ -71,6 +72,8 @@ u16 fbnic_flow_hash_2_rss_en_mask(struct fbnic_net *fbn, int flow_type)
 	rss_en_mask |= FBNIC_FH_2_RSSEM_BIT(IP_DST, IP_DST, flow_hash);
 	rss_en_mask |= FBNIC_FH_2_RSSEM_BIT(L4_B_0_1, L4_SRC, flow_hash);
 	rss_en_mask |= FBNIC_FH_2_RSSEM_BIT(L4_B_2_3, L4_DST, flow_hash);
+	rss_en_mask |= FBNIC_FH_2_RSSEM_BIT(IP6_FL, OV6_FL_LBL, flow_hash);
+	rss_en_mask |= FBNIC_FH_2_RSSEM_BIT(IP6_FL, IV6_FL_LBL, flow_hash);
 
 	return rss_en_mask;
 }
@@ -114,7 +117,7 @@ void fbnic_bmc_rpc_all_multi_config(struct fbnic_dev *fbd,
 	 * BMC.
 	 */
 	mac_addr = &fbd->mac_addr[fbd->mac_addr_boundary - 1];
-	if (fbnic_bmc_present(fbd) && fbd->fw_cap.all_multi) {
+	if (fbnic_bmc_all_multi(fbd)) {
 		if (mac_addr->state != FBNIC_TCAM_S_VALID) {
 			eth_zero_addr(mac_addr->value.addr8);
 			eth_broadcast_addr(mac_addr->mask.addr8);
@@ -123,18 +126,11 @@ void fbnic_bmc_rpc_all_multi_config(struct fbnic_dev *fbd,
 			set_bit(FBNIC_MAC_ADDR_T_BMC, mac_addr->act_tcam);
 			mac_addr->state = FBNIC_TCAM_S_ADD;
 		}
-		if (enable_host)
-			set_bit(FBNIC_MAC_ADDR_T_ALLMULTI,
-				mac_addr->act_tcam);
-		else
-			clear_bit(FBNIC_MAC_ADDR_T_ALLMULTI,
-				  mac_addr->act_tcam);
-	} else if (!test_bit(FBNIC_MAC_ADDR_T_BMC, mac_addr->act_tcam) &&
-		   !is_zero_ether_addr(mac_addr->mask.addr8) &&
-		   mac_addr->state == FBNIC_TCAM_S_VALID) {
-		clear_bit(FBNIC_MAC_ADDR_T_ALLMULTI, mac_addr->act_tcam);
-		clear_bit(FBNIC_MAC_ADDR_T_BMC, mac_addr->act_tcam);
-		mac_addr->state = FBNIC_TCAM_S_DELETE;
+		assign_bit(FBNIC_MAC_ADDR_T_ALLMULTI, mac_addr->act_tcam,
+			   enable_host);
+	} else {
+		__fbnic_xc_unsync(mac_addr, FBNIC_MAC_ADDR_T_BMC);
+		__fbnic_xc_unsync(mac_addr, FBNIC_MAC_ADDR_T_ALLMULTI);
 	}
 
 	/* We have to add a special handler for multicast as the
@@ -147,9 +143,11 @@ void fbnic_bmc_rpc_all_multi_config(struct fbnic_dev *fbd,
 
 	/* If we are not enabling the rule just delete it. We will fall
 	 * back to the RSS rules that support the multicast addresses.
+	 * Delete in any live state, not just VALID, as ifdown demotes it to
+	 * UPDATE and a miss there leaves it to be rewritten to hardware.
 	 */
-	if (!fbnic_bmc_present(fbd) || !fbd->fw_cap.all_multi || enable_host) {
-		if (act_tcam->state == FBNIC_TCAM_S_VALID)
+	if (!fbnic_bmc_all_multi(fbd) || enable_host) {
+		if (act_tcam->state != FBNIC_TCAM_S_DISABLED)
 			act_tcam->state = FBNIC_TCAM_S_DELETE;
 		return;
 	}
@@ -236,8 +234,123 @@ void fbnic_bmc_rpc_init(struct fbnic_dev *fbd)
 		act_tcam->mask.tcam[j] = 0xffff;
 
 	act_tcam->state = FBNIC_TCAM_S_UPDATE;
+}
 
-	fbnic_bmc_rpc_all_multi_config(fbd, false);
+/**
+ * fbnic_bmc_rules_present - is the BMC currently programmed into the filters?
+ * @fbd: Pointer to fbnic device struct
+ *
+ * The BMC tag is only set while a BMC is present, so it doubles as the state.
+ *
+ * Return: true if any MACDA entry carries the BMC tag, false otherwise.
+ */
+static bool fbnic_bmc_rules_present(struct fbnic_dev *fbd)
+{
+	int idx;
+
+	for (idx = ARRAY_SIZE(fbd->mac_addr); idx--;) {
+		struct fbnic_mac_addr *mac_addr = &fbd->mac_addr[idx];
+
+		if (mac_addr->state == FBNIC_TCAM_S_DISABLED)
+			continue;
+
+		if (test_bit(FBNIC_MAC_ADDR_T_BMC, mac_addr->act_tcam))
+			return true;
+	}
+
+	return false;
+}
+
+/**
+ * fbnic_bmc_rpc_disable - remove the BMC MAC and action rules
+ * @fbd: Pointer to fbnic device struct
+ *
+ * Undo fbnic_bmc_rpc_init() when the BMC drops its NC-SI channel while the
+ * host interface stays up. Only marks shadow state; the caller's
+ * __fbnic_set_rx_mode() pushes it to hardware, so ordering here is moot.
+ */
+static void fbnic_bmc_rpc_disable(struct fbnic_dev *fbd)
+{
+	struct fbnic_act_tcam *act_tcam;
+	int idx;
+
+	/* Drop the BMC's claim; entries the host also uses survive */
+	for (idx = ARRAY_SIZE(fbd->mac_addr); idx--;) {
+		struct fbnic_mac_addr *mac_addr = &fbd->mac_addr[idx];
+
+		if (mac_addr->state == FBNIC_TCAM_S_DISABLED)
+			continue;
+
+		__fbnic_xc_unsync(mac_addr, FBNIC_MAC_ADDR_T_BMC);
+	}
+
+	/* Delete in any live state, not just VALID: init leaves it UPDATE and
+	 * ifdown demotes VALID to UPDATE. A miss leaks the rule for good, as
+	 * fbnic_bmc_rules_present() keys off the MACDA tag just cleared above.
+	 */
+	act_tcam = &fbd->act_tcam[FBNIC_RPC_ACT_TBL_BMC_OFFSET];
+	if (act_tcam->state != FBNIC_TCAM_S_DISABLED)
+		act_tcam->state = FBNIC_TCAM_S_DELETE;
+
+	/* fbnic_rss_reinit() only programs the host-unicast entries while a BMC
+	 * is present, so the reinit after this would leave them stale and valid
+	 * in hardware. Delete them to converge on the no-BMC layout.
+	 */
+	for (idx = 0; idx < FBNIC_RSS_EN_NUM_UNICAST; idx++) {
+		act_tcam = &fbd->act_tcam[FBNIC_RPC_ACT_TBL_RSS_OFFSET + idx];
+		if (act_tcam->state != FBNIC_TCAM_S_DISABLED)
+			act_tcam->state = FBNIC_TCAM_S_DELETE;
+	}
+}
+
+void fbnic_bmc_rpc_check(struct fbnic_dev *fbd)
+{
+	struct fbnic_net *fbn = netdev_priv(fbd->netdev);
+	int err;
+
+	/* Nothing to do unless the firmware raised one of the flags. Test
+	 * before taking the lock to keep it off the common path; one raised
+	 * after this is picked up on the next pass.
+	 */
+	if (!(READ_ONCE(fbd->fw_cap.state) & FBNIC_FW_CAP_BMC_PENDING))
+		return;
+
+	/* The rx mode work and the ethtool paths rewrite the MACDA and action
+	 * TCAM shadows under the instance lock, and this runs from the service
+	 * task under RTNL only, so the two do not exclude each other.
+	 */
+	netdev_lock(fbd->netdev);
+
+	/* Consume the flag before the state it advertises. The ordering
+	 * implied by test_and_clear_bit() pairs with the barrier in
+	 * fbnic_fw_parse_bmc_cap(), and claiming it atomically means a set
+	 * racing with us is kept and retried rather than overwritten.
+	 */
+	if (test_and_clear_bit(FBNIC_FW_CAP_F_BMC_TCAM_REINIT,
+			       &fbd->fw_cap.state)) {
+		if (!fbnic_bmc_present(fbd) && fbnic_bmc_rules_present(fbd))
+			fbnic_bmc_rpc_disable(fbd);
+		else
+			fbnic_bmc_rpc_init(fbd);
+
+		/* Neither path touches the RSS actions, which carry the mc/bc
+		 * copy to the BMC, so recompute them alongside.
+		 */
+		fbnic_rss_reinit(fbd, fbn);
+		netif_addr_lock_bh(fbd->netdev);
+		__fbnic_set_rx_mode(fbd, &fbd->netdev->uc, &fbd->netdev->mc);
+		netif_addr_unlock_bh(fbd->netdev);
+	}
+
+	if (test_and_clear_bit(FBNIC_FW_CAP_F_BMC_MACDA_SYNC,
+			       &fbd->fw_cap.state)) {
+		err = fbnic_fw_xmit_rpc_macda_sync(fbd);
+		if (err)
+			dev_warn(fbd->dev,
+				 "Writing MACDA table to FW failed, err: %d\n", err);
+	}
+
+	netdev_unlock(fbd->netdev);
 }
 
 #define FBNIC_ACT1_INIT(_l4, _udp, _ip, _v6)		\
@@ -321,9 +434,8 @@ void fbnic_rss_reinit(struct fbnic_dev *fbd, struct fbnic_net *fbn)
 		else if (tstamp_mask & (1u << flow_type))
 			dest |= FBNIC_RPC_ACT_TBL0_TS_ENA;
 
-		if (act1_value[flow_type] & FBNIC_RPC_TCAM_ACT1_L4_VALID)
-			dest |= FIELD_PREP(FBNIC_RPC_ACT_TBL0_DMA_HINT,
-					   FBNIC_RCD_HDR_AL_DMA_HINT_L4);
+		dest |= FIELD_PREP(FBNIC_RPC_ACT_TBL0_DMA_HINT,
+				   FBNIC_RCD_HDR_AL_DMA_HINT_L4);
 
 		rss_en_mask = fbnic_flow_hash_2_rss_en_mask(fbn, flow_type);
 
@@ -452,6 +564,49 @@ int __fbnic_xc_unsync(struct fbnic_mac_addr *mac_addr, unsigned int tcam_idx)
 	return 0;
 }
 
+void fbnic_promisc_sync(struct fbnic_dev *fbd,
+			bool uc_promisc, bool mc_promisc)
+{
+	struct fbnic_mac_addr *mac_addr;
+
+	/* Populate last TCAM entry with promiscuous entry and 0/1 bit mask */
+	mac_addr = &fbd->mac_addr[FBNIC_RPC_TCAM_MACDA_PROMISC_IDX];
+	if (uc_promisc) {
+		if (!is_zero_ether_addr(mac_addr->value.addr8) ||
+		    mac_addr->state != FBNIC_TCAM_S_VALID) {
+			eth_zero_addr(mac_addr->value.addr8);
+			eth_broadcast_addr(mac_addr->mask.addr8);
+			clear_bit(FBNIC_MAC_ADDR_T_ALLMULTI,
+				  mac_addr->act_tcam);
+			set_bit(FBNIC_MAC_ADDR_T_PROMISC,
+				mac_addr->act_tcam);
+			mac_addr->state = FBNIC_TCAM_S_ADD;
+		}
+	} else if (mc_promisc && !fbnic_bmc_all_multi(fbd)) {
+		/* We have to add a special handler for multicast as the
+		 * BMC may have an all-multi rule already in place. As such
+		 * adding a rule ourselves won't do any good so we will have
+		 * to modify the rules for the ALL MULTI below if the BMC
+		 * already has the rule in place.
+		 */
+		if (!is_multicast_ether_addr(mac_addr->value.addr8) ||
+		    mac_addr->state != FBNIC_TCAM_S_VALID) {
+			eth_zero_addr(mac_addr->value.addr8);
+			eth_broadcast_addr(mac_addr->mask.addr8);
+			mac_addr->value.addr8[0] ^= 1;
+			mac_addr->mask.addr8[0] ^= 1;
+			set_bit(FBNIC_MAC_ADDR_T_ALLMULTI,
+				mac_addr->act_tcam);
+			clear_bit(FBNIC_MAC_ADDR_T_PROMISC,
+				  mac_addr->act_tcam);
+			mac_addr->state = FBNIC_TCAM_S_ADD;
+		}
+	} else if (mac_addr->state == FBNIC_TCAM_S_VALID) {
+		__fbnic_xc_unsync(mac_addr, FBNIC_MAC_ADDR_T_ALLMULTI);
+		__fbnic_xc_unsync(mac_addr, FBNIC_MAC_ADDR_T_PROMISC);
+	}
+}
+
 void fbnic_sift_macda(struct fbnic_dev *fbd)
 {
 	int dest, src;
@@ -535,6 +690,21 @@ static void fbnic_clear_macda(struct fbnic_dev *fbd)
 	}
 }
 
+static void fbnic_clear_valid_macda(struct fbnic_dev *fbd)
+{
+	int idx;
+
+	for (idx = ARRAY_SIZE(fbd->mac_addr); idx--;) {
+		struct fbnic_mac_addr *mac_addr = &fbd->mac_addr[idx];
+
+		if (mac_addr->state == FBNIC_TCAM_S_VALID) {
+			fbnic_clear_macda_entry(fbd, idx);
+
+			mac_addr->state = FBNIC_TCAM_S_UPDATE;
+		}
+	}
+}
+
 static void fbnic_write_macda_entry(struct fbnic_dev *fbd, unsigned int idx,
 				    struct fbnic_mac_addr *mac_addr)
 {
@@ -556,7 +726,7 @@ static void fbnic_write_macda_entry(struct fbnic_dev *fbd, unsigned int idx,
 
 void fbnic_write_macda(struct fbnic_dev *fbd)
 {
-	int idx;
+	int idx, updates = 0;
 
 	for (idx = ARRAY_SIZE(fbd->mac_addr); idx--;) {
 		struct fbnic_mac_addr *mac_addr = &fbd->mac_addr[idx];
@@ -564,6 +734,9 @@ void fbnic_write_macda(struct fbnic_dev *fbd)
 		/* Check if update flag is set else exit. */
 		if (!(mac_addr->state & FBNIC_TCAM_S_UPDATE))
 			continue;
+
+		/* Record update count */
+		updates++;
 
 		/* Clear by writing 0s. */
 		if (mac_addr->state == FBNIC_TCAM_S_DELETE) {
@@ -578,6 +751,14 @@ void fbnic_write_macda(struct fbnic_dev *fbd)
 
 		mac_addr->state = FBNIC_TCAM_S_VALID;
 	}
+
+	/* If reinitializing the BMC TCAM we are doing an initial update */
+	if (test_bit(FBNIC_FW_CAP_F_BMC_TCAM_REINIT, &fbd->fw_cap.state))
+		updates++;
+
+	/* If needed notify firmware of changes to MACDA TCAM */
+	if (updates != 0 && fbnic_bmc_present(fbd))
+		set_bit(FBNIC_FW_CAP_F_BMC_MACDA_SYNC, &fbd->fw_cap.state);
 }
 
 static void fbnic_clear_act_tcam(struct fbnic_dev *fbd, unsigned int idx)
@@ -1052,13 +1233,25 @@ void fbnic_write_ip_addr(struct fbnic_dev *fbd)
 	}
 }
 
-void fbnic_clear_rules(struct fbnic_dev *fbd)
+static void fbnic_clear_valid_act_tcam(struct fbnic_dev *fbd)
 {
-	u32 dest = FIELD_PREP(FBNIC_RPC_ACT_TBL0_DEST_MASK,
-			      FBNIC_RPC_ACT_TBL0_DEST_BMC);
 	int i = FBNIC_RPC_TCAM_ACT_NUM_ENTRIES - 1;
 	struct fbnic_act_tcam *act_tcam;
 
+	/* Work from the bottom up deleting all other rules from hardware */
+	do {
+		act_tcam = &fbd->act_tcam[i];
+
+		if (act_tcam->state != FBNIC_TCAM_S_VALID)
+			continue;
+
+		fbnic_clear_act_tcam(fbd, i);
+		act_tcam->state = FBNIC_TCAM_S_UPDATE;
+	} while (i--);
+}
+
+void fbnic_clear_rules(struct fbnic_dev *fbd)
+{
 	/* Clear MAC rules */
 	fbnic_clear_macda(fbd);
 
@@ -1073,6 +1266,11 @@ void fbnic_clear_rules(struct fbnic_dev *fbd)
 	 * the interface back up.
 	 */
 	if (fbnic_bmc_present(fbd)) {
+		u32 dest = FIELD_PREP(FBNIC_RPC_ACT_TBL0_DEST_MASK,
+				      FBNIC_RPC_ACT_TBL0_DEST_BMC);
+		int i = FBNIC_RPC_TCAM_ACT_NUM_ENTRIES - 1;
+		struct fbnic_act_tcam *act_tcam;
+
 		act_tcam = &fbd->act_tcam[i];
 
 		if (act_tcam->state == FBNIC_TCAM_S_VALID &&
@@ -1081,21 +1279,10 @@ void fbnic_clear_rules(struct fbnic_dev *fbd)
 			wr32(fbd, FBNIC_RPC_ACT_TBL1(i), 0);
 
 			act_tcam->state = FBNIC_TCAM_S_UPDATE;
-
-			i--;
 		}
 	}
 
-	/* Work from the bottom up deleting all other rules from hardware */
-	do {
-		act_tcam = &fbd->act_tcam[i];
-
-		if (act_tcam->state != FBNIC_TCAM_S_VALID)
-			continue;
-
-		fbnic_clear_act_tcam(fbd, i);
-		act_tcam->state = FBNIC_TCAM_S_UPDATE;
-	} while (i--);
+	fbnic_clear_valid_act_tcam(fbd);
 }
 
 static void fbnic_delete_act_tcam(struct fbnic_dev *fbd, unsigned int idx)
@@ -1144,4 +1331,10 @@ void fbnic_write_rules(struct fbnic_dev *fbd)
 		else
 			fbnic_update_act_tcam(fbd, i);
 	}
+}
+
+void fbnic_rpc_reset_valid_entries(struct fbnic_dev *fbd)
+{
+	fbnic_clear_valid_act_tcam(fbd);
+	fbnic_clear_valid_macda(fbd);
 }

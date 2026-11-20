@@ -1,12 +1,32 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
  * Copyright (C) 2015-2017 Intel Deutschland GmbH
- * Copyright (C) 2018-2025 Intel Corporation
+ * Copyright (C) 2018-2026 Intel Corporation
  */
 #include "iwl-config.h"
 
-/* NVM versions */
-#define IWL_GF_NVM_VERSION		0x0a1d
+/* Highest firmware API version supported */
+#define IWL_GF_UCODE_API_MAX	100
+
+/* Lowest firmware API version supported */
+#define IWL_GF_UCODE_API_MIN	100
+
+#define IWL_BZ_A_GF_A_FW_PRE		"iwlwifi-bz-a0-gf-a0"
+#define IWL_BZ_A_GF4_A_FW_PRE		"iwlwifi-bz-a0-gf4-a0"
+#define IWL_SC_A_GF_A_FW_PRE		"iwlwifi-sc-a0-gf-a0"
+#define IWL_SC_A_GF4_A_FW_PRE		"iwlwifi-sc-a0-gf4-a0"
+
+#define IWL_BZ_A_GF_A_MODULE_FIRMWARE(api) \
+	IWL_BZ_A_GF_A_FW_PRE "-" __stringify(api) ".ucode"
+
+#define IWL_BZ_A_GF4_A_MODULE_FIRMWARE(api) \
+	IWL_BZ_A_GF4_A_FW_PRE "-" __stringify(api) ".ucode"
+
+#define IWL_SC_A_GF_A_MODULE_FIRMWARE(api) \
+	IWL_SC_A_GF_A_FW_PRE "-" __stringify(api) ".ucode"
+
+#define IWL_SC_A_GF4_A_MODULE_FIRMWARE(api) \
+	IWL_SC_A_GF4_A_FW_PRE "-" __stringify(api) ".ucode"
 
 const struct iwl_rf_cfg iwl_rf_gf = {
 	.uhb_supported = true,
@@ -19,9 +39,10 @@ const struct iwl_rf_cfg iwl_rf_gf = {
 		.ht40_bands = BIT(NL80211_BAND_2GHZ) |
 			      BIT(NL80211_BAND_5GHZ),
 	},
-	.nvm_ver = IWL_GF_NVM_VERSION,
 	.nvm_type = IWL_NVM_EXT,
 	.num_rbds = IWL_NUM_RBDS_HE,
+	.ucode_api_min = IWL_GF_UCODE_API_MIN,
+	.ucode_api_max = IWL_GF_UCODE_API_MAX,
 };
 
 const char iwl_ax210_killer_1675w_name[] =
@@ -39,4 +60,10 @@ const char iwl_ax411_killer_1690i_name[] =
 
 const char iwl_ax210_name[] = "Intel(R) Wi-Fi 6E AX210 160MHz";
 const char iwl_ax211_name[] = "Intel(R) Wi-Fi 6E AX211 160MHz";
+const char iwl_ax231_name[] = "Intel(R) Wi-Fi 6 AX231";
 const char iwl_ax411_name[] = "Intel(R) Wi-Fi 6E AX411 160MHz";
+
+MODULE_FIRMWARE(IWL_BZ_A_GF_A_MODULE_FIRMWARE(IWL_GF_UCODE_API_MAX));
+MODULE_FIRMWARE(IWL_BZ_A_GF4_A_MODULE_FIRMWARE(IWL_GF_UCODE_API_MAX));
+MODULE_FIRMWARE(IWL_SC_A_GF_A_MODULE_FIRMWARE(IWL_GF_UCODE_API_MAX));
+MODULE_FIRMWARE(IWL_SC_A_GF4_A_MODULE_FIRMWARE(IWL_GF_UCODE_API_MAX));

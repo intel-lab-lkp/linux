@@ -14,7 +14,6 @@
 #include <linux/gpio/driver.h>
 #include <linux/init.h>
 #include <linux/io.h>
-#include <linux/mod_devicetable.h>
 #include <linux/platform_device.h>
 #include <linux/spinlock.h>
 
@@ -182,7 +181,7 @@ static int dc_gpio_direction_input(struct gpio_chip *chip, unsigned gpio)
 	return 0;
 }
 
-static void dc_gpio_set(struct gpio_chip *chip, unsigned gpio, int value);
+static int dc_gpio_set(struct gpio_chip *chip, unsigned int gpio, int value);
 
 static int dc_gpio_direction_output(struct gpio_chip *chip, unsigned gpio,
 				    int value)
@@ -216,7 +215,7 @@ static int dc_gpio_get(struct gpio_chip *chip, unsigned gpio)
 	return !!(input & BIT(bit_off));
 }
 
-static void dc_gpio_set(struct gpio_chip *chip, unsigned gpio, int value)
+static int dc_gpio_set(struct gpio_chip *chip, unsigned int gpio, int value)
 {
 	struct dc_pinmap *pmap = gpiochip_get_data(chip);
 	int reg_off = GP_OUTPUT0(gpio/PINS_PER_COLLECTION);
@@ -232,6 +231,8 @@ static void dc_gpio_set(struct gpio_chip *chip, unsigned gpio, int value)
 		output &= ~BIT(bit_off);
 	writeb_relaxed(output, pmap->regs + reg_off);
 	spin_unlock_irqrestore(&pmap->lock, flags);
+
+	return 0;
 }
 
 static int dc_gpiochip_add(struct dc_pinmap *pmap)
@@ -275,7 +276,7 @@ static int dc_pinctrl_probe(struct platform_device *pdev)
 	int name_len = strlen("GP_xx") + 1;
 	int i, j;
 
-	pmap = devm_kzalloc(&pdev->dev, sizeof(*pmap), GFP_KERNEL);
+	pmap = devm_kzalloc_obj(&pdev->dev, *pmap);
 	if (!pmap)
 		return -ENOMEM;
 
@@ -283,8 +284,7 @@ static int dc_pinctrl_probe(struct platform_device *pdev)
 	if (IS_ERR(pmap->regs))
 		return PTR_ERR(pmap->regs);
 
-	pins = devm_kcalloc(&pdev->dev, PINS_COUNT, sizeof(*pins),
-			    GFP_KERNEL);
+	pins = devm_kzalloc_objs(&pdev->dev, *pins, PINS_COUNT);
 	if (!pins)
 		return -ENOMEM;
 	pin_names = devm_kcalloc(&pdev->dev, PINS_COUNT, name_len,
@@ -305,7 +305,7 @@ static int dc_pinctrl_probe(struct platform_device *pdev)
 		}
 	}
 
-	pctl_desc = devm_kzalloc(&pdev->dev, sizeof(*pctl_desc), GFP_KERNEL);
+	pctl_desc = devm_kzalloc_obj(&pdev->dev, *pctl_desc);
 	if (!pctl_desc)
 		return -ENOMEM;
 

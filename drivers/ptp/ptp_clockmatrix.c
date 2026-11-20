@@ -1161,7 +1161,7 @@ static int set_pll_output_mask(struct idtcm *idtcm, u16 addr, u8 val)
 		SET_U16_MSB(idtcm->channel[3].output_mask, val);
 		break;
 	default:
-		err = -EFAULT; /* Bad address */;
+		err = -EFAULT; /* Bad address */
 		break;
 	}
 
@@ -2391,7 +2391,7 @@ static int idtcm_probe(struct platform_device *pdev)
 	int err;
 	u8 i;
 
-	idtcm = devm_kzalloc(&pdev->dev, sizeof(struct idtcm), GFP_KERNEL);
+	idtcm = devm_kzalloc_obj(&pdev->dev, struct idtcm);
 
 	if (!idtcm)
 		return -ENOMEM;

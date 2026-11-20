@@ -129,7 +129,7 @@ static void at91_wakeup_status(struct platform_device *pdev)
 	else if (SHDW_RTTWK(reg, &rcfg->shdwc))
 		reason = "RTT";
 
-	pr_info("AT91: Wake-Up source: %s\n", reason);
+	dev_info(&pdev->dev, "Wake-Up source: %s\n", reason);
 }
 
 static void at91_poweroff(void)
@@ -344,7 +344,7 @@ static int at91_shdwc_probe(struct platform_device *pdev)
 	if (at91_shdwc)
 		return -EBUSY;
 
-	at91_shdwc = devm_kzalloc(&pdev->dev, sizeof(*at91_shdwc), GFP_KERNEL);
+	at91_shdwc = devm_kzalloc_obj(&pdev->dev, *at91_shdwc);
 	if (!at91_shdwc)
 		return -ENOMEM;
 

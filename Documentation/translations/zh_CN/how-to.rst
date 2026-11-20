@@ -1,32 +1,32 @@
 .. SPDX-License-Identifier: GPL-2.0
 
-=========================
-Linux内核中文文档翻译规范
-=========================
+==========================
+Linux 内核中文文档翻译规范
+==========================
 
 修订记录：
- - v1.0 2025年3月28日，司延腾、慕冬亮共同编写了该规范。
+ - v1.0 2025 年 3 月 28 日，司延腾、慕冬亮共同编写了该规范。
 
 制定规范的背景
 ==============
 
 过去几年，在广大社区爱好者的友好合作下，Linux 内核中文文档迎来了蓬勃的发
 展。在翻译的早期，一切都是混乱的，社区对译稿只有一个准确翻译的要求，以鼓
-励更多的开发者参与进来，这是从0到1的必然过程，所以早期的中文文档目录更加
-具有多样性，不过好在文档不多，维护上并没有过大的压力。
+励更多的开发者参与进来，这是从 0 到 1 的必然过程，所以早期的中文文档目录
+呈现出较强的多样性，不过好在文档不多，维护上并没有过大的压力。
 
 然而，世事变幻，不觉有年，现在内核中文文档在前进的道路上越走越远，很多潜
 在的问题逐渐浮出水面，而且随着中文文档数量的增加，翻译更多的文档与提高中
 文文档可维护性之间的矛盾愈发尖锐。由于文档翻译的特殊性，很多开发者并不会
 一直更新文档，如果中文文档落后英文文档太多，文档更新的工作量会远大于重新
 翻译。而且邮件列表中陆续有新的面孔出现，他们那股热情，就像燃烧的火焰，能
-瞬间点燃整个空间，可是他们的补丁往往具有个性，这会给审阅带来了很大的困难，
+瞬间点燃整个空间，可是他们的补丁往往具有个性，这给审阅带来了很大的困难，
 reviewer 们只能耐心地指导他们如何与社区更好地合作，但是这项工作具有重复
 性，长此以往，会渐渐浇灭 reviewer 审阅的热情。
 
-虽然内核文档中已经有了类似的贡献指南，但是缺乏专门针对于中文翻译的，尤其
+虽然内核文档中已经有了类似的贡献指南，但是缺乏专门面向中文翻译的，尤其
 是对于新手来说，浏览大量的文档反而更加迷惑，该文档就是为了缓解这一问题而
-编写，目的是为提供给新手一个快速翻译指南。
+编写，旨在为新手提供一份快速翻译指南。
 
 详细的贡献指南：Documentation/translations/zh_CN/process/index.rst。
 
@@ -34,7 +34,7 @@ reviewer 们只能耐心地指导他们如何与社区更好地合作，但是�
 ========
 
 工欲善其事必先利其器，如果您目前对内核文档翻译满怀热情，并且会独立地安装
-linux 发行版和简单地使用 linux 命令行，那么可以迅速开始了。若您尚不具备该
+Linux 发行版和简单地使用 Linux 命令行，那么可以迅速开始了。若您尚不具备该
 能力，很多网站上会有详细的手把手教程，最多一个上午，您应该就能掌握对应技
 能。您需要注意的一点是，请不要使用 root 用户进行后续步骤和文档翻译。
 
@@ -64,13 +64,20 @@ linux 发行版和简单地使用 linux 命令行，那么可以迅速开始了�
 ::
 
 	cd linux
-	./scripts/sphinx-pre-install
+	./tools/docs/sphinx-pre-install
 
-以Fedora为例，它的输出是这样的::
+以 Fedora 为例，它的输出是这样的::
 
 	You should run:
 
-		sudo dnf install -y dejavu-sans-fonts dejavu-sans-mono-fonts dejavu-serif-fonts google-noto-sans-cjk-fonts graphviz-gd latexmk librsvg2-tools texlive-anyfontsize texlive-capt-of texlive-collection-fontsrecommended texlive-ctex texlive-eqparbox texlive-fncychap texlive-framed texlive-luatex85 texlive-multirow texlive-needspace texlive-tabulary texlive-threeparttable texlive-upquote texlive-wrapfig texlive-xecjk
+		sudo dnf install -y dejavu-sans-fonts dejavu-sans-mono-fonts \
+		     dejavu-serif-fonts google-noto-sans-cjk-fonts graphviz-gd \
+	             latexmk librsvg2-tools texlive-anyfontsize texlive-capt-of \
+		     texlive-collection-fontsrecommended texlive-ctex \
+		     texlive-eqparbox texlive-fncychap texlive-framed \
+		     texlive-luatex85 texlive-multirow texlive-needspace \
+		     texlive-tabulary texlive-threeparttable texlive-upquote \
+		     texlive-wrapfig texlive-xecjk
 
 	Sphinx needs to be installed either:
 	1) via pip/pypi with:
@@ -92,7 +99,8 @@ linux 发行版和简单地使用 linux 命令行，那么可以迅速开始了�
 		https://github.com/sphinx-doc/sphinx/pull/8313
 
 请您按照提示复制打印的命令到命令行执行，您必须具备 root 权限才能执行 sudo
-开头的命令。
+开头的命令。**请注意**，最新版本 Sphinx 的文档编译速度有极大提升，强烈建议
+您通过 pip/pypi 安装最新版本 Sphinx。
 
 如果您处于一个多用户环境中，为了避免对其他人造成影响，建议您配置单用户
 sphinx 虚拟环境，即只需要执行::
@@ -126,19 +134,19 @@ sphinx 虚拟环境，即只需要执行::
 检查编译结果
 ------------
 
-编译输出在Documentation/output/目录下，请用浏览器打开该目录下对应
+编译输出在 Documentation/output/ 目录下，请用浏览器打开该目录下对应
 的文件进行检查。
 
-git和邮箱配置
--------------
+Git 和邮箱配置
+--------------
 
 打开命令行执行::
 
 	sudo dnf install git-email
 	vim ~/.gitconfig
 
-这里是我的一个配置文件示范，请根据您的邮箱域名服务商提供的手册替换到对
-应的字段。
+这里是我的一个配置文件示范，请根据您的邮箱域名服务商提供的手册替换对应
+的字段。
 ::
 
 	[user]
@@ -150,11 +158,11 @@ git和邮箱配置
 	       smtpencryption = ssl
 	       smtpserver = smtp.migadu.com
 	       smtpuser = si.yanteng@linux.dev
-	       smtppass = <passwd>      # 建议使用第三方客户端专用密码
+	       smtppass = <passwd>      	# 建议使用第三方客户端专用密码
 	       chainreplyto = false
 	       smtpserverport = 465
 
-关于邮件客户端的配置，请查阅Documentation/translations/zh_CN/process/email-clients.rst。
+关于邮件客户端的配置，请查阅 Documentation/translations/zh_CN/process/email-clients.rst。
 
 开始翻译文档
 ============
@@ -162,8 +170,8 @@ git和邮箱配置
 文档索引结构
 ------------
 
-目前中文文档是在Documentation/translations/zh_CN/目录下进行，该
-目录结构最终会与Documentation/结构一致，所以您只需要将您感兴趣的英文
+目前中文文档是在 Documentation/translations/zh_CN/ 目录下进行，该
+目录结构最终会与 Documentation/ 结构一致，所以您只需要将您感兴趣的英文
 文档文件和对应的 index.rst 复制到 zh_CN 目录下对应的位置，然后修改更
 上一级的 index 即可开始您的翻译。
 
@@ -177,13 +185,12 @@ git和邮箱配置
 请执行以下命令，新建开发分支::
 
 	git checkout docs-next
-	git branch my-trans
-	git checkout my-trans
+	git checkout -b my-trans
 
 译文格式要求
 ------------
 
-	- 每行长度最多不超过40个字符
+	- 每行长度不超过 40 个字符
 	- 每行长度请保持一致
 	- 标题的下划线长度请按照一个英文一个字符、一个中文两个字符与标题对齐
 	- 其它的修饰符请与英文文档保持一致
@@ -192,7 +199,7 @@ git和邮箱配置
 
 	.. SPDX-License-Identifier: GPL-2.0
 	.. include:: ../disclaimer-zh_CN.rst  #您需要了解该文件的路径，根
-						据您实际翻译的文档灵活调整
+					       据您实际翻译的文档灵活调整
 
 	:Original: Documentation/xxx/xxx.rst  #替换为您翻译的英文文档路径
 
@@ -203,11 +210,11 @@ git和邮箱配置
 翻译技巧
 --------
 
-中文文档有每行40字符限制，因为一个中文字符等于2个英文字符。但是社区并没有
-那么严格，一个诀窍是将您的翻译的内容与英文原文的每行长度对齐即可，这样，
+中文文档有每行 40 字符限制，因为一个中文字符等于 2 个英文字符。但是社区并
+没有那么严格，一个诀窍是将您翻译的内容与英文原文的每行长度对齐，这样，
 您也不必总是检查有没有超限。
 
-如果您的英文阅读能力有限，可以考虑使用辅助翻译工具，例如 deepseek 。但是您
+如果您的英文阅读能力有限，可以考虑使用辅助翻译工具，例如 deepseek。但是您
 必须仔细地打磨，使译文达到“信达雅”的标准。
 
 **请注意** 社区不接受纯机器翻译的文档，社区工作建立在信任的基础上，请认真对待。
@@ -248,21 +255,36 @@ git和邮箱配置
 
 	Translate .../security/self-protection.rst into Chinese.
 
-	Update the translation through commit b080e52110ea	#请执行git log <您翻译的英文文档路径> 复制最顶部第一个补丁的sha值的前12位，替换掉12位sha值。
+	Update the translation through commit b080e52110ea
 	("docs: update self-protection __ro_after_init status")
+	# 请执行 git log --no-merges --oneline <您翻译的英文文档路径>
+	# 并替换上述内容。注意：应引用实际修改文件内容的 commit，
+	# 而非 merge commit
 
-	Signed-off-by: Yanteng Si <si.yanteng@linux.dev>	#如果您前面的步骤正确执行，该行会自动显示，否则请检查gitconfig文件。
+	Signed-off-by: Yanteng Si <si.yanteng@linux.dev>
+	# 如果您前面的步骤正确执行，该行会自动显示，否则请检查 gitconfig 文件
 
 保存并退出。
 
-**请注意** 以上四行，缺少任何一行，您都将会在第一轮审阅后返工，如果您需要一个更加明确的示例，请对 zh_CN 目录执行 git log。
+**请注意** 以上四行，缺少任何一行，您都将会在第一轮审阅后返工，如果您需要一个
+更加明确的示例，请对 zh_CN 目录执行 git log。
 
-导出补丁和制作封面
-------------------
+导出补丁
+--------
 
-这个时候，可以导出补丁，做发送邮件列表最后的准备了。命令行执行::
+这个时候，可以导出补丁，做发送邮件列表最后的准备了。对于单个补丁，
+命令行执行::
+
+	git format-patch -1
+
+然后命令行会输出类似下面的内容::
+
+	0001-docs-zh_CN-add-xxxxxxxx.patch
+
+如果您有多个补丁，命令行执行::
 
 	git format-patch -N
+	# N 要替换为补丁数量，一般 N 大于 1
 
 然后命令行会输出类似下面的内容::
 
@@ -277,54 +299,57 @@ git和邮箱配置
 
 	./scripts/checkpatch.pl *.patch
 
-参考脚本输出，解决掉所有的 error 和 warning，通常情况下，只有下面这个
+参考脚本输出，解决掉所有的 error 和 warning。通常情况下，只有下面这个
 warning 不需要解决::
 
 	WARNING: added, moved or deleted file(s), does MAINTAINERS need updating?
 
-一个简单的解决方法是一次只检查一个补丁，然后打上该补丁，直接对译文进行修改，
-然后执行以下命令为补丁追加更改::
+对于单个补丁，解决方案很简单，只需要打上该补丁，直接对译文进行修改，为补丁追加后续更改::
 
 	git checkout docs-next
-	git branch test-trans
+	git checkout -b test-trans-new
 	git am 0001-xxxxx.patch
 	./scripts/checkpatch.pl 0001-xxxxx.patch
-	直接修改您的翻译
+	# 直接修改您的翻译
 	git add .
-	git am --amend
-	保存退出
-	git am 0002-xxxxx.patch
-	……
+	git commit --amend
+	# 保存退出
 
-重新导出再次检测，重复这个过程，直到处理完所有的补丁。
+随后，重新导出补丁再次检测，重复这个过程，直到处理完所有 warning 和
+error。
 
-最后，如果检测时没有 warning 和 error 需要被处理或者您只有一个补丁，请跳
-过下面这个步骤，否则请重新导出补丁制作封面::
+如果您有多个补丁，请按补丁集中补丁顺序对每个补丁重复上述流程，一次只处理
+一个，不要一次 git am 多个补丁。全部处理完毕后再重新导出并再次测试。
 
-	git format-patch -N --cover-letter --thread=shallow  #N为您的补丁数量,N一般要大于1。
+为补丁集制作封面
+----------------
+
+对于单个补丁，请跳过本节。
+
+如果您有多个补丁，则需要为补丁集制作一份封面，即 0 号补丁::
+
+	git format-patch -N --cover-letter --thread=shallow
+	# N 要替换为补丁数量，一般 N 大于 1
 
 然后命令行会输出类似下面的内容::
 
 	0000-cover-letter.patch
 	0001-docs-zh_CN-add-xxxxxxxx.patch
 	0002-docs-zh_CN-add-xxxxxxxx.patch
+	……
 
-您需要用编辑器打开0号补丁，修改两处内容::
+您需要用编辑器打开 0 号补丁，修改两处内容::
 
 	vim 0000-cover-letter.patch
 
 	...
-	Subject: [PATCH 0/1] *** SUBJECT HERE ***	#修改该字段，概括您的补丁集都做了哪些事情
+	Subject: [PATCH 0/N] *** SUBJECT HERE *** # 修改该字段，概括您的补丁集都做了哪些事情
 
-	*** BLURB HERE ***				#修改该字段，详细描述您的补丁集做了哪些事情
+	*** BLURB HERE ***			  # 修改该字段，详细描述您的补丁集做了哪些事情
 
 	Yanteng Si (1):
 	  docs/zh_CN: add xxxxx
 	...
-
-如果您只有一个补丁，则可以不制作封面，即0号补丁，只需要执行::
-
-	git format-patch -1
 
 把补丁提交到邮件列表
 ====================
@@ -345,15 +370,16 @@ warning 不需要解决::
 
 打开上面您保存的邮件地址，执行::
 
-	git send-email *.patch --to <maintainer email addr> --cc <others addr>	#一个to对应一个地址，一个cc对应一个地址，有几个就写几个。
+	git send-email *.patch --to <maintainer email addr> --cc <others addr>
+	# 一个 to 对应一个地址，一个 cc 对应一个地址，有几个就写几个
 
-执行该命令时，请确保网络通常，邮件发送成功一般会返回250。
+执行该命令时，请确保网络通畅，邮件发送成功一般会返回 250。
 
 您可以先发送给自己，尝试发出的 patch 是否可以用 'git am' 工具正常打上。
 如果检查正常， 您就可以放心的发送到社区评审了。
 
-如果该步骤被中断，您可以检查一下，继续用上条命令发送失败的补丁，一定不要再
-次发送已经发送成功的补丁。
+如果该步骤被中断，您可以检查一下，然后用上条命令继续发送失败的补丁，一定不
+要再次发送已经发送成功的补丁。
 
 积极参与审阅过程并迭代补丁
 ==========================
@@ -366,7 +392,7 @@ reviewer 的评论，做到每条都有回复，每个回复都落实到位。
 
  - 请先将您的邮箱客户端信件回复修改为 **纯文本** 格式，并去除所有签名，尤其是
    企业邮箱。
- - 然后点击回复按钮，并将要回复的邮件带入，
+ - 然后点击回复按钮，并引用要回复的邮件，
  - 在第一条评论行尾换行，输入您的回复
  - 在第二条评论行尾换行，输入您的回复
  - 直到处理完最后一条评论，换行空两行输入问候语和署名
@@ -376,27 +402,66 @@ reviewer 的评论，做到每条都有回复，每个回复都落实到位。
 迭代补丁
 --------
 
-建议您每回复一条评论，就修改一处翻译。然后重新生成补丁，相信您现在已经具
-备了灵活使用 git am --amend 的能力。
+建议您每回复一条评论，就修改一处翻译，然后重新生成补丁，相信您现在
+已经具备了灵活使用 git am 与 git commit --amend 的能力。
 
-每次迭代一个补丁，不要一次多个::
+对于单个补丁，每回复完评论后修改、追加::
 
-	git am <您要修改的补丁>
-	直接对文件进行您的修改
+	git am 0001-xxxxx.patch
+	# 直接对文件进行您的修改
 	git add .
 	git commit --amend
 
-当您将所有的评论落实到位后，导出第二版补丁，并修改封面::
+当您将所有的评论落实到位后，导出第二版补丁::
 
-	git format-patch -N  -v 2 --cover-letter --thread=shallow
+	git format-patch -1 -v 2
 
-打开0号补丁，在 BLURB HERE 处编写相较于上个版本，您做了哪些改动。
+命令行会输出 v2-0001-xxxxx.patch。打开该文件，在 --- 分割线下方追加
+changelog。注意，分割线以下的内容不会进入 git 提交历史，仅作为邮件中的
+说明供 reviewer 检查::
 
-然后执行::
+	Subject: [PATCH v2] docs/zh_CN: add xxxxxx translation
 
-	git send-email v2* --to <maintainer email addr> --cc <others addr>
+	Translate .../xxx.rst into Chinese.
+
+	Signed-off-by: Yanteng Si <si.yanteng@linux.dev>
+	---
+	v1->v2:
+	  - 修正第二节的错别字，Reviewer-A 提出的意见
+	  - 根据 Reviewer-B 的建议调整段落顺序
+
+	 Documentation/translations/zh_CN/xxx.rst | 100 ++++++
+	 1 file changed, 100 insertions(+)
+
+后续迭代 v3、v4 …… 时，新的 changelog 放在最上面，旧的保留在下方，按
+从新到旧的顺序叠加。例如 v3 补丁的 --- 下方::
+
+	---
+	v2->v3:
+	  - ...本次相较 v2 的改动...
+	v1->v2:
+	  - ...上一次相较 v1 的改动...
+
+然后发送::
+
+	git send-email v2-0001-*.patch --to <maintainer email addr> --cc <others addr>
+
+如果您有多个补丁，迭代时请按以下原则：每次只迭代一个补丁，不要一次多个，
+每个补丁独立重复上述流程。所有评论落实到位后，导出 v2 时附带封面::
+
+	git format-patch -N -v 2 --cover-letter --thread=shallow
+
+打开 0 号补丁，在 BLURB HERE 处写明整组补丁相较 v1 的总体改动，格式
+同上面的单个补丁 changelog 示例。如果某个补丁需要单独说明，可在该
+补丁文件的 --- 分割线下方追加单个补丁的 changelog。最后执行::
+
+	git send-email v2-*.patch --to <maintainer email addr> --cc <others addr>
 
 这样，新的一版补丁就又发送到邮件列表等待审阅，之后就是重复这个过程。
+
+此外，如果审阅者或维护者在邮件回复中给出了 Reviewed-by tag，请在下
+一版补丁的 commit 信息中加入该 tag，放在 Signed-off-by 行的下方，以
+便维护者合入时保留您的审阅记录。
 
 审阅周期
 --------
@@ -411,10 +476,10 @@ reviewer 的评论，做到每条都有回复，每个回复都落实到位。
 紧急处理
 --------
 
-如果您发送到邮件列表之后。发现发错了补丁集，尤其是在多个版本迭代的过程中；
+如果您发送到邮件列表之后，发现发错了补丁集，尤其是在多个版本迭代的过程中；
 自己发现了一些不妥的翻译；发送错了邮件列表……
 
-git email默认会抄送给您一份，所以您可以切换为审阅者的角色审查自己的补丁，
+git send-email 默认会抄送给您一份，所以您可以切换为审阅者的角色审查自己的补丁，
 并留下评论，描述有何不妥，将在下个版本怎么改，并付诸行动，重新提交，但是
 注意频率，每天提交的次数不要超过两次。
 
@@ -423,24 +488,24 @@ git email默认会抄送给您一份，所以您可以切换为审阅者的角�
 对于首次参与 Linux 内核中文文档翻译的新手，建议您在 linux 目录中运行以下命令：
 ::
 
-	./script/checktransupdate.py -l zh_CN``
+	tools/docs/checktransupdate.py -l zh_CN
 
-该命令会列出需要翻译或更新的英文文档。
+该命令会列出需要翻译或更新的英文文档，结果同时保存在 checktransupdate.log 中。
 
-关于详细操作说明，请参考： Documentation/translations/zh_CN/doc-guide/checktransupdate.rst\
+关于详细操作说明，请参考：Documentation/translations/zh_CN/doc-guide/checktransupdate.rst。
 
 进阶
 ----
 
-希望您不只是单纯的翻译内核文档，在熟悉了一起与社区工作之后，您可以审阅其他
+希望您不只是单纯地翻译内核文档，在熟悉了与社区协作之后，您可以审阅其他
 开发者的翻译，或者提出具有建设性的主张。与此同时，与文档对应的代码更加有趣，
-而且需要完善的地方还有很多，勇敢地去探索，然后提交你的想法吧。
+而且需要完善的地方还有很多，勇敢地去探索，然后提交您的想法吧。
 
 常见的问题
 ==========
 
-Maintainer回复补丁不能正常apply
--------------------------------
+Maintainer 回复补丁不能正常 apply
+---------------------------------
 
 这通常是因为您的补丁与邮件列表其他人的补丁产生了冲突，别人的补丁先被 apply 了，
 您的补丁集就无法成功 apply 了，这需要您更新本地分支，在本地解决完冲突后再次提交。
@@ -453,7 +518,7 @@ Maintainer回复补丁不能正常apply
 ------------------
 
 大部分情况下，是由于您发送了非纯文本格式的信件，请尽量避免使用 webmail，推荐
-使用邮件客户端，比如 thunderbird，记得在设置中的回信配置那改为纯文本发送。
+使用邮件客户端，比如 thunderbird，记得在设置的回信配置中改为纯文本发送。
 
-如果超过了24小时，您依旧没有在<https://lore.kernel.org/linux-doc/>发现您的邮
-件，请联系您的网络管理员帮忙解决。
+如果超过了 24 小时，您依旧没有在 https://lore.kernel.org/linux-doc/ 上找到您
+的邮件，请联系您的网络管理员帮忙解决。

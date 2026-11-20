@@ -2,6 +2,7 @@
 /* Copyright (C) 2019 Intel Corporation */
 
 #include <linux/gpio/driver.h>
+#include <linux/gpio/generic.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
@@ -22,7 +23,7 @@
 #define PIN_NAME_LEN	10
 #define PAD_REG_OFF	0x100
 
-static void eqbr_gpio_disable_irq(struct irq_data *d)
+static void eqbr_irq_mask(struct irq_data *d)
 {
 	struct gpio_chip *gc = irq_data_get_irq_chip_data(d);
 	struct eqbr_gpio_ctrl *gctrl = gpiochip_get_data(gc);
@@ -35,7 +36,7 @@ static void eqbr_gpio_disable_irq(struct irq_data *d)
 	gpiochip_disable_irq(gc, offset);
 }
 
-static void eqbr_gpio_enable_irq(struct irq_data *d)
+static void eqbr_irq_unmask(struct irq_data *d)
 {
 	struct gpio_chip *gc = irq_data_get_irq_chip_data(d);
 	struct eqbr_gpio_ctrl *gctrl = gpiochip_get_data(gc);
@@ -49,7 +50,7 @@ static void eqbr_gpio_enable_irq(struct irq_data *d)
 	raw_spin_unlock_irqrestore(&gctrl->lock, flags);
 }
 
-static void eqbr_gpio_ack_irq(struct irq_data *d)
+static void eqbr_irq_ack(struct irq_data *d)
 {
 	struct gpio_chip *gc = irq_data_get_irq_chip_data(d);
 	struct eqbr_gpio_ctrl *gctrl = gpiochip_get_data(gc);
@@ -61,10 +62,17 @@ static void eqbr_gpio_ack_irq(struct irq_data *d)
 	raw_spin_unlock_irqrestore(&gctrl->lock, flags);
 }
 
-static void eqbr_gpio_mask_ack_irq(struct irq_data *d)
+static void eqbr_irq_mask_ack(struct irq_data *d)
 {
-	eqbr_gpio_disable_irq(d);
-	eqbr_gpio_ack_irq(d);
+	struct gpio_chip *gc = irq_data_get_irq_chip_data(d);
+	struct eqbr_gpio_ctrl *gctrl = gpiochip_get_data(gc);
+	unsigned int offset = irqd_to_hwirq(d);
+	unsigned long flags;
+
+	raw_spin_lock_irqsave(&gctrl->lock, flags);
+	writel(BIT(offset), gctrl->membase + GPIO_IRNENCLR);
+	writel(BIT(offset), gctrl->membase + GPIO_IRNCR);
+	raw_spin_unlock_irqrestore(&gctrl->lock, flags);
 }
 
 static inline void eqbr_cfg_bit(void __iomem *addr,
@@ -91,7 +99,7 @@ static int eqbr_irq_type_cfg(struct gpio_irq_type *type,
 	return 0;
 }
 
-static int eqbr_gpio_set_irq_type(struct irq_data *d, unsigned int type)
+static int eqbr_irq_set_type(struct irq_data *d, unsigned int type)
 {
 	struct gpio_chip *gc = irq_data_get_irq_chip_data(d);
 	struct eqbr_gpio_ctrl *gctrl = gpiochip_get_data(gc);
@@ -165,11 +173,11 @@ static void eqbr_irq_handler(struct irq_desc *desc)
 
 static const struct irq_chip eqbr_irq_chip = {
 	.name = "gpio_irq",
-	.irq_mask = eqbr_gpio_disable_irq,
-	.irq_unmask = eqbr_gpio_enable_irq,
-	.irq_ack = eqbr_gpio_ack_irq,
-	.irq_mask_ack = eqbr_gpio_mask_ack_irq,
-	.irq_set_type = eqbr_gpio_set_irq_type,
+	.irq_ack = eqbr_irq_ack,
+	.irq_mask = eqbr_irq_mask,
+	.irq_mask_ack = eqbr_irq_mask_ack,
+	.irq_unmask = eqbr_irq_unmask,
+	.irq_set_type = eqbr_irq_set_type,
 	.flags = IRQCHIP_IMMUTABLE,
 	GPIOCHIP_IRQ_RESOURCE_HELPERS,
 };
@@ -179,9 +187,11 @@ static int gpiochip_setup(struct device *dev, struct eqbr_gpio_ctrl *gctrl)
 	struct gpio_irq_chip *girq;
 	struct gpio_chip *gc;
 
-	gc = &gctrl->chip;
+	gc = &gctrl->chip.gc;
 	gc->label = gctrl->name;
 	gc->fwnode = gctrl->fwnode;
+	gc->request = gpiochip_generic_request;
+	gc->free = gpiochip_generic_free;
 
 	if (!fwnode_property_read_bool(gctrl->fwnode, "interrupt-controller")) {
 		dev_dbg(dev, "gc %s: doesn't act as interrupt controller!\n",
@@ -189,11 +199,11 @@ static int gpiochip_setup(struct device *dev, struct eqbr_gpio_ctrl *gctrl)
 		return 0;
 	}
 
-	girq = &gctrl->chip.irq;
+	girq = &gctrl->chip.gc.irq;
 	gpio_irq_chip_set_chip(girq, &eqbr_irq_chip);
 	girq->parent_handler = eqbr_irq_handler;
 	girq->num_parents = 1;
-	girq->parents = devm_kcalloc(dev, 1, sizeof(*girq->parents), GFP_KERNEL);
+	girq->parents = devm_kzalloc_objs(dev, *girq->parents, 1);
 	if (!girq->parents)
 		return -ENOMEM;
 
@@ -206,6 +216,7 @@ static int gpiochip_setup(struct device *dev, struct eqbr_gpio_ctrl *gctrl)
 
 static int gpiolib_reg(struct eqbr_pinctrl_drv_data *drvdata)
 {
+	struct gpio_generic_chip_config config;
 	struct device *dev = drvdata->dev;
 	struct eqbr_gpio_ctrl *gctrl;
 	struct device_node *np;
@@ -237,12 +248,16 @@ static int gpiolib_reg(struct eqbr_pinctrl_drv_data *drvdata)
 		}
 		raw_spin_lock_init(&gctrl->lock);
 
-		ret = bgpio_init(&gctrl->chip, dev, gctrl->bank->nr_pins / 8,
-				 gctrl->membase + GPIO_IN,
-				 gctrl->membase + GPIO_OUTSET,
-				 gctrl->membase + GPIO_OUTCLR,
-				 gctrl->membase + GPIO_DIR,
-				 NULL, 0);
+		config = (struct gpio_generic_chip_config) {
+			.dev = dev,
+			.sz = gctrl->bank->nr_pins / 8,
+			.dat = gctrl->membase + GPIO_IN,
+			.set = gctrl->membase + GPIO_OUTSET,
+			.clr = gctrl->membase + GPIO_OUTCLR,
+			.dirout = gctrl->membase + GPIO_DIR,
+		};
+
+		ret = gpio_generic_chip_init(&gctrl->chip, &config);
 		if (ret) {
 			dev_err(dev, "unable to init generic GPIO\n");
 			return ret;
@@ -252,7 +267,7 @@ static int gpiolib_reg(struct eqbr_pinctrl_drv_data *drvdata)
 		if (ret)
 			return ret;
 
-		ret = devm_gpiochip_add_data(dev, &gctrl->chip, gctrl);
+		ret = devm_gpiochip_add_data(dev, &gctrl->chip.gc, gctrl);
 		if (ret)
 			return ret;
 	}
@@ -317,7 +332,7 @@ static int eqbr_pinmux_set_mux(struct pinctrl_dev *pctldev,
 			       unsigned int selector, unsigned int group)
 {
 	struct eqbr_pinctrl_drv_data *pctl = pinctrl_dev_get_drvdata(pctldev);
-	struct function_desc *func;
+	const struct function_desc *func;
 	struct group_desc *grp;
 	unsigned int *pinmux;
 	int i;
@@ -437,7 +452,7 @@ static int eqbr_pinconf_get(struct pinctrl_dev *pctldev, unsigned int pin,
 	}
 	raw_spin_unlock_irqrestore(&pctl->lock, flags);
 	*config = pinconf_to_config_packed(param, val);
-;
+
 	return 0;
 }
 
@@ -497,7 +512,7 @@ static int eqbr_pinconf_set(struct pinctrl_dev *pctldev, unsigned int pin,
 					bank->pin_base, pin);
 				return -ENODEV;
 			}
-			gc = &gctrl->chip;
+			gc = &gctrl->chip.gc;
 			gc->direction_output(gc, offset, 0);
 			continue;
 		default:
@@ -517,8 +532,9 @@ static int eqbr_pinconf_set(struct pinctrl_dev *pctldev, unsigned int pin,
 static int eqbr_pinconf_group_get(struct pinctrl_dev *pctldev,
 				  unsigned int group, unsigned long *config)
 {
-	unsigned int i, npins, old = 0;
 	const unsigned int *pins;
+	unsigned int i, npins;
+	unsigned long old = 0;
 	int ret;
 
 	ret = pinctrl_generic_get_group_pins(pctldev, group, &pins, &npins);
@@ -602,7 +618,7 @@ static int funcs_utils(struct device *dev, struct pinfunction *funcs,
 
 		if (of_property_read_string(np, "function", &fn_name)) {
 			/* some groups may not have function, it's OK */
-			dev_dbg(dev, "Group %s: not function binded!\n",
+			dev_dbg(dev, "Group %s: not function bound!\n",
 				(char *)prop->value);
 			continue;
 		}
@@ -653,7 +669,7 @@ static int eqbr_build_functions(struct eqbr_pinctrl_drv_data *drvdata)
 	if (ret)
 		return ret;
 
-	funcs = devm_kcalloc(dev, nr_funcs, sizeof(*funcs), GFP_KERNEL);
+	funcs = devm_kzalloc_objs(dev, *funcs, nr_funcs);
 	if (!funcs)
 		return -ENOMEM;
 
@@ -668,9 +684,8 @@ static int eqbr_build_functions(struct eqbr_pinctrl_drv_data *drvdata)
 	for (i = 0; i < nr_funcs; i++) {
 		if (!funcs[i].ngroups)
 			continue;
-		funcs[i].groups = devm_kcalloc(dev, funcs[i].ngroups,
-					       sizeof(*(funcs[i].groups)),
-					       GFP_KERNEL);
+		funcs[i].groups = devm_kzalloc_objs(dev, *(funcs[i].groups),
+						    funcs[i].ngroups);
 		if (!funcs[i].groups)
 			return -ENOMEM;
 	}
@@ -685,11 +700,8 @@ static int eqbr_build_functions(struct eqbr_pinctrl_drv_data *drvdata)
 		if (funcs[i].name == NULL)
 			continue;
 
-		ret = pinmux_generic_add_function(drvdata->pctl_dev,
-						  funcs[i].name,
-						  funcs[i].groups,
-						  funcs[i].ngroups,
-						  drvdata);
+		ret = pinmux_generic_add_pinfunction(drvdata->pctl_dev,
+						     &funcs[i], drvdata);
 		if (ret < 0) {
 			dev_err(dev, "Failed to register function %s\n",
 				funcs[i].name);
@@ -721,13 +733,13 @@ static int eqbr_build_groups(struct eqbr_pinctrl_drv_data *drvdata)
 		}
 		grp->npins = err;
 		grp->name = prop->value;
-		pins = devm_kcalloc(dev, grp->npins, sizeof(*pins), GFP_KERNEL);
+		pins = devm_kzalloc_objs(dev, *pins, grp->npins);
 		if (!pins)
 			return -ENOMEM;
 
 		grp->pins = pins;
 
-		pinmux = devm_kcalloc(dev, grp->npins, sizeof(*pinmux), GFP_KERNEL);
+		pinmux = devm_kzalloc_objs(dev, *pinmux, grp->npins);
 		if (!pinmux)
 			return -ENOMEM;
 
@@ -786,7 +798,7 @@ static int pinctrl_reg(struct eqbr_pinctrl_drv_data *drvdata)
 	for (i = 0, nr_pins = 0; i < drvdata->nr_banks; i++)
 		nr_pins += drvdata->pin_banks[i].nr_pins;
 
-	pdesc = devm_kcalloc(dev, nr_pins, sizeof(*pdesc), GFP_KERNEL);
+	pdesc = devm_kzalloc_objs(dev, *pdesc, nr_pins);
 	if (!pdesc)
 		return -ENOMEM;
 	pin_names = devm_kcalloc(dev, nr_pins, PIN_NAME_LEN, GFP_KERNEL);
@@ -841,6 +853,7 @@ static int pinbank_init(struct device_node *np,
 
 	bank->pin_base = spec.args[1];
 	bank->nr_pins = spec.args[2];
+	of_node_put(spec.np);
 
 	bank->aval_pinmap = readl(bank->membase + REG_AVAIL);
 	bank->id = id;
@@ -873,11 +886,11 @@ static int pinbank_probe(struct eqbr_pinctrl_drv_data *drvdata)
 	}
 
 	/* Count pin bank number and gpio controller number */
-	banks = devm_kcalloc(dev, nr_gpio, sizeof(*banks), GFP_KERNEL);
+	banks = devm_kzalloc_objs(dev, *banks, nr_gpio);
 	if (!banks)
 		return -ENOMEM;
 
-	gctrls = devm_kcalloc(dev, nr_gpio, sizeof(*gctrls), GFP_KERNEL);
+	gctrls = devm_kzalloc_objs(dev, *gctrls, nr_gpio);
 	if (!gctrls)
 		return -ENOMEM;
 
@@ -910,7 +923,7 @@ static int eqbr_pinctrl_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	int ret;
 
-	drvdata = devm_kzalloc(dev, sizeof(*drvdata), GFP_KERNEL);
+	drvdata = devm_kzalloc_obj(dev, *drvdata);
 	if (!drvdata)
 		return -ENOMEM;
 

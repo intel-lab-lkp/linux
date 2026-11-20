@@ -12,18 +12,18 @@
 #include <drm/drm_print.h>
 #include <drm/drm_vblank.h>
 
-#include "i915_reg.h"
-#include "i915_utils.h"
 #include "intel_atomic.h"
-#include "intel_atomic_plane.h"
+#include "intel_crtc.h"
 #include "intel_cursor.h"
 #include "intel_cursor_regs.h"
 #include "intel_de.h"
 #include "intel_display.h"
 #include "intel_display_types.h"
+#include "intel_display_utils.h"
+#include "intel_display_wa.h"
 #include "intel_fb.h"
-#include "intel_fb_pin.h"
 #include "intel_frontbuffer.h"
+#include "intel_plane.h"
 #include "intel_psr.h"
 #include "intel_psr_regs.h"
 #include "intel_vblank.h"
@@ -34,17 +34,9 @@ static const u32 intel_cursor_formats[] = {
 	DRM_FORMAT_ARGB8888,
 };
 
-static u32 intel_cursor_base(const struct intel_plane_state *plane_state)
+static u32 intel_cursor_surf_offset(const struct intel_plane_state *plane_state)
 {
-	struct intel_display *display = to_intel_display(plane_state);
-	u32 base;
-
-	if (DISPLAY_INFO(display)->cursor_needs_physical)
-		base = plane_state->phys_dma_addr;
-	else
-		base = intel_plane_ggtt_offset(plane_state);
-
-	return base + plane_state->view.color_plane[0].offset;
+	return plane_state->view.color_plane[0].offset;
 }
 
 static u32 intel_cursor_position(const struct intel_crtc_state *crtc_state,
@@ -159,10 +151,10 @@ static int intel_check_cursor(struct intel_crtc_state *crtc_state,
 		return -EINVAL;
 	}
 
-	ret = intel_atomic_plane_check_clipping(plane_state, crtc_state,
-						DRM_PLANE_NO_SCALING,
-						DRM_PLANE_NO_SCALING,
-						true);
+	ret = intel_plane_check_clipping(plane_state, crtc_state,
+					 DRM_PLANE_NO_SCALING,
+					 DRM_PLANE_NO_SCALING,
+					 true);
 	if (ret)
 		return ret;
 
@@ -191,8 +183,8 @@ static int intel_check_cursor(struct intel_crtc_state *crtc_state,
 
 static unsigned int
 i845_cursor_max_stride(struct intel_plane *plane,
-		       u32 pixel_format, u64 modifier,
-		       unsigned int rotation)
+		       const struct drm_format_info *info,
+		       u64 modifier, unsigned int rotation)
 {
 	return 2048;
 }
@@ -214,8 +206,7 @@ static u32 i845_cursor_ctl_crtc(const struct intel_crtc_state *crtc_state)
 	return cntl;
 }
 
-static u32 i845_cursor_ctl(const struct intel_crtc_state *crtc_state,
-			   const struct intel_plane_state *plane_state)
+static u32 i845_cursor_ctl(const struct intel_plane_state *plane_state)
 {
 	return CURSOR_ENABLE |
 		CURSOR_FORMAT_ARGB |
@@ -275,7 +266,7 @@ static int i845_check_cursor(struct intel_crtc_state *crtc_state,
 		return -EINVAL;
 	}
 
-	plane_state->ctl = i845_cursor_ctl(crtc_state, plane_state);
+	plane_state->ctl = i845_cursor_ctl(plane_state);
 
 	return 0;
 }
@@ -298,7 +289,7 @@ static void i845_cursor_update_arm(struct intel_dsb *dsb,
 
 		size = CURSOR_HEIGHT(height) | CURSOR_WIDTH(width);
 
-		base = intel_cursor_base(plane_state);
+		base = plane_state->surf;
 		pos = intel_cursor_position(crtc_state, plane_state, false);
 	}
 
@@ -334,7 +325,7 @@ static bool i845_cursor_get_hw_state(struct intel_plane *plane,
 {
 	struct intel_display *display = to_intel_display(plane);
 	enum intel_display_power_domain power_domain;
-	intel_wakeref_t wakeref;
+	struct ref_tracker *wakeref;
 	bool ret;
 
 	power_domain = POWER_DOMAIN_PIPE(PIPE_A);
@@ -353,8 +344,8 @@ static bool i845_cursor_get_hw_state(struct intel_plane *plane,
 
 static unsigned int
 i9xx_cursor_max_stride(struct intel_plane *plane,
-		       u32 pixel_format, u64 modifier,
-		       unsigned int rotation)
+		       const struct drm_format_info *info,
+		       u64 modifier, unsigned int rotation)
 {
 	return plane->base.dev->mode_config.cursor_width * 4;
 }
@@ -407,8 +398,7 @@ static u32 i9xx_cursor_ctl_crtc(const struct intel_crtc_state *crtc_state)
 	return cntl;
 }
 
-static u32 i9xx_cursor_ctl(const struct intel_crtc_state *crtc_state,
-			   const struct intel_plane_state *plane_state)
+static u32 i9xx_cursor_ctl(const struct intel_plane_state *plane_state)
 {
 	struct intel_display *display = to_intel_display(plane_state);
 	u32 cntl = 0;
@@ -435,7 +425,7 @@ static u32 i9xx_cursor_ctl(const struct intel_crtc_state *crtc_state,
 		cntl |= MCURSOR_ROTATE_180;
 
 	/* Wa_22012358565:adl-p */
-	if (DISPLAY_VER(display) == 13)
+	if (intel_display_wa(display, INTEL_DISPLAY_WA_22012358565))
 		cntl |= MCURSOR_ARB_SLOTS(1);
 
 	return cntl;
@@ -535,7 +525,7 @@ static int i9xx_check_cursor(struct intel_crtc_state *crtc_state,
 		return -EINVAL;
 	}
 
-	plane_state->ctl = i9xx_cursor_ctl(crtc_state, plane_state);
+	plane_state->ctl = i9xx_cursor_ctl(plane_state);
 
 	return 0;
 }
@@ -547,7 +537,8 @@ static void i9xx_cursor_disable_sel_fetch_arm(struct intel_dsb *dsb,
 	struct intel_display *display = to_intel_display(plane);
 	enum pipe pipe = plane->pipe;
 
-	if (!crtc_state->enable_psr2_sel_fetch)
+	if (!crtc_state->enable_psr2_sel_fetch &&
+	    !crtc_state->clear_psr2_sel_fetch)
 		return;
 
 	intel_de_write_dsb(display, dsb, SEL_FETCH_CUR_CTL(pipe), 0);
@@ -580,8 +571,10 @@ static void i9xx_cursor_update_sel_fetch_arm(struct intel_dsb *dsb,
 	struct intel_display *display = to_intel_display(plane);
 	enum pipe pipe = plane->pipe;
 
-	if (!crtc_state->enable_psr2_sel_fetch)
+	if (!crtc_state->enable_psr2_sel_fetch) {
+		i9xx_cursor_disable_sel_fetch_arm(dsb, plane, crtc_state);
 		return;
+	}
 
 	if (drm_rect_height(&plane_state->psr2_sel_fetch_area) > 0) {
 		if (crtc_state->enable_psr2_su_region_et) {
@@ -673,10 +666,10 @@ static void i9xx_cursor_update_arm(struct intel_dsb *dsb,
 		cntl = plane_state->ctl |
 			i9xx_cursor_ctl_crtc(crtc_state);
 
-		if (width != height)
+		if (DISPLAY_VER(display) < 14 && width != height)
 			fbc_ctl = CUR_FBC_EN | CUR_FBC_HEIGHT(height - 1);
 
-		base = intel_cursor_base(plane_state);
+		base = plane_state->surf;
 		pos = intel_cursor_position(crtc_state, plane_state, false);
 	}
 
@@ -738,7 +731,7 @@ static bool i9xx_cursor_get_hw_state(struct intel_plane *plane,
 {
 	struct intel_display *display = to_intel_display(plane);
 	enum intel_display_power_domain power_domain;
-	intel_wakeref_t wakeref;
+	struct ref_tracker *wakeref;
 	bool ret;
 	u32 val;
 
@@ -807,6 +800,88 @@ void intel_cursor_unpin_work(struct kthread_work *base)
 	intel_plane_destroy_state(&plane->base, &plane_state->uapi);
 }
 
+static int intel_cursor_lock_joined_planes(struct intel_display *display,
+					   const struct intel_crtc_state *crtc_state,
+					   struct drm_modeset_acquire_ctx *ctx)
+{
+	struct intel_crtc *pipe_crtc;
+	int ret;
+
+	for_each_intel_crtc_in_pipe_mask(display, pipe_crtc,
+					 intel_crtc_joined_pipe_mask(crtc_state)) {
+		struct intel_plane *pipe_plane =
+			intel_crtc_get_plane(pipe_crtc, PLANE_CURSOR);
+
+		ret = drm_modeset_lock(&pipe_crtc->base.mutex, ctx);
+		if (ret)
+			return ret;
+
+		ret = drm_modeset_lock(&pipe_plane->base.mutex, ctx);
+		if (ret)
+			return ret;
+	}
+	return 0;
+}
+
+static bool
+intel_cursor_joiner_commits_idle(struct intel_display *display,
+				 const struct intel_crtc_state *crtc_state)
+{
+	struct intel_crtc *pipe_crtc;
+
+	for_each_intel_crtc_in_pipe_mask(display, pipe_crtc,
+					 intel_crtc_joined_pipe_mask(crtc_state)) {
+		struct intel_plane *pipe_plane =
+			intel_crtc_get_plane(pipe_crtc, PLANE_CURSOR);
+		struct intel_plane_state *pipe_plane_state =
+			to_intel_plane_state(pipe_plane->base.state);
+
+		if (pipe_plane_state->uapi.commit &&
+		    !try_wait_for_completion(&pipe_plane_state->uapi.commit->hw_done))
+			return false;
+	}
+
+	return true;
+}
+
+static void
+intel_cursor_fastpath_update_plane_state(struct intel_plane_state *plane_state,
+					 const struct intel_plane_state *from_plane_state,
+					 struct drm_framebuffer *fb,
+					 struct intel_crtc *hw_crtc,
+					 int crtc_x, int crtc_y,
+					 unsigned int crtc_w, unsigned int crtc_h,
+					 u32 src_x, u32 src_y,
+					 u32 src_w, u32 src_h)
+{
+	/*
+	 * Only the primary owns its uapi state; a secondary mirrors it, so
+	 * its uapi.crtc/fb stay NULL and hw.crtc comes from hw_crtc.
+	 */
+	if (plane_state == from_plane_state) {
+		drm_atomic_set_fb_for_plane(&plane_state->uapi, fb);
+
+		plane_state->uapi.src_x = src_x;
+		plane_state->uapi.src_y = src_y;
+		plane_state->uapi.src_w = src_w;
+		plane_state->uapi.src_h = src_h;
+		plane_state->uapi.crtc_x = crtc_x;
+		plane_state->uapi.crtc_y = crtc_y;
+		plane_state->uapi.crtc_w = crtc_w;
+		plane_state->uapi.crtc_h = crtc_h;
+	}
+
+	intel_plane_copy_uapi_to_hw_state(NULL, plane_state, from_plane_state, hw_crtc);
+}
+
+struct intel_cursor_joiner_state {
+	struct intel_plane *plane;
+	struct intel_crtc *crtc;
+	struct intel_crtc_state *crtc_state;
+	struct intel_plane_state *old_plane_state;
+	struct intel_plane_state *new_plane_state;
+};
+
 static int
 intel_legacy_cursor_update(struct drm_plane *_plane,
 			   struct drm_crtc *_crtc,
@@ -822,11 +897,13 @@ intel_legacy_cursor_update(struct drm_plane *_plane,
 	struct intel_display *display = to_intel_display(plane);
 	struct intel_plane_state *old_plane_state =
 		to_intel_plane_state(plane->base.state);
-	struct intel_plane_state *new_plane_state;
 	struct intel_crtc_state *crtc_state =
 		to_intel_crtc_state(crtc->base.state);
-	struct intel_crtc_state *new_crtc_state;
 	struct intel_vblank_evade_ctx evade;
+	struct intel_cursor_joiner_state joined_pipe_state[I915_MAX_PIPES] = {};
+	struct intel_crtc *pipe_crtc;
+	int num_pipes = 0;
+	u32 start_vbl_count, end_vbl_count;
 	int ret;
 
 	/*
@@ -835,22 +912,10 @@ intel_legacy_cursor_update(struct drm_plane *_plane,
 	 * PSR2 selective fetch also requires the slow path as
 	 * PSR2 plane and transcoder registers can only be updated during
 	 * vblank.
-	 *
-	 * FIXME joiner fastpath would be good
 	 */
 	if (!crtc_state->hw.active ||
 	    intel_crtc_needs_modeset(crtc_state) ||
-	    intel_crtc_needs_fastset(crtc_state) ||
-	    crtc_state->joiner_pipes)
-		goto slow;
-
-	/*
-	 * Don't do an async update if there is an outstanding commit modifying
-	 * the plane.  This prevents our async update's changes from getting
-	 * overridden by a previous synchronous update's state.
-	 */
-	if (old_plane_state->uapi.commit &&
-	    !try_wait_for_completion(&old_plane_state->uapi.commit->hw_done))
+	    intel_crtc_needs_fastset(crtc_state))
 		goto slow;
 
 	/*
@@ -866,46 +931,89 @@ intel_legacy_cursor_update(struct drm_plane *_plane,
 	    !old_plane_state->uapi.fb != !fb)
 		goto slow;
 
-	new_plane_state = to_intel_plane_state(intel_plane_duplicate_state(&plane->base));
-	if (!new_plane_state)
-		return -ENOMEM;
+	ret = intel_cursor_lock_joined_planes(display, crtc_state, ctx);
+	if (ret == -EDEADLK)
+		return ret;
+	if (ret)
+		goto slow;
 
-	new_crtc_state = to_intel_crtc_state(intel_crtc_duplicate_state(&crtc->base));
-	if (!new_crtc_state) {
-		ret = -ENOMEM;
-		goto out_free;
+	/*
+	 * Don't do an async update if there is an outstanding commit modifying
+	 * any of the joined cursor planes. This prevents our async update's
+	 * changes from getting overridden by a previous synchronous update's
+	 * state.
+	 */
+	if (!intel_cursor_joiner_commits_idle(display, crtc_state))
+		goto slow;
+
+	/*
+	 * Iterate over all joined pipes (primary and secondary) uniformly.
+	 * The joined pipe mask includes both the primary pipe and all
+	 * secondary joiner pipes, allowing us to handle them all the same way.
+	 */
+	for_each_intel_crtc_in_pipe_mask(display, pipe_crtc,
+					 intel_crtc_joined_pipe_mask(crtc_state)) {
+		struct intel_cursor_joiner_state *j = &joined_pipe_state[num_pipes];
+
+		j->plane = intel_crtc_get_plane(pipe_crtc, PLANE_CURSOR);
+		j->crtc = pipe_crtc;
+		j->crtc_state = to_intel_crtc_state(pipe_crtc->base.state);
+		j->old_plane_state = to_intel_plane_state(j->plane->base.state);
+		j->new_plane_state =
+			to_intel_plane_state(intel_plane_duplicate_state(&j->plane->base));
+
+		if (!j->new_plane_state) {
+			ret = -ENOMEM;
+			goto out_free;
+		}
+
+		intel_cursor_fastpath_update_plane_state(j->new_plane_state,
+							 joined_pipe_state[0].new_plane_state,
+							 fb, pipe_crtc,
+							 crtc_x, crtc_y,
+							 crtc_w, crtc_h,
+							 src_x, src_y,
+							 src_w, src_h);
+
+		ret = j->plane->check_plane(j->crtc_state, j->new_plane_state);
+		if (ret) {
+			intel_plane_destroy_state(&j->plane->base,
+						  &j->new_plane_state->uapi);
+			goto out_free;
+		}
+
+		ret = intel_plane_pin_fb(j->new_plane_state, j->old_plane_state);
+		if (ret) {
+			intel_plane_destroy_state(&j->plane->base,
+						  &j->new_plane_state->uapi);
+			goto out_free;
+		}
+
+		num_pipes++;
 	}
 
-	drm_atomic_set_fb_for_plane(&new_plane_state->uapi, fb);
-
-	new_plane_state->uapi.src_x = src_x;
-	new_plane_state->uapi.src_y = src_y;
-	new_plane_state->uapi.src_w = src_w;
-	new_plane_state->uapi.src_h = src_h;
-	new_plane_state->uapi.crtc_x = crtc_x;
-	new_plane_state->uapi.crtc_y = crtc_y;
-	new_plane_state->uapi.crtc_w = crtc_w;
-	new_plane_state->uapi.crtc_h = crtc_h;
-
-	intel_plane_copy_uapi_to_hw_state(new_plane_state, new_plane_state, crtc);
-
-	ret = intel_plane_atomic_check_with_state(crtc_state, new_crtc_state,
-						  old_plane_state, new_plane_state);
-	if (ret)
-		goto out_free;
-
-	ret = intel_plane_pin_fb(new_plane_state, old_plane_state);
-	if (ret)
-		goto out_free;
-
-	intel_frontbuffer_flush(to_intel_frontbuffer(new_plane_state->hw.fb),
+	intel_frontbuffer_flush(to_intel_frontbuffer(joined_pipe_state[0].new_plane_state->hw.fb),
 				ORIGIN_CURSOR_UPDATE);
-	intel_frontbuffer_track(to_intel_frontbuffer(old_plane_state->hw.fb),
-				to_intel_frontbuffer(new_plane_state->hw.fb),
-				plane->frontbuffer_bit);
 
-	/* Swap plane state */
-	plane->base.state = &new_plane_state->uapi;
+	for (int i = 0; i < num_pipes; i++) {
+		struct intel_frontbuffer *old_front =
+			to_intel_frontbuffer(joined_pipe_state[i].old_plane_state->hw.fb);
+		struct intel_frontbuffer *new_front =
+			to_intel_frontbuffer(joined_pipe_state[i].new_plane_state->hw.fb);
+
+		intel_frontbuffer_track(old_front, new_front,
+					joined_pipe_state[i].plane->frontbuffer_bit);
+	}
+
+	for (int i = 0; i < num_pipes; i++) {
+		joined_pipe_state[i].plane->base.state =
+			&joined_pipe_state[i].new_plane_state->uapi;
+
+		if (joined_pipe_state[i].new_plane_state->uapi.visible)
+			joined_pipe_state[i].crtc_state->active_planes |= BIT(PLANE_CURSOR);
+		else
+			joined_pipe_state[i].crtc_state->active_planes &= ~BIT(PLANE_CURSOR);
+	}
 
 	/*
 	 * We cannot swap crtc_state as it may be in use by an atomic commit or
@@ -917,7 +1025,6 @@ intel_legacy_cursor_update(struct drm_plane *_plane,
 	 * planes atomically. If the cursor was part of the atomic update then
 	 * we would have taken the slowpath.
 	 */
-	crtc_state->active_planes = new_crtc_state->active_planes;
 
 	intel_vblank_evade_init(crtc_state, crtc_state, &evade);
 
@@ -939,37 +1046,74 @@ intel_legacy_cursor_update(struct drm_plane *_plane,
 		local_irq_disable();
 	}
 
-	if (new_plane_state->uapi.visible) {
-		intel_plane_update_noarm(NULL, plane, crtc_state, new_plane_state);
-		intel_plane_update_arm(NULL, plane, crtc_state, new_plane_state);
-	} else {
-		intel_plane_disable_arm(NULL, plane, crtc_state);
+	/*
+	 * Joiner pipes are vblank-synchronized, so sampling only the primary
+	 * pipe is sufficient to detect a straddle across all joined pipes.
+	 * The vblank evasion above also operates on the primary pipe only.
+	 */
+	start_vbl_count = intel_crtc_get_vblank_counter(joined_pipe_state[0].crtc);
+
+	for (int i = 0; i < num_pipes; i++) {
+		if (joined_pipe_state[i].new_plane_state->uapi.visible) {
+			intel_plane_update_noarm(NULL, joined_pipe_state[i].plane,
+						 joined_pipe_state[i].crtc_state,
+						 joined_pipe_state[i].new_plane_state);
+			intel_plane_update_arm(NULL, joined_pipe_state[i].plane,
+					       joined_pipe_state[i].crtc_state,
+					       joined_pipe_state[i].new_plane_state);
+		} else {
+			intel_plane_disable_arm(NULL, joined_pipe_state[i].plane,
+						joined_pipe_state[i].crtc_state);
+		}
 	}
+
+	end_vbl_count = intel_crtc_get_vblank_counter(joined_pipe_state[0].crtc);
 
 	local_irq_enable();
 
+	if (start_vbl_count != end_vbl_count)
+		drm_err(display->drm,
+			"Atomic update failure on pipe %c (start=%u end=%u)\n",
+			pipe_name(joined_pipe_state[0].crtc->pipe),
+			start_vbl_count, end_vbl_count);
+
 	intel_psr_unlock(crtc_state);
 
-	if (old_plane_state->ggtt_vma != new_plane_state->ggtt_vma) {
-		drm_vblank_work_init(&old_plane_state->unpin_work, &crtc->base,
-				     intel_cursor_unpin_work);
+	/*
+	 * Schedule or immediately unpin old framebuffers.
+	 * Protect against concurrent access.
+	 */
+	for (int i = 0; i < num_pipes; i++) {
+		struct intel_plane_state *old = joined_pipe_state[i].old_plane_state;
 
-		drm_vblank_work_schedule(&old_plane_state->unpin_work,
-					 drm_crtc_accurate_vblank_count(&crtc->base) + 1,
-					 false);
-
-		old_plane_state = NULL;
-	} else {
-		intel_plane_unpin_fb(old_plane_state);
+		if (old->ggtt_vma != joined_pipe_state[i].new_plane_state->ggtt_vma) {
+			drm_vblank_work_init(&old->unpin_work, &crtc->base,
+					     intel_cursor_unpin_work);
+			drm_vblank_work_schedule(&old->unpin_work,
+						 drm_crtc_accurate_vblank_count(&crtc->base) + 1,
+						 false);
+			joined_pipe_state[i].old_plane_state = NULL;
+		} else {
+			intel_plane_unpin_fb(old);
+		}
 	}
 
 out_free:
-	if (new_crtc_state)
-		intel_crtc_destroy_state(&crtc->base, &new_crtc_state->uapi);
-	if (ret)
-		intel_plane_destroy_state(&plane->base, &new_plane_state->uapi);
-	else if (old_plane_state)
-		intel_plane_destroy_state(&plane->base, &old_plane_state->uapi);
+	if (ret) {
+		for (int i = 0; i < num_pipes; i++) {
+			intel_plane_unpin_fb(joined_pipe_state[i].new_plane_state);
+			intel_plane_destroy_state(&joined_pipe_state[i].plane->base,
+						  &joined_pipe_state[i].new_plane_state->uapi);
+		}
+	} else {
+		for (int i = 0; i < num_pipes; i++) {
+			if (!joined_pipe_state[i].old_plane_state)
+				continue;
+
+			intel_plane_destroy_state(&joined_pipe_state[i].plane->base,
+						  &joined_pipe_state[i].old_plane_state->uapi);
+		}
+	}
 	return ret;
 
 slow:
@@ -985,6 +1129,7 @@ static const struct drm_plane_funcs intel_cursor_plane_funcs = {
 	.atomic_duplicate_state = intel_plane_duplicate_state,
 	.atomic_destroy_state = intel_plane_destroy_state,
 	.format_mod_supported = intel_cursor_format_mod_supported,
+	.format_mod_supported_async = intel_plane_format_mod_supported_async,
 };
 
 static void intel_cursor_add_size_hints_property(struct intel_plane *plane)
@@ -1052,6 +1197,8 @@ intel_cursor_plane_create(struct intel_display *display,
 		cursor->check_plane = i9xx_check_cursor;
 	}
 
+	cursor->surf_offset = intel_cursor_surf_offset;
+
 	if (DISPLAY_VER(display) >= 5 || display->platform.g4x)
 		cursor->capture_error = g4x_cursor_capture_error;
 	else
@@ -1086,6 +1233,9 @@ intel_cursor_plane_create(struct intel_display *display,
 
 	intel_cursor_add_size_hints_property(cursor);
 
+	drm_plane_create_blend_mode_property(&cursor->base,
+					     BIT(DRM_MODE_BLEND_PREMULTI));
+
 	zpos = DISPLAY_RUNTIME_INFO(display)->num_sprites[pipe] + 1;
 	drm_plane_create_zpos_immutable_property(&cursor->base, zpos);
 
@@ -1100,4 +1250,24 @@ fail:
 	intel_plane_free(cursor);
 
 	return ERR_PTR(ret);
+}
+
+void intel_cursor_mode_config_init(struct intel_display *display)
+{
+	struct drm_mode_config *mode_config = &display->drm->mode_config;
+
+	if (display->platform.i845g) {
+		mode_config->cursor_width = 64;
+		mode_config->cursor_height = 1023;
+	} else if (display->platform.i865g) {
+		mode_config->cursor_width = 512;
+		mode_config->cursor_height = 1023;
+	} else if (display->platform.i830 || display->platform.i85x ||
+		   display->platform.i915g || display->platform.i915gm) {
+		mode_config->cursor_width = 64;
+		mode_config->cursor_height = 64;
+	} else {
+		mode_config->cursor_width = 256;
+		mode_config->cursor_height = 256;
+	}
 }

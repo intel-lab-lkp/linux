@@ -85,6 +85,12 @@ struct xe_guc {
 		struct xarray exec_queue_lookup;
 		/** @submission_state.stopped: submissions are stopped */
 		atomic_t stopped;
+		/**
+		 * @submission_state.reset_blocked: reset attempts are blocked;
+		 * blocking reset in order to delay it may be required if running
+		 * an operation which is sensitive to resets.
+		 */
+		atomic_t reset_blocked;
 		/** @submission_state.lock: protects submission state */
 		struct mutex lock;
 		/** @submission_state.enabled: submission is enabled */
@@ -94,8 +100,6 @@ struct xe_guc {
 		 * even initialized - before that not even the lock is valid
 		 */
 		bool initialized;
-		/** @submission_state.fini_wq: submit fini wait queue */
-		wait_queue_head_t fini_wq;
 	} submission_state;
 
 	/** @hwconfig: Hardware config state */
@@ -118,6 +122,12 @@ struct xe_guc {
 	struct xe_reg notify_reg;
 	/** @params: Control params for fw initialization */
 	u32 params[GUC_CTL_MAX_DWORDS];
+
+	/**
+	 * @pagefault_ack_counter: Counter to determine when periodically ack
+	 * pagefaults in a batch.
+	 */
+	u32 pagefault_ack_counter;
 };
 
 #endif

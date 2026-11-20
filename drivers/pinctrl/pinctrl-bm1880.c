@@ -1298,7 +1298,7 @@ static const struct pinmux_ops bm1880_pinmux_ops = {
 	.set_mux = bm1880_pinmux_set_mux,
 };
 
-static struct pinctrl_desc bm1880_desc = {
+static const struct pinctrl_desc bm1880_desc = {
 	.name = "bm1880_pinctrl",
 	.pins = bm1880_pins,
 	.npins = ARRAY_SIZE(bm1880_pins),
@@ -1313,7 +1313,7 @@ static int bm1880_pinctrl_probe(struct platform_device *pdev)
 {
 	struct bm1880_pinctrl *pctrl;
 
-	pctrl = devm_kzalloc(&pdev->dev, sizeof(*pctrl), GFP_KERNEL);
+	pctrl = devm_kzalloc_obj(&pdev->dev, *pctrl);
 	if (!pctrl)
 		return -ENOMEM;
 

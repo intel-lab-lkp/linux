@@ -136,6 +136,9 @@
 /* Set if the algorithm supports virtual addresses. */
 #define CRYPTO_ALG_REQ_VIRT		0x00040000
 
+/* Set if the algorithm cannot have a fallback (e.g., phmac). */
+#define CRYPTO_ALG_NO_FALLBACK		0x00080000
+
 /* The high bits 0xff000000 are reserved for type-specific flags. */
 
 /*
@@ -406,7 +409,6 @@ int crypto_has_alg(const char *name, u32 type, u32 mask);
  */
 
 struct crypto_tfm {
-	refcount_t refcnt;
 
 	u32 crt_flags;
 

@@ -20,6 +20,7 @@
 
 static unsigned int dataserver_timeo = NFS_DEF_TCP_TIMEO;
 static unsigned int dataserver_retrans;
+static unsigned int dataserver_nconnect;
 
 static bool ff_layout_has_available_ds(struct pnfs_layout_segment *lseg);
 
@@ -44,7 +45,7 @@ nfs4_ff_alloc_deviceid_node(struct nfs_server *server, struct pnfs_device *pdev,
 {
 	struct xdr_stream stream;
 	struct xdr_buf buf;
-	struct page *scratch;
+	struct folio *scratch;
 	struct list_head dsaddrs;
 	struct nfs4_pnfs_ds_addr *da;
 	struct nfs4_ff_layout_ds *new_ds = NULL;
@@ -56,11 +57,11 @@ nfs4_ff_alloc_deviceid_node(struct nfs_server *server, struct pnfs_device *pdev,
 	int i, ret = -ENOMEM;
 
 	/* set up xdr stream */
-	scratch = alloc_page(gfp_flags);
+	scratch = folio_alloc(gfp_flags, 0);
 	if (!scratch)
 		goto out_err;
 
-	new_ds = kzalloc(sizeof(struct nfs4_ff_layout_ds), gfp_flags);
+	new_ds = kzalloc_obj(struct nfs4_ff_layout_ds, gfp_flags);
 	if (!new_ds)
 		goto out_scratch;
 
@@ -70,7 +71,7 @@ nfs4_ff_alloc_deviceid_node(struct nfs_server *server, struct pnfs_device *pdev,
 	INIT_LIST_HEAD(&dsaddrs);
 
 	xdr_init_decode_pages(&stream, &buf, pdev->pages, pdev->pglen);
-	xdr_set_scratch_page(&stream, scratch);
+	xdr_set_scratch_folio(&stream, scratch);
 
 	/* multipath count */
 	p = xdr_inline_decode(&stream, 4);
@@ -97,13 +98,17 @@ nfs4_ff_alloc_deviceid_node(struct nfs_server *server, struct pnfs_device *pdev,
 	if (unlikely(!p))
 		goto out_err_drain_dsaddrs;
 	version_count = be32_to_cpup(p);
+
+	if (version_count == 0) {
+		ret = -EINVAL;
+		goto out_err_drain_dsaddrs;
+	}
 	dprintk("%s: version count %d\n", __func__, version_count);
 
-	ds_versions = kcalloc(version_count,
-			      sizeof(struct nfs4_ff_ds_version),
-			      gfp_flags);
+	ds_versions = kzalloc_objs(struct nfs4_ff_ds_version, version_count,
+				   gfp_flags);
 	if (!ds_versions)
-		goto out_scratch;
+		goto out_err_drain_dsaddrs;
 
 	for (i = 0; i < version_count; i++) {
 		/* 20 = version(4) + minor_version(4) + rsize(4) + wsize(4) +
@@ -149,35 +154,23 @@ nfs4_ff_alloc_deviceid_node(struct nfs_server *server, struct pnfs_device *pdev,
 	new_ds->ds_versions = ds_versions;
 	new_ds->ds_versions_cnt = version_count;
 
-	new_ds->ds = nfs4_pnfs_ds_add(net, &dsaddrs, gfp_flags);
+	new_ds->ds = nfs4_pnfs_ds_add(net, &dsaddrs, ds_versions[0].version,
+				      gfp_flags);
 	if (!new_ds->ds)
 		goto out_err_drain_dsaddrs;
 
 	/* If DS was already in cache, free ds addrs */
-	while (!list_empty(&dsaddrs)) {
-		da = list_first_entry(&dsaddrs,
-				      struct nfs4_pnfs_ds_addr,
-				      da_node);
-		list_del_init(&da->da_node);
-		kfree(da->da_remotestr);
-		kfree(da);
-	}
+	nfs4_pnfs_ds_addr_list_free(&dsaddrs);
 
-	__free_page(scratch);
+	folio_put(scratch);
 	return new_ds;
 
 out_err_drain_dsaddrs:
-	while (!list_empty(&dsaddrs)) {
-		da = list_first_entry(&dsaddrs, struct nfs4_pnfs_ds_addr,
-				      da_node);
-		list_del_init(&da->da_node);
-		kfree(da->da_remotestr);
-		kfree(da);
-	}
+	nfs4_pnfs_ds_addr_list_free(&dsaddrs);
 
 	kfree(ds_versions);
 out_scratch:
-	__free_page(scratch);
+	folio_put(scratch);
 out_err:
 	kfree(new_ds);
 
@@ -250,19 +243,20 @@ ff_layout_add_ds_error_locked(struct nfs4_flexfile_layout *flo,
 }
 
 int ff_layout_track_ds_error(struct nfs4_flexfile_layout *flo,
-			     struct nfs4_ff_layout_mirror *mirror, u64 offset,
-			     u64 length, int status, enum nfs_opnum4 opnum,
-			     gfp_t gfp_flags)
+			     struct nfs4_ff_layout_mirror *mirror,
+			     const struct nfs4_deviceid_node *devid,
+			     u32 dss_id, u64 offset, u64 length, int status,
+			     enum nfs_opnum4 opnum, gfp_t gfp_flags)
 {
 	struct nfs4_ff_layout_ds_err *dserr;
 
 	if (status == 0)
 		return 0;
 
-	if (IS_ERR_OR_NULL(mirror->mirror_ds))
+	if (devid == NULL)
 		return -EINVAL;
 
-	dserr = kmalloc(sizeof(*dserr), gfp_flags);
+	dserr = kmalloc_obj(*dserr, gfp_flags);
 	if (!dserr)
 		return -ENOMEM;
 
@@ -271,9 +265,8 @@ int ff_layout_track_ds_error(struct nfs4_flexfile_layout *flo,
 	dserr->length = length;
 	dserr->status = status;
 	dserr->opnum = opnum;
-	nfs4_stateid_copy(&dserr->stateid, &mirror->stateid);
-	memcpy(&dserr->deviceid, &mirror->mirror_ds->id_node.deviceid,
-	       NFS4_DEVICEID4_SIZE);
+	nfs4_stateid_copy(&dserr->stateid, &mirror->dss[dss_id].stateid);
+	memcpy(&dserr->deviceid, &devid->deviceid, NFS4_DEVICEID4_SIZE);
 
 	spin_lock(&flo->generic_hdr.plh_inode->i_lock);
 	ff_layout_add_ds_error_locked(flo, dserr);
@@ -282,14 +275,14 @@ int ff_layout_track_ds_error(struct nfs4_flexfile_layout *flo,
 }
 
 static const struct cred *
-ff_layout_get_mirror_cred(struct nfs4_ff_layout_mirror *mirror, u32 iomode)
+ff_layout_get_mirror_cred(struct nfs4_ff_layout_mirror *mirror, u32 iomode, u32 dss_id)
 {
 	const struct cred *cred, __rcu **pcred;
 
 	if (iomode == IOMODE_READ)
-		pcred = &mirror->ro_cred;
+		pcred = &mirror->dss[dss_id].ro_cred;
 	else
-		pcred = &mirror->rw_cred;
+		pcred = &mirror->dss[dss_id].rw_cred;
 
 	rcu_read_lock();
 	do {
@@ -304,55 +297,89 @@ ff_layout_get_mirror_cred(struct nfs4_ff_layout_mirror *mirror, u32 iomode)
 }
 
 struct nfs_fh *
-nfs4_ff_layout_select_ds_fh(struct nfs4_ff_layout_mirror *mirror)
+nfs4_ff_layout_select_ds_fh(struct nfs4_ff_layout_mirror *mirror, u32 dss_id)
 {
 	/* FIXME: For now assume there is only 1 version available for the DS */
-	return &mirror->fh_versions[0];
+	return &mirror->dss[dss_id].fh_versions[0];
 }
 
 void
 nfs4_ff_layout_select_ds_stateid(const struct nfs4_ff_layout_mirror *mirror,
-		nfs4_stateid *stateid)
+				 const struct nfs4_ff_layout_ds *mirror_ds,
+				 u32 dss_id,
+				 nfs4_stateid *stateid)
 {
-	if (nfs4_ff_layout_ds_version(mirror) == 4)
-		nfs4_stateid_copy(stateid, &mirror->stateid);
+	if (nfs4_ff_layout_ds_version(mirror_ds) == 4)
+		nfs4_stateid_copy(stateid, &mirror->dss[dss_id].stateid);
 }
 
-static bool
-ff_layout_init_mirror_ds(struct pnfs_layout_hdr *lo,
-			 struct nfs4_ff_layout_mirror *mirror)
+/*
+ * Resolve the stripe's deviceid on first use and pin the node on the
+ * mirror.  Returns a node the caller must put, or an ERR_PTR.
+ */
+struct nfs4_ff_layout_ds *
+ff_layout_get_mirror_ds(struct pnfs_layout_hdr *lo,
+			struct nfs4_ff_layout_mirror *mirror,
+			u32 dss_id)
 {
+	struct nfs4_ff_layout_ds *mirror_ds, *old;
+	struct nfs4_deviceid_node *node;
+
 	if (mirror == NULL)
-		goto outerr;
-	if (mirror->mirror_ds == NULL) {
-		struct nfs4_deviceid_node *node;
-		struct nfs4_ff_layout_ds *mirror_ds = ERR_PTR(-ENODEV);
+		return ERR_PTR(-ENODEV);
 
-		node = nfs4_find_get_deviceid(NFS_SERVER(lo->plh_inode),
-				&mirror->devid, lo->plh_lc_cred,
-				GFP_KERNEL);
-		if (node)
-			mirror_ds = FF_LAYOUT_MIRROR_DS(node);
+retry:
+	rcu_read_lock();
+	mirror_ds = rcu_dereference(mirror->dss[dss_id].mirror_ds);
+	if (mirror_ds && !IS_ERR(mirror_ds) &&
+	    atomic_inc_not_zero(&mirror_ds->id_node.ref)) {
+		rcu_read_unlock();
+		return mirror_ds;
+	}
+	rcu_read_unlock();
+	if (IS_ERR(mirror_ds))
+		return mirror_ds;
+	if (mirror_ds != NULL)
+		/* raced with a reset; the field is being re-pointed */
+		goto retry;
 
-		/* check for race with another call to this function */
-		if (cmpxchg(&mirror->mirror_ds, NULL, mirror_ds) &&
-		    mirror_ds != ERR_PTR(-ENODEV))
-			nfs4_put_deviceid_node(node);
+	node = nfs4_find_get_deviceid(NFS_SERVER(lo->plh_inode),
+			&mirror->dss[dss_id].devid, lo->plh_lc_cred,
+			GFP_KERNEL);
+	if (node) {
+		mirror_ds = FF_LAYOUT_MIRROR_DS(node);
+		/*
+		 * Take the caller's reference before the pointer becomes
+		 * visible below, so a concurrent reset of the installed
+		 * pointer cannot drop the last reference under us.
+		 */
+		atomic_inc(&node->ref);
+	} else {
+		mirror_ds = ERR_PTR(-ENODEV);
 	}
 
-	if (IS_ERR(mirror->mirror_ds))
-		goto outerr;
+	/* check for race with another call to this function */
+	old = unrcu_pointer(cmpxchg(&mirror->dss[dss_id].mirror_ds,
+				    NULL, RCU_INITIALIZER(mirror_ds)));
+	if (old == NULL)
+		return mirror_ds;
 
-	return true;
-outerr:
-	return false;
+	/* lost the race; use the winner's node instead */
+	if (node) {
+		nfs4_put_deviceid_node(node);
+		nfs4_put_deviceid_node(node);
+	}
+	goto retry;
 }
 
 /**
  * nfs4_ff_layout_prepare_ds - prepare a DS connection for an RPC call
  * @lseg: the layout segment we're operating on
  * @mirror: layout mirror describing the DS to use
- * @fail_return: return layout on connect failure?
+ * @mirror_ds: referenced device node for the stripe, from
+ *	ff_layout_get_mirror_ds() (may be an ERR_PTR)
+ * @dss_id: DS stripe id to select stripe to use
+ * @opnum: operation this connection is being prepared for
  *
  * Try to prepare a DS connection to accept an RPC call. This involves
  * selecting a mirror to use and connecting the client to it if it's not
@@ -360,26 +387,30 @@ outerr:
  *
  * Since we only need a single functioning mirror to satisfy a read, we don't
  * want to return the layout if there is one. For writes though, any down
- * mirror should result in a LAYOUTRETURN. @fail_return is how we distinguish
- * between the two cases.
+ * mirror should result in a LAYOUTRETURN. @opnum is how we distinguish
+ * between the two cases. On failure, @opnum is also reported in the tracked
+ * device error so that the server can tell which class of I/O the client
+ * was unable to send to the mirror.
  *
- * Returns a pointer to a connected DS object on success or NULL on failure.
+ * Returns a pointer to a connected DS object on success or an ERR_PTR value on failure.
  */
 struct nfs4_pnfs_ds *
 nfs4_ff_layout_prepare_ds(struct pnfs_layout_segment *lseg,
 			  struct nfs4_ff_layout_mirror *mirror,
-			  bool fail_return)
+			  struct nfs4_ff_layout_ds *mirror_ds,
+			  u32 dss_id,
+			  enum nfs_opnum4 opnum)
 {
-	struct nfs4_pnfs_ds *ds = NULL;
+	struct nfs4_pnfs_ds *ds;
 	struct inode *ino = lseg->pls_layout->plh_inode;
 	struct nfs_server *s = NFS_SERVER(ino);
 	unsigned int max_payload;
-	int status;
+	int status = -EAGAIN;
 
-	if (!ff_layout_init_mirror_ds(lseg->pls_layout, mirror))
+	if (IS_ERR_OR_NULL(mirror_ds))
 		goto noconnect;
 
-	ds = mirror->mirror_ds->ds;
+	ds = mirror_ds->ds;
 	if (READ_ONCE(ds->ds_clp))
 		goto out;
 	/* matching smp_wmb() in _nfs4_pnfs_v3/4_ds_connect */
@@ -388,10 +419,12 @@ nfs4_ff_layout_prepare_ds(struct pnfs_layout_segment *lseg,
 	/* FIXME: For now we assume the server sent only one version of NFS
 	 * to use for the DS.
 	 */
-	status = nfs4_pnfs_ds_connect(s, ds, &mirror->mirror_ds->id_node,
+	status = nfs4_pnfs_ds_connect(s, ds, &mirror_ds->id_node,
 			     dataserver_timeo, dataserver_retrans,
-			     mirror->mirror_ds->ds_versions[0].version,
-			     mirror->mirror_ds->ds_versions[0].minor_version);
+			     dataserver_nconnect,
+			     mirror_ds->ds_versions[0].version,
+			     mirror_ds->ds_versions[0].minor_version,
+			     mirror_ds->ds_versions[0].tightly_coupled);
 
 	/* connect success, check rsize/wsize limit */
 	if (!status) {
@@ -404,21 +437,30 @@ nfs4_ff_layout_prepare_ds(struct pnfs_layout_segment *lseg,
 		max_payload =
 			nfs_block_size(rpc_max_payload(ds->ds_clp->cl_rpcclient),
 				       NULL);
-		if (mirror->mirror_ds->ds_versions[0].rsize > max_payload)
-			mirror->mirror_ds->ds_versions[0].rsize = max_payload;
-		if (mirror->mirror_ds->ds_versions[0].wsize > max_payload)
-			mirror->mirror_ds->ds_versions[0].wsize = max_payload;
+		if (mirror_ds->ds_versions[0].rsize > max_payload)
+			mirror_ds->ds_versions[0].rsize = max_payload;
+		if (mirror_ds->ds_versions[0].wsize > max_payload)
+			mirror_ds->ds_versions[0].wsize = max_payload;
+		goto out;
+	}
+	/* The connect was interrupted by a signal: this is not a DS error */
+	if (status == -ERESTARTSYS || status == -EINTR) {
+		ds = ERR_PTR(status);
 		goto out;
 	}
 noconnect:
 	ff_layout_track_ds_error(FF_LAYOUT_FROM_HDR(lseg->pls_layout),
-				 mirror, lseg->pls_range.offset,
+				 mirror,
+				 IS_ERR_OR_NULL(mirror_ds) ?
+					NULL : &mirror_ds->id_node,
+				 dss_id, lseg->pls_range.offset,
 				 lseg->pls_range.length, NFS4ERR_NXIO,
-				 OP_ILLEGAL, GFP_NOIO);
+				 opnum, GFP_NOIO);
 	ff_layout_send_layouterror(lseg);
-	if (fail_return || !ff_layout_has_available_ds(lseg))
-		pnfs_error_mark_layout_for_return(ino, lseg);
-	ds = NULL;
+	if (opnum != OP_READ || !ff_layout_has_available_ds(lseg))
+		pnfs_error_mark_layout_for_return(ino, lseg,
+						  &mirror->dss[dss_id].devid);
+	ds = ERR_PTR(status);
 out:
 	return ds;
 }
@@ -426,12 +468,14 @@ out:
 const struct cred *
 ff_layout_get_ds_cred(struct nfs4_ff_layout_mirror *mirror,
 		      const struct pnfs_layout_range *range,
-		      const struct cred *mdscred)
+		      const struct cred *mdscred,
+		      const struct nfs4_ff_layout_ds *mirror_ds,
+		      u32 dss_id)
 {
 	const struct cred *cred;
 
-	if (mirror && !mirror->mirror_ds->ds_versions[0].tightly_coupled) {
-		cred = ff_layout_get_mirror_cred(mirror, range->iomode);
+	if (mirror && !mirror_ds->ds_versions[0].tightly_coupled) {
+		cred = ff_layout_get_mirror_cred(mirror, range->iomode, dss_id);
 		if (!cred)
 			cred = get_cred(mdscred);
 	} else {
@@ -442,7 +486,7 @@ ff_layout_get_ds_cred(struct nfs4_ff_layout_mirror *mirror,
 
 /**
  * nfs4_ff_find_or_create_ds_client - Find or create a DS rpc client
- * @mirror: pointer to the mirror
+ * @mirror_ds: device node for the stripe
  * @ds_clp: nfs_client for the DS
  * @inode: pointer to inode
  *
@@ -450,10 +494,10 @@ ff_layout_get_ds_cred(struct nfs4_ff_layout_mirror *mirror,
  * in the nfs_client cl_ds_clients list.
  */
 struct rpc_clnt *
-nfs4_ff_find_or_create_ds_client(struct nfs4_ff_layout_mirror *mirror,
+nfs4_ff_find_or_create_ds_client(const struct nfs4_ff_layout_ds *mirror_ds,
 				 struct nfs_client *ds_clp, struct inode *inode)
 {
-	switch (mirror->mirror_ds->ds_versions[0].version) {
+	switch (mirror_ds->ds_versions[0].version) {
 	case 3:
 		/* For NFSv3 DS, flavor is set when creating DS connections */
 		return ds_clp->cl_rpcclient;
@@ -558,43 +602,60 @@ unsigned int ff_layout_fetch_ds_ioerr(struct pnfs_layout_hdr *lo,
 static bool ff_read_layout_has_available_ds(struct pnfs_layout_segment *lseg)
 {
 	struct nfs4_ff_layout_mirror *mirror;
-	struct nfs4_deviceid_node *devid;
-	u32 idx;
+	struct nfs4_ff_layout_ds *mirror_ds;
+	bool ret = false;
+	u32 idx, dss_id;
 
+	rcu_read_lock();
 	for (idx = 0; idx < FF_LAYOUT_MIRROR_COUNT(lseg); idx++) {
 		mirror = FF_LAYOUT_COMP(lseg, idx);
-		if (mirror) {
-			if (!mirror->mirror_ds)
-				return true;
-			if (IS_ERR(mirror->mirror_ds))
+		if (!mirror)
+			continue;
+		for (dss_id = 0; dss_id < mirror->dss_count; dss_id++) {
+			mirror_ds = rcu_dereference(mirror->dss[dss_id].mirror_ds);
+			if (!mirror_ds) {
+				ret = true;
+				goto out;
+			}
+			if (IS_ERR(mirror_ds))
 				continue;
-			devid = &mirror->mirror_ds->id_node;
-			if (!nfs4_test_deviceid_unavailable(devid))
-				return true;
+			if (!nfs4_test_deviceid_unavailable(&mirror_ds->id_node)) {
+				ret = true;
+				goto out;
+			}
 		}
 	}
-
-	return false;
+out:
+	rcu_read_unlock();
+	return ret;
 }
 
 static bool ff_rw_layout_has_available_ds(struct pnfs_layout_segment *lseg)
 {
 	struct nfs4_ff_layout_mirror *mirror;
-	struct nfs4_deviceid_node *devid;
-	u32 idx;
+	struct nfs4_ff_layout_ds *mirror_ds;
+	bool ret = false;
+	u32 idx, dss_id;
 
+	rcu_read_lock();
 	for (idx = 0; idx < FF_LAYOUT_MIRROR_COUNT(lseg); idx++) {
 		mirror = FF_LAYOUT_COMP(lseg, idx);
-		if (!mirror || IS_ERR(mirror->mirror_ds))
-			return false;
-		if (!mirror->mirror_ds)
-			continue;
-		devid = &mirror->mirror_ds->id_node;
-		if (nfs4_test_deviceid_unavailable(devid))
-			return false;
+		if (!mirror)
+			goto out;
+		for (dss_id = 0; dss_id < mirror->dss_count; dss_id++) {
+			mirror_ds = rcu_dereference(mirror->dss[dss_id].mirror_ds);
+			if (IS_ERR(mirror_ds))
+				goto out;
+			if (!mirror_ds)
+				continue;
+			if (nfs4_test_deviceid_unavailable(&mirror_ds->id_node))
+				goto out;
+		}
 	}
-
-	return FF_LAYOUT_MIRROR_COUNT(lseg) != 0;
+	ret = FF_LAYOUT_MIRROR_COUNT(lseg) != 0;
+out:
+	rcu_read_unlock();
+	return ret;
 }
 
 static bool ff_layout_has_available_ds(struct pnfs_layout_segment *lseg)
@@ -625,3 +686,8 @@ module_param(dataserver_timeo, uint, 0644);
 MODULE_PARM_DESC(dataserver_timeo, "The time (in tenths of a second) the "
 			"NFSv4.1  client  waits for a response from a "
 			" data server before it retries an NFS request.");
+module_param(dataserver_nconnect, uint, 0644);
+MODULE_PARM_DESC(dataserver_nconnect, "The maximum number of connections "
+			"the NFSv4.1 client opens to each data server, "
+			"capping the value inherited from the MDS nconnect "
+			"mount option.  0 (default) applies no cap.");

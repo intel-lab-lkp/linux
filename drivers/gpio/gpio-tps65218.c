@@ -34,34 +34,28 @@ static int tps65218_gpio_get(struct gpio_chip *gc, unsigned offset)
 	return !!(val & (TPS65218_ENABLE2_GPIO1 << offset));
 }
 
-static void tps65218_gpio_set(struct gpio_chip *gc, unsigned offset,
-			      int value)
+static int tps65218_gpio_set(struct gpio_chip *gc, unsigned int offset,
+			     int value)
 {
 	struct tps65218_gpio *tps65218_gpio = gpiochip_get_data(gc);
 	struct tps65218 *tps65218 = tps65218_gpio->tps65218;
 
 	if (value)
-		tps65218_set_bits(tps65218, TPS65218_REG_ENABLE2,
-				  TPS65218_ENABLE2_GPIO1 << offset,
-				  TPS65218_ENABLE2_GPIO1 << offset,
-				  TPS65218_PROTECT_L1);
-	else
-		tps65218_clear_bits(tps65218, TPS65218_REG_ENABLE2,
-				    TPS65218_ENABLE2_GPIO1 << offset,
-				    TPS65218_PROTECT_L1);
+		return tps65218_set_bits(tps65218, TPS65218_REG_ENABLE2,
+					 TPS65218_ENABLE2_GPIO1 << offset,
+					 TPS65218_ENABLE2_GPIO1 << offset,
+					 TPS65218_PROTECT_L1);
+
+	return tps65218_clear_bits(tps65218, TPS65218_REG_ENABLE2,
+				   TPS65218_ENABLE2_GPIO1 << offset,
+				   TPS65218_PROTECT_L1);
 }
 
 static int tps65218_gpio_output(struct gpio_chip *gc, unsigned offset,
 				int value)
 {
 	/* Only drives GPOs */
-	tps65218_gpio_set(gc, offset, value);
-	return 0;
-}
-
-static int tps65218_gpio_input(struct gpio_chip *gc, unsigned offset)
-{
-	return -EPERM;
+	return tps65218_gpio_set(gc, offset, value);
 }
 
 static int tps65218_gpio_request(struct gpio_chip *gc, unsigned offset)
@@ -174,7 +168,6 @@ static const struct gpio_chip template_chip = {
 	.owner			= THIS_MODULE,
 	.request		= tps65218_gpio_request,
 	.direction_output	= tps65218_gpio_output,
-	.direction_input	= tps65218_gpio_input,
 	.get			= tps65218_gpio_get,
 	.set			= tps65218_gpio_set,
 	.set_config		= tps65218_gpio_set_config,
@@ -188,8 +181,7 @@ static int tps65218_gpio_probe(struct platform_device *pdev)
 	struct tps65218 *tps65218 = dev_get_drvdata(pdev->dev.parent);
 	struct tps65218_gpio *tps65218_gpio;
 
-	tps65218_gpio = devm_kzalloc(&pdev->dev, sizeof(*tps65218_gpio),
-				     GFP_KERNEL);
+	tps65218_gpio = devm_kzalloc_obj(&pdev->dev, *tps65218_gpio);
 	if (!tps65218_gpio)
 		return -ENOMEM;
 
@@ -208,7 +200,7 @@ static const struct of_device_id tps65218_dt_match[] = {
 MODULE_DEVICE_TABLE(of, tps65218_dt_match);
 
 static const struct platform_device_id tps65218_gpio_id_table[] = {
-	{ "tps65218-gpio", },
+	{ .name = "tps65218-gpio" },
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(platform, tps65218_gpio_id_table);

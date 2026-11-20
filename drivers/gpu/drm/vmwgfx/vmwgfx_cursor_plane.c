@@ -100,8 +100,10 @@ vmw_cursor_update_type(struct vmw_private *vmw, struct vmw_plane_state *vps)
 	if (vmw->has_mob) {
 		if ((vmw->capabilities2 & SVGA_CAP2_CURSOR_MOB) != 0)
 			return VMW_CURSOR_UPDATE_MOB;
+		else
+			return VMW_CURSOR_UPDATE_GB_ONLY;
 	}
-
+	drm_warn_once(&vmw->drm, "Unknown Cursor Type!\n");
 	return VMW_CURSOR_UPDATE_NONE;
 }
 
@@ -139,6 +141,7 @@ static u32 vmw_cursor_mob_size(enum vmw_cursor_update_type update_type,
 {
 	switch (update_type) {
 	case VMW_CURSOR_UPDATE_LEGACY:
+	case VMW_CURSOR_UPDATE_GB_ONLY:
 	case VMW_CURSOR_UPDATE_NONE:
 		return 0;
 	case VMW_CURSOR_UPDATE_MOB:
@@ -321,6 +324,7 @@ void vmw_kms_cursor_snoop(struct vmw_surface *srf,
 	unsigned long kmap_num;
 	SVGA3dCopyBox *box;
 	u32 box_count;
+	u64 src_extent;
 	void *virtual;
 	bool is_iomem;
 	struct vmw_dma_cmd {
@@ -331,6 +335,8 @@ void vmw_kms_cursor_snoop(struct vmw_surface *srf,
 	const struct SVGA3dSurfaceDesc *desc =
 		vmw_surface_get_desc(VMW_CURSOR_SNOOP_FORMAT);
 	const u32 image_pitch = VMW_CURSOR_SNOOP_WIDTH * desc->pitchBytesPerBlock;
+
+	BUILD_BUG_ON(sizeof(*srf->snooper.image) != desc->pitchBytesPerBlock);
 
 	cmd = container_of(header, struct vmw_dma_cmd, header);
 
@@ -369,8 +375,19 @@ void vmw_kms_cursor_snoop(struct vmw_surface *srf,
 		return;
 	}
 
+	if (box->w == 0 || box->h == 0)
+		return;
+
+	src_extent = (u64)(box->h - 1) * cmd->dma.guest.pitch +
+		     (u64)box->w * desc->pitchBytesPerBlock;
+	if (src_extent > bo->base.size) {
+		DRM_ERROR("Cursor snoop source of %llu bytes exceeds the %zu byte buffer\n",
+			  src_extent, bo->base.size);
+		return;
+	}
+
 	kmap_offset = cmd->dma.guest.ptr.offset >> PAGE_SHIFT;
-	kmap_num = (VMW_CURSOR_SNOOP_HEIGHT * image_pitch) >> PAGE_SHIFT;
+	kmap_num = PFN_UP(src_extent);
 
 	ret = ttm_bo_reserve(bo, true, false, NULL);
 	if (unlikely(ret != 0)) {
@@ -384,14 +401,16 @@ void vmw_kms_cursor_snoop(struct vmw_surface *srf,
 
 	virtual = ttm_kmap_obj_virtual(&map, &is_iomem);
 
-	if (box->w == VMW_CURSOR_SNOOP_WIDTH && cmd->dma.guest.pitch == image_pitch) {
+	if (box->w == VMW_CURSOR_SNOOP_WIDTH &&
+	    box->h == VMW_CURSOR_SNOOP_HEIGHT &&
+	    cmd->dma.guest.pitch == image_pitch) {
 		memcpy(srf->snooper.image, virtual,
 		       VMW_CURSOR_SNOOP_HEIGHT * image_pitch);
 	} else {
-		/* Image is unsigned pointer. */
+		/* The destination stride is in pixels. */
 		for (i = 0; i < box->h; i++)
-			memcpy(srf->snooper.image + i * image_pitch,
-			       virtual + i * cmd->dma.guest.pitch,
+			memcpy(srf->snooper.image + i * VMW_CURSOR_SNOOP_WIDTH,
+			       virtual + (size_t)i * cmd->dma.guest.pitch,
 			       box->w * desc->pitchBytesPerBlock);
 	}
 	srf->snooper.id++;
@@ -429,6 +448,7 @@ vmw_cursor_mob_map(struct vmw_plane_state *vps)
 	u32 size = vmw_cursor_mob_size(vps->cursor.update_type,
 				       vps->base.crtc_w, vps->base.crtc_h);
 	struct vmw_bo *vbo = vps->cursor.mob;
+	void *map;
 
 	if (!vbo)
 		return -EINVAL;
@@ -443,11 +463,15 @@ vmw_cursor_mob_map(struct vmw_plane_state *vps)
 	if (unlikely(ret != 0))
 		return -ENOMEM;
 
-	vmw_bo_map_and_cache(vbo);
+	map = vmw_bo_map_and_cache(vbo);
+	if (!map) {
+		vmw_bo_unmap(vbo);
+		ret = -ENOMEM;
+	}
 
 	ttm_bo_unreserve(&vbo->tbo);
 
-	return 0;
+	return ret;
 }
 
 /**
@@ -623,6 +647,7 @@ int vmw_cursor_plane_prepare_fb(struct drm_plane *plane,
 		if (!surface || vps->cursor.legacy.id == surface->snooper.id)
 			vps->cursor.update_type = VMW_CURSOR_UPDATE_NONE;
 		break;
+	case VMW_CURSOR_UPDATE_GB_ONLY:
 	case VMW_CURSOR_UPDATE_MOB: {
 		bo = vmw_user_object_buffer(&vps->uo);
 		if (bo) {
@@ -659,9 +684,15 @@ int vmw_cursor_plane_prepare_fb(struct drm_plane *plane,
 			    !vmw_cursor_buffer_changed(vps, old_vps)) {
 				vps->cursor.update_type =
 					VMW_CURSOR_UPDATE_NONE;
-			} else {
-				vmw_cursor_mob_get(vcp, vps);
-				vmw_cursor_mob_map(vps);
+			} else if (vps->cursor.update_type ==
+				   VMW_CURSOR_UPDATE_MOB &&
+				   (vmw_cursor_mob_get(vcp, vps) ||
+				    vmw_cursor_mob_map(vps))) {
+				/*
+				 * Reset the cursor to avoid crashes later.
+				 */
+				vps->cursor.update_type =
+					VMW_CURSOR_UPDATE_NONE;
 			}
 		}
 	}
@@ -686,7 +717,7 @@ int vmw_cursor_plane_prepare_fb(struct drm_plane *plane,
  * Returns 0 on success
  */
 int vmw_cursor_plane_atomic_check(struct drm_plane *plane,
-				  struct drm_atomic_state *state)
+				  struct drm_atomic_commit *state)
 {
 	struct drm_plane_state *new_state =
 		drm_atomic_get_new_plane_state(state, plane);
@@ -728,6 +759,34 @@ int vmw_cursor_plane_atomic_check(struct drm_plane *plane,
 				 "surface not suitable for cursor\n");
 			return -EINVAL;
 		}
+	} else if (update_type == VMW_CURSOR_UPDATE_GB_ONLY ||
+		   update_type == VMW_CURSOR_UPDATE_MOB) {
+		u32 cursor_max_dim =
+			vmw_read(vmw, SVGA_REG_CURSOR_MAX_DIMENSION);
+
+		if (new_state->crtc_w > cursor_max_dim ||
+		    new_state->crtc_h > cursor_max_dim) {
+			drm_warn(&vmw->drm,
+				 "Cursor dimensions (%d, %d) exceed device max %u\n",
+				 new_state->crtc_w, new_state->crtc_h,
+				 cursor_max_dim);
+			return -EINVAL;
+		}
+
+		if (update_type == VMW_CURSOR_UPDATE_MOB) {
+			u32 mob_max_size =
+				vmw_read(vmw, SVGA_REG_MOB_MAX_SIZE);
+			u64 mob_size = (u64)new_state->crtc_w *
+				       new_state->crtc_h * sizeof(u32) +
+				       sizeof(SVGAGBCursorHeader);
+
+			if (mob_size > mob_max_size) {
+				drm_warn(&vmw->drm,
+					 "Cursor MOB size %llu exceeds device max %u\n",
+					 mob_size, mob_max_size);
+				return -EINVAL;
+			}
+		}
 	}
 
 	return 0;
@@ -735,8 +794,9 @@ int vmw_cursor_plane_atomic_check(struct drm_plane *plane,
 
 void
 vmw_cursor_plane_atomic_update(struct drm_plane *plane,
-			       struct drm_atomic_state *state)
+			       struct drm_atomic_commit *state)
 {
+	struct vmw_bo *bo;
 	struct drm_plane_state *new_state =
 		drm_atomic_get_new_plane_state(state, plane);
 	struct drm_plane_state *old_state =
@@ -761,6 +821,15 @@ vmw_cursor_plane_atomic_update(struct drm_plane *plane,
 		break;
 	case VMW_CURSOR_UPDATE_MOB:
 		vmw_cursor_update_mob(dev_priv, vps);
+		break;
+	case VMW_CURSOR_UPDATE_GB_ONLY:
+		bo = vmw_user_object_buffer(&vps->uo);
+		if (bo)
+			vmw_send_define_cursor_cmd(dev_priv, bo->map.virtual,
+						   vps->base.crtc_w,
+						   vps->base.crtc_h,
+						   vps->base.hotspot_x,
+						   vps->base.hotspot_y);
 		break;
 	case VMW_CURSOR_UPDATE_NONE:
 		/* do nothing */

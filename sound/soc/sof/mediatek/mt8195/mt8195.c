@@ -12,7 +12,6 @@
 #include <linux/delay.h>
 #include <linux/firmware.h>
 #include <linux/io.h>
-#include <linux/of_address.h>
 #include <linux/of_irq.h>
 #include <linux/of_platform.h>
 #include <linux/of_reserved_mem.h>
@@ -46,25 +45,17 @@ static int platform_parse_resource(struct platform_device *pdev, void *data)
 {
 	struct resource *mmio;
 	struct resource res;
-	struct device_node *mem_region;
 	struct device *dev = &pdev->dev;
 	struct mtk_adsp_chip_info *adsp = data;
 	int ret;
 
-	ret = of_reserved_mem_device_init(dev);
+	ret = devm_of_reserved_mem_device_init(dev);
 	if (ret) {
 		dev_err(dev, "of_reserved_mem_device_init failed\n");
 		return ret;
 	}
 
-	mem_region = of_parse_phandle(dev->of_node, "memory-region", 1);
-	if (!mem_region) {
-		dev_err(dev, "no memory-region sysmem phandle\n");
-		return -ENODEV;
-	}
-
-	ret = of_address_to_resource(mem_region, 0, &res);
-	of_node_put(mem_region);
+	ret = of_reserved_mem_region_to_resource(dev->of_node, 1, &res);
 	if (ret) {
 		dev_err(dev, "of_address_to_resource sysmem failed\n");
 		return ret;
@@ -187,7 +178,7 @@ static int mt8195_dsp_probe(struct snd_sof_dev *sdev)
 	struct adsp_priv *priv;
 	int ret;
 
-	priv = devm_kzalloc(&pdev->dev, sizeof(*priv), GFP_KERNEL);
+	priv = devm_kzalloc_obj(&pdev->dev, *priv);
 	if (!priv)
 		return -ENOMEM;
 
@@ -195,7 +186,7 @@ static int mt8195_dsp_probe(struct snd_sof_dev *sdev)
 	priv->dev = sdev->dev;
 	priv->sdev = sdev;
 
-	priv->adsp = devm_kzalloc(&pdev->dev, sizeof(struct mtk_adsp_chip_info), GFP_KERNEL);
+	priv->adsp = devm_kzalloc_obj(&pdev->dev, struct mtk_adsp_chip_info);
 	if (!priv->adsp)
 		return -ENOMEM;
 

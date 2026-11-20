@@ -379,7 +379,6 @@ unevaluatedProperties: false
 examples:
   # Example AD7173-8 with external reference connected to REF+/REF-:
   - |
-    #include <dt-bindings/gpio/gpio.h>
     #include <dt-bindings/interrupt-controller/irq.h>
 
     spi {
@@ -444,7 +443,7 @@ examples:
       #address-cells = <1>;
       #size-cells = <0>;
 
-       adc@0 {
+      adc@0 {
         compatible = "adi,ad4111";
         reg = <0>;
 

@@ -333,21 +333,6 @@ static int isl29028_ir_get(struct isl29028_chip *chip, int *ir_data)
 	return isl29028_read_als_ir(chip, ir_data);
 }
 
-static int isl29028_set_pm_runtime_busy(struct isl29028_chip *chip, bool on)
-{
-	struct device *dev = regmap_get_device(chip->regmap);
-	int ret;
-
-	if (on) {
-		ret = pm_runtime_resume_and_get(dev);
-	} else {
-		pm_runtime_mark_last_busy(dev);
-		ret = pm_runtime_put_autosuspend(dev);
-	}
-
-	return ret;
-}
-
 /* Channel IO */
 static int isl29028_write_raw(struct iio_dev *indio_dev,
 			      struct iio_chan_spec const *chan,
@@ -357,8 +342,9 @@ static int isl29028_write_raw(struct iio_dev *indio_dev,
 	struct device *dev = regmap_get_device(chip->regmap);
 	int ret;
 
-	ret = isl29028_set_pm_runtime_busy(chip, true);
-	if (ret < 0)
+	PM_RUNTIME_ACQUIRE_AUTOSUSPEND(dev, pm);
+	ret = PM_RUNTIME_ACQUIRE_ERR(&pm);
+	if (ret)
 		return ret;
 
 	mutex_lock(&chip->lock);
@@ -407,13 +393,6 @@ static int isl29028_write_raw(struct iio_dev *indio_dev,
 
 	mutex_unlock(&chip->lock);
 
-	if (ret < 0)
-		return ret;
-
-	ret = isl29028_set_pm_runtime_busy(chip, false);
-	if (ret < 0)
-		return ret;
-
 	return ret;
 }
 
@@ -423,10 +402,11 @@ static int isl29028_read_raw(struct iio_dev *indio_dev,
 {
 	struct isl29028_chip *chip = iio_priv(indio_dev);
 	struct device *dev = regmap_get_device(chip->regmap);
-	int ret, pm_ret;
+	int ret;
 
-	ret = isl29028_set_pm_runtime_busy(chip, true);
-	if (ret < 0)
+	PM_RUNTIME_ACQUIRE_AUTOSUSPEND(dev, pm);
+	ret = PM_RUNTIME_ACQUIRE_ERR(&pm);
+	if (ret)
 		return ret;
 
 	mutex_lock(&chip->lock);
@@ -475,18 +455,6 @@ static int isl29028_read_raw(struct iio_dev *indio_dev,
 	}
 
 	mutex_unlock(&chip->lock);
-
-	if (ret < 0)
-		return ret;
-
-	/**
-	 * Preserve the ret variable if the call to
-	 * isl29028_set_pm_runtime_busy() is successful so the reading
-	 * (if applicable) is returned to user space.
-	 */
-	pm_ret = isl29028_set_pm_runtime_busy(chip, false);
-	if (pm_ret < 0)
-		return pm_ret;
 
 	return ret;
 }
@@ -562,7 +530,7 @@ static const struct regmap_config isl29028_regmap_config = {
 	.volatile_reg = isl29028_is_volatile_reg,
 	.max_register = ISL29028_NUM_REGS - 1,
 	.num_reg_defaults_raw = ISL29028_NUM_REGS,
-	.cache_type = REGCACHE_RBTREE,
+	.cache_type = REGCACHE_MAPLE,
 };
 
 static int isl29028_probe(struct i2c_client *client)
@@ -678,8 +646,8 @@ static DEFINE_RUNTIME_DEV_PM_OPS(isl29028_pm_ops, isl29028_suspend,
 				 isl29028_resume, NULL);
 
 static const struct i2c_device_id isl29028_id[] = {
-	{ "isl29028" },
-	{ "isl29030" },
+	{ .name = "isl29028" },
+	{ .name = "isl29030" },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, isl29028_id);

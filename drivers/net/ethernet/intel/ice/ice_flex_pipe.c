@@ -574,9 +574,7 @@ ice_destroy_tunnel_end:
 int ice_udp_tunnel_set_port(struct net_device *netdev, unsigned int table,
 			    unsigned int idx, struct udp_tunnel_info *ti)
 {
-	struct ice_netdev_priv *np = netdev_priv(netdev);
-	struct ice_vsi *vsi = np->vsi;
-	struct ice_pf *pf = vsi->back;
+	struct ice_pf *pf = ice_netdev_to_pf(netdev);
 	enum ice_tunnel_type tnl_type;
 	int status;
 	u16 index;
@@ -598,9 +596,7 @@ int ice_udp_tunnel_set_port(struct net_device *netdev, unsigned int table,
 int ice_udp_tunnel_unset_port(struct net_device *netdev, unsigned int table,
 			      unsigned int idx, struct udp_tunnel_info *ti)
 {
-	struct ice_netdev_priv *np = netdev_priv(netdev);
-	struct ice_vsi *vsi = np->vsi;
-	struct ice_pf *pf = vsi->back;
+	struct ice_pf *pf = ice_netdev_to_pf(netdev);
 	enum ice_tunnel_type tnl_type;
 	int status;
 
@@ -1479,7 +1475,7 @@ static void ice_init_prof_masks(struct ice_hw *hw, enum ice_block blk)
 	per_pf = ICE_PROF_MASK_COUNT / hw->dev_caps.num_funcs;
 
 	hw->blk[blk].masks.count = per_pf;
-	hw->blk[blk].masks.first = hw->pf_id * per_pf;
+	hw->blk[blk].masks.first = hw->logical_pf_id * per_pf;
 
 	memset(hw->blk[blk].masks.masks, 0, sizeof(hw->blk[blk].masks.masks));
 
@@ -2232,44 +2228,42 @@ int ice_init_hw_tbls(struct ice_hw *hw)
 		xlt1->sid = ice_blk_sids[i][ICE_SID_XLT1_OFF];
 		xlt1->count = blk_sizes[i].xlt1;
 
-		xlt1->ptypes = devm_kcalloc(ice_hw_to_dev(hw), xlt1->count,
-					    sizeof(*xlt1->ptypes), GFP_KERNEL);
+		xlt1->ptypes = devm_kzalloc_objs(ice_hw_to_dev(hw),
+						 *xlt1->ptypes, xlt1->count);
 
 		if (!xlt1->ptypes)
 			goto err;
 
-		xlt1->ptg_tbl = devm_kcalloc(ice_hw_to_dev(hw), ICE_MAX_PTGS,
-					     sizeof(*xlt1->ptg_tbl),
-					     GFP_KERNEL);
+		xlt1->ptg_tbl = devm_kzalloc_objs(ice_hw_to_dev(hw),
+						  *xlt1->ptg_tbl, ICE_MAX_PTGS);
 
 		if (!xlt1->ptg_tbl)
 			goto err;
 
-		xlt1->t = devm_kcalloc(ice_hw_to_dev(hw), xlt1->count,
-				       sizeof(*xlt1->t), GFP_KERNEL);
+		xlt1->t = devm_kzalloc_objs(ice_hw_to_dev(hw), *xlt1->t,
+					    xlt1->count);
 		if (!xlt1->t)
 			goto err;
 
 		xlt2->sid = ice_blk_sids[i][ICE_SID_XLT2_OFF];
 		xlt2->count = blk_sizes[i].xlt2;
 
-		xlt2->vsis = devm_kcalloc(ice_hw_to_dev(hw), xlt2->count,
-					  sizeof(*xlt2->vsis), GFP_KERNEL);
+		xlt2->vsis = devm_kzalloc_objs(ice_hw_to_dev(hw), *xlt2->vsis,
+					       xlt2->count);
 
 		if (!xlt2->vsis)
 			goto err;
 
-		xlt2->vsig_tbl = devm_kcalloc(ice_hw_to_dev(hw), xlt2->count,
-					      sizeof(*xlt2->vsig_tbl),
-					      GFP_KERNEL);
+		xlt2->vsig_tbl = devm_kzalloc_objs(ice_hw_to_dev(hw),
+						   *xlt2->vsig_tbl, xlt2->count);
 		if (!xlt2->vsig_tbl)
 			goto err;
 
 		for (j = 0; j < xlt2->count; j++)
 			INIT_LIST_HEAD(&xlt2->vsig_tbl[j].prop_lst);
 
-		xlt2->t = devm_kcalloc(ice_hw_to_dev(hw), xlt2->count,
-				       sizeof(*xlt2->t), GFP_KERNEL);
+		xlt2->t = devm_kzalloc_objs(ice_hw_to_dev(hw), *xlt2->t,
+					    xlt2->count);
 		if (!xlt2->t)
 			goto err;
 
@@ -2277,18 +2271,17 @@ int ice_init_hw_tbls(struct ice_hw *hw)
 		prof->count = blk_sizes[i].prof_tcam;
 		prof->max_prof_id = blk_sizes[i].prof_id;
 		prof->cdid_bits = blk_sizes[i].prof_cdid_bits;
-		prof->t = devm_kcalloc(ice_hw_to_dev(hw), prof->count,
-				       sizeof(*prof->t), GFP_KERNEL);
+		prof->t = devm_kzalloc_objs(ice_hw_to_dev(hw), *prof->t,
+					    prof->count);
 
 		if (!prof->t)
 			goto err;
 
 		prof_redir->sid = ice_blk_sids[i][ICE_SID_PR_REDIR_OFF];
 		prof_redir->count = blk_sizes[i].prof_redir;
-		prof_redir->t = devm_kcalloc(ice_hw_to_dev(hw),
-					     prof_redir->count,
-					     sizeof(*prof_redir->t),
-					     GFP_KERNEL);
+		prof_redir->t = devm_kzalloc_objs(ice_hw_to_dev(hw),
+						  *prof_redir->t,
+						  prof_redir->count);
 
 		if (!prof_redir->t)
 			goto err;
@@ -2296,36 +2289,34 @@ int ice_init_hw_tbls(struct ice_hw *hw)
 		es->sid = ice_blk_sids[i][ICE_SID_ES_OFF];
 		es->count = blk_sizes[i].es;
 		es->fvw = blk_sizes[i].fvw;
-		es->t = devm_kcalloc(ice_hw_to_dev(hw),
-				     (u32)(es->count * es->fvw),
-				     sizeof(*es->t), GFP_KERNEL);
+		es->t = devm_kzalloc_objs(ice_hw_to_dev(hw), *es->t,
+					  (u32)(es->count * es->fvw));
 		if (!es->t)
 			goto err;
 
-		es->ref_count = devm_kcalloc(ice_hw_to_dev(hw), es->count,
-					     sizeof(*es->ref_count),
-					     GFP_KERNEL);
+		es->ref_count = devm_kzalloc_objs(ice_hw_to_dev(hw),
+						  *es->ref_count, es->count);
 		if (!es->ref_count)
 			goto err;
 
-		es->symm = devm_kcalloc(ice_hw_to_dev(hw), es->count,
-					sizeof(*es->symm), GFP_KERNEL);
+		es->symm = devm_kzalloc_objs(ice_hw_to_dev(hw), *es->symm,
+					     es->count);
 		if (!es->symm)
 			goto err;
 
-		es->written = devm_kcalloc(ice_hw_to_dev(hw), es->count,
-					   sizeof(*es->written), GFP_KERNEL);
+		es->written = devm_kzalloc_objs(ice_hw_to_dev(hw), *es->written,
+						es->count);
 		if (!es->written)
 			goto err;
 
-		es->mask_ena = devm_kcalloc(ice_hw_to_dev(hw), es->count,
-					    sizeof(*es->mask_ena), GFP_KERNEL);
+		es->mask_ena = devm_kzalloc_objs(ice_hw_to_dev(hw),
+						 *es->mask_ena, es->count);
 		if (!es->mask_ena)
 			goto err;
 
 		prof_id->count = blk_sizes[i].prof_id;
-		prof_id->id = devm_kcalloc(ice_hw_to_dev(hw), prof_id->count,
-					   sizeof(*prof_id->id), GFP_KERNEL);
+		prof_id->id = devm_kzalloc_objs(ice_hw_to_dev(hw), *prof_id->id,
+						prof_id->count);
 		if (!prof_id->id)
 			goto err;
 	}
@@ -3043,16 +3034,16 @@ ice_disable_fd_swap(struct ice_hw *hw, u8 prof_id)
  * the ID value used here.
  */
 int
-ice_add_prof(struct ice_hw *hw, enum ice_block blk, u64 id, u8 ptypes[],
-	     const struct ice_ptype_attributes *attr, u16 attr_cnt,
-	     struct ice_fv_word *es, u16 *masks, bool symm, bool fd_swap)
+ice_add_prof(struct ice_hw *hw, enum ice_block blk, u64 id,
+	     unsigned long *ptypes, const struct ice_ptype_attributes *attr,
+	     u16 attr_cnt, struct ice_fv_word *es, u16 *masks, bool symm,
+	     bool fd_swap)
 {
-	u32 bytes = DIV_ROUND_UP(ICE_FLOW_PTYPE_MAX, BITS_PER_BYTE);
 	DECLARE_BITMAP(ptgs_used, ICE_XLT1_CNT);
 	struct ice_prof_map *prof;
-	u8 byte = 0;
-	u8 prof_id;
 	int status;
+	u8 prof_id;
+	u16 ptype;
 
 	bitmap_zero(ptgs_used, ICE_XLT1_CNT);
 
@@ -3090,7 +3081,7 @@ ice_add_prof(struct ice_hw *hw, enum ice_block blk, u64 id, u8 ptypes[],
 	ice_prof_inc_ref(hw, blk, prof_id);
 
 	/* add profile info */
-	prof = devm_kzalloc(ice_hw_to_dev(hw), sizeof(*prof), GFP_KERNEL);
+	prof = devm_kzalloc_obj(ice_hw_to_dev(hw), *prof);
 	if (!prof) {
 		status = -ENOMEM;
 		goto err_ice_add_prof;
@@ -3102,57 +3093,35 @@ ice_add_prof(struct ice_hw *hw, enum ice_block blk, u64 id, u8 ptypes[],
 	prof->context = 0;
 
 	/* build list of ptgs */
-	while (bytes && prof->ptg_cnt < ICE_MAX_PTG_PER_PROFILE) {
-		u8 bit;
+	for_each_set_bit(ptype, ptypes, ICE_FLOW_PTYPE_MAX) {
+		u8 ptg;
 
-		if (!ptypes[byte]) {
-			bytes--;
-			byte++;
+		/* The package should place all ptypes in a non-zero
+		 * PTG, so the following call should never fail.
+		 */
+		if (ice_ptg_find_ptype(hw, blk, ptype, &ptg))
 			continue;
-		}
 
-		/* Examine 8 bits per byte */
-		for_each_set_bit(bit, (unsigned long *)&ptypes[byte],
-				 BITS_PER_BYTE) {
-			u16 ptype;
-			u8 ptg;
+		/* If PTG is already added, skip and continue */
+		if (test_bit(ptg, ptgs_used))
+			continue;
 
-			ptype = byte * BITS_PER_BYTE + bit;
+		set_bit(ptg, ptgs_used);
+		/* Check to see there are any attributes for this ptype, and
+		 * add them if found.
+		 */
+		status = ice_add_prof_attrib(prof, ptg, ptype, attr, attr_cnt);
+		if (status == -ENOSPC)
+			break;
+		if (status) {
+			/* This is simple a ptype/PTG with no attribute */
+			prof->ptg[prof->ptg_cnt] = ptg;
+			prof->attr[prof->ptg_cnt].flags = 0;
+			prof->attr[prof->ptg_cnt].mask = 0;
 
-			/* The package should place all ptypes in a non-zero
-			 * PTG, so the following call should never fail.
-			 */
-			if (ice_ptg_find_ptype(hw, blk, ptype, &ptg))
-				continue;
-
-			/* If PTG is already added, skip and continue */
-			if (test_bit(ptg, ptgs_used))
-				continue;
-
-			__set_bit(ptg, ptgs_used);
-			/* Check to see there are any attributes for
-			 * this PTYPE, and add them if found.
-			 */
-			status = ice_add_prof_attrib(prof, ptg, ptype,
-						     attr, attr_cnt);
-			if (status == -ENOSPC)
+			if (++prof->ptg_cnt >= ICE_MAX_PTG_PER_PROFILE)
 				break;
-			if (status) {
-				/* This is simple a PTYPE/PTG with no
-				 * attribute
-				 */
-				prof->ptg[prof->ptg_cnt] = ptg;
-				prof->attr[prof->ptg_cnt].flags = 0;
-				prof->attr[prof->ptg_cnt].mask = 0;
-
-				if (++prof->ptg_cnt >=
-				    ICE_MAX_PTG_PER_PROFILE)
-					break;
-			}
 		}
-
-		bytes--;
-		byte++;
 	}
 
 	list_add(&prof->list, &hw->blk[blk].es.prof_map);
@@ -3296,8 +3265,7 @@ ice_rem_vsig(struct ice_hw *hw, enum ice_block blk, u16 vsig,
 			struct ice_vsig_vsi *tmp = vsi_cur->next_vsi;
 			struct ice_chs_chg *p;
 
-			p = devm_kzalloc(ice_hw_to_dev(hw), sizeof(*p),
-					 GFP_KERNEL);
+			p = devm_kzalloc_obj(ice_hw_to_dev(hw), *p);
 			if (!p)
 				return -ENOMEM;
 
@@ -3452,8 +3420,7 @@ ice_get_prof(struct ice_hw *hw, enum ice_block blk, u64 hdl,
 	for (i = 0; i < map->ptg_cnt; i++)
 		if (!hw->blk[blk].es.written[map->prof_id]) {
 			/* add ES to change list */
-			p = devm_kzalloc(ice_hw_to_dev(hw), sizeof(*p),
-					 GFP_KERNEL);
+			p = devm_kzalloc_obj(ice_hw_to_dev(hw), *p);
 			if (!p) {
 				status = -ENOMEM;
 				goto err_ice_get_prof;
@@ -3541,7 +3508,7 @@ ice_add_prof_to_lst(struct ice_hw *hw, enum ice_block blk,
 		goto err_ice_add_prof_to_lst;
 	}
 
-	p = devm_kzalloc(ice_hw_to_dev(hw), sizeof(*p), GFP_KERNEL);
+	p = devm_kzalloc_obj(ice_hw_to_dev(hw), *p);
 	if (!p) {
 		status = -ENOMEM;
 		goto err_ice_add_prof_to_lst;
@@ -3580,7 +3547,7 @@ ice_move_vsi(struct ice_hw *hw, enum ice_block blk, u16 vsi, u16 vsig,
 	u16 orig_vsig;
 	int status;
 
-	p = devm_kzalloc(ice_hw_to_dev(hw), sizeof(*p), GFP_KERNEL);
+	p = devm_kzalloc_obj(ice_hw_to_dev(hw), *p);
 	if (!p)
 		return -ENOMEM;
 
@@ -3601,6 +3568,19 @@ ice_move_vsi(struct ice_hw *hw, enum ice_block blk, u16 vsi, u16 vsig,
 	list_add(&p->list_entry, chg);
 
 	return 0;
+}
+
+/**
+ * ice_set_tcam_flags - set TCAM flag don't care mask
+ * @mask: mask for flags
+ * @dc_mask: pointer to the don't care mask
+ */
+static void ice_set_tcam_flags(u16 mask, u8 dc_mask[ICE_TCAM_KEY_VAL_SZ])
+{
+	u16 inverted_mask = ~mask;
+
+	/* flags are lowest u16 */
+	put_unaligned_le16(inverted_mask, dc_mask);
 }
 
 /**
@@ -3669,9 +3649,12 @@ ice_prof_tcam_ena_dis(struct ice_hw *hw, enum ice_block blk, bool enable,
 		return status;
 
 	/* add TCAM to change list */
-	p = devm_kzalloc(ice_hw_to_dev(hw), sizeof(*p), GFP_KERNEL);
+	p = devm_kzalloc_obj(ice_hw_to_dev(hw), *p);
 	if (!p)
 		return -ENOMEM;
+
+	/* set don't care masks for TCAM flags */
+	ice_set_tcam_flags(tcam->attr.mask, dc_msk);
 
 	status = ice_tcam_write_entry(hw, blk, tcam->tcam_idx, tcam->prof_id,
 				      tcam->ptg, vsig, 0, tcam->attr.flags,
@@ -3699,6 +3682,34 @@ err_ice_prof_tcam_ena_dis:
 }
 
 /**
+ * ice_ptg_attr_in_use - determine if PTG and attribute pair is in use
+ * @ptg_attr: pointer to the PTG and attribute pair to check
+ * @ptgs_used: bitmap that denotes which PTGs are in use
+ * @attr_used: array of PTG and attributes pairs already used
+ * @attr_cnt: count of entries in the attr_used array
+ *
+ * Return: true if the PTG and attribute pair is in use, false otherwise.
+ */
+static bool
+ice_ptg_attr_in_use(struct ice_tcam_inf *ptg_attr, unsigned long *ptgs_used,
+		    struct ice_tcam_inf *attr_used[], u16 attr_cnt)
+{
+	u16 i;
+
+	if (!test_bit(ptg_attr->ptg, ptgs_used))
+		return false;
+
+	/* the PTG is used, so now look for correct attributes */
+	for (i = 0; i < attr_cnt; i++)
+		if (attr_used[i]->ptg == ptg_attr->ptg &&
+		    attr_used[i]->attr.flags == ptg_attr->attr.flags &&
+		    attr_used[i]->attr.mask == ptg_attr->attr.mask)
+			return true;
+
+	return false;
+}
+
+/**
  * ice_adj_prof_priorities - adjust profile based on priorities
  * @hw: pointer to the HW struct
  * @blk: hardware block
@@ -3710,9 +3721,15 @@ ice_adj_prof_priorities(struct ice_hw *hw, enum ice_block blk, u16 vsig,
 			struct list_head *chg)
 {
 	DECLARE_BITMAP(ptgs_used, ICE_XLT1_CNT);
+	struct ice_tcam_inf **attr_used;
 	struct ice_vsig_prof *t;
-	int status;
+	u16 attr_used_cnt = 0;
+	int status = 0;
 	u16 idx;
+
+	attr_used = kzalloc_objs(*attr_used, ICE_MAX_PTG_ATTRS);
+	if (!attr_used)
+		return -ENOMEM;
 
 	bitmap_zero(ptgs_used, ICE_XLT1_CNT);
 	idx = vsig & ICE_VSIG_IDX_M;
@@ -3731,11 +3748,15 @@ ice_adj_prof_priorities(struct ice_hw *hw, enum ice_block blk, u16 vsig,
 		u16 i;
 
 		for (i = 0; i < t->tcam_count; i++) {
+			bool used;
+
 			/* Scan the priorities from newest to oldest.
 			 * Make sure that the newest profiles take priority.
 			 */
-			if (test_bit(t->tcam[i].ptg, ptgs_used) &&
-			    t->tcam[i].in_use) {
+			used = ice_ptg_attr_in_use(&t->tcam[i], ptgs_used,
+						   attr_used, attr_used_cnt);
+
+			if (used && t->tcam[i].in_use) {
 				/* need to mark this PTG as never match, as it
 				 * was already in use and therefore duplicate
 				 * (and lower priority)
@@ -3745,9 +3766,8 @@ ice_adj_prof_priorities(struct ice_hw *hw, enum ice_block blk, u16 vsig,
 							       &t->tcam[i],
 							       chg);
 				if (status)
-					return status;
-			} else if (!test_bit(t->tcam[i].ptg, ptgs_used) &&
-				   !t->tcam[i].in_use) {
+					goto free_attr_used;
+			} else if (!used && !t->tcam[i].in_use) {
 				/* need to enable this PTG, as it in not in use
 				 * and not enabled (highest priority)
 				 */
@@ -3756,15 +3776,21 @@ ice_adj_prof_priorities(struct ice_hw *hw, enum ice_block blk, u16 vsig,
 							       &t->tcam[i],
 							       chg);
 				if (status)
-					return status;
+					goto free_attr_used;
 			}
 
 			/* keep track of used ptgs */
-			__set_bit(t->tcam[i].ptg, ptgs_used);
+			set_bit(t->tcam[i].ptg, ptgs_used);
+			if (attr_used_cnt < ICE_MAX_PTG_ATTRS)
+				attr_used[attr_used_cnt++] = &t->tcam[i];
+			else
+				ice_debug(hw, ICE_DBG_INIT, "Warn: ICE_MAX_PTG_ATTRS exceeded\n");
 		}
 	}
 
-	return 0;
+free_attr_used:
+	kfree(attr_used);
+	return status;
 }
 
 /**
@@ -3795,7 +3821,7 @@ ice_add_prof_id_vsig(struct ice_hw *hw, enum ice_block blk, u16 vsig, u64 hdl,
 		return -EEXIST;
 
 	/* new VSIG profile structure */
-	t = devm_kzalloc(ice_hw_to_dev(hw), sizeof(*t), GFP_KERNEL);
+	t = devm_kzalloc_obj(ice_hw_to_dev(hw), *t);
 	if (!t)
 		return -ENOMEM;
 
@@ -3816,7 +3842,7 @@ ice_add_prof_id_vsig(struct ice_hw *hw, enum ice_block blk, u16 vsig, u64 hdl,
 		u16 tcam_idx;
 
 		/* add TCAM to change list */
-		p = devm_kzalloc(ice_hw_to_dev(hw), sizeof(*p), GFP_KERNEL);
+		p = devm_kzalloc_obj(ice_hw_to_dev(hw), *p);
 		if (!p) {
 			status = -ENOMEM;
 			goto err_ice_add_prof_id_vsig;
@@ -3847,11 +3873,15 @@ ice_add_prof_id_vsig(struct ice_hw *hw, enum ice_block blk, u16 vsig, u64 hdl,
 		p->vsig = vsig;
 		p->tcam_idx = t->tcam[i].tcam_idx;
 
+		/* set don't care masks for TCAM flags */
+		ice_set_tcam_flags(t->tcam[i].attr.mask, dc_msk);
+
 		/* write the TCAM entry */
 		status = ice_tcam_write_entry(hw, blk, t->tcam[i].tcam_idx,
 					      t->tcam[i].prof_id,
-					      t->tcam[i].ptg, vsig, 0, 0,
-					      vl_msk, dc_msk, nm_msk);
+					      t->tcam[i].ptg, vsig, 0,
+					      t->tcam[i].attr.flags, vl_msk,
+					      dc_msk, nm_msk);
 		if (status) {
 			devm_kfree(ice_hw_to_dev(hw), p);
 			goto err_ice_add_prof_id_vsig;
@@ -3896,7 +3926,7 @@ ice_create_prof_id_vsig(struct ice_hw *hw, enum ice_block blk, u16 vsi, u64 hdl,
 	u16 new_vsig;
 	int status;
 
-	p = devm_kzalloc(ice_hw_to_dev(hw), sizeof(*p), GFP_KERNEL);
+	p = devm_kzalloc_obj(ice_hw_to_dev(hw), *p);
 	if (!p)
 		return -ENOMEM;
 
@@ -3984,7 +4014,7 @@ ice_find_prof_vsig(struct ice_hw *hw, enum ice_block blk, u64 hdl, u16 *vsig)
 
 	INIT_LIST_HEAD(&lst);
 
-	t = kzalloc(sizeof(*t), GFP_KERNEL);
+	t = kzalloc_obj(*t);
 	if (!t)
 		return false;
 
@@ -4165,9 +4195,6 @@ ice_flow_assoc_fdir_prof(struct ice_hw *hw, enum ice_block blk,
 	u16 vsi_num;
 	int status;
 
-	if (blk != ICE_BLK_FD)
-		return -EINVAL;
-
 	vsi_num = ice_get_hw_vsi_num(hw, dest_vsi);
 	status = ice_add_prof_id_flow(hw, blk, vsi_num, hdl);
 	if (status) {
@@ -4175,6 +4202,9 @@ ice_flow_assoc_fdir_prof(struct ice_hw *hw, enum ice_block blk,
 			  status);
 		return status;
 	}
+
+	if (blk != ICE_BLK_FD)
+		return 0;
 
 	vsi_num = ice_get_hw_vsi_num(hw, fdir_vsi);
 	status = ice_add_prof_id_flow(hw, blk, vsi_num, hdl);

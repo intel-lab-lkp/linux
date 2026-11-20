@@ -39,12 +39,13 @@ static unsigned long ma35d1_clkdiv_recalc_rate(struct clk_hw *hw, unsigned long 
 				   CLK_DIVIDER_ROUND_CLOSEST, dclk->width);
 }
 
-static long ma35d1_clkdiv_round_rate(struct clk_hw *hw, unsigned long rate, unsigned long *prate)
+static int ma35d1_clkdiv_determine_rate(struct clk_hw *hw,
+					struct clk_rate_request *req)
 {
 	struct ma35d1_adc_clk_div *dclk = to_ma35d1_adc_clk_div(hw);
 
-	return divider_round_rate(hw, rate, prate, dclk->table,
-				  dclk->width, CLK_DIVIDER_ROUND_CLOSEST);
+	return divider_determine_rate(hw, req, dclk->table, dclk->width,
+				      CLK_DIVIDER_ROUND_CLOSEST);
 }
 
 static int ma35d1_clkdiv_set_rate(struct clk_hw *hw, unsigned long rate, unsigned long parent_rate)
@@ -71,7 +72,7 @@ static int ma35d1_clkdiv_set_rate(struct clk_hw *hw, unsigned long rate, unsigne
 
 static const struct clk_ops ma35d1_adc_clkdiv_ops = {
 	.recalc_rate = ma35d1_clkdiv_recalc_rate,
-	.round_rate = ma35d1_clkdiv_round_rate,
+	.determine_rate = ma35d1_clkdiv_determine_rate,
 	.set_rate = ma35d1_clkdiv_set_rate,
 };
 
@@ -89,14 +90,14 @@ struct clk_hw *ma35d1_reg_adc_clkdiv(struct device *dev, const char *name,
 	int ret;
 	int i;
 
-	div = devm_kzalloc(dev, sizeof(*div), GFP_KERNEL);
+	div = devm_kzalloc_obj(dev, *div);
 	if (!div)
 		return ERR_PTR(-ENOMEM);
 
 	max_div = clk_div_mask(width) + 1;
 	min_div = 1;
 
-	table = devm_kcalloc(dev, max_div + 1, sizeof(*table), GFP_KERNEL);
+	table = devm_kzalloc_objs(dev, *table, max_div + 1);
 	if (!table)
 		return ERR_PTR(-ENOMEM);
 

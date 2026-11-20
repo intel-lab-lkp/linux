@@ -438,8 +438,7 @@ brcm_avs_get_freq_table(struct device *dev, struct private_data *priv)
 	 * We allocate space for the 5 different P-STATES AVS,
 	 * plus extra space for a terminating element.
 	 */
-	table = devm_kcalloc(dev, AVS_PSTATE_MAX + 1 + 1, sizeof(*table),
-			     GFP_KERNEL);
+	table = devm_kzalloc_objs(dev, *table, AVS_PSTATE_MAX + 1 + 1);
 	if (!table)
 		return ERR_PTR(-ENOMEM);
 
@@ -480,15 +479,13 @@ static bool brcm_avs_is_firmware_loaded(struct private_data *priv)
 
 static unsigned int brcm_avs_cpufreq_get(unsigned int cpu)
 {
-	struct cpufreq_policy *policy = cpufreq_cpu_get(cpu);
+	struct cpufreq_policy *policy __free(put_cpufreq_policy) = cpufreq_cpu_get(cpu);
 	struct private_data *priv;
 
 	if (!policy)
 		return 0;
 
 	priv = policy->driver_data;
-
-	cpufreq_cpu_put(policy);
 
 	return brcm_avs_get_frequency(priv->base);
 }
@@ -557,7 +554,7 @@ static int brcm_avs_prepare_init(struct platform_device *pdev)
 	int ret;
 
 	dev = &pdev->dev;
-	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
+	priv = devm_kzalloc_obj(dev, *priv);
 	if (!priv)
 		return -ENOMEM;
 
@@ -586,11 +583,8 @@ static int brcm_avs_prepare_init(struct platform_device *pdev)
 	ret = devm_request_irq(dev, priv->host_irq, irq_handler,
 			       IRQF_TRIGGER_RISING,
 			       BRCM_AVS_HOST_INTR, priv);
-	if (ret && priv->host_irq >= 0) {
-		dev_err(dev, "IRQ request failed: %s (%d) -- %d\n",
-			BRCM_AVS_HOST_INTR, priv->host_irq, ret);
+	if (ret && priv->host_irq >= 0)
 		goto unmap_intr_base;
-	}
 
 	if (brcm_avs_is_firmware_loaded(priv))
 		return 0;
@@ -765,7 +759,7 @@ static void brcm_avs_cpufreq_remove(struct platform_device *pdev)
 }
 
 static const struct of_device_id brcm_avs_cpufreq_match[] = {
-	{ .compatible = BRCM_AVS_CPU_DATA },
+	{ .compatible = "brcm,avs-cpu-data-mem" },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, brcm_avs_cpufreq_match);

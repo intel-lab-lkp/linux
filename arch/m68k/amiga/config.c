@@ -16,12 +16,10 @@
 #include <linux/kernel.h>
 #include <linux/mm.h>
 #include <linux/seq_file.h>
-#include <linux/tty.h>
 #include <linux/clocksource.h>
 #include <linux/console.h>
 #include <linux/rtc.h>
 #include <linux/init.h>
-#include <linux/vt_kern.h>
 #include <linux/delay.h>
 #include <linux/interrupt.h>
 #include <linux/zorro.h>
@@ -98,7 +96,7 @@ static char amiga_model_name[13] = "Amiga ";
 static void amiga_sched_init(void);
 static void amiga_get_model(char *model);
 static void amiga_get_hardware_list(struct seq_file *m);
-static void amiga_reset(void);
+static void amiga_reset(void) __noreturn;
 static void amiga_mem_console_write(struct console *co, const char *b,
 				    unsigned int count);
 #ifdef CONFIG_HEARTBEAT
@@ -544,8 +542,6 @@ static u64 amiga_read_clk(struct clocksource *cs)
 
 	return ticks;
 }
-
-static void amiga_reset(void)  __noreturn;
 
 static void amiga_reset(void)
 {

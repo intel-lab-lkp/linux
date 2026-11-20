@@ -3,6 +3,8 @@
 #ifndef __SND_AR_TOKENS_H__
 #define __SND_AR_TOKENS_H__
 
+#include <linux/types.h>
+
 #define APM_SUB_GRAPH_PERF_MODE_LOW_POWER	0x1
 #define APM_SUB_GRAPH_PERF_MODE_LOW_LATENCY	0x2
 
@@ -56,7 +58,7 @@ enum ar_event_types {
 #define SND_SOC_AR_TPLG_FE_BE_GRAPH_CTL_MIX	256
 #define SND_SOC_AR_TPLG_VOL_CTL			257
 
-/**
+/*
  * %AR_TKN_U32_SUB_GRAPH_INSTANCE_ID:		Sub Graph Instance Id
  *
  * %AR_TKN_U32_SUB_GRAPH_PERF_MODE:		Performance mode of subgraph
@@ -118,6 +120,12 @@ enum ar_event_types {
  *						LPAIF_WSA = 2,
  *						LPAIF_VA = 3,
  *						LPAIF_AXI = 4
+ * Possible values for MI2S
+ *						I2S_INTF_TYPE_PRIMARY = 0,
+ *						I2S_INTF_TYPE_SECONDARY = 1,
+ *						I2S_INTF_TYPE_TERTIARY = 2,
+ *						I2S_INTF_TYPE_QUATERNARY = 3,
+ *						I2S_INTF_TYPE_QUINARY = 4,
  *
  * %AR_TKN_U32_MODULE_FMT_INTERLEAVE:		PCM Interleaving
  *						PCM_INTERLEAVED = 1,
@@ -160,6 +168,60 @@ enum ar_event_types {
  *						LOG_WAIT = 0,
  *						LOG_IMMEDIATELY = 1
  *
+ * %AR_TKN_U16_MODULE_SYNC_SRC:			Frame sync source
+ *						AR_AUDIO_IF_SYNC_SRC_EXTERNAL = 0,
+ *						AR_AUDIO_IF_SYNC_SRC_INTERNAL = 1
+ *
+ * %AR_TKN_U16_MODULE_CTRL_DATA_OUT_ENABLE:	Enable data-out tri-state control
+ *						AR_AUDIO_IF_CTRL_DATA_OE_DISABLE = 0,
+ *						AR_AUDIO_IF_CTRL_DATA_OE_ENABLE = 1
+ *
+ * %AR_TKN_U32_MODULE_SLOT_MASK:			Active TDM slot bitmask
+ *
+ * %AR_TKN_U16_MODULE_NSLOTS_PER_FRAME:		Number of slots per TDM frame
+ *
+ * %AR_TKN_U16_MODULE_SLOT_WIDTH:		Slot width in bits (16 or 32)
+ *
+ * %AR_TKN_U16_MODULE_SYNC_MODE:			Frame sync mode
+ *						AR_AUDIO_IF_FRAME_SYNC_MODE_SHORT = 0,
+ *						AR_AUDIO_IF_FRAME_SYNC_MODE_ONE_SLOT = 1,
+ *						AR_AUDIO_IF_FRAME_SYNC_MODE_LONG = 2
+ *
+ * %AR_TKN_U16_MODULE_CTRL_INVERT_SYNC_PULSE:	Invert frame sync pulse polarity
+ *						AR_AUDIO_IF_SYNC_NORMAL = 0,
+ *						AR_AUDIO_IF_SYNC_INVERTED = 1
+ *
+ * %AR_TKN_U16_MODULE_CTRL_SYNC_DATA_DELAY:	Data delay relative to frame sync
+ *						AR_AUDIO_IF_DATA_DELAY_NONE = 0,
+ *						AR_AUDIO_IF_DATA_DELAY_1_CYCLE = 1,
+ *						AR_AUDIO_IF_DATA_DELAY_2_CYCLE = 2
+ *
+ * %AR_TKN_U16_MODULE_INTF_MODE:			Audio IF interface mode
+ *						AR_AUDIO_IF_INTF_MODE_TDM = 0,
+ *						AR_AUDIO_IF_INTF_MODE_PCM = 1,
+ *						AR_AUDIO_IF_INTF_MODE_I2S = 2
+ *
+ * %AR_TKN_U16_MODULE_QAIF_TYPE:			QAIF hardware port type index
+ *						AR_AUDIO_IF_QAIF = 0,
+ *						AR_AUDIO_IF_QAIF_VA = 1
+ *
+ * %AR_TKN_U32_MODULE_ACTIVE_LANE_MASK:		Active lane bitmask for multi-lane
+ *
+ * %AR_TKN_U32_MODULE_FRAME_SYNC_RATE:		Frame sync rate in Hz
+ *
+ * %AR_TKN_U16_MODULE_BIT_CLK_TYPE:		Bit clock type
+ *						AR_AUDIO_IF_BIT_CLK_INTERNAL = 0,
+ *						AR_AUDIO_IF_BIT_CLK_EXTERNAL = 1,
+ *						AR_AUDIO_IF_BIT_CLK_SKIP = 2
+ *
+ * %AR_TKN_U8_MODULE_INV_INT_BIT_CLK:		Invert internal bit clock
+ *						AR_AUDIO_IF_CLK_NORMAL = 0,
+ *						AR_AUDIO_IF_CLK_INVERTED = 1
+ *
+ * %AR_TKN_U8_MODULE_INV_EXT_BIT_CLK:		Invert external bit clock
+ *						AR_AUDIO_IF_CLK_NORMAL = 0,
+ *						AR_AUDIO_IF_CLK_INVERTED = 1
+ *
  * %AR_TKN_DAI_INDEX:				dai index
  *
  */
@@ -184,8 +246,8 @@ enum ar_event_types {
 #define AR_TKN_U32_MODULE_INSTANCE_ID		201
 #define AR_TKN_U32_MODULE_MAX_IP_PORTS		202
 #define AR_TKN_U32_MODULE_MAX_OP_PORTS		203
-#define AR_TKN_U32_MODULE_IN_PORTS		204
-#define AR_TKN_U32_MODULE_OUT_PORTS		205
+#define AR_TKN_U32_MODULE_IN_PORTS		204 /* deprecated */
+#define AR_TKN_U32_MODULE_OUT_PORTS		205 /* deprecated */
 #define AR_TKN_U32_MODULE_SRC_OP_PORT_ID	206
 #define AR_TKN_U32_MODULE_DST_IN_PORT_ID	207
 #define AR_TKN_U32_MODULE_SRC_INSTANCE_ID	208
@@ -231,5 +293,52 @@ enum ar_event_types {
 #define AR_TKN_U32_MODULE_LOG_CODE		259
 #define AR_TKN_U32_MODULE_LOG_TAP_POINT_ID	260
 #define AR_TKN_U32_MODULE_LOG_MODE		261
+
+#define AR_TKN_U16_MODULE_SYNC_SRC		262
+#define AR_TKN_U16_MODULE_CTRL_DATA_OUT_ENABLE	263
+#define AR_TKN_U32_MODULE_SLOT_MASK		264
+#define AR_TKN_U16_MODULE_NSLOTS_PER_FRAME	265
+#define AR_TKN_U16_MODULE_SLOT_WIDTH		266
+#define AR_TKN_U16_MODULE_SYNC_MODE		267
+#define AR_TKN_U16_MODULE_CTRL_INVERT_SYNC_PULSE	268
+#define AR_TKN_U16_MODULE_CTRL_SYNC_DATA_DELAY	269
+#define AR_TKN_U16_MODULE_INTF_MODE		270
+#define AR_TKN_U16_MODULE_QAIF_TYPE		271
+#define AR_TKN_U32_MODULE_ACTIVE_LANE_MASK	272
+#define AR_TKN_U32_MODULE_FRAME_SYNC_RATE	273
+#define AR_TKN_U16_MODULE_BIT_CLK_TYPE		274
+#define AR_TKN_U8_MODULE_INV_INT_BIT_CLK	275
+#define AR_TKN_U8_MODULE_INV_EXT_BIT_CLK	276
+
+#define AR_AUDIO_IF_SYNC_SRC_EXTERNAL		0
+#define AR_AUDIO_IF_SYNC_SRC_INTERNAL		1
+#define AR_AUDIO_IF_CTRL_DATA_OE_DISABLE	0
+#define AR_AUDIO_IF_CTRL_DATA_OE_ENABLE		1
+#define AR_AUDIO_IF_INTF_MODE_TDM		0
+#define AR_AUDIO_IF_INTF_MODE_PCM		1
+#define AR_AUDIO_IF_INTF_MODE_I2S		2
+#define AR_AUDIO_IF_QAIF			0
+#define AR_AUDIO_IF_QAIF_VA			1
+#define AR_AUDIO_IF_FRAME_SYNC_MODE_SHORT	0
+#define AR_AUDIO_IF_FRAME_SYNC_MODE_ONE_SLOT	1
+#define AR_AUDIO_IF_FRAME_SYNC_MODE_LONG	2
+#define AR_AUDIO_IF_SYNC_NORMAL			0
+#define AR_AUDIO_IF_SYNC_INVERTED		1
+#define AR_AUDIO_IF_DATA_DELAY_NONE		0
+#define AR_AUDIO_IF_DATA_DELAY_1_CYCLE		1
+#define AR_AUDIO_IF_DATA_DELAY_2_CYCLE		2
+#define AR_AUDIO_IF_BIT_CLK_INTERNAL		0
+#define AR_AUDIO_IF_BIT_CLK_EXTERNAL		1
+#define AR_AUDIO_IF_BIT_CLK_SKIP		2
+#define AR_AUDIO_IF_CLK_NORMAL			0
+#define AR_AUDIO_IF_CLK_INVERTED		1
+
+#define SND_SOC_AR_TPLG_MODULE_CFG_TYPE 0x01001006
+struct audioreach_module_priv_data {
+	__le32 size;	/* size in bytes of the array, including all elements */
+	__le32 type;	/* SND_SOC_AR_TPLG_MODULE_CFG_TYPE */
+	__le32 priv[2];	/* Private data for future expansion */
+	__le32 data[0];	/* config data */
+};
 
 #endif /* __SND_AR_TOKENS_H__ */

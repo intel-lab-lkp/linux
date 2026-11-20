@@ -127,6 +127,9 @@ static int nf_trace_fill_ct_info(struct sk_buff *nlskb,
 		if (nla_put_be32(nlskb, NFTA_TRACE_CT_ID, (__force __be32)id))
 			return -1;
 
+		/* Kernel implementation detail, withhold this from userspace for now */
+		status &= ~IPS_NAT_CLASH;
+
 		if (status && nla_put_be32(nlskb, NFTA_TRACE_CT_STATUS, htonl(status)))
 			return -1;
 	}
@@ -224,8 +227,10 @@ static const struct nft_chain *nft_trace_get_chain(const struct nft_rule_dp *rul
 
 	last = (const struct nft_rule_dp_last *)rule;
 
-	if (WARN_ON_ONCE(!last->chain))
+	if (unlikely(!last->chain)) {
+		DEBUG_NET_WARN_ON_ONCE(1);
 		return &info->basechain->chain;
+	}
 
 	return last->chain;
 }
@@ -351,7 +356,7 @@ void nft_trace_notify(const struct nft_pktinfo *pkt,
 	return;
 
  nla_put_failure:
-	WARN_ON_ONCE(1);
+	DEBUG_NET_WARN_ON_ONCE(1);
 	kfree_skb(skb);
 }
 

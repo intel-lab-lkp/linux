@@ -69,6 +69,10 @@
 #define IFF_NAPI_FRAGS	0x0020
 /* Used in TUNSETIFF to bring up tun/tap without carrier */
 #define IFF_NO_CARRIER	0x0040
+/* Stop the queue instead of dropping when the internal ring is full, so an
+ * attached qdisc applies backpressure instead of being bypassed.
+ */
+#define IFF_BACKPRESSURE	0x0080
 #define IFF_NO_PI	0x1000
 /* This flag has no real effect */
 #define IFF_ONE_QUEUE	0x2000
@@ -92,6 +96,15 @@
 #define TUN_F_UFO	0x10	/* I can handle UFO packets */
 #define TUN_F_USO4	0x20	/* I can handle USO for IPv4 packets */
 #define TUN_F_USO6	0x40	/* I can handle USO for IPv6 packets */
+
+/* I can handle TSO/USO for UDP tunneled packets */
+#define TUN_F_UDP_TUNNEL_GSO		0x080
+
+/*
+ * I can handle TSO/USO for UDP tunneled packets requiring csum offload for
+ * the outer header
+ */
+#define TUN_F_UDP_TUNNEL_GSO_CSUM	0x100
 
 /* Protocol info prepended to the packets (when IFF_NO_PI is not set) */
 #define TUN_PKT_STRIP	0x0001

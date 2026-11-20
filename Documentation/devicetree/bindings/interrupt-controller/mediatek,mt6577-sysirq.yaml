@@ -21,6 +21,7 @@ properties:
           - enum:
               - mediatek,mt2701-sysirq
               - mediatek,mt2712-sysirq
+              - mediatek,mt6572-sysirq
               - mediatek,mt6580-sysirq
               - mediatek,mt6582-sysirq
               - mediatek,mt6589-sysirq
@@ -48,7 +49,8 @@ properties:
   interrupt-controller: true
 
   "#interrupt-cells":
-    $ref: arm,gic.yaml#/properties/#interrupt-cells
+    const: 3
+    description: The cells have the same encoding as defined in arm,gic.yaml.
 
 required:
   - reg

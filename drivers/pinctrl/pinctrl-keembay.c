@@ -135,6 +135,11 @@ struct keembay_pin_soc {
 	const struct pinctrl_pin_desc *pins;
 };
 
+struct keembay_pinfunction {
+	struct pinfunction func;
+	u8 mux_mode;
+};
+
 static const struct pinctrl_pin_desc keembay_pins[] = {
 	KEEMBAY_PIN_DESC(0, "GPIO0",
 			 KEEMBAY_MUX(0x0, "I2S0_M0"),
@@ -930,7 +935,7 @@ static int keembay_set_mux(struct pinctrl_dev *pctldev, unsigned int fun_sel,
 			   unsigned int grp_sel)
 {
 	struct keembay_pinctrl *kpc = pinctrl_dev_get_drvdata(pctldev);
-	struct function_desc *func;
+	const struct function_desc *func;
 	struct group_desc *grp;
 	unsigned int val;
 	u8 pin_mode;
@@ -1188,7 +1193,7 @@ static int keembay_gpio_get(struct gpio_chip *gc, unsigned int pin)
 	return keembay_read_pin(kpc->base0 + offset, pin);
 }
 
-static void keembay_gpio_set(struct gpio_chip *gc, unsigned int pin, int val)
+static int keembay_gpio_set(struct gpio_chip *gc, unsigned int pin, int val)
 {
 	struct keembay_pinctrl *kpc = gpiochip_get_data(gc);
 	unsigned int reg_val;
@@ -1200,6 +1205,8 @@ static void keembay_gpio_set(struct gpio_chip *gc, unsigned int pin, int val)
 	else
 		keembay_write_gpio_reg(~reg_val | BIT(pin % KEEMBAY_GPIO_MAX_PER_REG),
 				       kpc->base0 + KEEMBAY_GPIO_DATA_LOW, pin);
+
+	return 0;
 }
 
 static int keembay_gpio_get_direction(struct gpio_chip *gc, unsigned int pin)
@@ -1231,9 +1238,8 @@ static int keembay_gpio_set_direction_out(struct gpio_chip *gc,
 	val = keembay_read_reg(kpc->base1 + KEEMBAY_GPIO_MODE, pin);
 	val &= ~KEEMBAY_GPIO_MODE_DIR;
 	keembay_write_reg(val, kpc->base1 + KEEMBAY_GPIO_MODE, pin);
-	keembay_gpio_set(gc, pin, value);
 
-	return 0;
+	return keembay_gpio_set(gc, pin, value);
 }
 
 static void keembay_gpio_irq_handler(struct irq_desc *desc)
@@ -1465,8 +1471,9 @@ static int keembay_gpiochip_probe(struct keembay_pinctrl *kpc,
 	girq->chip		= &keembay_gpio_irqchip;
 	girq->parent_handler	= keembay_gpio_irq_handler;
 	girq->num_parents	= KEEMBAY_GPIO_NUM_IRQ;
-	girq->parents		= devm_kcalloc(kpc->dev, girq->num_parents,
-					       sizeof(*girq->parents), GFP_KERNEL);
+	girq->parents		= devm_kzalloc_objs(kpc->dev,
+							 *girq->parents,
+							 girq->num_parents);
 
 	if (!girq->parents)
 		return -ENOMEM;
@@ -1521,7 +1528,7 @@ static int keembay_build_groups(struct keembay_pinctrl *kpc)
 	unsigned int i;
 
 	kpc->ngroups = kpc->npins;
-	grp = devm_kcalloc(kpc->dev, kpc->ngroups, sizeof(*grp), GFP_KERNEL);
+	grp = devm_kzalloc_objs(kpc->dev, *grp, kpc->ngroups);
 	if (!grp)
 		return -ENOMEM;
 
@@ -1555,19 +1562,19 @@ static int keembay_pinctrl_reg(struct keembay_pinctrl *kpc,  struct device *dev)
 }
 
 static int keembay_add_functions(struct keembay_pinctrl *kpc,
-				 struct function_desc *functions)
+				 struct keembay_pinfunction *functions)
 {
 	unsigned int i;
 
 	/* Assign the groups for each function */
 	for (i = 0; i < kpc->nfuncs; i++) {
-		struct function_desc *func = &functions[i];
+		struct keembay_pinfunction *func = &functions[i];
 		const char **group_names;
 		unsigned int grp_idx = 0;
 		int j;
 
-		group_names = devm_kcalloc(kpc->dev, func->func.ngroups,
-					   sizeof(*group_names), GFP_KERNEL);
+		group_names = devm_kzalloc_objs(kpc->dev, *group_names,
+						func->func.ngroups);
 		if (!group_names)
 			return -ENOMEM;
 
@@ -1585,20 +1592,16 @@ static int keembay_add_functions(struct keembay_pinctrl *kpc,
 	}
 
 	/* Add all functions */
-	for (i = 0; i < kpc->nfuncs; i++) {
-		pinmux_generic_add_function(kpc->pctrl,
-					    functions[i].func.name,
-					    functions[i].func.groups,
-					    functions[i].func.ngroups,
-					    functions[i].data);
-	}
+	for (i = 0; i < kpc->nfuncs; i++)
+		pinmux_generic_add_pinfunction(kpc->pctrl, &functions[i].func,
+					       &functions[i].mux_mode);
 
 	return 0;
 }
 
 static int keembay_build_functions(struct keembay_pinctrl *kpc)
 {
-	struct function_desc *keembay_funcs, *new_funcs;
+	struct keembay_pinfunction *keembay_funcs, *new_funcs;
 	int i;
 
 	/*
@@ -1606,7 +1609,8 @@ static int keembay_build_functions(struct keembay_pinctrl *kpc)
 	 * being part of 8 (hw maximum) globally unique muxes.
 	 */
 	kpc->nfuncs = 0;
-	keembay_funcs = kcalloc(kpc->npins * 8, sizeof(*keembay_funcs), GFP_KERNEL);
+	keembay_funcs = devm_kzalloc_objs(kpc->dev, *keembay_funcs,
+					  kpc->npins * 8);
 	if (!keembay_funcs)
 		return -ENOMEM;
 
@@ -1616,7 +1620,7 @@ static int keembay_build_functions(struct keembay_pinctrl *kpc)
 		struct keembay_mux_desc *mux;
 
 		for (mux = pdesc->drv_data; mux->name; mux++) {
-			struct function_desc *fdesc;
+			struct keembay_pinfunction *fdesc;
 
 			/* Check if we already have function for this mux */
 			for (fdesc = keembay_funcs; fdesc->func.name; fdesc++) {
@@ -1630,18 +1634,18 @@ static int keembay_build_functions(struct keembay_pinctrl *kpc)
 			if (!fdesc->func.name) {
 				fdesc->func.name = mux->name;
 				fdesc->func.ngroups = 1;
-				fdesc->data = &mux->mode;
+				fdesc->mux_mode = mux->mode;
 				kpc->nfuncs++;
 			}
 		}
 	}
 
 	/* Reallocate memory based on actual number of functions */
-	new_funcs = krealloc(keembay_funcs, kpc->nfuncs * sizeof(*new_funcs), GFP_KERNEL);
-	if (!new_funcs) {
-		kfree(keembay_funcs);
+	new_funcs = devm_krealloc_array(kpc->dev, keembay_funcs,
+					kpc->nfuncs, sizeof(*new_funcs),
+					GFP_KERNEL);
+	if (!new_funcs)
 		return -ENOMEM;
-	}
 
 	return keembay_add_functions(kpc, new_funcs);
 }
@@ -1662,7 +1666,7 @@ static int keembay_pinctrl_probe(struct platform_device *pdev)
 	struct keembay_pinctrl *kpc;
 	int ret;
 
-	kpc = devm_kzalloc(dev, sizeof(*kpc), GFP_KERNEL);
+	kpc = devm_kzalloc_obj(dev, *kpc);
 	if (!kpc)
 		return -ENOMEM;
 

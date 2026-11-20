@@ -2,6 +2,8 @@
 #include <linux/of.h>
 #include <linux/slab.h>
 
+#include <kunit/visibility.h>
+
 #include "of_private.h"
 
 /* true when node is initialized */
@@ -27,6 +29,7 @@ static void of_node_release(struct kobject *kobj)
 const struct kobj_type of_node_ktype = {
 	.release = of_node_release,
 };
+EXPORT_SYMBOL_IF_KUNIT(of_node_ktype);
 
 static ssize_t of_node_property_read(struct file *filp, struct kobject *kobj,
 				const struct bin_attribute *bin_attr, char *buf,
@@ -77,7 +80,7 @@ int __of_add_property_sysfs(struct device_node *np, struct property *pp)
 	pp->attr.attr.name = safe_name(&np->kobj, pp->name);
 	pp->attr.attr.mode = secure ? 0400 : 0444;
 	pp->attr.size = secure ? 0 : pp->length;
-	pp->attr.read_new = of_node_property_read;
+	pp->attr.read = of_node_property_read;
 
 	rc = sysfs_create_bin_file(&np->kobj, &pp->attr);
 	WARN(rc, "error adding attribute %s to node %pOF\n", pp->name, np);

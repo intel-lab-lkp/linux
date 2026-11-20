@@ -192,10 +192,10 @@ snd_vortex_create(struct snd_card *card, struct pci_dev *pci)
 
 // constructor -- see "Constructor" sub-section
 static int
-__snd_vortex_probe(struct pci_dev *pci, const struct pci_device_id *pci_id)
+snd_vortex_probe(struct pci_dev *pci, const struct pci_device_id *pci_id)
 {
 	static int dev;
-	struct snd_card *card;
+	struct snd_card *card __free(snd_card_free) = NULL;
 	vortex_t *chip;
 	int err;
 
@@ -220,7 +220,7 @@ __snd_vortex_probe(struct pci_dev *pci, const struct pci_device_id *pci_id)
 	snd_vortex_workaround(pci, pcifix[dev]);
 
 	// Card details needed in snd_vortex_midi
-	strcpy(card->driver, CARD_NAME_SHORT);
+	strscpy(card->driver, CARD_NAME_SHORT);
 	sprintf(card->shortname, "Aureal Vortex %s", CARD_NAME_SHORT);
 	sprintf(card->longname, "%s at 0x%lx irq %i",
 		card->shortname, chip->io, chip->irq);
@@ -270,7 +270,7 @@ __snd_vortex_probe(struct pci_dev *pci, const struct pci_device_id *pci_id)
 		snd_vortex_synth_arg_t *arg;
 
 		arg = SNDRV_SEQ_DEVICE_ARGPTR(wave);
-		strcpy(wave->name, "Aureal Synth");
+		strscpy(wave->name, "Aureal Synth");
 		arg->hwptr = vortex;
 		arg->index = 1;
 		arg->seq_ports = seq_ports[dev];
@@ -280,11 +280,11 @@ __snd_vortex_probe(struct pci_dev *pci, const struct pci_device_id *pci_id)
 
 	// (5)
 	err = pci_read_config_word(pci, PCI_DEVICE_ID, &chip->device);
-	if (err < 0)
-		return err;
+	if (err)
+		return pcibios_err_to_errno(err);
 	err = pci_read_config_word(pci, PCI_VENDOR_ID, &chip->vendor);
-	if (err < 0)
-		return err;
+	if (err)
+		return pcibios_err_to_errno(err);
 	chip->rev = pci->revision;
 #ifdef CHIP_AU8830
 	if ((chip->rev) != 0xfe && (chip->rev) != 0xfa) {
@@ -303,16 +303,11 @@ __snd_vortex_probe(struct pci_dev *pci, const struct pci_device_id *pci_id)
 		return err;
 	// (7)
 	pci_set_drvdata(pci, card);
+	card = NULL; /* probe succeeded, don't release as error */
 	dev++;
 	vortex_connect_default(chip, 1);
 	vortex_enable_int(chip);
 	return 0;
-}
-
-static int
-snd_vortex_probe(struct pci_dev *pci, const struct pci_device_id *pci_id)
-{
-	return snd_card_free_on_error(&pci->dev, __snd_vortex_probe(pci, pci_id));
 }
 
 // pci_driver definition

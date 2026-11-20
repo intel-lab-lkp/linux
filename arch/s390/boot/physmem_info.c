@@ -68,11 +68,11 @@ static int __diag260(unsigned long rx1, unsigned long rx2)
 	ry = 0x10; /* storage configuration */
 	exception = 1;
 	asm_inline volatile(
-		"	diag	%[rx],%[ry],0x260\n"
-		"0:	lhi	%[exc],0\n"
+		"0:	diag	%[rx],%[ry],0x260\n"
+		"	lhi	%[exc],0\n"
 		"1:\n"
 		CC_IPM(cc)
-		EX_TABLE(0b, 1b)
+		EX_TABLE_INSN(0b, 1b)
 		: CC_OUT(cc, cc), [exc] "+d" (exception), [ry] "+d" (ry)
 		: [rx] "d" (rx.pair)
 		: CC_CLOBBER_LIST("memory"));
@@ -108,9 +108,9 @@ static int diag500_storage_limit(unsigned long *max_physmem_end)
 	asm_inline volatile(
 		"	lghi	%%r1,%[subcode]\n"
 		"	lghi	%%r2,0\n"
-		"	diag	%%r2,%%r4,0x500\n"
-		"0:	lgr	%[slimit],%%r2\n"
-		EX_TABLE(0b, 0b)
+		"0:	diag	%%r2,%%r4,0x500\n"
+		"1:	lgr	%[slimit],%%r2\n"
+		EX_TABLE_INSN(0b, 1b)
 		: [slimit] "=d" (storage_limit)
 		: [subcode] "i" (DIAG500_SC_STOR_LIMIT)
 		: "memory", "1", "2");
@@ -127,11 +127,11 @@ static int tprot(unsigned long addr)
 
 	exception = 1;
 	asm_inline volatile(
-		"	tprot	0(%[addr]),0\n"
-		"0:	lhi	%[exc],0\n"
+		"0:	tprot	0(%[addr]),0\n"
+		"	lhi	%[exc],0\n"
 		"1:\n"
 		CC_IPM(cc)
-		EX_TABLE(0b, 1b)
+		EX_TABLE_INSN(0b, 1b)
 		: CC_OUT(cc, cc), [exc] "+d" (exception)
 		: [addr] "a" (addr)
 		: CC_CLOBBER_LIST("memory"));
@@ -141,7 +141,7 @@ static int tprot(unsigned long addr)
 
 static unsigned long search_mem_end(void)
 {
-	unsigned long range = 1 << (MAX_PHYSMEM_BITS - 20); /* in 1MB blocks */
+	unsigned long range = 1UL << (MAX_PHYSMEM_BITS - 20); /* in 1MB blocks */
 	unsigned long offset = 0;
 	unsigned long pivot;
 
@@ -228,9 +228,7 @@ static void die_oom(unsigned long size, unsigned long align, unsigned long min, 
 	boot_emerg("Usable online memory total: %lu Reserved: %lu Free: %lu\n",
 		   total_mem, total_reserved_mem,
 		   total_mem > total_reserved_mem ? total_mem - total_reserved_mem : 0);
-	print_stacktrace(current_frame_address());
-	boot_emerg(" -- System halted\n");
-	disabled_wait();
+	boot_panic("Oom\n");
 }
 
 static void _physmem_reserve(enum reserved_range_type type, unsigned long addr, unsigned long size)

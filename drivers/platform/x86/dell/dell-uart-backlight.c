@@ -275,7 +275,7 @@ static int dell_uart_bl_serdev_probe(struct serdev_device *serdev)
 	struct device *dev = &serdev->dev;
 	int ret;
 
-	dell_bl = devm_kzalloc(dev, sizeof(*dell_bl), GFP_KERNEL);
+	dell_bl = devm_kzalloc_obj(dev, *dell_bl);
 	if (!dell_bl)
 		return -ENOMEM;
 
@@ -305,7 +305,7 @@ static int dell_uart_bl_serdev_probe(struct serdev_device *serdev)
 	dev_dbg(dev, "Firmware version: %.*s\n", resp[RESP_LEN] - 3, resp + RESP_DATA);
 
 	/* Initialize bl_power to a known value */
-	ret = dell_uart_set_bl_power(dell_bl, FB_BLANK_UNBLANK);
+	ret = dell_uart_set_bl_power(dell_bl, BACKLIGHT_POWER_ON);
 	if (ret)
 		return ret;
 

@@ -105,11 +105,11 @@ static int lpass_platform_alloc_rxtx_dmactl_fields(struct device *dev,
 	struct lpaif_dmactl *rd_dmactl, *wr_dmactl;
 	int rval;
 
-	rd_dmactl = devm_kzalloc(dev, sizeof(*rd_dmactl), GFP_KERNEL);
+	rd_dmactl = devm_kzalloc_obj(dev, *rd_dmactl);
 	if (!rd_dmactl)
 		return -ENOMEM;
 
-	wr_dmactl = devm_kzalloc(dev, sizeof(*wr_dmactl), GFP_KERNEL);
+	wr_dmactl = devm_kzalloc_obj(dev, *wr_dmactl);
 	if (!wr_dmactl)
 		return -ENOMEM;
 
@@ -132,7 +132,7 @@ static int lpass_platform_alloc_va_dmactl_fields(struct device *dev,
 	const struct lpass_variant *v = drvdata->variant;
 	struct lpaif_dmactl *wr_dmactl;
 
-	wr_dmactl = devm_kzalloc(dev, sizeof(*wr_dmactl), GFP_KERNEL);
+	wr_dmactl = devm_kzalloc_obj(dev, *wr_dmactl);
 	if (!wr_dmactl)
 		return -ENOMEM;
 
@@ -150,13 +150,11 @@ static int lpass_platform_alloc_dmactl_fields(struct device *dev,
 	struct lpaif_dmactl *rd_dmactl, *wr_dmactl;
 	int rval;
 
-	drvdata->rd_dmactl = devm_kzalloc(dev, sizeof(struct lpaif_dmactl),
-					  GFP_KERNEL);
+	drvdata->rd_dmactl = devm_kzalloc_obj(dev, struct lpaif_dmactl);
 	if (drvdata->rd_dmactl == NULL)
 		return -ENOMEM;
 
-	drvdata->wr_dmactl = devm_kzalloc(dev, sizeof(struct lpaif_dmactl),
-					  GFP_KERNEL);
+	drvdata->wr_dmactl = devm_kzalloc_obj(dev, struct lpaif_dmactl);
 	if (drvdata->wr_dmactl == NULL)
 		return -ENOMEM;
 
@@ -179,7 +177,7 @@ static int lpass_platform_alloc_hdmidmactl_fields(struct device *dev,
 	const struct lpass_variant *v = drvdata->variant;
 	struct lpaif_dmactl *rd_dmactl;
 
-	rd_dmactl = devm_kzalloc(dev, sizeof(struct lpaif_dmactl), GFP_KERNEL);
+	rd_dmactl = devm_kzalloc_obj(dev, struct lpaif_dmactl);
 	if (rd_dmactl == NULL)
 		return -ENOMEM;
 
@@ -202,8 +200,7 @@ static int lpass_platform_pcmops_open(struct snd_soc_component *component,
 	struct regmap *map;
 	unsigned int dai_id = cpu_dai->driver->id;
 
-	component->id = dai_id;
-	data = kzalloc(sizeof(*data), GFP_KERNEL);
+	data = kzalloc_obj(*data);
 	if (!data)
 		return -ENOMEM;
 
@@ -1190,13 +1187,14 @@ static int lpass_platform_pcmops_suspend(struct snd_soc_component *component)
 {
 	struct lpass_data *drvdata = snd_soc_component_get_drvdata(component);
 	struct regmap *map;
-	unsigned int dai_id = component->id;
 
-	if (dai_id == LPASS_DP_RX)
+	if (drvdata->hdmi_port_enable) {
 		map = drvdata->hdmiif_map;
-	else
-		map = drvdata->lpaif_map;
+		regcache_cache_only(map, true);
+		regcache_mark_dirty(map);
+	}
 
+	map = drvdata->lpaif_map;
 	regcache_cache_only(map, true);
 	regcache_mark_dirty(map);
 
@@ -1207,14 +1205,19 @@ static int lpass_platform_pcmops_resume(struct snd_soc_component *component)
 {
 	struct lpass_data *drvdata = snd_soc_component_get_drvdata(component);
 	struct regmap *map;
-	unsigned int dai_id = component->id;
+	int ret;
 
-	if (dai_id == LPASS_DP_RX)
+	if (drvdata->hdmi_port_enable) {
 		map = drvdata->hdmiif_map;
-	else
-		map = drvdata->lpaif_map;
+		regcache_cache_only(map, false);
+		ret = regcache_sync(map);
+		if (ret)
+			return ret;
+	}
 
+	map = drvdata->lpaif_map;
 	regcache_cache_only(map, false);
+
 	return regcache_sync(map);
 }
 
@@ -1224,7 +1227,9 @@ static int lpass_platform_copy(struct snd_soc_component *component,
 			       unsigned long bytes)
 {
 	struct snd_pcm_runtime *rt = substream->runtime;
-	unsigned int dai_id = component->id;
+	struct snd_soc_pcm_runtime *soc_runtime = snd_soc_substream_to_rtd(substream);
+	struct snd_soc_dai *cpu_dai = snd_soc_rtd_to_cpu(soc_runtime, 0);
+	unsigned int dai_id = cpu_dai->driver->id;
 	int ret = 0;
 
 	void __iomem *dma_buf = (void __iomem *) (rt->dma_area + pos +
@@ -1261,7 +1266,7 @@ static const struct snd_soc_component_driver lpass_component_driver = {
 	.trigger	= lpass_platform_pcmops_trigger,
 	.pointer	= lpass_platform_pcmops_pointer,
 	.mmap		= lpass_platform_pcmops_mmap,
-	.pcm_construct	= lpass_platform_pcm_new,
+	.pcm_new	= lpass_platform_pcm_new,
 	.suspend		= lpass_platform_pcmops_suspend,
 	.resume			= lpass_platform_pcmops_resume,
 	.copy		= lpass_platform_copy,

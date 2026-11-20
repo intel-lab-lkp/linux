@@ -444,16 +444,6 @@ static int dln2_update_scan_mode(struct iio_dev *indio_dev,
 	lval.scan_type.endianness = IIO_LE;				\
 }
 
-/* Assignment version of IIO_CHAN_SOFT_TIMESTAMP */
-#define IIO_CHAN_SOFT_TIMESTAMP_ASSIGN(lval, _si) {	\
-	lval.type = IIO_TIMESTAMP;			\
-	lval.channel = -1;				\
-	lval.scan_index = _si;				\
-	lval.scan_type.sign = 's';			\
-	lval.scan_type.realbits = 64;			\
-	lval.scan_type.storagebits = 64;		\
-}
-
 static const struct iio_info dln2_adc_info = {
 	.read_raw = dln2_adc_read_raw,
 	.write_raw = dln2_adc_write_raw,
@@ -467,7 +457,7 @@ static irqreturn_t dln2_adc_trigger_h(int irq, void *p)
 	struct {
 		__le16 values[DLN2_ADC_MAX_CHANNELS];
 		aligned_s64 timestamp_space;
-	} data;
+	} data = { };
 	struct dln2_adc_get_all_vals dev_data;
 	struct dln2_adc *dln2 = iio_priv(indio_dev);
 	const struct dln2_adc_demux_table *t;
@@ -478,8 +468,6 @@ static irqreturn_t dln2_adc_trigger_h(int irq, void *p)
 	mutex_unlock(&dln2->mutex);
 	if (ret < 0)
 		goto done;
-
-	memset(&data, 0, sizeof(data));
 
 	/* Demux operation */
 	for (i = 0; i < dln2->demux_count; ++i) {
@@ -586,10 +574,8 @@ static int dln2_adc_probe(struct platform_device *pdev)
 	int i, ret, chans;
 
 	indio_dev = devm_iio_device_alloc(dev, sizeof(*dln2));
-	if (!indio_dev) {
-		dev_err(dev, "failed allocating iio device\n");
+	if (!indio_dev)
 		return -ENOMEM;
-	}
 
 	dln2 = iio_priv(indio_dev);
 	dln2->pdev = pdev;
@@ -618,7 +604,7 @@ static int dln2_adc_probe(struct platform_device *pdev)
 
 	for (i = 0; i < chans; ++i)
 		DLN2_ADC_CHAN(dln2->iio_channels[i], i)
-	IIO_CHAN_SOFT_TIMESTAMP_ASSIGN(dln2->iio_channels[i], i);
+	dln2->iio_channels[i] = IIO_CHAN_SOFT_TIMESTAMP(i);
 
 	indio_dev->name = DLN2_ADC_MOD_NAME;
 	indio_dev->info = &dln2_adc_info;
@@ -630,10 +616,9 @@ static int dln2_adc_probe(struct platform_device *pdev)
 	dln2->trig = devm_iio_trigger_alloc(dev, "%s-dev%d",
 					    indio_dev->name,
 					    iio_device_id(indio_dev));
-	if (!dln2->trig) {
-		dev_err(dev, "failed to allocate trigger\n");
+	if (!dln2->trig)
 		return -ENOMEM;
-	}
+
 	iio_trigger_set_drvdata(dln2->trig, dln2);
 	ret = devm_iio_trigger_register(dev, dln2->trig);
 	if (ret) {

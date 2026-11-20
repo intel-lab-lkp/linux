@@ -172,7 +172,7 @@ static const struct gpio_chip reference_gp = {
 	.label = "da9052-gpio",
 	.owner = THIS_MODULE,
 	.get = da9052_gpio_get,
-	.set_rv = da9052_gpio_set,
+	.set = da9052_gpio_set,
 	.direction_input = da9052_gpio_direction_input,
 	.direction_output = da9052_gpio_direction_output,
 	.to_irq = da9052_gpio_to_irq,
@@ -186,7 +186,7 @@ static int da9052_gpio_probe(struct platform_device *pdev)
 	struct da9052_gpio *gpio;
 	struct da9052_pdata *pdata;
 
-	gpio = devm_kzalloc(&pdev->dev, sizeof(*gpio), GFP_KERNEL);
+	gpio = devm_kzalloc_obj(&pdev->dev, *gpio);
 	if (!gpio)
 		return -ENOMEM;
 

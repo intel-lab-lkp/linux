@@ -62,7 +62,7 @@ static const struct bin_attribute *const konepure_bin_attrs[] = {
 };
 
 static const struct attribute_group konepure_group = {
-	.bin_attrs_new = konepure_bin_attrs,
+	.bin_attrs = konepure_bin_attrs,
 };
 
 static const struct attribute_group *konepure_groups[] = {
@@ -88,7 +88,7 @@ static int konepure_init_specials(struct hid_device *hdev)
 		return 0;
 	}
 
-	konepure = kzalloc(sizeof(*konepure), GFP_KERNEL);
+	konepure = kzalloc_obj(*konepure);
 	if (!konepure) {
 		hid_err(hdev, "can't alloc device descriptor\n");
 		return -ENOMEM;
@@ -179,6 +179,9 @@ static int konepure_raw_event(struct hid_device *hdev,
 
 	if (intf->cur_altsetting->desc.bInterfaceProtocol
 			!= USB_INTERFACE_PROTOCOL_MOUSE)
+		return 0;
+
+	if (size < sizeof(struct konepure_mouse_report_button))
 		return 0;
 
 	if (data[0] != KONEPURE_MOUSE_REPORT_NUMBER_BUTTON)

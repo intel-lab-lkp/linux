@@ -109,7 +109,7 @@ The template for each hypercall is:
 Usage:
 
 a0: guest physical address where host copies
-"struct kvm_clock_offset" structure.
+"struct kvm_clock_pairing" structure.
 
 a1: clock_type, ATM only KVM_CLOCK_PAIRING_WALLCLOCK (0)
 is supported (corresponding to the host's CLOCK_REALTIME clock).
@@ -137,7 +137,7 @@ compute the CLOCK_REALTIME for its clock, at the same instant.
 Returns KVM_EOPNOTSUPP if the host does not use TSC clocksource,
 or if clock type is different than KVM_CLOCK_PAIRING_WALLCLOCK.
 
-6. KVM_HC_SEND_IPI
+7. KVM_HC_SEND_IPI
 ------------------
 
 :Architecture: x86
@@ -158,7 +158,7 @@ corresponds to the APIC ID a2+1, and so on.
 
 Returns the number of CPUs to which the IPIs were delivered successfully.
 
-7. KVM_HC_SCHED_YIELD
+8. KVM_HC_SCHED_YIELD
 ---------------------
 
 :Architecture: x86
@@ -170,7 +170,7 @@ a0: destination APIC ID
 :Usage example: When sending a call-function IPI-many to vCPUs, yield if
 	        any of the IPI target vCPUs was preempted.
 
-8. KVM_HC_MAP_GPA_RANGE
+9. KVM_HC_MAP_GPA_RANGE
 -------------------------
 :Architecture: x86
 :Status: active

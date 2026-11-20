@@ -8,15 +8,6 @@
  * evenly when servicing a single client. May need to modify the
  * svc_xprt_enqueue procedure...
  *
- * TCP support is largely untested and may be a little slow. The problem
- * is that we currently do two separate recvfrom's, one for the 4-byte
- * record length, and the second for the actual record. This could possibly
- * be improved by always reading a minimum size of around 100 bytes and
- * tucking any superfluous bytes away in a temporary store. Still, that
- * leaves write requests out in the rain. An alternative may be to peek at
- * the first skb in the queue, and if it matches the next TCP sequence
- * number, to extract the record marker. Yuck.
- *
  * Copyright (C) 1995, 1996 Olaf Kirch <okir@monad.swb.de>
  */
 
@@ -67,6 +58,17 @@
 #include "sunrpc.h"
 
 #define RPCDBG_FACILITY	RPCDBG_SVCXPRT
+
+/*
+ * For UDP:
+ * 1 for header page
+ * enough pages for RPCSVC_MAXPAYLOAD_UDP
+ * 1 in case payload is not aligned
+ * 1 for tail page
+ */
+enum {
+	SUNRPC_MAX_UDP_SENDPAGES = 1 + RPCSVC_MAXPAYLOAD_UDP / PAGE_SIZE + 1 + 1
+};
 
 /* To-do: to avoid tying up an nfsd thread while waiting for a
  * handshake request, the request could instead be deferred.
@@ -227,111 +229,108 @@ static int svc_one_sock_name(struct svc_sock *svsk, char *buf, int remaining)
 	return len;
 }
 
-static int
-svc_tcp_sock_process_cmsg(struct socket *sock, struct msghdr *msg,
-			  struct cmsghdr *cmsg, int ret)
+/*
+ * The ->read_sock data path invokes neither security_socket_recvmsg()
+ * nor the sock:sock_recv_length tracepoint. Dispatch ->recvmsg
+ * directly so the whole receive path behaves one way.
+ */
+static int svc_tcp_recv_cmsg(struct socket *sock, int flags,
+			     struct kvec *payload, u8 *type,
+			     unsigned int *msg_flags)
 {
-	u8 content_type = tls_get_record_type(sock->sk, cmsg);
-	u8 level, description;
-
-	switch (content_type) {
-	case 0:
-		break;
-	case TLS_RECORD_TYPE_DATA:
-		/* TLS sets EOR at the end of each application data
-		 * record, even though there might be more frames
-		 * waiting to be decrypted.
-		 */
-		msg->msg_flags &= ~MSG_EOR;
-		break;
-	case TLS_RECORD_TYPE_ALERT:
-		tls_alert_recv(sock->sk, msg, &level, &description);
-		ret = (level == TLS_ALERT_LEVEL_FATAL) ?
-			-ENOTCONN : -EAGAIN;
-		break;
-	default:
-		/* discard this record type */
-		ret = -EAGAIN;
-	}
-	return ret;
-}
-
-static int
-svc_tcp_sock_recv_cmsg(struct svc_sock *svsk, struct msghdr *msg)
-{
+	const struct proto_ops *ops = READ_ONCE(sock->ops);
 	union {
 		struct cmsghdr	cmsg;
 		u8		buf[CMSG_SPACE(sizeof(u8))];
-	} u;
-	struct socket *sock = svsk->sk_sock;
+	} u = {};
+	struct msghdr msg = {
+		.msg_control	= &u,
+		.msg_controllen	= sizeof(u),
+	};
 	int ret;
 
-	msg->msg_control = &u;
-	msg->msg_controllen = sizeof(u);
-	ret = sock_recvmsg(sock, msg, MSG_DONTWAIT);
-	if (unlikely(msg->msg_controllen != sizeof(u)))
-		ret = svc_tcp_sock_process_cmsg(sock, msg, &u.cmsg, ret);
+	iov_iter_kvec(&msg.msg_iter, ITER_DEST, payload, 1, payload->iov_len);
+	ret = ops->recvmsg(sock, &msg, msg_data_left(&msg), flags);
+	if (ret < 0)
+		return ret;
+	*msg_flags = msg.msg_flags;
+	*type = tls_get_record_type(sock->sk, &u.cmsg);
+	if (!*type && ret)
+		return -EBADMSG;
 	return ret;
 }
 
-#if ARCH_IMPLEMENTS_FLUSH_DCACHE_PAGE
-static void svc_flush_bvec(const struct bio_vec *bvec, size_t size, size_t seek)
+static int svc_tcp_recv_ctrl_record(struct svc_sock *svsk)
 {
-	struct bvec_iter bi = {
-		.bi_size	= size + seek,
+	u8 alert[2], type, level, description;
+	struct socket *sock = svsk->sk_sock;
+	struct kvec recv_kvec = {
+		.iov_base	= alert,
+		.iov_len	= sizeof(alert),
 	};
-	struct bio_vec bv;
+	unsigned int msg_flags;
+	struct msghdr msg = {};
+	int ret;
 
-	bvec_iter_advance(bvec, &bi, seek & PAGE_MASK);
-	for_each_bvec(bv, bvec, bi, bi)
-		flush_dcache_page(bv.bv_page);
-}
-#else
-static inline void svc_flush_bvec(const struct bio_vec *bvec, size_t size,
-				  size_t seek)
-{
-}
-#endif
+	if (!test_bit(XPT_TLS_SESSION, &svsk->sk_xprt.xpt_flags))
+		return 0;
 
-/*
- * Read from @rqstp's transport socket. The incoming message fills whole
- * pages in @rqstp's rq_pages array until the last page of the message
- * has been received into a partial page.
- */
-static ssize_t svc_tcp_read_msg(struct svc_rqst *rqstp, size_t buflen,
-				size_t seek)
-{
-	struct svc_sock *svsk =
-		container_of(rqstp->rq_xprt, struct svc_sock, sk_xprt);
-	struct bio_vec *bvec = rqstp->rq_bvec;
-	struct msghdr msg = { NULL };
-	unsigned int i;
-	ssize_t len;
-	size_t t;
-
-	clear_bit(XPT_DATA, &svsk->sk_xprt.xpt_flags);
-
-	for (i = 0, t = 0; t < buflen; i++, t += PAGE_SIZE)
-		bvec_set_page(&bvec[i], rqstp->rq_pages[i], PAGE_SIZE, 0);
-	rqstp->rq_respages = &rqstp->rq_pages[i];
-	rqstp->rq_next_page = rqstp->rq_respages + 1;
-
-	iov_iter_bvec(&msg.msg_iter, ITER_DEST, bvec, i, buflen);
-	if (seek) {
-		iov_iter_advance(&msg.msg_iter, seek);
-		buflen -= seek;
-	}
-	len = svc_tcp_sock_recv_cmsg(svsk, &msg);
-	if (len > 0)
-		svc_flush_bvec(bvec, len, seek);
-
-	/* If we read a full record, then assume there may be more
-	 * data to read (stream based sockets only!)
+	/* A data record can become ready between ->read_sock returning
+	 * and this probe. A plain receive would take two octets of it
+	 * as RPC payload, so peek.
 	 */
-	if (len == buflen)
+	ret = svc_tcp_recv_cmsg(sock, MSG_DONTWAIT | MSG_PEEK,
+				&recv_kvec, &type, &msg_flags);
+	if (ret == -EAGAIN || (!ret && !type))
+		return 0;
+	if (ret < 0)
+		return ret;
+	if (type == TLS_RECORD_TYPE_DATA) {
+		/* The peek parks the decrypted record on ctx->rx_list,
+		 * where it draws no further data_ready. Re-arm or the
+		 * RPC hangs until the client times out.
+		 */
 		set_bit(XPT_DATA, &svsk->sk_xprt.xpt_flags);
+		return 0;
+	}
+	if (type != TLS_RECORD_TYPE_ALERT)
+		return -EPROTO;
 
-	return len;
+	ret = svc_tcp_recv_cmsg(sock, MSG_DONTWAIT, &recv_kvec, &type,
+				&msg_flags);
+	/* The peek found a record at the head, so an -EAGAIN here is
+	 * spurious. Propagating it strands the record with no later
+	 * announcement, so return -EBADMSG, which closes the transport.
+	 */
+	if (ret == -EAGAIN)
+		return -EBADMSG;
+	if (ret < 0)
+		return ret;
+
+	/* An Alert record carries exactly one two-octet message (RFC
+	 * 8446 Section 5.1). recv_kvec caps the receive at two, so a
+	 * longer record produces the same count. MSG_EOR appears only
+	 * once kTLS has drained the whole record.
+	 */
+	if (ret != sizeof(alert) || !(msg_flags & MSG_EOR))
+		return -EBADMSG;
+
+	iov_iter_kvec(&msg.msg_iter, ITER_DEST, &recv_kvec, 1,
+		      recv_kvec.iov_len);
+	tls_alert_recv(sock->sk, &msg, &level, &description);
+
+	/* RFC 8446 Section 6: every alert but a closure alert is
+	 * an error alert. kTLS raises no data_ready for records it
+	 * already holds, so re-arm for what sits behind the alert.
+	 */
+	switch (description) {
+	case TLS_ALERT_DESC_CLOSE_NOTIFY:
+	case TLS_ALERT_DESC_USER_CANCELED:
+		set_bit(XPT_DATA, &svsk->sk_xprt.xpt_flags);
+		return -EAGAIN;
+	default:
+		return -ENOTCONN;
+	}
 }
 
 /*
@@ -353,10 +352,8 @@ static void svc_sock_setbufsize(struct svc_sock *svsk, unsigned int nreqs)
 
 static void svc_sock_secure_port(struct svc_rqst *rqstp)
 {
-	if (svc_port_is_privileged(svc_addr(rqstp)))
-		set_bit(RQ_SECURE, &rqstp->rq_flags);
-	else
-		clear_bit(RQ_SECURE, &rqstp->rq_flags);
+	assign_bit(RQ_SECURE, &rqstp->rq_flags,
+		   svc_port_is_privileged(svc_addr(rqstp)));
 }
 
 /*
@@ -435,6 +432,7 @@ static void svc_tcp_handshake_done(void *data, int status, key_serial_t peerid)
 	}
 	clear_bit(XPT_HANDSHAKE, &xprt->xpt_flags);
 	complete_all(&svsk->sk_handshake_done);
+	svc_xprt_put(xprt);
 }
 
 /**
@@ -458,9 +456,13 @@ static void svc_tcp_handshake(struct svc_xprt *xprt)
 	clear_bit(XPT_TLS_SESSION, &xprt->xpt_flags);
 	init_completion(&svsk->sk_handshake_done);
 
+	/* Pin the transport across the asynchronous handshake callback. */
+	svc_xprt_get(xprt);
+
 	ret = tls_server_hello_x509(&args, GFP_KERNEL);
 	if (ret) {
 		trace_svc_tls_not_started(xprt);
+		svc_xprt_put(xprt);
 		goto out_failed;
 	}
 
@@ -469,8 +471,13 @@ static void svc_tcp_handshake(struct svc_xprt *xprt)
 	if (ret <= 0) {
 		if (tls_handshake_cancel(sk)) {
 			trace_svc_tls_timed_out(xprt);
+			svc_xprt_put(xprt);
 			goto out_close;
 		}
+		/* Cancellation lost to handshake_complete(): the
+		 * callback is in flight and should finish quickly.
+		 */
+		wait_for_completion(&svsk->sk_handshake_done);
 	}
 
 	if (!test_bit(XPT_TLS_SESSION, &xprt->xpt_flags)) {
@@ -639,13 +646,9 @@ static int svc_udp_recvfrom(struct svc_rqst *rqstp)
 	if (len <= rqstp->rq_arg.head[0].iov_len) {
 		rqstp->rq_arg.head[0].iov_len = len;
 		rqstp->rq_arg.page_len = 0;
-		rqstp->rq_respages = rqstp->rq_pages+1;
 	} else {
 		rqstp->rq_arg.page_len = len - rqstp->rq_arg.head[0].iov_len;
-		rqstp->rq_respages = rqstp->rq_pages + 1 +
-			DIV_ROUND_UP(rqstp->rq_arg.page_len, PAGE_SIZE);
 	}
-	rqstp->rq_next_page = rqstp->rq_respages+1;
 
 	if (serv->sv_stats)
 		serv->sv_stats->netudpcnt++;
@@ -700,7 +703,7 @@ static int svc_udp_sendto(struct svc_rqst *rqstp)
 		.msg_flags	= MSG_SPLICE_PAGES,
 		.msg_controllen	= sizeof(buffer),
 	};
-	unsigned int count;
+	int count;
 	int err;
 
 	svc_udp_release_ctxt(xprt, rqstp->rq_xprt_ctxt);
@@ -713,18 +716,23 @@ static int svc_udp_sendto(struct svc_rqst *rqstp)
 	if (svc_xprt_is_dead(xprt))
 		goto out_notconn;
 
-	count = xdr_buf_to_bvec(rqstp->rq_bvec, rqstp->rq_maxpages, xdr);
+	count = xdr_buf_to_bvec(svsk->sk_bvec, SUNRPC_MAX_UDP_SENDPAGES, xdr);
+	if (count < 0) {
+		err = count;
+		goto out_trace;
+	}
 
-	iov_iter_bvec(&msg.msg_iter, ITER_SOURCE, rqstp->rq_bvec,
+	iov_iter_bvec(&msg.msg_iter, ITER_SOURCE, svsk->sk_bvec,
 		      count, rqstp->rq_res.len);
 	err = sock_sendmsg(svsk->sk_sock, &msg);
 	if (err == -ECONNREFUSED) {
 		/* ICMP error on earlier request. */
-		iov_iter_bvec(&msg.msg_iter, ITER_SOURCE, rqstp->rq_bvec,
+		iov_iter_bvec(&msg.msg_iter, ITER_SOURCE, svsk->sk_bvec,
 			      count, rqstp->rq_res.len);
 		err = sock_sendmsg(svsk->sk_sock, &msg);
 	}
 
+out_trace:
 	trace_svcsock_udp_send(xprt, err);
 
 	mutex_unlock(&xprt->xpt_mutex);
@@ -745,11 +753,11 @@ static int svc_udp_has_wspace(struct svc_xprt *xprt)
 	 * Set the SOCK_NOSPACE flag before checking the available
 	 * sock space.
 	 */
-	set_bit(SOCK_NOSPACE, &svsk->sk_sock->flags);
+	sk_set_nospace(svsk->sk_sk);
 	required = atomic_read(&svsk->sk_xprt.xpt_reserved) + serv->sv_max_mesg;
 	if (required*2 > sock_wspace(svsk->sk_sk))
 		return 0;
-	clear_bit(SOCK_NOSPACE, &svsk->sk_sock->flags);
+	sk_clear_nospace(svsk->sk_sk);
 	return 1;
 }
 
@@ -790,6 +798,7 @@ static struct svc_xprt_class svc_udp_class = {
 	.xcl_ops = &svc_udp_ops,
 	.xcl_max_payload = RPCSVC_MAXPAYLOAD_UDP,
 	.xcl_ident = XPRT_TRANSPORT_UDP,
+	.xcl_flags = SVC_XPRT_FLAG_WSPACE_RESERVE,
 };
 
 static void svc_udp_init(struct svc_sock *svsk, struct svc_serv *serv)
@@ -809,6 +818,7 @@ static void svc_udp_init(struct svc_sock *svsk, struct svc_serv *serv)
 	/* data might have come in before data_ready set up */
 	set_bit(XPT_DATA, &svsk->sk_xprt.xpt_flags);
 	set_bit(XPT_CHNGBUF, &svsk->sk_xprt.xpt_flags);
+	set_bit(XPT_RPCB_UNREG, &svsk->sk_xprt.xpt_flags);
 
 	/* make sure we get destination address info */
 	switch (svsk->sk_sk->sk_family) {
@@ -930,10 +940,8 @@ static struct svc_xprt *svc_tcp_accept(struct svc_xprt *xprt)
 		slen = offsetof(struct sockaddr, sa_data);
 	svc_xprt_set_local(&newsvsk->sk_xprt, sin, slen);
 
-	if (sock_is_loopback(newsock->sk))
-		set_bit(XPT_LOCAL, &newsvsk->sk_xprt.xpt_flags);
-	else
-		clear_bit(XPT_LOCAL, &newsvsk->sk_xprt.xpt_flags);
+	assign_bit(XPT_LOCAL, &newsvsk->sk_xprt.xpt_flags,
+		   sock_is_loopback(newsock->sk));
 	if (serv->sv_stats)
 		serv->sv_stats->nettcpconn++;
 
@@ -944,24 +952,23 @@ failed:
 	return NULL;
 }
 
-static size_t svc_tcp_restore_pages(struct svc_sock *svsk,
-				    struct svc_rqst *rqstp)
+static void svc_tcp_restore_pages(struct svc_sock *svsk,
+				  struct svc_rqst *rqstp)
 {
 	size_t len = svsk->sk_datalen;
 	unsigned int i, npages;
 
 	if (!len)
-		return 0;
+		return;
 	npages = (len + PAGE_SIZE - 1) >> PAGE_SHIFT;
 	for (i = 0; i < npages; i++) {
 		if (rqstp->rq_pages[i] != NULL)
-			put_page(rqstp->rq_pages[i]);
+			svc_rqst_page_release(rqstp, rqstp->rq_pages[i]);
 		BUG_ON(svsk->sk_pages[i] == NULL);
 		rqstp->rq_pages[i] = svsk->sk_pages[i];
 		svsk->sk_pages[i] = NULL;
 	}
 	rqstp->rq_arg.head[0].iov_base = page_address(rqstp->rq_pages[0]);
-	return len;
 }
 
 static void svc_tcp_save_pages(struct svc_sock *svsk, struct svc_rqst *rqstp)
@@ -976,6 +983,7 @@ static void svc_tcp_save_pages(struct svc_sock *svsk, struct svc_rqst *rqstp)
 		svsk->sk_pages[i] = rqstp->rq_pages[i];
 		rqstp->rq_pages[i] = NULL;
 	}
+	rqstp->rq_pages_nfree = npages;
 }
 
 static void svc_tcp_clear_pages(struct svc_sock *svsk)
@@ -997,49 +1005,6 @@ static void svc_tcp_clear_pages(struct svc_sock *svsk)
 out:
 	svsk->sk_tcplen = 0;
 	svsk->sk_datalen = 0;
-}
-
-/*
- * Receive fragment record header into sk_marker.
- */
-static ssize_t svc_tcp_read_marker(struct svc_sock *svsk,
-				   struct svc_rqst *rqstp)
-{
-	ssize_t want, len;
-
-	/* If we haven't gotten the record length yet,
-	 * get the next four bytes.
-	 */
-	if (svsk->sk_tcplen < sizeof(rpc_fraghdr)) {
-		struct msghdr	msg = { NULL };
-		struct kvec	iov;
-
-		want = sizeof(rpc_fraghdr) - svsk->sk_tcplen;
-		iov.iov_base = ((char *)&svsk->sk_marker) + svsk->sk_tcplen;
-		iov.iov_len  = want;
-		iov_iter_kvec(&msg.msg_iter, ITER_DEST, &iov, 1, want);
-		len = svc_tcp_sock_recv_cmsg(svsk, &msg);
-		if (len < 0)
-			return len;
-		svsk->sk_tcplen += len;
-		if (len < want) {
-			/* call again to read the remaining bytes */
-			goto err_short;
-		}
-		trace_svcsock_marker(&svsk->sk_xprt, svsk->sk_marker);
-		if (svc_sock_reclen(svsk) + svsk->sk_datalen >
-		    svsk->sk_xprt.xpt_server->sv_max_mesg)
-			goto err_too_large;
-	}
-	return svc_sock_reclen(svsk);
-
-err_too_large:
-	net_notice_ratelimited("svc: %s %s RPC fragment too large: %d\n",
-			       __func__, svsk->sk_xprt.xpt_server->sv_name,
-			       svc_sock_reclen(svsk));
-	svc_xprt_deferred_close(&svsk->sk_xprt);
-err_short:
-	return -EAGAIN;
 }
 
 static int receive_cb_reply(struct svc_sock *svsk, struct svc_rqst *rqstp)
@@ -1079,9 +1044,153 @@ unlock_eagain:
 
 static void svc_tcp_fragment_received(struct svc_sock *svsk)
 {
-	/* If we have more data, signal svc_xprt_enqueue() to try again */
 	svsk->sk_tcplen = 0;
 	svsk->sk_marker = xdr_zero;
+}
+
+/*
+ * A non-final fragment carries four octets of marker and may carry
+ * no payload at all. sk_datalen advances only by the payload, so a
+ * run of tiny fragments exhausts ->read_sock's byte budget before
+ * the sv_max_mesg check trips, and a run of empty ones never trips
+ * it. Cap the fragments per socket-lock hold. The cap leaves the
+ * record incomplete, and svc_tcp_recvfrom() resumes it on the next
+ * call.
+ */
+#define SVC_TCP_MAX_FRAGS		256
+
+struct svc_tcp_recv_ctx {
+	struct svc_rqst		*rqstp;
+	unsigned int		frags;
+	bool			complete;
+};
+
+/*
+ * Nothing reads the message body before the message is complete, and
+ * partial receives refill the same pages. Flush once here, after the
+ * socket lock is released, rather than once per copy in the actor.
+ */
+static void svc_tcp_flush_pages(struct svc_sock *svsk,
+				struct svc_rqst *rqstp)
+{
+	unsigned int pg, pages = DIV_ROUND_UP(svsk->sk_datalen, PAGE_SIZE);
+
+	for (pg = 0; pg < pages; pg++)
+		flush_dcache_page(rqstp->rq_pages[pg]);
+}
+
+/*
+ * Mapping the message's unfilled remainder would re-map untouched
+ * pages on every call, at a cost that grows with the message rather
+ * than with the octets copied.
+ */
+static void svc_tcp_recv_iter_init(struct svc_rqst *rqstp,
+				   struct iov_iter *iter, size_t body_off,
+				   size_t len)
+{
+	unsigned int first = body_off >> PAGE_SHIFT;
+	size_t seek = offset_in_page(body_off);
+	unsigned int i, pages = DIV_ROUND_UP(seek + len, PAGE_SIZE);
+
+	for (i = 0; i < pages; i++)
+		bvec_set_page(&rqstp->rq_bvec[i], rqstp->rq_pages[first + i],
+			      PAGE_SIZE, 0);
+
+	iov_iter_bvec(iter, ITER_DEST, rqstp->rq_bvec, pages, seek + len);
+	iov_iter_advance(iter, seek);
+}
+
+/*
+ * ->read_sock actor, called under the socket lock. sk_datalen is both
+ * the count of body octets received so far and their write offset into
+ * rq_pages.
+ */
+static int svc_tcp_recv_actor(read_descriptor_t *desc, struct sk_buff *skb,
+			      unsigned int offset, size_t len)
+{
+	struct svc_tcp_recv_ctx *ctx = desc->arg.data;
+	struct svc_rqst *rqstp = ctx->rqstp;
+	struct svc_sock *svsk =
+		container_of(rqstp->rq_xprt, struct svc_sock, sk_xprt);
+	size_t reclen, received, want, take, n;
+	size_t consumed = 0;
+
+	if (!desc->count)
+		return 0;
+
+	len = min(len, desc->count);
+
+	if (svsk->sk_tcplen < sizeof(rpc_fraghdr)) {
+		want = sizeof(rpc_fraghdr) - svsk->sk_tcplen;
+		n = min(want, len);
+
+		if (skb_copy_bits(skb, offset,
+				  (char *)&svsk->sk_marker + svsk->sk_tcplen,
+				  n))
+			goto fault;
+		svsk->sk_tcplen += n;
+		offset += n;
+		len -= n;
+		consumed += n;
+		desc->count -= n;
+
+		if (svsk->sk_tcplen < sizeof(rpc_fraghdr))
+			return consumed;
+
+		trace_svcsock_marker(&svsk->sk_xprt, svsk->sk_marker);
+		if (svc_sock_reclen(svsk) + svsk->sk_datalen >
+		    svsk->sk_xprt.xpt_server->sv_max_mesg) {
+			net_notice_ratelimited("svc: %s oversized RPC fragment (%u octets) from %pISpc\n",
+					       svsk->sk_xprt.xpt_server->sv_name,
+					       svc_sock_reclen(svsk),
+					       (struct sockaddr *)&svsk->sk_xprt.xpt_remote);
+			desc->error = -EMSGSIZE;
+			desc->count = 0;
+			return consumed;
+		}
+	}
+
+	reclen = svc_sock_reclen(svsk);
+	received = svsk->sk_tcplen - sizeof(rpc_fraghdr);
+	want = reclen - received;
+	take = min(want, len);
+
+	if (take) {
+		struct iov_iter iter;
+
+		svc_tcp_recv_iter_init(rqstp, &iter, svsk->sk_datalen, take);
+		if (skb_copy_datagram_iter(skb, offset, &iter, take))
+			goto fault;
+		svsk->sk_datalen += take;
+		svsk->sk_tcplen += take;
+		consumed += take;
+		desc->count -= take;
+	}
+
+	if (take == want) {
+		if (svc_sock_final_rec(svsk)) {
+			ctx->complete = true;
+			desc->count = 0;
+		} else {
+			svc_tcp_fragment_received(svsk);
+			if (++ctx->frags >= SVC_TCP_MAX_FRAGS)
+				desc->count = 0;
+		}
+	}
+
+	return consumed;
+
+fault:
+	desc->error = -EFAULT;
+	desc->count = 0;
+	return consumed;
+}
+
+static bool svc_tcp_at_urg_mark(struct sock *sk)
+{
+	const struct tcp_sock *tp = tcp_sk(sk);
+
+	return tp->urg_data && tp->urg_seq == tp->copied_seq;
 }
 
 /**
@@ -1090,9 +1199,7 @@ static void svc_tcp_fragment_received(struct svc_sock *svsk)
  *
  * Called in a loop when XPT_DATA has been set.
  *
- * Read the 4-byte stream record marker, then use the record length
- * in that marker to set up exactly the resources needed to receive
- * the next RPC message into @rqstp.
+ * Context: Process context. Takes and releases the socket lock.
  *
  * Returns:
  *   On success, the number of bytes in a received RPC Call, or
@@ -1107,28 +1214,68 @@ static int svc_tcp_recvfrom(struct svc_rqst *rqstp)
 	struct svc_sock	*svsk =
 		container_of(rqstp->rq_xprt, struct svc_sock, sk_xprt);
 	struct svc_serv	*serv = svsk->sk_xprt.xpt_server;
-	size_t want, base;
+	struct svc_tcp_recv_ctx ctx = {
+		.rqstp		= rqstp,
+	};
+	read_descriptor_t desc = {
+		.arg.data	= &ctx,
+		.count		= serv->sv_max_mesg + sizeof(rpc_fraghdr),
+	};
+	struct socket *sock = svsk->sk_sock;
 	ssize_t len;
 	__be32 *p;
 	__be32 calldir;
 
 	clear_bit(XPT_DATA, &svsk->sk_xprt.xpt_flags);
-	len = svc_tcp_read_marker(svsk, rqstp);
-	if (len < 0)
-		goto error;
+	svc_tcp_restore_pages(svsk, rqstp);
 
-	base = svc_tcp_restore_pages(svsk, rqstp);
-	want = len - (svsk->sk_tcplen - sizeof(rpc_fraghdr));
-	len = svc_tcp_read_msg(rqstp, base + want, base);
-	if (len >= 0) {
-		trace_svcsock_tcp_recv(&svsk->sk_xprt, len);
-		svsk->sk_tcplen += len;
-		svsk->sk_datalen += len;
+	lock_sock(sock->sk);
+	len = sock->ops->read_sock(sock->sk, &desc, svc_tcp_recv_actor);
+	/* ->read_sock stops at urgent data and consumes none of it.
+	 * Only recvmsg() clears the condition, and this path calls
+	 * none, so every later read stops at the same octet. An RPC
+	 * stream carries no urgent data, so close the connection.
+	 *
+	 * The read that first reaches the mark consumes the octets
+	 * ahead of it, so the stop does not show up as a zero len. A
+	 * record completed ahead of the mark is returned first. The
+	 * XPT_DATA set below brings the next call back here with
+	 * nothing left to consume.
+	 */
+	if (!ctx.complete && svc_tcp_at_urg_mark(sock->sk))
+		desc.error = -EPROTO;
+	release_sock(sock->sk);
+
+	/* ->read_sock returns the octets consumed before an actor
+	 * failure, so a positive len can accompany desc.error.
+	 */
+	if (desc.error < 0) {
+		len = desc.error;
+		goto err_nuts;
 	}
-	if (len != want || !svc_sock_final_rec(svsk))
+	if (len >= 0)
+		trace_svcsock_tcp_recv(&svsk->sk_xprt, len);
+
+	if (!ctx.complete) {
+		if (!desc.count) {
+			set_bit(XPT_DATA, &svsk->sk_xprt.xpt_flags);
+			goto err_incomplete;
+		}
+		/* A zero return leaves no record at the head to classify.
+		 * -EINVAL means a control record sits there. Screen the
+		 * other errors out first, because a probe calls
+		 * sock_error(), whose xchg clears sk->sk_err as it reads.
+		 */
+		if (len <= 0 && len != -EINVAL)
+			goto err_incomplete;
+
+		len = svc_tcp_recv_ctrl_record(svsk);
 		goto err_incomplete;
+	}
 	if (svsk->sk_datalen < 8)
 		goto err_nuts;
+
+	svc_tcp_flush_pages(svsk, rqstp);
 
 	rqstp->rq_arg.len = svsk->sk_datalen;
 	rqstp->rq_arg.page_base = 0;
@@ -1140,10 +1287,14 @@ static int svc_tcp_recvfrom(struct svc_rqst *rqstp)
 
 	rqstp->rq_xprt_ctxt   = NULL;
 	rqstp->rq_prot	      = IPPROTO_TCP;
-	if (test_bit(XPT_LOCAL, &svsk->sk_xprt.xpt_flags))
-		set_bit(RQ_LOCAL, &rqstp->rq_flags);
-	else
-		clear_bit(RQ_LOCAL, &rqstp->rq_flags);
+	assign_bit(RQ_LOCAL, &rqstp->rq_flags,
+		   test_bit(XPT_LOCAL, &svsk->sk_xprt.xpt_flags));
+
+	/* Completing one message stops ->read_sock with whatever
+	 * follows still queued, and no path from here re-arms XPT_DATA.
+	 * The queued message would wait for unrelated traffic.
+	 */
+	set_bit(XPT_DATA, &svsk->sk_xprt.xpt_flags);
 
 	p = (__be32 *)rqstp->rq_arg.head[0].iov_base;
 	calldir = p[1];
@@ -1169,19 +1320,21 @@ err_incomplete:
 	svc_tcp_save_pages(svsk, rqstp);
 	if (len < 0 && len != -EAGAIN)
 		goto err_delete;
-	if (len == want)
-		svc_tcp_fragment_received(svsk);
-	else
+	if (svsk->sk_tcplen >= sizeof(rpc_fraghdr))
 		trace_svcsock_tcp_recv_short(&svsk->sk_xprt,
 				svc_sock_reclen(svsk),
 				svsk->sk_tcplen - sizeof(rpc_fraghdr));
+	else
+		trace_svcsock_tcp_recv_eagain(&svsk->sk_xprt, 0);
 	goto err_noclose;
 error:
-	if (len != -EAGAIN)
-		goto err_delete;
 	trace_svcsock_tcp_recv_eagain(&svsk->sk_xprt, 0);
 	goto err_noclose;
 err_nuts:
+	/* svc_tcp_save_pages() has not run, so svsk->sk_pages[] is
+	 * empty. A non-zero sk_datalen makes the teardown-time
+	 * svc_tcp_clear_pages() walk empty slots and WARN.
+	 */
 	svsk->sk_datalen = 0;
 err_delete:
 	trace_svcsock_tcp_recv_err(&svsk->sk_xprt, len);
@@ -1197,38 +1350,38 @@ err_noclose:
  * that the pages backing @xdr are unchanging.
  */
 static int svc_tcp_sendmsg(struct svc_sock *svsk, struct svc_rqst *rqstp,
-			   rpc_fraghdr marker, unsigned int *sentp)
+			   rpc_fraghdr marker)
 {
 	struct msghdr msg = {
 		.msg_flags	= MSG_SPLICE_PAGES,
 	};
-	unsigned int count;
+	int count;
 	void *buf;
 	int ret;
 
-	*sentp = 0;
-
 	/* The stream record marker is copied into a temporary page
-	 * fragment buffer so that it can be included in rq_bvec.
+	 * fragment buffer so that it can be included in sk_bvec.
 	 */
 	buf = page_frag_alloc(&svsk->sk_frag_cache, sizeof(marker),
 			      GFP_KERNEL);
 	if (!buf)
 		return -ENOMEM;
 	memcpy(buf, &marker, sizeof(marker));
-	bvec_set_virt(rqstp->rq_bvec, buf, sizeof(marker));
+	bvec_set_virt(svsk->sk_bvec, buf, sizeof(marker));
 
-	count = xdr_buf_to_bvec(rqstp->rq_bvec + 1, rqstp->rq_maxpages,
+	count = xdr_buf_to_bvec(svsk->sk_bvec + 1, rqstp->rq_maxpages,
 				&rqstp->rq_res);
+	if (count < 0) {
+		ret = count;
+		goto out;
+	}
 
-	iov_iter_bvec(&msg.msg_iter, ITER_SOURCE, rqstp->rq_bvec,
+	iov_iter_bvec(&msg.msg_iter, ITER_SOURCE, svsk->sk_bvec,
 		      1 + count, sizeof(marker) + rqstp->rq_res.len);
 	ret = sock_sendmsg(svsk->sk_sock, &msg);
+out:
 	page_frag_free(buf);
-	if (ret < 0)
-		return ret;
-	*sentp += ret;
-	return 0;
+	return ret;
 }
 
 /**
@@ -1247,8 +1400,7 @@ static int svc_tcp_sendto(struct svc_rqst *rqstp)
 	struct xdr_buf *xdr = &rqstp->rq_res;
 	rpc_fraghdr marker = cpu_to_be32(RPC_LAST_STREAM_FRAGMENT |
 					 (u32)xdr->len);
-	unsigned int sent;
-	int err;
+	int sent;
 
 	svc_tcp_release_ctxt(xprt, rqstp->rq_xprt_ctxt);
 	rqstp->rq_xprt_ctxt = NULL;
@@ -1256,9 +1408,9 @@ static int svc_tcp_sendto(struct svc_rqst *rqstp)
 	mutex_lock(&xprt->xpt_mutex);
 	if (svc_xprt_is_dead(xprt))
 		goto out_notconn;
-	err = svc_tcp_sendmsg(svsk, rqstp, marker, &sent);
-	trace_svcsock_tcp_send(xprt, err < 0 ? (long)err : sent);
-	if (err < 0 || sent != (xdr->len + sizeof(marker)))
+	sent = svc_tcp_sendmsg(svsk, rqstp, marker);
+	trace_svcsock_tcp_send(xprt, sent);
+	if (sent < 0 || sent != (xdr->len + sizeof(marker)))
 		goto out_close;
 	mutex_unlock(&xprt->xpt_mutex);
 	return sent;
@@ -1267,10 +1419,10 @@ out_notconn:
 	mutex_unlock(&xprt->xpt_mutex);
 	return -ENOTCONN;
 out_close:
-	pr_notice("rpc-srv/tcp: %s: %s %d when sending %d bytes - shutting down socket\n",
+	pr_notice("rpc-srv/tcp: %s: %s %d when sending %zu bytes - shutting down socket\n",
 		  xprt->xpt_server->sv_name,
-		  (err < 0) ? "got error" : "sent",
-		  (err < 0) ? err : sent, xdr->len);
+		  (sent < 0) ? "got error" : "sent",
+		  sent, xdr->len + sizeof(marker));
 	svc_xprt_deferred_close(xprt);
 	mutex_unlock(&xprt->xpt_mutex);
 	return -EAGAIN;
@@ -1329,6 +1481,7 @@ static void svc_tcp_init(struct svc_sock *svsk, struct svc_serv *serv)
 	if (sk->sk_state == TCP_LISTEN) {
 		strcpy(svsk->sk_xprt.xpt_remotebuf, "listener");
 		set_bit(XPT_LISTENER, &svsk->sk_xprt.xpt_flags);
+		set_bit(XPT_RPCB_UNREG, &svsk->sk_xprt.xpt_flags);
 		sk->sk_data_ready = svc_tcp_listen_data_ready;
 		set_bit(XPT_CONN, &svsk->sk_xprt.xpt_flags);
 	} else {
@@ -1369,6 +1522,20 @@ void svc_sock_update_bufs(struct svc_serv *serv)
 	spin_unlock_bh(&serv->sv_lock);
 }
 
+static int svc_sock_sendpages(struct svc_serv *serv, struct socket *sock, int flags)
+{
+	switch (sock->type) {
+	case SOCK_STREAM:
+		/* +1 for TCP record marker */
+		if (flags & SVC_SOCK_TEMPORARY)
+			return svc_serv_maxpages(serv) + 1;
+		return 0;
+	case SOCK_DGRAM:
+		return SUNRPC_MAX_UDP_SENDPAGES;
+	}
+	return -EINVAL;
+}
+
 /*
  * Initialize socket for RPC use and create svc_sock struct
  */
@@ -1379,12 +1546,26 @@ static struct svc_sock *svc_setup_socket(struct svc_serv *serv,
 	struct svc_sock	*svsk;
 	struct sock	*inet;
 	int		pmap_register = !(flags & SVC_SOCK_ANONYMOUS);
+	int		sendpages;
 	unsigned long	pages;
 
+	sendpages = svc_sock_sendpages(serv, sock, flags);
+	if (sendpages < 0)
+		return ERR_PTR(sendpages);
+
 	pages = svc_serv_maxpages(serv);
-	svsk = kzalloc(struct_size(svsk, sk_pages, pages), GFP_KERNEL);
+	svsk = kzalloc_flex(*svsk, sk_pages, pages);
 	if (!svsk)
 		return ERR_PTR(-ENOMEM);
+
+	if (sendpages) {
+		svsk->sk_bvec = kzalloc_objs(*svsk->sk_bvec, sendpages);
+		if (!svsk->sk_bvec) {
+			kfree(svsk);
+			return ERR_PTR(-ENOMEM);
+		}
+	}
+
 	svsk->sk_maxpages = pages;
 
 	inet = sock->sk;
@@ -1396,6 +1577,7 @@ static struct svc_sock *svc_setup_socket(struct svc_serv *serv,
 				     inet->sk_protocol,
 				     ntohs(inet_sk(inet)->inet_sport));
 		if (err < 0) {
+			kfree(svsk->sk_bvec);
 			kfree(svsk);
 			return ERR_PTR(err);
 		}
@@ -1461,6 +1643,9 @@ int svc_addsock(struct svc_serv *serv, struct net *net, const int fd,
 		goto out;
 	err = -EISCONN;
 	if (so->state > SS_UNCONNECTED)
+		goto out;
+	err = -EBUSY;
+	if (so->sk->sk_user_data)
 		goto out;
 	err = -ENOENT;
 	if (!try_module_get(THIS_MODULE))
@@ -1534,7 +1719,7 @@ static struct svc_xprt *svc_create_socket(struct svc_serv *serv,
 		ip6_sock_set_v6only(sock->sk);
 	if (type == SOCK_STREAM)
 		sock->sk->sk_reuse = SK_CAN_REUSE; /* allow address reuse */
-	error = kernel_bind(sock, sin, len);
+	error = kernel_bind(sock, (struct sockaddr_unsized *)sin, len);
 	if (error < 0)
 		goto bummer;
 
@@ -1613,5 +1798,6 @@ static void svc_sock_free(struct svc_xprt *xprt)
 		sock_release(sock);
 
 	page_frag_cache_drain(&svsk->sk_frag_cache);
+	kfree(svsk->sk_bvec);
 	kfree(svsk);
 }

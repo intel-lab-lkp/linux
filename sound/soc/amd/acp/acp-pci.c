@@ -63,7 +63,7 @@ static int create_acp_platform_devs(struct pci_dev *pci, struct acp_chip_info *c
 	parent = &pci->dev;
 
 	if (chip->is_i2s_config || chip->is_pdm_dev) {
-		chip->res = devm_kzalloc(&pci->dev, sizeof(struct resource), GFP_KERNEL);
+		chip->res = devm_kzalloc_obj(&pci->dev, struct resource);
 		if (!chip->res) {
 			ret = -ENOMEM;
 			goto err;
@@ -114,20 +114,13 @@ static int acp_pci_probe(struct pci_dev *pci, const struct pci_device_id *pci_id
 	if (flag != FLAG_AMD_LEGACY && flag != FLAG_AMD_LEGACY_ONLY_DMIC)
 		return -ENODEV;
 
-	chip = devm_kzalloc(&pci->dev, sizeof(*chip), GFP_KERNEL);
+	chip = devm_kzalloc_obj(&pci->dev, *chip);
 	if (!chip)
 		return -ENOMEM;
 
-	if (pci_enable_device(pci))
+	if (pcim_enable_device(pci))
 		return dev_err_probe(&pci->dev, -ENODEV,
 				     "pci_enable_device failed\n");
-
-	ret = pci_request_regions(pci, "AMD ACP3x audio");
-	if (ret < 0) {
-		dev_err(&pci->dev, "pci_request_regions failed\n");
-		ret = -ENOMEM;
-		goto disable_pci;
-	}
 
 	pci_set_master(pci);
 
@@ -137,47 +130,45 @@ static int acp_pci_probe(struct pci_dev *pci, const struct pci_device_id *pci_id
 		chip->name = "acp_asoc_renoir";
 		chip->rsrc = &rn_rsrc;
 		chip->acp_hw_ops_init = acp31_hw_ops_init;
-		chip->machines = &snd_soc_acpi_amd_acp_machines;
+		chip->machines = snd_soc_acpi_amd_acp_machines;
 		break;
 	case 0x6f:
 		chip->name = "acp_asoc_rembrandt";
 		chip->rsrc = &rmb_rsrc;
 		chip->acp_hw_ops_init = acp6x_hw_ops_init;
-		chip->machines = &snd_soc_acpi_amd_rmb_acp_machines;
+		chip->machines = snd_soc_acpi_amd_rmb_acp_machines;
 		break;
 	case 0x63:
 		chip->name = "acp_asoc_acp63";
 		chip->rsrc = &acp63_rsrc;
 		chip->acp_hw_ops_init = acp63_hw_ops_init;
-		chip->machines = &snd_soc_acpi_amd_acp63_acp_machines;
+		chip->machines = snd_soc_acpi_amd_acp63_acp_machines;
 		break;
 	case 0x70:
 	case 0x71:
+	case 0x72:
 		chip->name = "acp_asoc_acp70";
 		chip->rsrc = &acp70_rsrc;
 		chip->acp_hw_ops_init = acp70_hw_ops_init;
-		chip->machines = &snd_soc_acpi_amd_acp70_acp_machines;
+		chip->machines = snd_soc_acpi_amd_acp70_acp_machines;
 		break;
 	default:
 		dev_err(dev, "Unsupported device revision:0x%x\n", pci->revision);
-		ret = -EINVAL;
-		goto release_regions;
+		return -EINVAL;
 	}
 	chip->flag = flag;
 
 	addr = pci_resource_start(pci, 0);
-	chip->base = devm_ioremap(&pci->dev, addr, pci_resource_len(pci, 0));
-	if (!chip->base) {
-		ret = -ENOMEM;
-		goto release_regions;
-	}
+	chip->base = pcim_iomap_region(pci, 0, "AMD ACP3x audio");
+	if (IS_ERR(chip->base))
+		return PTR_ERR(chip->base);
 
 	chip->addr = addr;
 
 	chip->acp_hw_ops_init(chip);
 	ret = acp_hw_init(chip);
 	if (ret)
-		goto release_regions;
+		goto de_init;
 
 	ret = devm_request_irq(dev, pci->irq, irq_handler,
 			       IRQF_SHARED, "ACP_I2S_IRQ", chip);
@@ -213,10 +204,6 @@ skip_pdev_creation:
 
 de_init:
 	acp_hw_deinit(chip);
-release_regions:
-	pci_release_regions(pci);
-disable_pci:
-	pci_disable_device(pci);
 
 	return ret;
 };

@@ -16,7 +16,6 @@
 #include <linux/interrupt.h>
 #include <linux/kernel.h>
 #include <linux/ktime.h>
-#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/property.h>
 #include <linux/slab.h>
@@ -1889,7 +1888,7 @@ static int iqs7222_dev_init(struct iqs7222_private *iqs7222, int dir)
 		if (!val)
 			continue;
 
-		val_buf = kcalloc(num_col, sizeof(__le16), GFP_KERNEL);
+		val_buf = kzalloc_objs(__le16, num_col);
 		if (!val_buf)
 			return -ENOMEM;
 
@@ -2426,6 +2425,9 @@ static int iqs7222_parse_chan(struct iqs7222_private *iqs7222,
 					    &iqs7222->kp_code[chan_index][i]);
 		if (error)
 			return error;
+
+		if (!iqs7222->kp_type[chan_index][i])
+			continue;
 
 		if (!dev_desc->event_offset)
 			continue;
@@ -3054,7 +3056,7 @@ static int iqs7222_probe(struct i2c_client *client)
 	unsigned long irq_flags;
 	int error, irq;
 
-	iqs7222 = devm_kzalloc(&client->dev, sizeof(*iqs7222), GFP_KERNEL);
+	iqs7222 = devm_kzalloc_obj(&client->dev, *iqs7222);
 	if (!iqs7222)
 		return -ENOMEM;
 

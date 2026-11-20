@@ -72,7 +72,6 @@ static const struct regmap_config meson_rtc_peripheral_regmap_config = {
 	.val_bits	= 32,
 	.reg_stride	= 4,
 	.max_register	= RTC_REG4,
-	.fast_io	= true,
 };
 
 /* RTC front-end serialiser controls */
@@ -296,7 +295,7 @@ static int meson_rtc_probe(struct platform_device *pdev)
 	int ret;
 	u32 tm;
 
-	rtc = devm_kzalloc(dev, sizeof(struct meson_rtc), GFP_KERNEL);
+	rtc = devm_kzalloc_obj(dev, struct meson_rtc);
 	if (!rtc)
 		return -ENOMEM;
 

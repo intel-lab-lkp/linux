@@ -4,16 +4,15 @@
  *
  * Copyright 2019 Analog Devices Inc.
  */
+#include <linux/adi-axi-common.h>
 #include <linux/bits.h>
 #include <linux/clk.h>
-#include <linux/fpga/adi-axi-common.h>
 #include <linux/hwmon.h>
 #include <linux/hwmon-sysfs.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
-#include <linux/mod_devicetable.h>
 #include <linux/platform_device.h>
 #include <linux/property.h>
 
@@ -457,7 +456,7 @@ static int axi_fan_control_probe(struct platform_device *pdev)
 	if (!id)
 		return -EINVAL;
 
-	ctl = devm_kzalloc(&pdev->dev, sizeof(*ctl), GFP_KERNEL);
+	ctl = devm_kzalloc_obj(&pdev->dev, *ctl);
 	if (!ctl)
 		return -ENOMEM;
 
@@ -507,10 +506,9 @@ static int axi_fan_control_probe(struct platform_device *pdev)
 	ret = devm_request_threaded_irq(&pdev->dev, ctl->irq, NULL,
 					axi_fan_control_irq_handler,
 					IRQF_ONESHOT | IRQF_TRIGGER_HIGH,
-					pdev->driver_override, ctl);
+					NULL, ctl);
 	if (ret)
-		return dev_err_probe(&pdev->dev, ret,
-				     "failed to request an irq\n");
+		return ret;
 
 	return 0;
 }

@@ -204,7 +204,7 @@ static int vprbrd_i2c_read(struct vprbrd *vb, struct i2c_msg *msg)
 		/* copy the received data */
 		memcpy(msg->buf + start, rmsg, len1);
 
-		/* second read transfer if neccessary */
+		/* second read transfer if necessary */
 		if (len2 > 0) {
 			ret = vprbrd_i2c_receive(vb->usb_dev, rmsg, len2);
 			if (ret < 0)
@@ -360,7 +360,7 @@ static int vprbrd_i2c_probe(struct platform_device *pdev)
 	int ret;
 	int pipe;
 
-	vb_i2c = devm_kzalloc(&pdev->dev, sizeof(*vb_i2c), GFP_KERNEL);
+	vb_i2c = devm_kzalloc_obj(&pdev->dev, *vb_i2c);
 	if (vb_i2c == NULL)
 		return -ENOMEM;
 

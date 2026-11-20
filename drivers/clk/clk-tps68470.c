@@ -146,12 +146,14 @@ static unsigned int tps68470_clk_cfg_lookup(unsigned long rate)
 	return best_idx;
 }
 
-static long tps68470_clk_round_rate(struct clk_hw *hw, unsigned long rate,
-				    unsigned long *parent_rate)
+static int tps68470_clk_determine_rate(struct clk_hw *hw,
+				       struct clk_rate_request *req)
 {
-	unsigned int idx = tps68470_clk_cfg_lookup(rate);
+	unsigned int idx = tps68470_clk_cfg_lookup(req->rate);
 
-	return clk_freqs[idx].freq;
+	req->rate = clk_freqs[idx].freq;
+
+	return 0;
 }
 
 static int tps68470_clk_set_rate(struct clk_hw *hw, unsigned long rate,
@@ -186,7 +188,7 @@ static const struct clk_ops tps68470_clk_ops = {
 	.prepare = tps68470_clk_prepare,
 	.unprepare = tps68470_clk_unprepare,
 	.recalc_rate = tps68470_clk_recalc_rate,
-	.round_rate = tps68470_clk_round_rate,
+	.determine_rate = tps68470_clk_determine_rate,
 	.set_rate = tps68470_clk_set_rate,
 };
 
@@ -204,8 +206,7 @@ static int tps68470_clk_probe(struct platform_device *pdev)
 	int ret;
 	int i;
 
-	tps68470_clkdata = devm_kzalloc(&pdev->dev, sizeof(*tps68470_clkdata),
-					GFP_KERNEL);
+	tps68470_clkdata = devm_kzalloc_obj(&pdev->dev, *tps68470_clkdata);
 	if (!tps68470_clkdata)
 		return -ENOMEM;
 

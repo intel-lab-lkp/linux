@@ -43,7 +43,7 @@ static int hilscher_pci_probe(struct pci_dev *dev,
 {
 	struct uio_info *info;
 
-	info = devm_kzalloc(&dev->dev, sizeof(struct uio_info), GFP_KERNEL);
+	info = devm_kzalloc_obj(&dev->dev, struct uio_info);
 	if (!info)
 		return -ENOMEM;
 
@@ -105,7 +105,7 @@ static void hilscher_pci_remove(struct pci_dev *dev)
 	iounmap(info->mem[0].internal_addr);
 }
 
-static struct pci_device_id hilscher_pci_ids[] = {
+static const struct pci_device_id hilscher_pci_ids[] = {
 	{
 		.vendor =	PCI_VENDOR_ID_PLX,
 		.device =	PCI_DEVICE_ID_PLX_9030,

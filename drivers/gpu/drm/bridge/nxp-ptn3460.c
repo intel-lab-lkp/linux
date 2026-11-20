@@ -111,7 +111,8 @@ static int ptn3460_select_edid(struct ptn3460_bridge *ptn_bridge)
 	return 0;
 }
 
-static void ptn3460_pre_enable(struct drm_bridge *bridge)
+static void ptn3460_pre_enable(struct drm_bridge *bridge,
+			       struct drm_atomic_commit *commit)
 {
 	struct ptn3460_bridge *ptn_bridge = bridge_to_ptn3460(bridge);
 	int ret;
@@ -139,7 +140,8 @@ static void ptn3460_pre_enable(struct drm_bridge *bridge)
 	ptn_bridge->enabled = true;
 }
 
-static void ptn3460_disable(struct drm_bridge *bridge)
+static void ptn3460_disable(struct drm_bridge *bridge,
+			    struct drm_atomic_commit *commit)
 {
 	struct ptn3460_bridge *ptn_bridge = bridge_to_ptn3460(bridge);
 
@@ -163,7 +165,7 @@ static const struct drm_edid *ptn3460_edid_read(struct drm_bridge *bridge,
 	int ret;
 
 	power_off = !ptn_bridge->enabled;
-	ptn3460_pre_enable(&ptn_bridge->bridge);
+	ptn3460_pre_enable(&ptn_bridge->bridge, NULL);
 
 	edid = kmalloc(EDID_LENGTH, GFP_KERNEL);
 	if (!edid) {
@@ -182,7 +184,7 @@ static const struct drm_edid *ptn3460_edid_read(struct drm_bridge *bridge,
 
 out:
 	if (power_off)
-		ptn3460_disable(&ptn_bridge->bridge);
+		ptn3460_disable(&ptn_bridge->bridge, NULL);
 
 	return drm_edid;
 }
@@ -248,8 +250,11 @@ static int ptn3460_bridge_attach(struct drm_bridge *bridge,
 }
 
 static const struct drm_bridge_funcs ptn3460_bridge_funcs = {
-	.pre_enable = ptn3460_pre_enable,
-	.disable = ptn3460_disable,
+	.atomic_create_state = drm_atomic_helper_bridge_create_state,
+	.atomic_destroy_state = drm_atomic_helper_bridge_destroy_state,
+	.atomic_duplicate_state = drm_atomic_helper_bridge_duplicate_state,
+	.atomic_pre_enable = ptn3460_pre_enable,
+	.atomic_disable = ptn3460_disable,
 	.attach = ptn3460_bridge_attach,
 	.edid_read = ptn3460_edid_read,
 };
@@ -261,10 +266,10 @@ static int ptn3460_probe(struct i2c_client *client)
 	struct drm_bridge *panel_bridge;
 	int ret;
 
-	ptn_bridge = devm_kzalloc(dev, sizeof(*ptn_bridge), GFP_KERNEL);
-	if (!ptn_bridge) {
-		return -ENOMEM;
-	}
+	ptn_bridge = devm_drm_bridge_alloc(dev, struct ptn3460_bridge, bridge,
+					   &ptn3460_bridge_funcs);
+	if (IS_ERR(ptn_bridge))
+		return PTR_ERR(ptn_bridge);
 
 	panel_bridge = devm_drm_of_get_bridge(dev, dev->of_node, 0, 0);
 	if (IS_ERR(panel_bridge))
@@ -300,7 +305,6 @@ static int ptn3460_probe(struct i2c_client *client)
 		return ret;
 	}
 
-	ptn_bridge->bridge.funcs = &ptn3460_bridge_funcs;
 	ptn_bridge->bridge.ops = DRM_BRIDGE_OP_EDID;
 	ptn_bridge->bridge.type = DRM_MODE_CONNECTOR_LVDS;
 	ptn_bridge->bridge.of_node = dev->of_node;
@@ -319,8 +323,8 @@ static void ptn3460_remove(struct i2c_client *client)
 }
 
 static const struct i2c_device_id ptn3460_i2c_table[] = {
-	{ "ptn3460" },
-	{}
+	{ .name = "ptn3460" },
+	{ }
 };
 MODULE_DEVICE_TABLE(i2c, ptn3460_i2c_table);
 

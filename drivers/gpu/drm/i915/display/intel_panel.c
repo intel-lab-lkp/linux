@@ -67,19 +67,60 @@ static bool is_best_fixed_mode(struct intel_connector *connector,
 	if (!best_mode)
 		return true;
 
-	/*
-	 * With VRR always pick a mode with equal/higher than requested
-	 * vrefresh, which we can then reduce to match the requested
-	 * vrefresh by extending the vblank length.
-	 */
-	if (intel_vrr_is_in_range(connector, vrefresh) &&
-	    intel_vrr_is_in_range(connector, fixed_mode_vrefresh) &&
-	    fixed_mode_vrefresh < vrefresh)
-		return false;
-
 	/* pick the fixed_mode that is closest in terms of vrefresh */
 	return abs(fixed_mode_vrefresh - vrefresh) <
 		abs(drm_mode_vrefresh(best_mode) - vrefresh);
+}
+
+static bool is_vrr_compatible(const struct drm_display_mode *mode1,
+			      const struct drm_display_mode *mode2)
+{
+	return drm_mode_match(mode1, mode2,
+			      DRM_MODE_MATCH_CLOCK |
+			      DRM_MODE_MATCH_TIMINGS_VRR |
+			      DRM_MODE_MATCH_FLAGS |
+			      DRM_MODE_MATCH_3D_FLAGS);
+}
+
+static const struct drm_display_mode *
+intel_panel_fixed_mode_vrr(struct intel_connector *connector,
+			   const struct drm_display_mode *mode,
+			   const struct drm_display_mode *vrr_ref_mode)
+{
+	const struct drm_display_mode *fixed_mode, *best_mode = NULL;
+	int vrefresh = drm_mode_vrefresh(mode);
+
+	if (!intel_vrr_is_in_range(connector, vrefresh))
+		return NULL;
+
+	if (vrr_ref_mode &&
+	    !intel_vrr_is_in_range(connector, drm_mode_vrefresh(vrr_ref_mode)))
+		return NULL;
+
+	list_for_each_entry(fixed_mode, &connector->panel.fixed_modes, head) {
+		int fixed_mode_vrefresh = drm_mode_vrefresh(fixed_mode);
+
+		if (!intel_vrr_is_in_range(connector, fixed_mode_vrefresh))
+			continue;
+
+		/*
+		 * With VRR always pick a mode with equal/higher than requested
+		 * vrefresh, which we can then reduce to match the requested
+		 * vrefresh by extending the vblank length.
+		 */
+		if (fixed_mode_vrefresh < vrefresh)
+			continue;
+
+		if (vrr_ref_mode &&
+		    !is_vrr_compatible(fixed_mode, vrr_ref_mode))
+			continue;
+
+		if (is_best_fixed_mode(connector, vrefresh,
+				       fixed_mode_vrefresh, best_mode))
+			best_mode = fixed_mode;
+	}
+
+	return best_mode;
 }
 
 const struct drm_display_mode *
@@ -197,14 +238,66 @@ enum drrs_type intel_panel_drrs_type(struct intel_connector *connector)
 	return connector->panel.vbt.drrs_type;
 }
 
-int intel_panel_compute_config(struct intel_connector *connector,
-			       struct drm_display_mode *adjusted_mode)
+static int intel_panel_compute_config_vrr(struct intel_atomic_state *state,
+					  struct intel_crtc_state *crtc_state,
+					  struct intel_connector *connector)
 {
-	const struct drm_display_mode *fixed_mode =
-		intel_panel_fixed_mode(connector, adjusted_mode);
+	struct drm_display_mode *adjusted_mode = &crtc_state->hw.adjusted_mode;
+	const struct drm_display_mode *fixed_mode = NULL;
 	int vrefresh, fixed_mode_vrefresh;
-	bool is_vrr;
 
+	/*
+	 * Attempt a VRR based refresh rate change if possible
+	 * when userspace has forbidden a full modeset.
+	 */
+	if (!state->base.allow_modeset) {
+		struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
+		const struct intel_crtc_state *old_crtc_state =
+			intel_atomic_get_old_crtc_state(state, crtc);
+
+		if (old_crtc_state->hw.enable &&
+		    old_crtc_state->uapi.encoder_mask == crtc_state->uapi.encoder_mask)
+			fixed_mode = intel_panel_fixed_mode_vrr(connector, adjusted_mode,
+								&old_crtc_state->hw.adjusted_mode);
+	}
+
+	if (!fixed_mode)
+		fixed_mode = intel_panel_fixed_mode_vrr(connector, adjusted_mode, NULL);
+
+	if (!fixed_mode)
+		return -EINVAL;
+
+	vrefresh = drm_mode_vrefresh(adjusted_mode);
+	fixed_mode_vrefresh = drm_mode_vrefresh(fixed_mode);
+
+	drm_mode_copy(adjusted_mode, fixed_mode);
+
+	if (fixed_mode_vrefresh != vrefresh) {
+		int vsync_start_offset = adjusted_mode->vtotal - adjusted_mode->vsync_start;
+		int vsync_end_offset = adjusted_mode->vtotal - adjusted_mode->vsync_end;
+
+		adjusted_mode->vtotal =
+			DIV_ROUND_CLOSEST(adjusted_mode->clock * 1000,
+					  adjusted_mode->htotal * vrefresh);
+
+		adjusted_mode->vsync_start = adjusted_mode->vtotal - vsync_start_offset;
+		adjusted_mode->vsync_end = adjusted_mode->vtotal - vsync_end_offset;
+	}
+
+	drm_mode_set_crtcinfo(adjusted_mode, 0);
+
+	return 0;
+}
+
+static int intel_panel_compute_config_fixed_rr(struct intel_atomic_state *state,
+					       struct intel_crtc_state *crtc_state,
+					       struct intel_connector *connector)
+{
+	struct drm_display_mode *adjusted_mode = &crtc_state->hw.adjusted_mode;
+	const struct drm_display_mode *fixed_mode;
+	int vrefresh, fixed_mode_vrefresh;
+
+	fixed_mode = intel_panel_fixed_mode(connector, adjusted_mode);
 	if (!fixed_mode)
 		return 0;
 
@@ -212,39 +305,38 @@ int intel_panel_compute_config(struct intel_connector *connector,
 	fixed_mode_vrefresh = drm_mode_vrefresh(fixed_mode);
 
 	/*
-	 * Assume that we shouldn't muck about with the
-	 * timings if they don't land in the VRR range.
+	 * We don't want to lie too much to the user about the refresh
+	 * rate they're going to get. But we have to allow a bit of latitude
+	 * for Xorg since it likes to automagically cook up modes with slightly
+	 * off refresh rates.
 	 */
-	is_vrr = intel_vrr_is_in_range(connector, vrefresh) &&
-		intel_vrr_is_in_range(connector, fixed_mode_vrefresh);
+	if (abs(vrefresh - fixed_mode_vrefresh) > 1) {
+		drm_dbg_kms(connector->base.dev,
+			    "[CONNECTOR:%d:%s] Requested mode vrefresh (%d Hz) does not match fixed mode vrefresh (%d Hz)\n",
+			    connector->base.base.id, connector->base.name,
+			    vrefresh, fixed_mode_vrefresh);
 
-	if (!is_vrr) {
-		/*
-		 * We don't want to lie too much to the user about the refresh
-		 * rate they're going to get. But we have to allow a bit of latitude
-		 * for Xorg since it likes to automagically cook up modes with slightly
-		 * off refresh rates.
-		 */
-		if (abs(vrefresh - fixed_mode_vrefresh) > 1) {
-			drm_dbg_kms(connector->base.dev,
-				    "[CONNECTOR:%d:%s] Requested mode vrefresh (%d Hz) does not match fixed mode vrefresh (%d Hz)\n",
-				    connector->base.base.id, connector->base.name,
-				    vrefresh, fixed_mode_vrefresh);
-
-			return -EINVAL;
-		}
+		return -EINVAL;
 	}
 
 	drm_mode_copy(adjusted_mode, fixed_mode);
 
-	if (is_vrr && fixed_mode_vrefresh != vrefresh)
-		adjusted_mode->vtotal =
-			DIV_ROUND_CLOSEST(adjusted_mode->clock * 1000,
-					  adjusted_mode->htotal * vrefresh);
-
 	drm_mode_set_crtcinfo(adjusted_mode, 0);
 
 	return 0;
+}
+
+int intel_panel_compute_config(struct intel_atomic_state *state,
+			       struct intel_crtc_state *crtc_state,
+			       struct intel_connector *connector)
+{
+	int ret;
+
+	ret = intel_panel_compute_config_vrr(state, crtc_state, connector);
+	if (ret)
+		ret = intel_panel_compute_config_fixed_rr(state, crtc_state, connector);
+
+	return ret;
 }
 
 static void intel_panel_add_edid_alt_fixed_modes(struct intel_connector *connector)
@@ -396,10 +488,14 @@ intel_panel_detect(struct drm_connector *connector, bool force)
 
 enum drm_mode_status
 intel_panel_mode_valid(struct intel_connector *connector,
-		       const struct drm_display_mode *mode)
+		       const struct drm_display_mode *mode,
+		       int *target_clock)
 {
 	const struct drm_display_mode *fixed_mode =
 		intel_panel_fixed_mode(connector, mode);
+
+	if (target_clock)
+		*target_clock = mode->clock;
 
 	if (!fixed_mode)
 		return MODE_OK;
@@ -412,6 +508,9 @@ intel_panel_mode_valid(struct intel_connector *connector,
 
 	if (drm_mode_vrefresh(mode) != drm_mode_vrefresh(fixed_mode))
 		return MODE_PANEL;
+
+	if (target_clock)
+		*target_clock = fixed_mode->clock;
 
 	return MODE_OK;
 }
@@ -461,4 +560,136 @@ void intel_panel_fini(struct intel_connector *connector)
 		list_del(&fixed_mode->head);
 		drm_mode_destroy(connector->base.dev, fixed_mode);
 	}
+}
+
+/*
+ * If the panel was already enabled at probe, and we took over the state, the
+ * panel prepared state is out of sync, and the panel followers won't be
+ * notified. We need to call drm_panel_prepare() on enabled panels.
+ *
+ * It would be natural to handle this e.g. in the connector ->sync_state hook at
+ * intel_modeset_readout_hw_state(), but that's unfortunately too early. We
+ * don't have drm_connector::kdev at that time. For now, figure out the state at
+ * ->late_register, and sync there.
+ */
+static void intel_panel_sync_state(struct intel_connector *connector)
+{
+	struct intel_display *display = to_intel_display(connector);
+	struct drm_connector_state *conn_state;
+	struct intel_crtc *crtc;
+	int ret;
+
+	ret = drm_modeset_lock(&display->drm->mode_config.connection_mutex, NULL);
+	if (ret)
+		return;
+
+	conn_state = connector->base.state;
+
+	crtc = to_intel_crtc(conn_state->crtc);
+	if (crtc) {
+		struct intel_crtc_state *crtc_state;
+
+		crtc_state = to_intel_crtc_state(crtc->base.state);
+
+		if (crtc_state->hw.active) {
+			drm_dbg_kms(display->drm, "[CONNECTOR:%d:%s] Panel prepare\n",
+				    connector->base.base.id, connector->base.name);
+			intel_panel_prepare(crtc_state, conn_state);
+		}
+	}
+
+	drm_modeset_unlock(&display->drm->mode_config.connection_mutex);
+}
+
+static const struct drm_panel_funcs dummy_panel_funcs = {
+};
+
+int intel_panel_register(struct intel_connector *connector)
+{
+	struct intel_display *display = to_intel_display(connector);
+	struct intel_panel *panel = &connector->panel;
+	int ret;
+
+	ret = intel_backlight_device_register(connector);
+	if (ret)
+		return ret;
+
+	if (connector->base.connector_type == DRM_MODE_CONNECTOR_DSI ||
+	    connector->base.connector_type == DRM_MODE_CONNECTOR_eDP) {
+		struct device *dev = connector->base.kdev;
+		struct drm_panel *base;
+
+		/* Sanity check. */
+		if (drm_WARN_ON(display->drm, !dev))
+			goto out;
+
+		/*
+		 * We need drm_connector::kdev for allocating the panel, to make
+		 * drm_panel_add_follower() lookups work. The kdev is
+		 * initialized in drm_sysfs_connector_add(), just before the
+		 * connector .late_register() hooks. So we can't allocate the
+		 * panel at connector init time, and can't allocate struct
+		 * intel_panel with a drm_panel sub-struct. For now, use
+		 * __devm_drm_panel_alloc() directly.
+		 *
+		 * The lookups also depend on drm_connector::fwnode being set in
+		 * intel_acpi_assign_connector_fwnodes(). However, if that's
+		 * missing, it will gracefully lead to -EPROBE_DEFER in
+		 * drm_panel_add_follower().
+		 */
+		base = __devm_drm_panel_alloc(dev, sizeof(*base), 0,
+					      &dummy_panel_funcs,
+					      connector->base.connector_type);
+		if (IS_ERR(base)) {
+			ret = PTR_ERR(base);
+			goto err;
+		}
+
+		panel->base = base;
+
+		drm_panel_add(panel->base);
+
+		drm_dbg_kms(display->drm, "[CONNECTOR:%d:%s] Registered panel device '%s', has fwnode: %s\n",
+			    connector->base.base.id, connector->base.name,
+			    dev_name(dev), str_yes_no(dev_fwnode(dev)));
+
+		intel_panel_sync_state(connector);
+	}
+
+out:
+	return 0;
+
+err:
+	intel_backlight_device_unregister(connector);
+
+	return ret;
+}
+
+void intel_panel_unregister(struct intel_connector *connector)
+{
+	struct intel_panel *panel = &connector->panel;
+
+	if (panel->base)
+		drm_panel_remove(panel->base);
+
+	intel_backlight_device_unregister(connector);
+}
+
+/* Notify followers, if any, about power being up. */
+void intel_panel_prepare(const struct intel_crtc_state *crtc_state,
+			 const struct drm_connector_state *conn_state)
+{
+	struct intel_connector *connector = to_intel_connector(conn_state->connector);
+	struct intel_panel *panel = &connector->panel;
+
+	drm_panel_prepare(panel->base);
+}
+
+/* Notify followers, if any, about power going down. */
+void intel_panel_unprepare(const struct drm_connector_state *old_conn_state)
+{
+	struct intel_connector *connector = to_intel_connector(old_conn_state->connector);
+	struct intel_panel *panel = &connector->panel;
+
+	drm_panel_unprepare(panel->base);
 }

@@ -139,7 +139,7 @@ static const struct gpio_chip template_chip = {
 	.direction_input	= lp87565_gpio_direction_input,
 	.direction_output	= lp87565_gpio_direction_output,
 	.get			= lp87565_gpio_get,
-	.set_rv			= lp87565_gpio_set,
+	.set			= lp87565_gpio_set,
 	.set_config		= lp87565_gpio_set_config,
 	.base			= -1,
 	.ngpio			= 3,
@@ -152,7 +152,7 @@ static int lp87565_gpio_probe(struct platform_device *pdev)
 	struct lp87565 *lp87565;
 	int ret;
 
-	gpio = devm_kzalloc(&pdev->dev, sizeof(*gpio), GFP_KERNEL);
+	gpio = devm_kzalloc_obj(&pdev->dev, *gpio);
 	if (!gpio)
 		return -ENOMEM;
 
@@ -171,7 +171,7 @@ static int lp87565_gpio_probe(struct platform_device *pdev)
 }
 
 static const struct platform_device_id lp87565_gpio_id_table[] = {
-	{ "lp87565-q1-gpio", },
+	{ .name = "lp87565-q1-gpio" },
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(platform, lp87565_gpio_id_table);

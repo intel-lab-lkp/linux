@@ -55,7 +55,7 @@ static int da9055_gpio_get(struct gpio_chip *gc, unsigned offset)
 			return ret;
 	}
 
-	return ret & (1 << offset);
+	return !!(ret & (1 << offset));
 
 }
 
@@ -116,7 +116,7 @@ static const struct gpio_chip reference_gp = {
 	.label = "da9055-gpio",
 	.owner = THIS_MODULE,
 	.get = da9055_gpio_get,
-	.set_rv = da9055_gpio_set,
+	.set = da9055_gpio_set,
 	.direction_input = da9055_gpio_direction_input,
 	.direction_output = da9055_gpio_direction_output,
 	.to_irq = da9055_gpio_to_irq,
@@ -130,7 +130,7 @@ static int da9055_gpio_probe(struct platform_device *pdev)
 	struct da9055_gpio *gpio;
 	struct da9055_pdata *pdata;
 
-	gpio = devm_kzalloc(&pdev->dev, sizeof(*gpio), GFP_KERNEL);
+	gpio = devm_kzalloc_obj(&pdev->dev, *gpio);
 	if (!gpio)
 		return -ENOMEM;
 

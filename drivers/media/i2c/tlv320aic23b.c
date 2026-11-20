@@ -7,7 +7,7 @@
  * Based on wm8775 driver
  *
  * Copyright (C) 2004 Ulf Eklund <ivtv at eklund.to>
- * Copyright (C) 2005 Hans Verkuil <hverkuil@xs4all.nl>
+ * Copyright (C) 2005 Hans Verkuil <hverkuil@kernel.org>
  */
 
 #include <linux/module.h>
@@ -141,7 +141,7 @@ static int tlv320aic23b_probe(struct i2c_client *client)
 	v4l_info(client, "chip found @ 0x%x (%s)\n",
 			client->addr << 1, client->adapter->name);
 
-	state = devm_kzalloc(&client->dev, sizeof(*state), GFP_KERNEL);
+	state = devm_kzalloc_obj(&client->dev, *state);
 	if (state == NULL)
 		return -ENOMEM;
 	sd = &state->sd;
@@ -188,7 +188,7 @@ static void tlv320aic23b_remove(struct i2c_client *client)
 /* ----------------------------------------------------------------------- */
 
 static const struct i2c_device_id tlv320aic23b_id[] = {
-	{ "tlv320aic23b" },
+	{ .name = "tlv320aic23b" },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, tlv320aic23b_id);

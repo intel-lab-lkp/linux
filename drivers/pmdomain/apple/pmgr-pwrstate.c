@@ -205,7 +205,7 @@ static int apple_pmgr_ps_probe(struct platform_device *pdev)
 	if (IS_ERR(regmap))
 		return PTR_ERR(regmap);
 
-	ps = devm_kzalloc(dev, sizeof(*ps), GFP_KERNEL);
+	ps = devm_kzalloc_obj(dev, *ps);
 	if (!ps)
 		return -ENOMEM;
 
@@ -306,6 +306,7 @@ err_remove:
 }
 
 static const struct of_device_id apple_pmgr_ps_of_match[] = {
+	{ .compatible = "apple,t8103-pmgr-pwrstate" },
 	{ .compatible = "apple,pmgr-pwrstate" },
 	{}
 };

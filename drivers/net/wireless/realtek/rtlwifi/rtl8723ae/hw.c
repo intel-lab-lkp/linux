@@ -1449,18 +1449,9 @@ _rtl8723e_read_txpower_info_from_hwpg(struct ieee80211_hw *hw,
 				rtlefuse->eeprom_chnlarea_txpwr_ht40_1s
 					[rf_path][index];
 
-			if ((rtlefuse->eeprom_chnlarea_txpwr_ht40_1s
-					[rf_path][index] -
-			     rtlefuse->eprom_chnl_txpwr_ht40_2sdf
-					[rf_path][index]) > 0) {
-				rtlefuse->txpwrlevel_ht40_2s[rf_path][i] =
-				  rtlefuse->eeprom_chnlarea_txpwr_ht40_1s
-				  [rf_path][index] -
-				  rtlefuse->eprom_chnl_txpwr_ht40_2sdf
-				  [rf_path][index];
-			} else {
-				rtlefuse->txpwrlevel_ht40_2s[rf_path][i] = 0;
-			}
+			rtlefuse->txpwrlevel_ht40_2s[rf_path][i] =
+				max(rtlefuse->eeprom_chnlarea_txpwr_ht40_1s[rf_path][index] -
+				    rtlefuse->eprom_chnl_txpwr_ht40_2sdf[rf_path][index], 0);
 		}
 
 		for (i = 0; i < 14; i++) {
@@ -1933,7 +1924,6 @@ static void rtl8723e_update_hal_rate_mask(struct ieee80211_hw *hw,
 	bool shortgi = false;
 	u8 rate_mask[5];
 	u8 macid = 0;
-	/*u8 mimo_ps = IEEE80211_SMPS_OFF;*/
 
 	sta_entry = (struct rtl_sta_info *)sta->drv_priv;
 	wirelessmode = sta_entry->wireless_mode;

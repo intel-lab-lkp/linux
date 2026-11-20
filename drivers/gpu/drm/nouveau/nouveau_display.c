@@ -30,6 +30,7 @@
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_client_event.h>
 #include <drm/drm_crtc_helper.h>
+#include <drm/drm_dumb_buffers.h>
 #include <drm/drm_fourcc.h>
 #include <drm/drm_gem_framebuffer_helper.h>
 #include <drm/drm_probe_helper.h>
@@ -253,6 +254,7 @@ nouveau_check_bl_size(struct nouveau_drm *drm, struct nouveau_bo *nvbo,
 
 int
 nouveau_framebuffer_new(struct drm_device *dev,
+			const struct drm_format_info *info,
 			const struct drm_mode_fb_cmd2 *mode_cmd,
 			struct drm_gem_object *gem,
 			struct drm_framebuffer **pfb)
@@ -260,7 +262,6 @@ nouveau_framebuffer_new(struct drm_device *dev,
 	struct nouveau_drm *drm = nouveau_drm(dev);
 	struct nouveau_bo *nvbo = nouveau_gem_object(gem);
 	struct drm_framebuffer *fb;
-	const struct drm_format_info *info;
 	unsigned int height, i;
 	uint32_t tile_mode;
 	uint8_t kind;
@@ -295,8 +296,6 @@ nouveau_framebuffer_new(struct drm_device *dev,
 		kind = nvbo->kind;
 	}
 
-	info = drm_get_format_info(dev, mode_cmd);
-
 	for (i = 0; i < info->num_planes; i++) {
 		height = drm_format_info_plane_height(info,
 						      mode_cmd->height,
@@ -317,10 +316,10 @@ nouveau_framebuffer_new(struct drm_device *dev,
 		}
 	}
 
-	if (!(fb = *pfb = kzalloc(sizeof(*fb), GFP_KERNEL)))
+	if (!(fb = *pfb = kzalloc_obj(*fb)))
 		return -ENOMEM;
 
-	drm_helper_mode_fill_fb_struct(dev, fb, mode_cmd);
+	drm_helper_mode_fill_fb_struct(dev, fb, info, mode_cmd);
 	fb->obj[0] = gem;
 
 	ret = drm_framebuffer_init(dev, fb, &nouveau_framebuffer_funcs);
@@ -332,6 +331,7 @@ nouveau_framebuffer_new(struct drm_device *dev,
 struct drm_framebuffer *
 nouveau_user_framebuffer_create(struct drm_device *dev,
 				struct drm_file *file_priv,
+				const struct drm_format_info *info,
 				const struct drm_mode_fb_cmd2 *mode_cmd)
 {
 	struct drm_framebuffer *fb;
@@ -342,7 +342,7 @@ nouveau_user_framebuffer_create(struct drm_device *dev,
 	if (!gem)
 		return ERR_PTR(-ENOENT);
 
-	ret = nouveau_framebuffer_new(dev, mode_cmd, gem, &fb);
+	ret = nouveau_framebuffer_new(dev, info, mode_cmd, gem, &fb);
 	if (ret == 0)
 		return fb;
 
@@ -354,6 +354,11 @@ static const struct drm_mode_config_funcs nouveau_mode_config_funcs = {
 	.fb_create = nouveau_user_framebuffer_create,
 };
 
+static const struct drm_mode_config_funcs nouveau_mode_config_funcs_atomic = {
+	.fb_create = nouveau_user_framebuffer_create,
+	.atomic_commit = drm_atomic_helper_commit,
+	.atomic_check = drm_atomic_helper_check,
+};
 
 struct nouveau_drm_prop_enum_list {
 	u8 gen_mask;
@@ -495,7 +500,7 @@ nouveau_display_hpd_work(struct work_struct *work)
 	if (first_changed_connector)
 		drm_connector_put(first_changed_connector);
 
-	pm_runtime_mark_last_busy(drm->dev->dev);
+	pm_runtime_mark_last_busy(dev->dev);
 noop:
 	pm_runtime_put_autosuspend(dev->dev);
 }
@@ -646,7 +651,7 @@ nouveau_display_create(struct drm_device *dev)
 	struct nouveau_display *disp;
 	int ret;
 
-	disp = drm->display = kzalloc(sizeof(*disp), GFP_KERNEL);
+	disp = drm->display = kzalloc_obj(*disp);
 	if (!disp)
 		return -ENOMEM;
 
@@ -654,7 +659,11 @@ nouveau_display_create(struct drm_device *dev)
 	drm_mode_create_scaling_mode_property(dev);
 	drm_mode_create_dvi_i_properties(dev);
 
-	dev->mode_config.funcs = &nouveau_mode_config_funcs;
+	/* this only gets set if the driver has the ATOMIC flag */
+	if (drm_drv_uses_atomic_modeset(dev))
+		dev->mode_config.funcs = &nouveau_mode_config_funcs_atomic;
+	else
+		dev->mode_config.funcs = &nouveau_mode_config_funcs;
 
 	dev->mode_config.min_width = 0;
 	dev->mode_config.min_height = 0;
@@ -765,7 +774,7 @@ nouveau_display_suspend(struct drm_device *dev, bool runtime)
 {
 	struct nouveau_display *disp = nouveau_display(dev);
 
-	drm_client_dev_suspend(dev, false);
+	drm_client_dev_suspend(dev);
 
 	if (drm_drv_uses_atomic_modeset(dev)) {
 		if (!runtime) {
@@ -796,7 +805,7 @@ nouveau_display_resume(struct drm_device *dev, bool runtime)
 		}
 	}
 
-	drm_client_dev_resume(dev, false);
+	drm_client_dev_resume(dev);
 }
 
 int
@@ -808,9 +817,9 @@ nouveau_display_dumb_create(struct drm_file *file_priv, struct drm_device *dev,
 	uint32_t domain;
 	int ret;
 
-	args->pitch = roundup(args->width * (args->bpp / 8), 256);
-	args->size = args->pitch * args->height;
-	args->size = roundup(args->size, PAGE_SIZE);
+	ret = drm_mode_size_dumb(dev, args, SZ_256, 0);
+	if (ret)
+		return ret;
 
 	/* Use VRAM if there is any ; otherwise fallback to system memory */
 	if (nouveau_drm(dev)->client.device.info.ram_size != 0)

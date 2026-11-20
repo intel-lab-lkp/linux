@@ -11,21 +11,17 @@
 	compatible = "wm,wm8650";
 
 	cpus {
-		#address-cells = <0>;
+		#address-cells = <1>;
 		#size-cells = <0>;
 
-		cpu {
+		cpu@0 {
 			device_type = "cpu";
 			compatible = "arm,arm926ej-s";
+			reg = <0x0>;
 		};
 	};
 
-	memory {
-		device_type = "memory";
-		reg = <0x0 0x0>;
-	};
-
- 	aliases {
+	aliases {
 		serial0 = &uart0;
 		serial1 = &uart1;
 	};
@@ -151,12 +147,12 @@
 				};
 
 				clkuart0: uart0 {
- 					#clock-cells = <0>;
- 					compatible = "via,vt8500-device-clock";
+					#clock-cells = <0>;
+					compatible = "via,vt8500-device-clock";
 					clocks = <&ref24>;
 					enable-reg = <0x250>;
 					enable-bit = <1>;
- 				};
+				};
 
 				clkuart1: uart1 {
 					#clock-cells = <0>;
@@ -196,7 +192,7 @@
 			interrupts = <43>;
 		};
 
-		sdhc@d800a000 {
+		mmc@d800a000 {
 			compatible = "wm,wm8505-sdhc";
 			reg = <0xd800a000 0x400>;
 			interrupts = <20>, <21>;

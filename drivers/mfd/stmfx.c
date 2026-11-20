@@ -269,9 +269,8 @@ static int stmfx_irq_init(struct i2c_client *client)
 	u32 irqoutpin = 0, irqtrigger;
 	int ret;
 
-	stmfx->irq_domain = irq_domain_create_simple(of_fwnode_handle(stmfx->dev->of_node),
-						  STMFX_REG_IRQ_SRC_MAX, 0,
-						  &stmfx_irq_ops, stmfx);
+	stmfx->irq_domain = irq_domain_create_simple(dev_fwnode(stmfx->dev), STMFX_REG_IRQ_SRC_MAX,
+						     0, &stmfx_irq_ops, stmfx);
 	if (!stmfx->irq_domain) {
 		dev_err(stmfx->dev, "Failed to create IRQ domain\n");
 		return -EINVAL;
@@ -415,7 +414,7 @@ static int stmfx_probe(struct i2c_client *client)
 	struct stmfx *stmfx;
 	int ret;
 
-	stmfx = devm_kzalloc(dev, sizeof(*stmfx), GFP_KERNEL);
+	stmfx = devm_kzalloc_obj(dev, *stmfx);
 	if (!stmfx)
 		return -ENOMEM;
 

@@ -1372,7 +1372,7 @@ int stmpe_probe(struct stmpe_client_info *ci, enum stmpe_partnum partnum)
 	int ret;
 	u32 val;
 
-	pdata = devm_kzalloc(ci->dev, sizeof(*pdata), GFP_KERNEL);
+	pdata = devm_kzalloc_obj(ci->dev, *pdata);
 	if (!pdata)
 		return -ENOMEM;
 
@@ -1381,7 +1381,7 @@ int stmpe_probe(struct stmpe_client_info *ci, enum stmpe_partnum partnum)
 	if (!of_property_present(np, "interrupts"))
 		ci->irq = -1;
 
-	stmpe = devm_kzalloc(ci->dev, sizeof(struct stmpe), GFP_KERNEL);
+	stmpe = devm_kzalloc_obj(ci->dev, struct stmpe);
 	if (!stmpe)
 		return -ENOMEM;
 
@@ -1482,9 +1482,13 @@ int stmpe_probe(struct stmpe_client_info *ci, enum stmpe_partnum partnum)
 
 	return ret;
 }
+EXPORT_SYMBOL_GPL(stmpe_probe);
 
 void stmpe_remove(struct stmpe *stmpe)
 {
+	if (stmpe->domain)
+		irq_domain_remove(stmpe->domain);
+
 	if (!IS_ERR(stmpe->vio) && regulator_is_enabled(stmpe->vio))
 		regulator_disable(stmpe->vio);
 	if (!IS_ERR(stmpe->vcc) && regulator_is_enabled(stmpe->vcc))
@@ -1494,6 +1498,7 @@ void stmpe_remove(struct stmpe *stmpe)
 
 	mfd_remove_devices(stmpe->dev);
 }
+EXPORT_SYMBOL_GPL(stmpe_remove);
 
 static int stmpe_suspend(struct device *dev)
 {
@@ -1517,3 +1522,7 @@ static int stmpe_resume(struct device *dev)
 
 EXPORT_GPL_SIMPLE_DEV_PM_OPS(stmpe_dev_pm_ops,
 			     stmpe_suspend, stmpe_resume);
+
+MODULE_DESCRIPTION("STMPE Core driver");
+MODULE_AUTHOR("Rabin Vincent <rabin.vincent@stericsson.com>");
+MODULE_LICENSE("GPL");

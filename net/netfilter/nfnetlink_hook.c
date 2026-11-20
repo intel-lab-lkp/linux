@@ -24,7 +24,7 @@
 #include <net/sock.h>
 
 static const struct nla_policy nfnl_hook_nla_policy[NFNLA_HOOK_MAX + 1] = {
-	[NFNLA_HOOK_HOOKNUM]	= { .type = NLA_U32 },
+	[NFNLA_HOOK_HOOKNUM]	= NLA_POLICY_MAX(NLA_BE32, 255),
 	[NFNLA_HOOK_PRIORITY]	= { .type = NLA_U32 },
 	[NFNLA_HOOK_DEV]	= { .type = NLA_STRING,
 				    .len = IFNAMSIZ - 1 },
@@ -54,7 +54,6 @@ static int nf_netlink_dump_start_rcu(struct sock *nlsk, struct sk_buff *skb,
 
 struct nfnl_dump_hook_data {
 	char devname[IFNAMSIZ];
-	unsigned long headv;
 	u8 hook;
 };
 
@@ -109,13 +108,30 @@ cancel_nest:
 	return -EMSGSIZE;
 }
 
+static int nfnl_hook_put_nft_info_desc(struct sk_buff *nlskb, const char *tname,
+				       const char *name, u8 family)
+{
+	struct nlattr *nest;
+
+	nest = nla_nest_start(nlskb, NFNLA_HOOK_INFO_DESC);
+	if (!nest ||
+	    nla_put_string(nlskb, NFNLA_CHAIN_TABLE, tname) ||
+	    nla_put_string(nlskb, NFNLA_CHAIN_NAME, name) ||
+	    nla_put_u8(nlskb, NFNLA_CHAIN_FAMILY, family)) {
+		nla_nest_cancel(nlskb, nest);
+		return -EMSGSIZE;
+	}
+	nla_nest_end(nlskb, nest);
+	return 0;
+}
+
 static int nfnl_hook_put_nft_chain_info(struct sk_buff *nlskb,
 					const struct nfnl_dump_hook_data *ctx,
 					unsigned int seq,
 					struct nft_chain *chain)
 {
 	struct net *net = sock_net(nlskb->sk);
-	struct nlattr *nest, *nest2;
+	struct nlattr *nest;
 	int ret = 0;
 
 	if (WARN_ON_ONCE(!chain))
@@ -128,34 +144,52 @@ static int nfnl_hook_put_nft_chain_info(struct sk_buff *nlskb,
 	if (!nest)
 		return -EMSGSIZE;
 
-	nest2 = nla_nest_start(nlskb, NFNLA_HOOK_INFO_DESC);
-	if (!nest2)
-		goto cancel_nest;
+	ret = nfnl_hook_put_nft_info_desc(nlskb, chain->table->name,
+					  chain->name, chain->table->family);
+	if (ret) {
+		nla_nest_cancel(nlskb, nest);
+		return ret;
+	}
 
-	ret = nla_put_string(nlskb, NFNLA_CHAIN_TABLE, chain->table->name);
-	if (ret)
-		goto cancel_nest;
-
-	ret = nla_put_string(nlskb, NFNLA_CHAIN_NAME, chain->name);
-	if (ret)
-		goto cancel_nest;
-
-	ret = nla_put_u8(nlskb, NFNLA_CHAIN_FAMILY, chain->table->family);
-	if (ret)
-		goto cancel_nest;
-
-	nla_nest_end(nlskb, nest2);
 	nla_nest_end(nlskb, nest);
-	return ret;
+	return 0;
+}
 
-cancel_nest:
-	nla_nest_cancel(nlskb, nest);
-	return -EMSGSIZE;
+static int nfnl_hook_put_nft_ft_info(struct sk_buff *nlskb,
+				     const struct nfnl_dump_hook_data *ctx,
+				     unsigned int seq,
+				     struct nf_flowtable *nf_ft)
+{
+	struct nft_flowtable *ft =
+		container_of(nf_ft, struct nft_flowtable, data);
+	struct net *net = sock_net(nlskb->sk);
+	struct nlattr *nest;
+	int ret = 0;
+
+	if (WARN_ON_ONCE(!nf_ft))
+		return 0;
+
+	if (!nft_is_active(net, ft))
+		return 0;
+
+	nest = nfnl_start_info_type(nlskb, NFNL_HOOK_TYPE_NFT_FLOWTABLE);
+	if (!nest)
+		return -EMSGSIZE;
+
+	ret = nfnl_hook_put_nft_info_desc(nlskb, ft->table->name,
+					  ft->name, ft->table->family);
+	if (ret) {
+		nla_nest_cancel(nlskb, nest);
+		return ret;
+	}
+
+	nla_nest_end(nlskb, nest);
+	return 0;
 }
 
 static int nfnl_hook_dump_one(struct sk_buff *nlskb,
 			      const struct nfnl_dump_hook_data *ctx,
-			      const struct nf_hook_ops *ops,
+			      const struct nf_hook_ops *ops, int priority,
 			      int family, unsigned int seq)
 {
 	u16 event = nfnl_msg_type(NFNL_SUBSYS_HOOK, NFNL_MSG_HOOK_GET);
@@ -209,7 +243,7 @@ static int nfnl_hook_dump_one(struct sk_buff *nlskb,
 	if (ret)
 		goto nla_put_failure;
 
-	ret = nla_put_be32(nlskb, NFNLA_HOOK_PRIORITY, htonl(ops->priority));
+	ret = nla_put_be32(nlskb, NFNLA_HOOK_PRIORITY, htonl(priority));
 	if (ret)
 		goto nla_put_failure;
 
@@ -219,6 +253,9 @@ static int nfnl_hook_dump_one(struct sk_buff *nlskb,
 		break;
 	case NF_HOOK_OP_BPF:
 		ret = nfnl_hook_put_bpf_prog_info(nlskb, ctx, seq, ops->priv);
+		break;
+	case NF_HOOK_OP_NFT_FT:
+		ret = nfnl_hook_put_nft_ft_info(nlskb, ctx, seq, ops->priv);
 		break;
 	case NF_HOOK_OP_UNDEFINED:
 		break;
@@ -299,6 +336,50 @@ nfnl_hook_entries_head(u8 pf, unsigned int hook, struct net *net, const char *de
 	return hook_head;
 }
 
+static int nfnl_hook_dump_nat(struct sk_buff *nlskb,
+			      struct netlink_callback *cb,
+			      const struct nf_hook_ops *ops, int family)
+{
+	struct nf_nat_lookup_hook_priv *priv = ops->priv;
+	struct nfnl_dump_hook_data *ctx = cb->data;
+	struct net *net = sock_net(nlskb->sk);
+	struct nf_hook_ops **nat_ops;
+	unsigned int i = cb->args[1];
+	struct nf_hook_entries *e;
+	unsigned int base_seq;
+	int err = 0;
+
+	base_seq = smp_load_acquire(&net->nf.nat_hook_base_seq);
+
+	e = rcu_dereference(priv->entries);
+	if (!e)
+		goto out;
+
+	nat_ops = nf_hook_entries_get_hook_ops(e);
+
+	for (; i < e->num_hook_entries; i++) {
+		err = nfnl_hook_dump_one(nlskb, ctx,
+					 READ_ONCE(nat_ops[i]),
+					 ops->priority, family,
+					 cb->nlh->nlmsg_seq);
+		if (err)
+			break;
+
+	}
+out:
+	if (!err)
+		i = 0;
+	cb->args[1] = i;
+
+	if (cb->args[2] && base_seq != cb->args[2]) {
+		cb->seq++;
+		err = -EINTR;
+	}
+	cb->args[2] = base_seq;
+
+	return err;
+}
+
 static int nfnl_hook_dump(struct sk_buff *nlskb,
 			  struct netlink_callback *cb)
 {
@@ -311,30 +392,31 @@ static int nfnl_hook_dump(struct sk_buff *nlskb,
 	unsigned int i = cb->args[0];
 
 	rcu_read_lock();
+	cb->seq = smp_load_acquire(&net->nf.hook_base_seq);
 
 	e = nfnl_hook_entries_head(family, ctx->hook, net, ctx->devname);
-	if (!e)
+	if (!e || IS_ERR(e))
 		goto done;
-
-	if (IS_ERR(e)) {
-		cb->seq++;
-		goto done;
-	}
-
-	if ((unsigned long)e != ctx->headv || i >= e->num_hook_entries)
-		cb->seq++;
 
 	ops = nf_hook_entries_get_hook_ops(e);
 
 	for (; i < e->num_hook_entries; i++) {
-		err = nfnl_hook_dump_one(nlskb, ctx, ops[i], family,
-					 cb->nlh->nlmsg_seq);
+		const struct nf_hook_ops *cur = READ_ONCE(ops[i]);
+
+		if (cur->hook_ops_type == NF_HOOK_OP_NAT) {
+			err = nfnl_hook_dump_nat(nlskb, cb, cur, family);
+		} else {
+			err = nfnl_hook_dump_one(nlskb, ctx, cur,
+						 cur->priority, family,
+						 cb->nlh->nlmsg_seq);
+		}
 		if (err)
 			break;
 	}
 
 done:
-	nl_dump_check_consistent(cb, nlmsg_hdr(nlskb));
+	if (nlskb->len > 0)
+		nl_dump_check_consistent(cb, nlmsg_hdr(nlskb));
 	rcu_read_unlock();
 	cb->args[0] = i;
 	return nlskb->len;
@@ -370,15 +452,12 @@ static int nfnl_hook_dump_start(struct netlink_callback *cb)
 	if (head && IS_ERR(head))
 		return PTR_ERR(head);
 
-	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
+	ctx = kzalloc_obj(*ctx);
 	if (!ctx)
 		return -ENOMEM;
 
 	strscpy(ctx->devname, name, sizeof(ctx->devname));
-	ctx->headv = (unsigned long)head;
 	ctx->hook = hooknum;
-
-	cb->seq = 1;
 	cb->data = ctx;
 
 	return 0;

@@ -40,12 +40,12 @@ struct amdgpu_tlb_fence {
 
 static const char *amdgpu_tlb_fence_get_driver_name(struct dma_fence *fence)
 {
-	return "amdgpu tlb fence";
+	return "amdgpu_tlb_fence";
 }
 
 static const char *amdgpu_tlb_fence_get_timeline_name(struct dma_fence *f)
 {
-	return "amdgpu tlb timeline";
+	return "amdgpu_tlb_timeline";
 }
 
 static void amdgpu_tlb_fence_work(struct work_struct *work)
@@ -71,42 +71,53 @@ static void amdgpu_tlb_fence_work(struct work_struct *work)
 }
 
 static const struct dma_fence_ops amdgpu_tlb_fence_ops = {
-	.use_64bit_seqno = true,
 	.get_driver_name = amdgpu_tlb_fence_get_driver_name,
 	.get_timeline_name = amdgpu_tlb_fence_get_timeline_name
 };
 
-void amdgpu_vm_tlb_fence_create(struct amdgpu_device *adev, struct amdgpu_vm *vm,
+/**
+ * amdgpu_vm_tlb_fence_create - create a TLB invalidation fence
+ * @adev: the amdgpu device
+ * @vm: the vm to use
+ * @dep: the dependency to wait for
+ * @fence: the resulting fence
+ *
+ * Creates a TLB invalidation fence which signals when all the VMIDs assigned to
+ * the PASID of the VM are invalidated.
+ */
+void amdgpu_vm_tlb_fence_create(struct amdgpu_device *adev,
+				struct amdgpu_vm *vm,
+				struct dma_fence *dep,
 				struct dma_fence **fence)
 {
 	struct amdgpu_tlb_fence *f;
 
-	f = kmalloc(sizeof(*f), GFP_KERNEL);
+	f = kmalloc_obj(*f);
 	if (!f) {
 		/*
 		 * We can't fail since the PDEs and PTEs are already updated, so
 		 * just block for the dependency and execute the TLB flush
 		 */
-		if (*fence)
-			dma_fence_wait(*fence, false);
+		if (dep)
+			dma_fence_wait(dep, false);
 
 		amdgpu_gmc_flush_gpu_tlb_pasid(adev, vm->pasid, 2, true, 0);
-		*fence = dma_fence_get_stub();
 		return;
 	}
 
 	f->adev = adev;
-	f->dependency = *fence;
+	f->dependency = dma_fence_get(dep);
 	f->pasid = vm->pasid;
 	INIT_WORK(&f->work, amdgpu_tlb_fence_work);
 	spin_lock_init(&f->lock);
 
-	dma_fence_init(&f->base, &amdgpu_tlb_fence_ops, &f->lock,
-		       vm->tlb_fence_context, atomic64_read(&vm->tlb_seq));
+	dma_fence_init64(&f->base, &amdgpu_tlb_fence_ops, &f->lock,
+			 vm->tlb_fence_context, atomic64_read(&vm->tlb_seq));
 
 	/* TODO: We probably need a separate wq here */
 	dma_fence_get(&f->base);
 	schedule_work(&f->work);
 
+	dma_fence_put(*fence);
 	*fence = &f->base;
 }

@@ -138,7 +138,7 @@ static struct max8998_platform_data *max8998_i2c_parse_dt_pdata(
 {
 	struct max8998_platform_data *pd;
 
-	pd = devm_kzalloc(dev, sizeof(*pd), GFP_KERNEL);
+	pd = devm_kzalloc_obj(dev, *pd);
 	if (!pd)
 		return ERR_PTR(-ENOMEM);
 
@@ -146,7 +146,7 @@ static struct max8998_platform_data *max8998_i2c_parse_dt_pdata(
 
 	/*
 	 * ToDo: the 'wakeup' member in the platform data is more of a linux
-	 * specfic information. Hence, there is no binding for that yet and
+	 * specific information. Hence, there is no binding for that yet and
 	 * not parsed here.
 	 */
 	return pd;
@@ -158,8 +158,7 @@ static int max8998_i2c_probe(struct i2c_client *i2c)
 	struct max8998_dev *max8998;
 	int ret = 0;
 
-	max8998 = devm_kzalloc(&i2c->dev, sizeof(struct max8998_dev),
-				GFP_KERNEL);
+	max8998 = devm_kzalloc_obj(&i2c->dev, struct max8998_dev);
 	if (max8998 == NULL)
 		return -ENOMEM;
 
@@ -234,7 +233,7 @@ static int max8998_suspend(struct device *dev)
 	struct max8998_dev *max8998 = i2c_get_clientdata(i2c);
 
 	if (device_may_wakeup(dev))
-		irq_set_irq_wake(max8998->irq, 1);
+		enable_irq_wake(max8998->irq);
 	return 0;
 }
 
@@ -244,7 +243,7 @@ static int max8998_resume(struct device *dev)
 	struct max8998_dev *max8998 = i2c_get_clientdata(i2c);
 
 	if (device_may_wakeup(dev))
-		irq_set_irq_wake(max8998->irq, 0);
+		disable_irq_wake(max8998->irq);
 	/*
 	 * In LP3974, if IRQ registers are not "read & clear"
 	 * when it's set during sleep, the interrupt becomes

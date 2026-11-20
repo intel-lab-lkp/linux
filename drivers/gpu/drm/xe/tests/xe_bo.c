@@ -18,12 +18,238 @@
 #include "tests/xe_test.h"
 
 #include "xe_bo_evict.h"
+#include "xe_gt.h"
 #include "xe_pci.h"
 #include "xe_pm.h"
 
+#ifdef CONFIG_DRM_XE_DEBUG_PAGE_SIZE
+struct page_size_alloc_saved {
+	enum xe_page_size_alloc_ctrl_mode mode;
+	u32 cur_index;
+};
+
+/* Caller must hold xe->page_size_alloc_ctrl.lock. */
+static void page_size_alloc_save(struct xe_device *xe,
+				 struct page_size_alloc_saved *s)
+{
+	s->mode = xe->page_size_alloc_ctrl.mode;
+	s->cur_index = xe->page_size_alloc_ctrl.cur_index;
+}
+
+static void page_size_alloc_restore(struct xe_device *xe,
+				    const struct page_size_alloc_saved *s)
+{
+	mutex_lock(&xe->page_size_alloc_ctrl.lock);
+	xe->page_size_alloc_ctrl.mode = s->mode;
+	xe->page_size_alloc_ctrl.cur_index = s->cur_index;
+	mutex_unlock(&xe->page_size_alloc_ctrl.lock);
+}
+
+/* Expected properties for a forced page-size allocation mode. */
+struct leaf_info {
+	u64 leaf;
+	u64 alloc_size;
+	u32 flag;
+	const char *name;
+};
+
+static const struct leaf_info leaf_2m = {
+	.leaf = SZ_2M,
+	.alloc_size = SZ_2M - PAGE_SIZE,
+	.flag = XE_BO_FLAG_NEEDS_2M,
+	.name = "2M",
+};
+
+static const struct leaf_info leaf_1g = {
+	.leaf = SZ_1G,
+	.alloc_size = SZ_1G - PAGE_SIZE,
+	.flag = XE_BO_FLAG_NEEDS_1G,
+	.name = "1G",
+};
+
+static void run_only_leaf(struct kunit *test,
+			  enum xe_page_size_alloc_ctrl_mode mode,
+			  const struct leaf_info *li)
+{
+	struct xe_device *xe = test->priv;
+	struct page_size_alloc_saved saved;
+	struct xe_bo *bo;
+	struct ttm_buffer_object *ttm_bo;
+	u32 other_flags;
+
+	if (!IS_DGFX(xe)) {
+		kunit_skip(test, "requires dGFX VRAM");
+		return;
+	}
+
+	mutex_lock(&xe->page_size_alloc_ctrl.lock);
+	page_size_alloc_save(xe, &saved);
+	xe->page_size_alloc_ctrl.mode = mode;
+	mutex_unlock(&xe->page_size_alloc_ctrl.lock);
+
+	bo = xe_bo_create_user(xe, NULL, li->alloc_size,
+			       DRM_XE_GEM_CPU_CACHING_WC,
+			       XE_BO_FLAG_VRAM0, NULL);
+	if (IS_ERR(bo)) {
+		page_size_alloc_restore(xe, &saved);
+		if (PTR_ERR(bo) == -ENOSPC) {
+			kunit_skip(test,
+				   "no contiguous %s VRAM available right now",
+				   li->name);
+			return;
+		}
+
+		KUNIT_FAIL(test, "%s BO alloc failed: %pe", li->name, bo);
+		return;
+	}
+
+	ttm_bo = &bo->ttm;
+
+	/* 1) The mode added the right NEEDS_* flag. */
+	KUNIT_EXPECT_TRUE_MSG(test, bo->flags & li->flag,
+			      "%s: flag missing, flags=0x%x",
+			      li->name, bo->flags);
+
+	/* 2) No other NEEDS_* flags accidentally tagged on. */
+	other_flags = (XE_BO_FLAG_NEEDS_64K |
+		       XE_BO_FLAG_NEEDS_2M |
+		       XE_BO_FLAG_NEEDS_1G) & ~li->flag;
+	KUNIT_EXPECT_FALSE_MSG(test, bo->flags & other_flags,
+			       "%s: stray flags=0x%x",
+			       li->name, bo->flags);
+	/* 3) BO size was rounded up to the expected leaf size. */
+	KUNIT_EXPECT_EQ_MSG(test, xe_bo_size(bo), li->leaf,
+			    "%s: bo size=%llu expected=%llu",
+			    li->name,
+			    (u64)xe_bo_size(bo),
+			    (u64)li->leaf);
+	/*
+	 * 4) Allocator honored the requested alignment.
+	 * ttm_bo->page_alignment is stored in PAGE_SIZE units, so compare against
+	 * the expected leaf size converted with >> PAGE_SHIFT.
+	 */
+	KUNIT_EXPECT_EQ_MSG(test, ttm_bo->page_alignment,
+			    li->leaf >> PAGE_SHIFT,
+			    "%s: page_alignment=%u pages expected=%llu pages",
+			    li->name, ttm_bo->page_alignment,
+			    (u64)(li->leaf >> PAGE_SHIFT));
+
+	xe_bo_put(bo);
+	page_size_alloc_restore(xe, &saved);
+}
+
+static void xe_bo_page_size_alloc_only_2m(struct kunit *test)
+{
+	run_only_leaf(test, XE_PAGE_SIZE_ALLOC_CTRL_MODE_ONLY_2M, &leaf_2m);
+}
+
+static void xe_bo_page_size_alloc_only_1g(struct kunit *test)
+{
+	run_only_leaf(test, XE_PAGE_SIZE_ALLOC_CTRL_MODE_ONLY_1G, &leaf_1g);
+}
+
+static void xe_bo_page_size_alloc_mixed_bos(struct kunit *test)
+{
+	struct xe_device *xe = test->priv;
+	struct page_size_alloc_saved saved;
+	struct xe_bo *bo;
+	struct ttm_buffer_object *ttm_bo;
+	u32 all_flags = XE_BO_FLAG_NEEDS_64K | XE_BO_FLAG_NEEDS_2M |
+			XE_BO_FLAG_NEEDS_1G;
+	u32 flags;
+	u64 expected_align;
+	int i;
+	const int n = 4;
+
+	if (!IS_DGFX(xe)) {
+		kunit_skip(test, "requires dGFX VRAM");
+		return;
+	}
+
+	mutex_lock(&xe->page_size_alloc_ctrl.lock);
+	page_size_alloc_save(xe, &saved);
+	mutex_unlock(&xe->page_size_alloc_ctrl.lock);
+
+	for (i = 0; i < n; i++) {
+		mutex_lock(&xe->page_size_alloc_ctrl.lock);
+		xe->page_size_alloc_ctrl.mode = XE_PAGE_SIZE_ALLOC_CTRL_MODE_MIXED;
+		xe->page_size_alloc_ctrl.cur_index = i;
+		mutex_unlock(&xe->page_size_alloc_ctrl.lock);
+		/*
+		 * Request a size valid for any mixed-mode slot. Since cur_index is
+		 * device-global and may be perturbed by concurrent allocations on
+		 * a live system, do not assume this iteration will see a specific
+		 * slot.
+		 */
+		bo = xe_bo_create_user(xe, NULL, SZ_1G,
+				       DRM_XE_GEM_CPU_CACHING_WC,
+				       XE_BO_FLAG_VRAM0, NULL);
+		if (IS_ERR(bo)) {
+			int err = PTR_ERR(bo);
+
+			page_size_alloc_restore(xe, &saved);
+			if (err == -ENOSPC) {
+				kunit_skip(test,
+					   "mixed mode BO allocation unavailable: %d",
+					   err);
+				return;
+			}
+			KUNIT_FAIL(test, "iter=%d alloc failed: %pe", i, bo);
+			return;
+		}
+
+		ttm_bo = &bo->ttm;
+		flags = bo->flags & all_flags;
+		/*
+		 * Mixed mode may result in:
+		 * 0-> default platform VRAM alignment
+		 * XE_BO_FLAG_NEEDS_64K
+		 * XE_BO_FLAG_NEEDS_2M
+		 * XE_BO_FLAG_NEEDS_1G
+		 * Any other combination is invalid.
+		 */
+		if (flags == 0) {
+			expected_align = SZ_4K;
+			if (xe->info.vram_flags & XE_VRAM_FLAGS_NEED64K)
+				expected_align = SZ_64K;
+		} else if (flags == XE_BO_FLAG_NEEDS_64K) {
+			expected_align = SZ_64K;
+		} else if (flags == XE_BO_FLAG_NEEDS_2M) {
+			expected_align = SZ_2M;
+		} else if (flags == XE_BO_FLAG_NEEDS_1G) {
+			expected_align = SZ_1G;
+		} else {
+			KUNIT_FAIL(test,
+				   "iter=%d invalid mixed-mode flags: 0x%x",
+				   i, flags);
+			xe_bo_put(bo);
+			page_size_alloc_restore(xe, &saved);
+			return;
+		}
+		/*
+		 * BO size should remain valid for the selected mode. Since the
+		 * request is SZ_1G, it should remain unchanged regardless of the
+		 * selected page-size policy.
+		 */
+		KUNIT_EXPECT_EQ_MSG(test, xe_bo_size(bo), (u64)SZ_1G,
+				    "iter=%d size=%llu expected=%llu",
+				    i,
+				    (u64)xe_bo_size(bo),
+				    (u64)SZ_1G);
+		KUNIT_EXPECT_EQ_MSG(test, ttm_bo->page_alignment,
+				    expected_align >> PAGE_SHIFT,
+				    "iter=%d flags=0x%x page_alignment=%u pages expected=%llu pages",
+				    i, flags, ttm_bo->page_alignment,
+				    (u64)(expected_align >> PAGE_SHIFT));
+		xe_bo_put(bo);
+	}
+	page_size_alloc_restore(xe, &saved);
+}
+#endif
+
 static int ccs_test_migrate(struct xe_tile *tile, struct xe_bo *bo,
 			    bool clear, u64 get_val, u64 assign_val,
-			    struct kunit *test)
+			    struct kunit *test, struct drm_exec *exec)
 {
 	struct dma_fence *fence;
 	struct ttm_tt *ttm;
@@ -35,7 +261,7 @@ static int ccs_test_migrate(struct xe_tile *tile, struct xe_bo *bo,
 	u32 offset;
 
 	/* Move bo to VRAM if not already there. */
-	ret = xe_bo_validate(bo, NULL, false);
+	ret = xe_bo_validate(bo, NULL, false, exec);
 	if (ret) {
 		KUNIT_FAIL(test, "Failed to validate bo.\n");
 		return ret;
@@ -60,7 +286,7 @@ static int ccs_test_migrate(struct xe_tile *tile, struct xe_bo *bo,
 	}
 
 	/* Evict to system. CCS data should be copied. */
-	ret = xe_bo_evict(bo);
+	ret = xe_bo_evict(bo, exec);
 	if (ret) {
 		KUNIT_FAIL(test, "Failed to evict bo.\n");
 		return ret;
@@ -106,7 +332,7 @@ static int ccs_test_migrate(struct xe_tile *tile, struct xe_bo *bo,
 	}
 
 	/* Check last CCS value, or at least last value in page. */
-	offset = xe_device_ccs_bytes(tile_to_xe(tile), bo->size);
+	offset = xe_device_ccs_bytes(tile_to_xe(tile), xe_bo_size(bo));
 	offset = min_t(u32, offset, PAGE_SIZE) / sizeof(u64) - 1;
 	if (cpu_map[offset] != get_val) {
 		KUNIT_FAIL(test,
@@ -132,14 +358,15 @@ static void ccs_test_run_tile(struct xe_device *xe, struct xe_tile *tile,
 
 	/* TODO: Sanity check */
 	unsigned int bo_flags = XE_BO_FLAG_VRAM_IF_DGFX(tile);
+	struct drm_exec *exec = XE_VALIDATION_OPT_OUT;
 
 	if (IS_DGFX(xe))
 		kunit_info(test, "Testing vram id %u\n", tile->id);
 	else
 		kunit_info(test, "Testing system memory\n");
 
-	bo = xe_bo_create_user(xe, NULL, NULL, SZ_1M, DRM_XE_GEM_CPU_CACHING_WC,
-			       bo_flags);
+	bo = xe_bo_create_user(xe, NULL, SZ_1M, DRM_XE_GEM_CPU_CACHING_WC,
+			       bo_flags, exec);
 	if (IS_ERR(bo)) {
 		KUNIT_FAIL(test, "Failed to create bo.\n");
 		return;
@@ -149,18 +376,18 @@ static void ccs_test_run_tile(struct xe_device *xe, struct xe_tile *tile,
 
 	kunit_info(test, "Verifying that CCS data is cleared on creation.\n");
 	ret = ccs_test_migrate(tile, bo, false, 0ULL, 0xdeadbeefdeadbeefULL,
-			       test);
+			       test, exec);
 	if (ret)
 		goto out_unlock;
 
 	kunit_info(test, "Verifying that CCS data survives migration.\n");
 	ret = ccs_test_migrate(tile, bo, false, 0xdeadbeefdeadbeefULL,
-			       0xdeadbeefdeadbeefULL, test);
+			       0xdeadbeefdeadbeefULL, test, exec);
 	if (ret)
 		goto out_unlock;
 
 	kunit_info(test, "Verifying that CCS data can be properly cleared.\n");
-	ret = ccs_test_migrate(tile, bo, true, 0ULL, 0ULL, test);
+	ret = ccs_test_migrate(tile, bo, true, 0ULL, 0ULL, test, exec);
 
 out_unlock:
 	xe_bo_unlock(bo);
@@ -184,16 +411,13 @@ static int ccs_test_run_device(struct xe_device *xe)
 		return 0;
 	}
 
-	xe_pm_runtime_get(xe);
-
+	guard(xe_pm_runtime)(xe);
 	for_each_tile(tile, xe, id) {
 		/* For igfx run only for primary tile */
 		if (!IS_DGFX(xe) && id > 0)
 			continue;
 		ccs_test_run_tile(xe, tile, test);
 	}
-
-	xe_pm_runtime_put(xe);
 
 	return 0;
 }
@@ -210,6 +434,7 @@ static int evict_test_run_tile(struct xe_device *xe, struct xe_tile *tile, struc
 	struct xe_bo *bo, *external;
 	unsigned int bo_flags = XE_BO_FLAG_VRAM_IF_DGFX(tile);
 	struct xe_vm *vm = xe_migrate_get_vm(xe_device_get_root_tile(xe)->migrate);
+	struct drm_exec *exec = XE_VALIDATION_OPT_OUT;
 	struct xe_gt *__gt;
 	int err, i, id;
 
@@ -218,25 +443,25 @@ static int evict_test_run_tile(struct xe_device *xe, struct xe_tile *tile, struc
 
 	for (i = 0; i < 2; ++i) {
 		xe_vm_lock(vm, false);
-		bo = xe_bo_create_user(xe, NULL, vm, 0x10000,
+		bo = xe_bo_create_user(xe, vm, 0x10000,
 				       DRM_XE_GEM_CPU_CACHING_WC,
-				       bo_flags);
+				       bo_flags, exec);
 		xe_vm_unlock(vm);
 		if (IS_ERR(bo)) {
 			KUNIT_FAIL(test, "bo create err=%pe\n", bo);
 			break;
 		}
 
-		external = xe_bo_create_user(xe, NULL, NULL, 0x10000,
+		external = xe_bo_create_user(xe, NULL, 0x10000,
 					     DRM_XE_GEM_CPU_CACHING_WC,
-					     bo_flags);
+					     bo_flags, NULL);
 		if (IS_ERR(external)) {
 			KUNIT_FAIL(test, "external bo create err=%pe\n", external);
 			goto cleanup_bo;
 		}
 
 		xe_bo_lock(external, false);
-		err = xe_bo_pin_external(external);
+		err = xe_bo_pin_external(external, false, exec);
 		xe_bo_unlock(external);
 		if (err) {
 			KUNIT_FAIL(test, "external bo pin err=%pe\n",
@@ -294,7 +519,7 @@ static int evict_test_run_tile(struct xe_device *xe, struct xe_tile *tile, struc
 		if (i) {
 			down_read(&vm->lock);
 			xe_vm_lock(vm, false);
-			err = xe_bo_validate(bo, bo->vm, false);
+			err = xe_bo_validate(bo, bo->vm, false, exec);
 			xe_vm_unlock(vm);
 			up_read(&vm->lock);
 			if (err) {
@@ -303,7 +528,7 @@ static int evict_test_run_tile(struct xe_device *xe, struct xe_tile *tile, struc
 				goto cleanup_all;
 			}
 			xe_bo_lock(external, false);
-			err = xe_bo_validate(external, NULL, false);
+			err = xe_bo_validate(external, NULL, false, exec);
 			xe_bo_unlock(external);
 			if (err) {
 				KUNIT_FAIL(test, "external bo valid err=%pe\n",
@@ -354,12 +579,9 @@ static int evict_test_run_device(struct xe_device *xe)
 		return 0;
 	}
 
-	xe_pm_runtime_get(xe);
-
+	guard(xe_pm_runtime)(xe);
 	for_each_tile(tile, xe, id)
 		evict_test_run_tile(xe, tile, test);
-
-	xe_pm_runtime_put(xe);
 
 	return 0;
 }
@@ -485,7 +707,7 @@ static int shrink_test_run_device(struct xe_device *xe)
 		unsigned int mem_type;
 		struct xe_ttm_tt *xe_tt;
 
-		link = kzalloc(sizeof(*link), GFP_KERNEL);
+		link = kzalloc_obj(*link);
 		if (!link) {
 			KUNIT_FAIL(test, "Unexpected link allocation failure\n");
 			failed = true;
@@ -495,9 +717,9 @@ static int shrink_test_run_device(struct xe_device *xe)
 		INIT_LIST_HEAD(&link->link);
 
 		/* We can create bos using WC caching here. But it is slower. */
-		bo = xe_bo_create_user(xe, NULL, NULL, XE_BO_SHRINK_SIZE,
+		bo = xe_bo_create_user(xe, NULL, XE_BO_SHRINK_SIZE,
 				       DRM_XE_GEM_CPU_CACHING_WB,
-				       XE_BO_FLAG_SYSTEM);
+				       XE_BO_FLAG_SYSTEM, NULL);
 		if (IS_ERR(bo)) {
 			if (bo != ERR_PTR(-ENOMEM) && bo != ERR_PTR(-ENOSPC) &&
 			    bo != ERR_PTR(-EINTR) && bo != ERR_PTR(-ERESTARTSYS))
@@ -514,9 +736,9 @@ static int shrink_test_run_device(struct xe_device *xe)
 		 * other way around, they may not be subject to swapping...
 		 */
 		if (alloced < purgeable) {
-			xe_ttm_tt_account_subtract(&xe_tt->ttm);
+			xe_ttm_tt_account_subtract(xe, &xe_tt->ttm);
 			xe_tt->purgeable = true;
-			xe_ttm_tt_account_add(&xe_tt->ttm);
+			xe_ttm_tt_account_add(xe, &xe_tt->ttm);
 			bo->ttm.priority = 0;
 			spin_lock(&bo->ttm.bdev->lru_lock);
 			ttm_bo_move_to_lru_tail(&bo->ttm);
@@ -611,6 +833,23 @@ static struct kunit_case xe_bo_tests[] = {
 	KUNIT_CASE_PARAM(xe_bo_evict_kunit, xe_pci_live_device_gen_param),
 	{}
 };
+
+#ifdef CONFIG_DRM_XE_DEBUG_PAGE_SIZE
+static struct kunit_case xe_bo_page_size_alloc_cases[] = {
+	KUNIT_CASE_PARAM(xe_bo_page_size_alloc_only_2m,   xe_pci_live_device_gen_param),
+	KUNIT_CASE_PARAM(xe_bo_page_size_alloc_only_1g,   xe_pci_live_device_gen_param),
+	KUNIT_CASE_PARAM(xe_bo_page_size_alloc_mixed_bos,   xe_pci_live_device_gen_param),
+	{}
+};
+
+VISIBLE_IF_KUNIT
+struct kunit_suite xe_bo_page_size_alloc_suite = {
+	.name = "xe_bo_page_size_alloc",
+	.test_cases = xe_bo_page_size_alloc_cases,
+	.init = xe_kunit_helper_xe_device_live_test_init,
+};
+EXPORT_SYMBOL_IF_KUNIT(xe_bo_page_size_alloc_suite);
+#endif
 
 VISIBLE_IF_KUNIT
 struct kunit_suite xe_bo_test_suite = {

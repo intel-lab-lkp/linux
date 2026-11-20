@@ -23,67 +23,35 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include "futextest.h"
-#include "logging.h"
 
-#define TEST_NAME "futex-requeue-pi-mismatched-ops"
+#include "futextest.h"
+#include "kselftest_harness.h"
 
 futex_t f1 = FUTEX_INITIALIZER;
 futex_t f2 = FUTEX_INITIALIZER;
-int child_ret = 0;
-
-void usage(char *prog)
-{
-	printf("Usage: %s\n", prog);
-	printf("  -c	Use color\n");
-	printf("  -h	Display this help message\n");
-	printf("  -v L	Verbosity level: %d=QUIET %d=CRITICAL %d=INFO\n",
-	       VQUIET, VCRITICAL, VINFO);
-}
+int child_ret;
 
 void *blocking_child(void *arg)
 {
+	struct __test_metadata *_metadata = (struct __test_metadata *)arg;
+
 	child_ret = futex_wait(&f1, f1, NULL, FUTEX_PRIVATE_FLAG);
 	if (child_ret < 0) {
 		child_ret = -errno;
-		error("futex_wait\n", errno);
+		ASSERT_EQ(child_ret, 0)
+			TH_LOG("futex_wait failed: %s", strerror(errno));
 	}
 	return (void *)&child_ret;
 }
 
-int main(int argc, char *argv[])
+TEST(requeue_pi_mismatched_ops)
 {
-	int ret = RET_PASS;
 	pthread_t child;
-	int c;
+	int ret;
 
-	while ((c = getopt(argc, argv, "chv:")) != -1) {
-		switch (c) {
-		case 'c':
-			log_color(1);
-			break;
-		case 'h':
-			usage(basename(argv[0]));
-			exit(0);
-		case 'v':
-			log_verbosity(atoi(optarg));
-			break;
-		default:
-			usage(basename(argv[0]));
-			exit(1);
-		}
-	}
+	ASSERT_EQ(pthread_create(&child, NULL, blocking_child, _metadata), 0)
+		TH_LOG("pthread_create failed");
 
-	ksft_print_header();
-	ksft_set_plan(1);
-	ksft_print_msg("%s: Detect mismatched requeue_pi operations\n",
-	       basename(argv[0]));
-
-	if (pthread_create(&child, NULL, blocking_child, NULL)) {
-		error("pthread_create\n", errno);
-		ret = RET_ERROR;
-		goto out;
-	}
 	/* Allow the child to block in the kernel. */
 	sleep(1);
 
@@ -103,33 +71,32 @@ int main(int argc, char *argv[])
 			 */
 			ret = futex_wake(&f1, 1, FUTEX_PRIVATE_FLAG);
 			if (ret == 1) {
-				ret = RET_PASS;
+				ret = 0;
 			} else if (ret < 0) {
-				error("futex_wake\n", errno);
-				ret = RET_ERROR;
+				ASSERT_GE(ret, 0)
+					TH_LOG("futex_wake failed: %s", strerror(errno));
 			} else {
-				error("futex_wake did not wake the child\n", 0);
-				ret = RET_ERROR;
+				ASSERT_TRUE(0)
+					TH_LOG("futex_wake did not wake the child");
 			}
 		} else {
-			error("futex_cmp_requeue_pi\n", errno);
-			ret = RET_ERROR;
+			ASSERT_TRUE(0)
+				TH_LOG("futex_cmp_requeue_pi failed with unexpected errno: %s", strerror(errno));
 		}
 	} else if (ret > 0) {
-		fail("futex_cmp_requeue_pi failed to detect the mismatch\n");
-		ret = RET_FAIL;
+		EXPECT_EQ(ret, 0)
+			TH_LOG("futex_cmp_requeue_pi failed to detect the mismatch");
 	} else {
-		error("futex_cmp_requeue_pi found no waiters\n", 0);
-		ret = RET_ERROR;
+		ASSERT_TRUE(0)
+			TH_LOG("futex_cmp_requeue_pi found no waiters");
 	}
 
 	pthread_join(child, NULL);
 
-	if (!ret)
-		ret = child_ret;
-
- out:
-	/* If the kernel crashes, we shouldn't return at all. */
-	print_result(TEST_NAME, ret);
-	return ret;
+	EXPECT_EQ(ret, 0)
+		TH_LOG("Test failed: ret=%d", ret);
+	EXPECT_EQ(child_ret, 0)
+		TH_LOG("Child failed: child_ret=%d", child_ret);
 }
+
+TEST_HARNESS_MAIN

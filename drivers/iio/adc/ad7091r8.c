@@ -206,14 +206,14 @@ static int ad7091r8_gpio_setup(struct ad7091r_state *st)
 	return 0;
 }
 
-static struct ad7091r_init_info ad7091r2_init_info = {
+static const struct ad7091r_init_info ad7091r2_init_info = {
 	.info_no_irq = &ad7091r8_infos[AD7091R2_INFO],
 	.regmap_config = &ad7091r2_reg_conf,
 	.init_adc_regmap = &ad7091r8_regmap_init,
 	.setup = &ad7091r8_gpio_setup
 };
 
-static struct ad7091r_init_info ad7091r4_init_info = {
+static const struct ad7091r_init_info ad7091r4_init_info = {
 	.info_no_irq = &ad7091r8_infos[AD7091R4_INFO],
 	.info_irq = &ad7091r8_infos[AD7091R4_INFO_IRQ],
 	.regmap_config = &ad7091r4_reg_conf,
@@ -221,7 +221,7 @@ static struct ad7091r_init_info ad7091r4_init_info = {
 	.setup = &ad7091r8_gpio_setup
 };
 
-static struct ad7091r_init_info ad7091r8_init_info = {
+static const struct ad7091r_init_info ad7091r8_init_info = {
 	.info_no_irq = &ad7091r8_infos[AD7091R8_INFO],
 	.info_irq = &ad7091r8_infos[AD7091R8_INFO_IRQ],
 	.regmap_config = &ad7091r8_reg_conf,
@@ -249,9 +249,9 @@ static const struct of_device_id ad7091r8_of_match[] = {
 MODULE_DEVICE_TABLE(of, ad7091r8_of_match);
 
 static const struct spi_device_id ad7091r8_spi_id[] = {
-	{ "ad7091r2", (kernel_ulong_t)&ad7091r2_init_info },
-	{ "ad7091r4", (kernel_ulong_t)&ad7091r4_init_info },
-	{ "ad7091r8", (kernel_ulong_t)&ad7091r8_init_info },
+	{ .name = "ad7091r2", .driver_data = (kernel_ulong_t)&ad7091r2_init_info },
+	{ .name = "ad7091r4", .driver_data = (kernel_ulong_t)&ad7091r4_init_info },
+	{ .name = "ad7091r8", .driver_data = (kernel_ulong_t)&ad7091r8_init_info },
 	{ }
 };
 MODULE_DEVICE_TABLE(spi, ad7091r8_spi_id);

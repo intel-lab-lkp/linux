@@ -12,7 +12,7 @@
 #include <dt-bindings/sound/qcom,q6dsp-lpass-ports.h>
 #include "q6dsp-lpass-clocks.h"
 
-#define Q6DSP_MAX_CLK_ID			104
+#define Q6DSP_MAX_CLK_ID			105
 #define Q6DSP_LPASS_CLK_ROOT_DEFAULT		0
 
 
@@ -69,17 +69,17 @@ static unsigned long clk_q6dsp_recalc_rate(struct clk_hw *hw,
 	return clk->rate;
 }
 
-static long clk_q6dsp_round_rate(struct clk_hw *hw, unsigned long rate,
-				 unsigned long *parent_rate)
+static int clk_q6dsp_determine_rate(struct clk_hw *hw,
+				    struct clk_rate_request *req)
 {
-	return rate;
+	return 0;
 }
 
 static const struct clk_ops clk_q6dsp_ops = {
 	.prepare	= clk_q6dsp_prepare,
 	.unprepare	= clk_q6dsp_unprepare,
 	.set_rate	= clk_q6dsp_set_rate,
-	.round_rate	= clk_q6dsp_round_rate,
+	.determine_rate = clk_q6dsp_determine_rate,
 	.recalc_rate	= clk_q6dsp_recalc_rate,
 };
 
@@ -134,7 +134,7 @@ int q6dsp_clock_dev_probe(struct platform_device *pdev)
 	const struct q6dsp_clk_desc *desc;
 	int i, ret;
 
-	cc = devm_kzalloc(dev, sizeof(*cc), GFP_KERNEL);
+	cc = devm_kzalloc_obj(dev, *cc);
 	if (!cc)
 		return -ENOMEM;
 
@@ -153,7 +153,7 @@ int q6dsp_clock_dev_probe(struct platform_device *pdev)
 		};
 		struct q6dsp_clk *clk;
 
-		clk = devm_kzalloc(dev, sizeof(*clk), GFP_KERNEL);
+		clk = devm_kzalloc_obj(dev, *clk);
 		if (!clk)
 			return -ENOMEM;
 

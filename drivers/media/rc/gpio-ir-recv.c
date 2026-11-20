@@ -48,10 +48,8 @@ static irqreturn_t gpio_ir_recv_irq(int irq, void *dev_id)
 	if (val >= 0)
 		ir_raw_event_store_edge(gpio_dev->rcdev, val == 1);
 
-	if (pmdev) {
-		pm_runtime_mark_last_busy(pmdev);
+	if (pmdev)
 		pm_runtime_put_autosuspend(pmdev);
-	}
 
 	return IRQ_HANDLED;
 }
@@ -68,7 +66,7 @@ static int gpio_ir_recv_probe(struct platform_device *pdev)
 	if (!np)
 		return -ENODEV;
 
-	gpio_dev = devm_kzalloc(dev, sizeof(*gpio_dev), GFP_KERNEL);
+	gpio_dev = devm_kzalloc_obj(dev, *gpio_dev);
 	if (!gpio_dev)
 		return -ENOMEM;
 

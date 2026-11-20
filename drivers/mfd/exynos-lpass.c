@@ -101,7 +101,6 @@ static const struct regmap_config exynos_lpass_reg_conf = {
 	.reg_stride	= 4,
 	.val_bits	= 32,
 	.max_register	= 0xfc,
-	.fast_io	= true,
 };
 
 static void exynos_lpass_disable_lpass(void *data)
@@ -121,7 +120,7 @@ static int exynos_lpass_probe(struct platform_device *pdev)
 	void __iomem *base_top;
 	int ret;
 
-	lpass = devm_kzalloc(dev, sizeof(*lpass), GFP_KERNEL);
+	lpass = devm_kzalloc_obj(dev, *lpass);
 	if (!lpass)
 		return -ENOMEM;
 

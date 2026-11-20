@@ -44,7 +44,7 @@
 /* We borrow bit 11 to store the exclusive marker in swap PTEs. */
 #define _PAGE_SWP_EXCLUSIVE	0x800
 
-#ifndef __ASSEMBLY__
+#ifndef __ASSEMBLER__
 
 /* This is the cache mode to be used for pages containing page descriptors for
  * processors >= '040. It is in pte_mknocache(), and the variable is defined
@@ -131,14 +131,6 @@ static inline void pud_set(pud_t *pudp, pmd_t *pmdp)
 #define pud_clear(pudp)		({ pud_val(*pudp) = 0; })
 #define pud_page(pud)		(mem_map + ((unsigned long)(__va(pud_val(pud)) - PAGE_OFFSET) >> PAGE_SHIFT))
 
-#define pte_ERROR(e) \
-	printk("%s:%d: bad pte %08lx.\n", __FILE__, __LINE__, pte_val(e))
-#define pmd_ERROR(e) \
-	printk("%s:%d: bad pmd %08lx.\n", __FILE__, __LINE__, pmd_val(e))
-#define pgd_ERROR(e) \
-	printk("%s:%d: bad pgd %08lx.\n", __FILE__, __LINE__, pgd_val(e))
-
-
 /*
  * The following only work if pte_present() is true.
  * Undefined behaviour if not..
@@ -202,5 +194,5 @@ static inline pte_t pte_swp_clear_exclusive(pte_t pte)
 	return pte;
 }
 
-#endif	/* !__ASSEMBLY__ */
+#endif	/* !__ASSEMBLER__ */
 #endif /* _MOTOROLA_PGTABLE_H */

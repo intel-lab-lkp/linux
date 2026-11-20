@@ -62,10 +62,8 @@ int __init riscv_early_of_processor_hartid(struct device_node *node, unsigned lo
 		return -ENODEV;
 	}
 
-	if (!of_device_is_available(node)) {
-		pr_info("CPU with hartid=%lu is not available\n", *hart);
+	if (!of_device_is_available(node))
 		return -ENODEV;
-	}
 
 	if (of_property_read_string(node, "riscv,isa-base", &isa))
 		goto old_interface;
@@ -294,9 +292,9 @@ static void print_mmu(struct seq_file *f)
 #if defined(CONFIG_32BIT)
 	sv_type = "sv32";
 #elif defined(CONFIG_64BIT)
-	if (pgtable_l5_enabled)
+	if (pgtable_l5_enabled())
 		sv_type = "sv57";
-	else if (pgtable_l4_enabled)
+	else if (pgtable_l4_enabled())
 		sv_type = "sv48";
 	else
 		sv_type = "sv39";

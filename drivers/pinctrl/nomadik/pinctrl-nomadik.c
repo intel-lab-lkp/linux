@@ -584,7 +584,7 @@ static void nmk_pin_dbg_show(struct pinctrl_dev *pctldev, struct seq_file *s,
 		seq_printf(s, "invalid pin offset");
 		return;
 	}
-	nmk_gpio_dbg_show_one(s, pctldev, chip, offset - chip->base, offset);
+	nmk_gpio_dbg_show_one(s, pctldev, chip, offset - chip->base);
 }
 
 static int nmk_dt_add_map_mux(struct pinctrl_map **map, unsigned int *reserved_maps,
@@ -1215,7 +1215,7 @@ static int nmk_pinctrl_probe(struct platform_device *pdev)
 	uintptr_t version = 0;
 	int i;
 
-	npct = devm_kzalloc(&pdev->dev, sizeof(*npct), GFP_KERNEL);
+	npct = devm_kzalloc_obj(&pdev->dev, *npct);
 	if (!npct)
 		return -ENOMEM;
 

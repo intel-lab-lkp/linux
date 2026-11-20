@@ -708,10 +708,10 @@ struct mwifiex_rx_reorder_tbl {
 	int init_win;
 	int start_win;
 	int win_size;
-	void **rx_reorder_ptr;
 	struct reorder_tmr_cnxt timer_context;
 	u8 amsdu;
 	u8 flags;
+	struct sk_buff *rx_reorder_ptr[] __counted_by(win_size);
 };
 
 struct mwifiex_bss_prio_node {
@@ -982,6 +982,7 @@ struct mwifiex_adapter {
 	u8 country_code[IEEE80211_COUNTRY_STRING_LEN];
 	u16 max_mgmt_ie_index;
 	const struct firmware *cal_data;
+	const struct firmware *rgpower_data;
 	struct device_node *dt_node;
 
 	/* 11AC */
@@ -1002,6 +1003,7 @@ struct mwifiex_adapter {
 	bool host_mlme_enabled;
 	struct ieee80211_txrx_stypes mwifiex_mgmt_stypes[NUM_NL80211_IFTYPES];
 	u8 fw_api_ver;
+	u16 fw_hotfix_ver;
 	u8 key_api_major_ver, key_api_minor_ver;
 	u8 max_p2p_conn, max_sta_conn;
 	struct memory_type_mapping *mem_type_mapping_tbl;
@@ -1579,6 +1581,8 @@ int mwifiex_11h_handle_event_chanswann(struct mwifiex_private *priv);
 int mwifiex_dnld_dt_cfgdata(struct mwifiex_private *priv,
 			    struct device_node *node, const char *prefix);
 void mwifiex_dnld_txpwr_table(struct mwifiex_private *priv);
+int mwifiex_send_rgpower_table(struct mwifiex_private *priv, const u8 *data,
+			       const size_t size);
 
 extern const struct ethtool_ops mwifiex_ethtool_ops;
 

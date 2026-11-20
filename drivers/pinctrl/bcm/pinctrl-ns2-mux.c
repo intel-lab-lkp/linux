@@ -971,6 +971,7 @@ static struct pinctrl_desc ns2_pinctrl_desc = {
 	.pctlops = &ns2_pinctrl_ops,
 	.pmxops = &ns2_pinmux_ops,
 	.confops = &ns2_pinconf_ops,
+	.npins = ARRAY_SIZE(ns2_pins),
 };
 
 static int ns2_mux_log_init(struct ns2_pinctrl *pinctrl)
@@ -978,9 +979,8 @@ static int ns2_mux_log_init(struct ns2_pinctrl *pinctrl)
 	struct ns2_mux_log *log;
 	unsigned int i;
 
-	pinctrl->mux_log = devm_kcalloc(pinctrl->dev, NS2_NUM_IOMUX,
-					sizeof(struct ns2_mux_log),
-					GFP_KERNEL);
+	pinctrl->mux_log = devm_kzalloc_objs(pinctrl->dev, struct ns2_mux_log,
+					     NS2_NUM_IOMUX);
 	if (!pinctrl->mux_log)
 		return -ENOMEM;
 
@@ -1026,9 +1026,8 @@ static int ns2_pinmux_probe(struct platform_device *pdev)
 	struct resource *res;
 	int i, ret;
 	struct pinctrl_pin_desc *pins;
-	unsigned int num_pins = ARRAY_SIZE(ns2_pins);
 
-	pinctrl = devm_kzalloc(&pdev->dev, sizeof(*pinctrl), GFP_KERNEL);
+	pinctrl = devm_kzalloc_obj(&pdev->dev, *pinctrl);
 	if (!pinctrl)
 		return -ENOMEM;
 
@@ -1060,11 +1059,11 @@ static int ns2_pinmux_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	pins = devm_kcalloc(&pdev->dev, num_pins, sizeof(*pins), GFP_KERNEL);
+	pins = devm_kzalloc_objs(&pdev->dev, *pins, ARRAY_SIZE(ns2_pins));
 	if (!pins)
 		return -ENOMEM;
 
-	for (i = 0; i < num_pins; i++) {
+	for (i = 0; i < ARRAY_SIZE(ns2_pins); i++) {
 		pins[i].number = ns2_pins[i].pin;
 		pins[i].name = ns2_pins[i].name;
 		pins[i].drv_data = &ns2_pins[i];
@@ -1075,7 +1074,6 @@ static int ns2_pinmux_probe(struct platform_device *pdev)
 	pinctrl->functions = ns2_pin_functions;
 	pinctrl->num_functions = ARRAY_SIZE(ns2_pin_functions);
 	ns2_pinctrl_desc.pins = pins;
-	ns2_pinctrl_desc.npins = num_pins;
 
 	pinctrl->pctl = pinctrl_register(&ns2_pinctrl_desc, &pdev->dev,
 			pinctrl);

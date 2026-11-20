@@ -133,7 +133,7 @@ static struct max8997_platform_data *max8997_i2c_parse_dt_pdata(
 {
 	struct max8997_platform_data *pd;
 
-	pd = devm_kzalloc(dev, sizeof(*pd), GFP_KERNEL);
+	pd = devm_kzalloc_obj(dev, *pd);
 	if (!pd)
 		return ERR_PTR(-ENOMEM);
 
@@ -148,8 +148,7 @@ static int max8997_i2c_probe(struct i2c_client *i2c)
 	struct max8997_platform_data *pdata = dev_get_platdata(&i2c->dev);
 	int ret = 0;
 
-	max8997 = devm_kzalloc(&i2c->dev, sizeof(struct max8997_dev),
-				GFP_KERNEL);
+	max8997 = devm_kzalloc_obj(&i2c->dev, struct max8997_dev);
 	if (max8997 == NULL)
 		return -ENOMEM;
 
@@ -438,7 +437,7 @@ static int max8997_suspend(struct device *dev)
 
 	disable_irq(max8997->irq);
 	if (device_may_wakeup(dev))
-		irq_set_irq_wake(max8997->irq, 1);
+		enable_irq_wake(max8997->irq);
 	return 0;
 }
 
@@ -448,7 +447,7 @@ static int max8997_resume(struct device *dev)
 	struct max8997_dev *max8997 = i2c_get_clientdata(i2c);
 
 	if (device_may_wakeup(dev))
-		irq_set_irq_wake(max8997->irq, 0);
+		disable_irq_wake(max8997->irq);
 	enable_irq(max8997->irq);
 	return max8997_irq_resume(max8997);
 }

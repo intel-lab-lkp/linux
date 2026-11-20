@@ -18,6 +18,9 @@
 
 #include "common.h"
 
+VFIO_PCI_CORE_DEFINE_CALLBACKS(virtiovf, struct virtiovf_pci_core_device,
+			       core_device)
+
 static int virtiovf_pci_open_device(struct vfio_device *core_vdev)
 {
 	struct virtiovf_pci_core_device *virtvdev = container_of(core_vdev,
@@ -88,12 +91,14 @@ static const struct vfio_device_ops virtiovf_vfio_pci_lm_ops = {
 	.open_device = virtiovf_pci_open_device,
 	.close_device = virtiovf_pci_close_device,
 	.ioctl = vfio_pci_core_ioctl,
+	.get_region_info_caps = vfio_pci_ioctl_get_region_info,
 	.device_feature = vfio_pci_core_ioctl_feature,
 	.read = vfio_pci_core_read,
 	.write = vfio_pci_core_write,
 	.mmap = vfio_pci_core_mmap,
 	.request = vfio_pci_core_request,
 	.match = vfio_pci_core_match,
+	.match_token_uuid = vfio_pci_core_match_token_uuid,
 	.bind_iommufd = vfio_iommufd_physical_bind,
 	.unbind_iommufd = vfio_iommufd_physical_unbind,
 	.attach_ioas = vfio_iommufd_physical_attach_ioas,
@@ -107,13 +112,15 @@ static const struct vfio_device_ops virtiovf_vfio_pci_tran_lm_ops = {
 	.release = virtiovf_pci_core_release_dev,
 	.open_device = virtiovf_pci_open_device,
 	.close_device = virtiovf_pci_close_device,
-	.ioctl = virtiovf_vfio_pci_core_ioctl,
+	.ioctl = vfio_pci_core_ioctl,
+	.get_region_info_caps = virtiovf_pci_ioctl_get_region_info,
 	.device_feature = vfio_pci_core_ioctl_feature,
 	.read = virtiovf_pci_core_read,
 	.write = virtiovf_pci_core_write,
 	.mmap = vfio_pci_core_mmap,
 	.request = vfio_pci_core_request,
 	.match = vfio_pci_core_match,
+	.match_token_uuid = vfio_pci_core_match_token_uuid,
 	.bind_iommufd = vfio_iommufd_physical_bind,
 	.unbind_iommufd = vfio_iommufd_physical_unbind,
 	.attach_ioas = vfio_iommufd_physical_attach_ioas,
@@ -128,12 +135,14 @@ static const struct vfio_device_ops virtiovf_vfio_pci_ops = {
 	.open_device = virtiovf_pci_open_device,
 	.close_device = vfio_pci_core_close_device,
 	.ioctl = vfio_pci_core_ioctl,
+	.get_region_info_caps = vfio_pci_ioctl_get_region_info,
 	.device_feature = vfio_pci_core_ioctl_feature,
 	.read = vfio_pci_core_read,
 	.write = vfio_pci_core_write,
 	.mmap = vfio_pci_core_mmap,
 	.request = vfio_pci_core_request,
 	.match = vfio_pci_core_match,
+	.match_token_uuid = vfio_pci_core_match_token_uuid,
 	.bind_iommufd = vfio_iommufd_physical_bind,
 	.unbind_iommufd = vfio_iommufd_physical_unbind,
 	.attach_ioas = vfio_iommufd_physical_attach_ioas,
@@ -168,7 +177,7 @@ static int virtiovf_pci_probe(struct pci_dev *pdev,
 	if (sup_lm)
 		virtiovf_set_migratable(virtvdev);
 
-	dev_set_drvdata(&pdev->dev, &virtvdev->core_device);
+	dev_set_drvdata(&pdev->dev, virtvdev);
 	ret = vfio_pci_core_register_device(&virtvdev->core_device);
 	if (ret)
 		goto out;
@@ -205,7 +214,7 @@ static void virtiovf_pci_aer_reset_done(struct pci_dev *pdev)
 
 static const struct pci_error_handlers virtiovf_err_handlers = {
 	.reset_done = virtiovf_pci_aer_reset_done,
-	.error_detected = vfio_pci_core_aer_err_detected,
+	.error_detected = virtiovf_aer_err_detected,
 };
 
 static struct pci_driver virtiovf_pci_driver = {
@@ -213,6 +222,7 @@ static struct pci_driver virtiovf_pci_driver = {
 	.id_table = virtiovf_pci_table,
 	.probe = virtiovf_pci_probe,
 	.remove = virtiovf_pci_remove,
+	.driver = { .pm = pm_ptr(&virtiovf_pm_ops) },
 	.err_handler = &virtiovf_err_handlers,
 	.driver_managed_dma = true,
 };

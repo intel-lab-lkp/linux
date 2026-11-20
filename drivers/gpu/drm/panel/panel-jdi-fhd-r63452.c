@@ -175,9 +175,11 @@ static int jdi_fhd_r63452_probe(struct mipi_dsi_device *dsi)
 	struct jdi_fhd_r63452 *ctx;
 	int ret;
 
-	ctx = devm_kzalloc(dev, sizeof(*ctx), GFP_KERNEL);
-	if (!ctx)
-		return -ENOMEM;
+	ctx = devm_drm_panel_alloc(dev, struct jdi_fhd_r63452, panel,
+				   &jdi_fhd_r63452_panel_funcs,
+				   DRM_MODE_CONNECTOR_DSI);
+	if (IS_ERR(ctx))
+		return PTR_ERR(ctx);
 
 	ctx->reset_gpio = devm_gpiod_get(dev, "reset", GPIOD_OUT_HIGH);
 	if (IS_ERR(ctx->reset_gpio))
@@ -192,35 +194,23 @@ static int jdi_fhd_r63452_probe(struct mipi_dsi_device *dsi)
 	dsi->mode_flags = MIPI_DSI_MODE_VIDEO_BURST |
 			  MIPI_DSI_CLOCK_NON_CONTINUOUS;
 
-	drm_panel_init(&ctx->panel, dev, &jdi_fhd_r63452_panel_funcs,
-		       DRM_MODE_CONNECTOR_DSI);
 	ctx->panel.prepare_prev_first = true;
 
 	ret = drm_panel_of_backlight(&ctx->panel);
 	if (ret)
 		return dev_err_probe(dev, ret, "Failed to get backlight\n");
 
-	drm_panel_add(&ctx->panel);
+	ret = devm_drm_panel_add(dev, &ctx->panel);
+	if (ret)
+		return ret;
 
-	ret = mipi_dsi_attach(dsi);
+	ret = devm_mipi_dsi_attach(dev, dsi);
 	if (ret < 0) {
 		dev_err(dev, "Failed to attach to DSI host: %d\n", ret);
 		return ret;
 	}
 
 	return 0;
-}
-
-static void jdi_fhd_r63452_remove(struct mipi_dsi_device *dsi)
-{
-	struct jdi_fhd_r63452 *ctx = mipi_dsi_get_drvdata(dsi);
-	int ret;
-
-	ret = mipi_dsi_detach(dsi);
-	if (ret < 0)
-		dev_err(&dsi->dev, "Failed to detach from DSI host: %d\n", ret);
-
-	drm_panel_remove(&ctx->panel);
 }
 
 static const struct of_device_id jdi_fhd_r63452_of_match[] = {
@@ -231,7 +221,6 @@ MODULE_DEVICE_TABLE(of, jdi_fhd_r63452_of_match);
 
 static struct mipi_dsi_driver jdi_fhd_r63452_driver = {
 	.probe = jdi_fhd_r63452_probe,
-	.remove = jdi_fhd_r63452_remove,
 	.driver = {
 		.name = "panel-jdi-fhd-r63452",
 		.of_match_table = jdi_fhd_r63452_of_match,

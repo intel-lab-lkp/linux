@@ -150,8 +150,8 @@ enum {
 	V4L2_M2M_DST = 1,
 };
 
-#define V4L2_CID_TRANS_TIME_MSEC	(V4L2_CID_USER_BASE + 0x1000)
-#define V4L2_CID_TRANS_NUM_BUFS		(V4L2_CID_USER_BASE + 0x1001)
+#define V4L2_CID_TRANS_TIME_MSEC	(V4L2_CID_USER_VIM2M_BASE + 0)
+#define V4L2_CID_TRANS_NUM_BUFS		(V4L2_CID_USER_VIM2M_BASE + 1)
 
 static struct vim2m_fmt *find_format(u32 fourcc)
 {
@@ -191,9 +191,7 @@ static void get_alignment(u32 fourcc,
 struct vim2m_dev {
 	struct v4l2_device	v4l2_dev;
 	struct video_device	vfd;
-#ifdef CONFIG_MEDIA_CONTROLLER
 	struct media_device	mdev;
-#endif
 
 	atomic_t		num_inst;
 	struct mutex		dev_mutex;
@@ -207,6 +205,7 @@ struct vim2m_ctx {
 	struct vim2m_dev	*dev;
 
 	struct v4l2_ctrl_handler hdl;
+	struct v4l2_ctrl	*trans_num_bufs_ctrl;
 
 	/* Processed buffers in this transaction */
 	u8			num_processed;
@@ -236,7 +235,7 @@ struct vim2m_ctx {
 
 static inline struct vim2m_ctx *file2ctx(struct file *file)
 {
-	return container_of(file->private_data, struct vim2m_ctx, fh);
+	return container_of(file_to_v4l2_fh(file), struct vim2m_ctx, fh);
 }
 
 static struct vim2m_q_data *get_q_data(struct vim2m_ctx *ctx,
@@ -267,9 +266,6 @@ static const char *type_name(enum v4l2_buf_type type)
 		return "Invalid";
 	}
 }
-
-#define CLIP(__color) \
-	(u8)(((__color) > 0xff) ? 0xff : (((__color) < 0) ? 0 : (__color)))
 
 static void copy_line(struct vim2m_q_data *q_data_out,
 		      u8 *src, u8 *dst, bool reverse)
@@ -482,7 +478,7 @@ static int device_process(struct vim2m_ctx *ctx,
 
 	out_vb->sequence = q_data_out->sequence++;
 	in_vb->sequence = q_data_in->sequence++;
-	v4l2_m2m_buf_copy_metadata(in_vb, out_vb, true);
+	v4l2_m2m_buf_copy_metadata(in_vb, out_vb);
 
 	if (ctx->mode & MEM2MEM_VFLIP) {
 		start = height - 1;
@@ -729,13 +725,8 @@ static int vidioc_enum_framesizes(struct file *file, void *priv,
 
 static int vidioc_g_fmt(struct vim2m_ctx *ctx, struct v4l2_format *f)
 {
-	struct vb2_queue *vq;
 	struct vim2m_q_data *q_data;
 	int ret;
-
-	vq = v4l2_m2m_get_vq(ctx->fh.m2m_ctx, f->type);
-	if (!vq)
-		return -EINVAL;
 
 	q_data = get_q_data(ctx, f->type);
 	if (!q_data)
@@ -757,13 +748,8 @@ static int vidioc_g_fmt(struct vim2m_ctx *ctx, struct v4l2_format *f)
 
 static int vidioc_g_fmt_mplane(struct vim2m_ctx *ctx, struct v4l2_format *f)
 {
-	struct vb2_queue *vq;
 	struct vim2m_q_data *q_data;
 	int ret;
-
-	vq = v4l2_m2m_get_vq(ctx->fh.m2m_ctx, f->type);
-	if (!vq)
-		return -EINVAL;
 
 	q_data = get_q_data(ctx, f->type);
 	if (!q_data)
@@ -976,8 +962,6 @@ static int vidioc_s_fmt(struct vim2m_ctx *ctx, struct v4l2_format *f)
 	u32 height = (is_mplane) ? f->fmt.pix_mp.height : f->fmt.pix.height;
 
 	vq = v4l2_m2m_get_vq(ctx->fh.m2m_ctx, f->type);
-	if (!vq)
-		return -EINVAL;
 
 	q_data = get_q_data(ctx, f->type);
 	if (!q_data)
@@ -1275,7 +1259,25 @@ static int vim2m_start_streaming(struct vb2_queue *q, unsigned int count)
 		ctx->aborting = 0;
 
 	q_data->sequence = 0;
+	v4l2_ctrl_grab(ctx->trans_num_bufs_ctrl, true);
+
 	return 0;
+}
+
+static bool vim2m_other_queue_is_streaming(struct vim2m_ctx *ctx,
+					   struct vb2_queue *q)
+{
+	struct vb2_queue *other_vq;
+
+	if (!ctx->fh.m2m_ctx)
+		return false;
+
+	if (V4L2_TYPE_IS_OUTPUT(q->type))
+		other_vq = v4l2_m2m_get_dst_vq(ctx->fh.m2m_ctx);
+	else
+		other_vq = v4l2_m2m_get_src_vq(ctx->fh.m2m_ctx);
+
+	return vb2_is_streaming(other_vq);
 }
 
 static void vim2m_stop_streaming(struct vb2_queue *q)
@@ -1291,11 +1293,14 @@ static void vim2m_stop_streaming(struct vb2_queue *q)
 		else
 			vbuf = v4l2_m2m_dst_buf_remove(ctx->fh.m2m_ctx);
 		if (!vbuf)
-			return;
+			break;
 		v4l2_ctrl_request_complete(vbuf->vb2_buf.req_obj.req,
 					   &ctx->hdl);
 		v4l2_m2m_buf_done(vbuf, VB2_BUF_STATE_ERROR);
 	}
+
+	if (!vim2m_other_queue_is_streaming(ctx, q))
+		v4l2_ctrl_grab(ctx->trans_num_bufs_ctrl, false);
 }
 
 static void vim2m_buf_request_complete(struct vb2_buffer *vb)
@@ -1382,14 +1387,13 @@ static int vim2m_open(struct file *file)
 
 	if (mutex_lock_interruptible(&dev->dev_mutex))
 		return -ERESTARTSYS;
-	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
+	ctx = kzalloc_obj(*ctx);
 	if (!ctx) {
 		rc = -ENOMEM;
 		goto open_unlock;
 	}
 
 	v4l2_fh_init(&ctx->fh, video_devdata(file));
-	file->private_data = &ctx->fh;
 	ctx->dev = dev;
 	hdl = &ctx->hdl;
 	v4l2_ctrl_handler_init(hdl, 4);
@@ -1398,7 +1402,8 @@ static int vim2m_open(struct file *file)
 
 	vim2m_ctrl_trans_time_msec.def = default_transtime;
 	v4l2_ctrl_new_custom(hdl, &vim2m_ctrl_trans_time_msec, NULL);
-	v4l2_ctrl_new_custom(hdl, &vim2m_ctrl_trans_num_bufs, NULL);
+	ctx->trans_num_bufs_ctrl =
+		v4l2_ctrl_new_custom(hdl, &vim2m_ctrl_trans_num_bufs, NULL);
 	if (hdl->error) {
 		rc = hdl->error;
 		v4l2_ctrl_handler_free(hdl);
@@ -1433,7 +1438,7 @@ static int vim2m_open(struct file *file)
 		goto open_unlock;
 	}
 
-	v4l2_fh_add(&ctx->fh);
+	v4l2_fh_add(&ctx->fh, file);
 	atomic_inc(&dev->num_inst);
 
 	dprintk(dev, 1, "Created instance: %p, m2m_ctx: %p\n",
@@ -1451,12 +1456,12 @@ static int vim2m_release(struct file *file)
 
 	dprintk(dev, 1, "Releasing instance %p\n", ctx);
 
-	v4l2_fh_del(&ctx->fh);
+	v4l2_fh_del(&ctx->fh, file);
 	v4l2_fh_exit(&ctx->fh);
-	v4l2_ctrl_handler_free(&ctx->hdl);
 	mutex_lock(&dev->dev_mutex);
 	v4l2_m2m_ctx_release(ctx->fh.m2m_ctx);
 	mutex_unlock(&dev->dev_mutex);
+	v4l2_ctrl_handler_free(&ctx->hdl);
 	kfree(ctx);
 
 	atomic_dec(&dev->num_inst);
@@ -1470,9 +1475,7 @@ static void vim2m_device_release(struct video_device *vdev)
 
 	v4l2_device_unregister(&dev->v4l2_dev);
 	v4l2_m2m_release(dev->m2m_dev);
-#ifdef CONFIG_MEDIA_CONTROLLER
 	media_device_cleanup(&dev->mdev);
-#endif
 	kfree(dev);
 }
 
@@ -1512,7 +1515,7 @@ static int vim2m_probe(struct platform_device *pdev)
 	struct video_device *vfd;
 	int ret;
 
-	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
+	dev = kzalloc_obj(*dev);
 	if (!dev)
 		return -ENOMEM;
 
@@ -1543,7 +1546,6 @@ static int vim2m_probe(struct platform_device *pdev)
 		goto error_dev;
 	}
 
-#ifdef CONFIG_MEDIA_CONTROLLER
 	dev->mdev.dev = &pdev->dev;
 	strscpy(dev->mdev.model, "vim2m", sizeof(dev->mdev.model));
 	strscpy(dev->mdev.bus_info, "platform:vim2m",
@@ -1551,7 +1553,6 @@ static int vim2m_probe(struct platform_device *pdev)
 	media_device_init(&dev->mdev);
 	dev->mdev.ops = &m2m_media_ops;
 	dev->v4l2_dev.mdev = &dev->mdev;
-#endif
 
 	ret = video_register_device(vfd, VFL_TYPE_VIDEO, 0);
 	if (ret) {
@@ -1562,7 +1563,6 @@ static int vim2m_probe(struct platform_device *pdev)
 	v4l2_info(&dev->v4l2_dev,
 		  "Device registered as /dev/video%d\n", vfd->num);
 
-#ifdef CONFIG_MEDIA_CONTROLLER
 	ret = v4l2_m2m_register_media_controller(dev->m2m_dev, vfd,
 						 MEDIA_ENT_F_PROC_VIDEO_SCALER);
 	if (ret) {
@@ -1575,13 +1575,11 @@ static int vim2m_probe(struct platform_device *pdev)
 		v4l2_err(&dev->v4l2_dev, "Failed to register mem2mem media device\n");
 		goto error_m2m_mc;
 	}
-#endif
+
 	return 0;
 
-#ifdef CONFIG_MEDIA_CONTROLLER
 error_m2m_mc:
 	v4l2_m2m_unregister_media_controller(dev->m2m_dev);
-#endif
 error_v4l2:
 	video_unregister_device(&dev->vfd);
 	/* vim2m_device_release called by video_unregister_device to release various objects */
@@ -1602,10 +1600,8 @@ static void vim2m_remove(struct platform_device *pdev)
 
 	v4l2_info(&dev->v4l2_dev, "Removing " MEM2MEM_NAME);
 
-#ifdef CONFIG_MEDIA_CONTROLLER
 	media_device_unregister(&dev->mdev);
 	v4l2_m2m_unregister_media_controller(dev->m2m_dev);
-#endif
 	video_unregister_device(&dev->vfd);
 }
 

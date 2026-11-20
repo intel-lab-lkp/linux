@@ -907,7 +907,7 @@ static const struct pinconf_ops artpec6_pconf_ops = {
 	.pin_config_group_set	= artpec6_pconf_group_set,
 };
 
-static struct pinctrl_desc artpec6_desc = {
+static const struct pinctrl_desc artpec6_desc = {
 	.name	 = "artpec6-pinctrl",
 	.owner	 = THIS_MODULE,
 	.pins	 = artpec6_pins,
@@ -937,7 +937,7 @@ static int artpec6_pmx_probe(struct platform_device *pdev)
 {
 	struct artpec6_pmx *pmx;
 
-	pmx = devm_kzalloc(&pdev->dev, sizeof(*pmx), GFP_KERNEL);
+	pmx = devm_kzalloc_obj(&pdev->dev, *pmx);
 	if (!pmx)
 		return -ENOMEM;
 

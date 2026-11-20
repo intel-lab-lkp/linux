@@ -19,7 +19,6 @@ static const struct regmap_config stm32_lptimer_regmap_cfg = {
 	.val_bits = 32,
 	.reg_stride = sizeof(u32),
 	.max_register = STM32_LPTIM_MAX_REGISTER,
-	.fast_io = true,
 };
 
 static int stm32_lptimer_detect_encoder(struct stm32_lptimer *ddata)
@@ -87,7 +86,7 @@ static int stm32_lptimer_probe(struct platform_device *pdev)
 	void __iomem *mmio;
 	int ret;
 
-	ddata = devm_kzalloc(dev, sizeof(*ddata), GFP_KERNEL);
+	ddata = devm_kzalloc_obj(dev, *ddata);
 	if (!ddata)
 		return -ENOMEM;
 

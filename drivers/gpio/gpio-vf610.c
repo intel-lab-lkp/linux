@@ -10,6 +10,7 @@
 #include <linux/clk.h>
 #include <linux/err.h>
 #include <linux/gpio/driver.h>
+#include <linux/gpio/generic.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>
@@ -28,7 +29,7 @@ struct fsl_gpio_soc_data {
 };
 
 struct vf610_gpio_port {
-	struct gpio_chip gc;
+	struct gpio_generic_chip chip;
 	void __iomem *base;
 	void __iomem *gpio_base;
 	const struct fsl_gpio_soc_data *sdata;
@@ -82,6 +83,7 @@ static const struct of_device_id vf610_gpio_dt_ids[] = {
 	{ .compatible = "fsl,imx8ulp-gpio",	.data = &imx8ulp_data, },
 	{ /* sentinel */ }
 };
+MODULE_DEVICE_TABLE(of, vf610_gpio_dt_ids);
 
 static inline void vf610_gpio_writel(u32 val, void __iomem *reg)
 {
@@ -108,7 +110,7 @@ static void vf610_gpio_irq_handler(struct irq_desc *desc)
 	for_each_set_bit(pin, &irq_isfr, VF610_GPIO_PER_PORT) {
 		vf610_gpio_writel(BIT(pin), port->base + PORT_ISFR);
 
-		generic_handle_domain_irq(port->gc.irq.domain, pin);
+		generic_handle_domain_irq(port->chip.gc.irq.domain, pin);
 	}
 
 	chained_irq_exit(chip, desc);
@@ -214,6 +216,7 @@ static void vf610_gpio_disable_clk(void *data)
 
 static int vf610_gpio_probe(struct platform_device *pdev)
 {
+	struct gpio_generic_chip_config config;
 	struct device *dev = &pdev->dev;
 	struct vf610_gpio_port *port;
 	struct gpio_chip *gc;
@@ -223,7 +226,7 @@ static int vf610_gpio_probe(struct platform_device *pdev)
 	int ret;
 	bool dual_base;
 
-	port = devm_kzalloc(dev, sizeof(*port), GFP_KERNEL);
+	port = devm_kzalloc_obj(dev, *port);
 	if (!port)
 		return -ENOMEM;
 
@@ -293,22 +296,27 @@ static int vf610_gpio_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	gc = &port->gc;
-	flags = BGPIOF_PINCTRL_BACKEND;
+	gc = &port->chip.gc;
+	flags = GPIO_GENERIC_PINCTRL_BACKEND;
 	/*
 	 * We only read the output register for current value on output
 	 * lines if the direction register is available so we can switch
 	 * direction.
 	 */
 	if (port->sdata->have_paddr)
-		flags |= BGPIOF_READ_OUTPUT_REG_SET;
-	ret = bgpio_init(gc, dev, 4,
-			 port->gpio_base + GPIO_PDIR,
-			 port->gpio_base + GPIO_PDOR,
-			 NULL,
-			 port->sdata->have_paddr ? port->gpio_base + GPIO_PDDR : NULL,
-			 NULL,
-			 flags);
+		flags |= GPIO_GENERIC_READ_OUTPUT_REG_SET;
+
+	config = (struct gpio_generic_chip_config) {
+		.dev = dev,
+		.sz = 4,
+		.dat = port->gpio_base + GPIO_PDIR,
+		.set = port->gpio_base + GPIO_PDOR,
+		.dirout = port->sdata->have_paddr ?
+				port->gpio_base + GPIO_PDDR : NULL,
+		.flags = flags,
+	};
+
+	ret = gpio_generic_chip_init(&port->chip, &config);
 	if (ret)
 		return dev_err_probe(dev, ret, "unable to init generic GPIO\n");
 	gc->label = dev_name(dev);
@@ -325,9 +333,7 @@ static int vf610_gpio_probe(struct platform_device *pdev)
 	gpio_irq_chip_set_chip(girq, &vf610_irqchip);
 	girq->parent_handler = vf610_gpio_irq_handler;
 	girq->num_parents = 1;
-	girq->parents = devm_kcalloc(&pdev->dev, 1,
-				     sizeof(*girq->parents),
-				     GFP_KERNEL);
+	girq->parents = devm_kzalloc_objs(&pdev->dev, *girq->parents, 1);
 	if (!girq->parents)
 		return -ENOMEM;
 	girq->parents[0] = port->irq;

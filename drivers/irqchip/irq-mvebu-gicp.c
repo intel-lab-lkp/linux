@@ -177,9 +177,10 @@ static int mvebu_gicp_probe(struct platform_device *pdev)
 		.ops	= &gicp_domain_ops,
 	};
 	struct mvebu_gicp *gicp;
+	void __iomem *base;
 	int ret, i;
 
-	gicp = devm_kzalloc(&pdev->dev, sizeof(*gicp), GFP_KERNEL);
+	gicp = devm_kzalloc_obj(&pdev->dev, *gicp);
 	if (!gicp)
 		return -ENOMEM;
 
@@ -197,10 +198,8 @@ static int mvebu_gicp_probe(struct platform_device *pdev)
 	gicp->spi_ranges_cnt = ret / 2;
 
 	gicp->spi_ranges =
-		devm_kcalloc(&pdev->dev,
-			     gicp->spi_ranges_cnt,
-			     sizeof(struct mvebu_gicp_spi_range),
-			     GFP_KERNEL);
+		devm_kzalloc_objs(&pdev->dev, struct mvebu_gicp_spi_range,
+				  gicp->spi_ranges_cnt);
 	if (!gicp->spi_ranges)
 		return -ENOMEM;
 
@@ -234,6 +233,15 @@ static int mvebu_gicp_probe(struct platform_device *pdev)
 	if (!info.parent) {
 		dev_err(&pdev->dev, "failed to find parent IRQ domain\n");
 		return -ENODEV;
+	}
+
+	base = ioremap(gicp->res->start, resource_size(gicp->res));
+	if (!base) {
+		dev_err(&pdev->dev, "ioremap() failed. Unable to clear pending interrupts.\n");
+	} else {
+		for (i = 0; i < 64; i++)
+			writel(i, base + GICP_CLRSPI_NSR_OFFSET);
+		iounmap(base);
 	}
 
 	return msi_create_parent_irq_domain(&info, &gicp_msi_parent_ops) ? 0 : -ENOMEM;

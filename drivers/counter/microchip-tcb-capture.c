@@ -451,7 +451,7 @@ static void mchp_tc_irq_remove(void *ptr)
 static int mchp_tc_irq_enable(struct counter_device *const counter, int irq)
 {
 	struct mchp_tc_data *const priv = counter_priv(counter);
-	int ret = devm_request_irq(counter->parent, irq, mchp_tc_isr, 0,
+	int ret = devm_request_irq(counter->parent, irq, mchp_tc_isr, IRQF_SHARED,
 				   dev_name(counter->parent), counter);
 
 	if (ret < 0)
@@ -483,7 +483,7 @@ static int mchp_tc_probe(struct platform_device *pdev)
 	char clk_name[7];
 	struct regmap *regmap;
 	struct clk *clk[3];
-	int channel;
+	u32 channel;
 	int ret, i;
 
 	counter = devm_counter_alloc(&pdev->dev, sizeof(*priv));
@@ -517,7 +517,7 @@ static int mchp_tc_probe(struct platform_device *pdev)
 
 		priv->channel[i] = channel;
 
-		snprintf(clk_name, sizeof(clk_name), "t%d_clk", channel);
+		snprintf(clk_name, sizeof(clk_name), "t%u_clk", channel);
 
 		clk[i] = of_clk_get_by_name(np->parent, clk_name);
 		if (IS_ERR(clk[i])) {

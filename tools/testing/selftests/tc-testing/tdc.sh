@@ -4,8 +4,7 @@
 # If a module is required and was not compiled
 # the test that requires it will fail anyways
 try_modprobe() {
-   modprobe -q -R "$1"
-   if [ $? -ne 0 ]; then
+   if ! modprobe -q -R "$1"; then
       echo "Module $1 not found... skipping."
    else
       modprobe "$1"
@@ -66,5 +65,20 @@ try_modprobe sch_gred
 try_modprobe sch_hfsc
 try_modprobe sch_hhf
 try_modprobe sch_htb
+try_modprobe sch_ingress
+try_modprobe sch_mqprio
+try_modprobe sch_multiq
+try_modprobe sch_netem
+try_modprobe sch_pie
+try_modprobe sch_plug
+try_modprobe sch_prio
+try_modprobe sch_qfq
+try_modprobe sch_red
+try_modprobe sch_sfb
+try_modprobe sch_sfq
+try_modprobe sch_skbprio
+try_modprobe sch_taprio
+try_modprobe sch_tbf
 try_modprobe sch_teql
-./tdc.py -J`nproc`
+try_modprobe sch_dualpi2
+./tdc.py -J"$(nproc)"

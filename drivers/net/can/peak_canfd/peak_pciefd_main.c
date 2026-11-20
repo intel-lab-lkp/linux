@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (C) 2007, 2011 Wolfgang Grandegger <wg@grandegger.com>
- * Copyright (C) 2012 Stephane Grosjean <s.grosjean@peak-system.com>
  *
  * Derived from the PCAN project file driver/src/pcan_pci.c:
  *
- * Copyright (C) 2001-2006  PEAK System-Technik GmbH
+ * Copyright (C) 2001-2025 PEAK System-Technik GmbH
+ * Author: Stéphane Grosjean <s.grosjean@peak-system.fr>
  */
 
 #include <linux/kernel.h>
@@ -19,7 +19,7 @@
 
 #include "peak_canfd_user.h"
 
-MODULE_AUTHOR("Stephane Grosjean <s.grosjean@peak-system.com>");
+MODULE_AUTHOR("Stéphane Grosjean <s.grosjean@peak-system.fr>");
 MODULE_DESCRIPTION("Socket-CAN driver for PEAK PCAN PCIe/M.2 FD family cards");
 MODULE_LICENSE("GPL v2");
 
@@ -744,8 +744,7 @@ static int peak_pciefd_probe(struct pci_dev *pdev,
 		can_count = 1;
 
 	/* allocate board structure object */
-	pciefd = devm_kzalloc(&pdev->dev, struct_size(pciefd, can, can_count),
-			      GFP_KERNEL);
+	pciefd = devm_kzalloc_flex(&pdev->dev, *pciefd, can, can_count);
 	if (!pciefd) {
 		err = -ENOMEM;
 		goto err_release_regions;

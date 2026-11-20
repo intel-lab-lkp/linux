@@ -34,7 +34,6 @@ struct ia_css_pipeline_stage {
 struct ia_css_pipeline {
 	enum ia_css_pipe_id pipe_id;
 	u8 pipe_num;
-	bool stop_requested;
 	struct ia_css_pipeline_stage *stages;
 	struct ia_css_pipeline_stage *current_stage;
 	unsigned int num_stages;
@@ -220,7 +219,7 @@ int ia_css_pipeline_get_output_stage(
  */
 bool ia_css_pipeline_uses_params(struct ia_css_pipeline *pipeline);
 
-/**
+/*
  * @brief get the SP thread ID.
  *
  * @param[in]	key	The query key, typical use is pipe_num.
@@ -232,7 +231,7 @@ bool ia_css_pipeline_uses_params(struct ia_css_pipeline *pipeline);
  */
 bool ia_css_pipeline_get_sp_thread_id(unsigned int key, unsigned int *val);
 
-/**
+/*
  * @brief Get the pipeline io status
  *
  * @param[in] None
@@ -241,7 +240,7 @@ bool ia_css_pipeline_get_sp_thread_id(unsigned int key, unsigned int *val);
  */
 struct sh_css_sp_pipeline_io_status *ia_css_pipeline_get_pipe_io_status(void);
 
-/**
+/*
  * @brief Map an SP thread to this pipeline
  *
  * @param[in]	pipe_num
@@ -250,7 +249,7 @@ struct sh_css_sp_pipeline_io_status *ia_css_pipeline_get_pipe_io_status(void);
  */
 void ia_css_pipeline_map(unsigned int pipe_num, bool map);
 
-/**
+/*
  * @brief Checks whether the pipeline is mapped to SP threads
  *
  * @param[in]	Query key, typical use is pipe_num
@@ -261,7 +260,7 @@ void ia_css_pipeline_map(unsigned int pipe_num, bool map);
  */
 bool ia_css_pipeline_is_mapped(unsigned int key);
 
-/**
+/*
  * @brief Print pipeline thread mapping
  *
  * @param[in]	none

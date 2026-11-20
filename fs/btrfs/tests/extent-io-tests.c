@@ -4,7 +4,7 @@
  */
 
 #include <linux/pagemap.h>
-#include <linux/pagevec.h>
+#include <linux/folio_batch.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/sizes.h>
@@ -18,13 +18,13 @@
 #define PROCESS_RELEASE		(1U << 1)
 #define PROCESS_TEST_LOCKED	(1U << 2)
 
-static noinline int process_page_range(struct inode *inode, u64 start, u64 end,
-				       unsigned long flags)
+static noinline int process_folio_range(struct inode *inode, u64 start, u64 end,
+					unsigned long flags)
 {
 	int ret;
 	struct folio_batch fbatch;
-	unsigned long index = start >> PAGE_SHIFT;
-	unsigned long end_index = end >> PAGE_SHIFT;
+	pgoff_t index = start >> PAGE_SHIFT;
+	pgoff_t end_index = end >> PAGE_SHIFT;
 	int i;
 	int count = 0;
 	int loops = 0;
@@ -75,7 +75,8 @@ static void extent_flag_to_str(const struct extent_state *state, char *dest)
 	dest[0] = 0;
 	PRINT_ONE_FLAG(state, dest, cur, DIRTY);
 	PRINT_ONE_FLAG(state, dest, cur, LOCKED);
-	PRINT_ONE_FLAG(state, dest, cur, NEW);
+	PRINT_ONE_FLAG(state, dest, cur, DIRTY_LOG1);
+	PRINT_ONE_FLAG(state, dest, cur, DIRTY_LOG2);
 	PRINT_ONE_FLAG(state, dest, cur, DELALLOC);
 	PRINT_ONE_FLAG(state, dest, cur, DEFRAG);
 	PRINT_ONE_FLAG(state, dest, cur, BOUNDARY);
@@ -111,9 +112,8 @@ static int test_find_delalloc(u32 sectorsize, u32 nodesize)
 	struct btrfs_root *root = NULL;
 	struct inode *inode = NULL;
 	struct extent_io_tree *tmp;
-	struct page *page;
-	struct page *locked_page = NULL;
-	unsigned long index = 0;
+	struct folio *folio;
+	struct folio *locked_folio = NULL;
 	/* In this test we need at least 2 file extents at its maximum size */
 	u64 max_bytes = BTRFS_MAX_EXTENT_SIZE;
 	u64 total_dirty = 2 * max_bytes;
@@ -133,14 +133,14 @@ static int test_find_delalloc(u32 sectorsize, u32 nodesize)
 	if (IS_ERR(root)) {
 		test_std_err(TEST_ALLOC_ROOT);
 		ret = PTR_ERR(root);
-		goto out;
+		goto out_root_info;
 	}
 
 	inode = btrfs_new_test_inode();
 	if (!inode) {
 		test_std_err(TEST_ALLOC_INODE);
 		ret = -ENOMEM;
-		goto out;
+		goto out_root_info;
 	}
 	tmp = &BTRFS_I(inode)->io_tree;
 	BTRFS_I(inode)->root = root;
@@ -152,23 +152,27 @@ static int test_find_delalloc(u32 sectorsize, u32 nodesize)
 	btrfs_extent_io_tree_init(NULL, tmp, IO_TREE_SELFTEST);
 
 	/*
-	 * First go through and create and mark all of our pages dirty, we pin
-	 * everything to make sure our pages don't get evicted and screw up our
+	 * First go through and create and mark all of our folios dirty, we pin
+	 * everything to make sure our folios don't get evicted and screw up our
 	 * test.
 	 */
-	for (index = 0; index < (total_dirty >> PAGE_SHIFT); index++) {
-		page = find_or_create_page(inode->i_mapping, index, GFP_KERNEL);
-		if (!page) {
-			test_err("failed to allocate test page");
-			ret = -ENOMEM;
+	for (pgoff_t index = 0; index < (total_dirty >> PAGE_SHIFT); index++) {
+		folio = __filemap_get_folio(inode->i_mapping, index,
+					    FGP_LOCK | FGP_ACCESSED | FGP_CREAT,
+					    GFP_KERNEL);
+		if (IS_ERR(folio)) {
+			test_err("failed to allocate test folio");
+			ret = PTR_ERR(folio);
 			goto out;
 		}
-		SetPageDirty(page);
+		/* The ranges below assume page sized folios. */
+		ASSERT(folio_order(folio) == 0);
+		folio_set_dirty(folio);
 		if (index) {
-			unlock_page(page);
+			folio_unlock(folio);
 		} else {
-			get_page(page);
-			locked_page = page;
+			folio_get(folio);
+			locked_folio = folio;
 		}
 	}
 
@@ -179,8 +183,7 @@ static int test_find_delalloc(u32 sectorsize, u32 nodesize)
 	btrfs_set_extent_bit(tmp, 0, sectorsize - 1, EXTENT_DELALLOC, NULL);
 	start = 0;
 	end = start + PAGE_SIZE - 1;
-	found = find_lock_delalloc_range(inode, page_folio(locked_page), &start,
-					 &end);
+	found = find_lock_delalloc_range(inode, locked_folio, &start, &end);
 	if (!found) {
 		test_err("should have found at least one delalloc");
 		goto out_bits;
@@ -191,8 +194,8 @@ static int test_find_delalloc(u32 sectorsize, u32 nodesize)
 		goto out_bits;
 	}
 	btrfs_unlock_extent(tmp, start, end, NULL);
-	unlock_page(locked_page);
-	put_page(locked_page);
+	folio_unlock(locked_folio);
+	folio_put(locked_folio);
 
 	/*
 	 * Test this scenario
@@ -201,17 +204,17 @@ static int test_find_delalloc(u32 sectorsize, u32 nodesize)
 	 *           |--- search ---|
 	 */
 	test_start = SZ_64M;
-	locked_page = find_lock_page(inode->i_mapping,
-				     test_start >> PAGE_SHIFT);
-	if (!locked_page) {
-		test_err("couldn't find the locked page");
+	locked_folio = filemap_lock_folio(inode->i_mapping, test_start >> PAGE_SHIFT);
+	if (IS_ERR(locked_folio)) {
+		test_err("couldn't find the locked folio");
+		locked_folio = NULL;
 		goto out_bits;
 	}
+	ASSERT(folio_order(locked_folio) == 0);
 	btrfs_set_extent_bit(tmp, sectorsize, max_bytes - 1, EXTENT_DELALLOC, NULL);
 	start = test_start;
 	end = start + PAGE_SIZE - 1;
-	found = find_lock_delalloc_range(inode, page_folio(locked_page), &start,
-					 &end);
+	found = find_lock_delalloc_range(inode, locked_folio, &start, &end);
 	if (!found) {
 		test_err("couldn't find delalloc in our range");
 		goto out_bits;
@@ -221,14 +224,14 @@ static int test_find_delalloc(u32 sectorsize, u32 nodesize)
 				test_start, max_bytes - 1, start, end);
 		goto out_bits;
 	}
-	if (process_page_range(inode, start, end,
-			       PROCESS_TEST_LOCKED | PROCESS_UNLOCK)) {
-		test_err("there were unlocked pages in the range");
+	if (process_folio_range(inode, start, end,
+				PROCESS_TEST_LOCKED | PROCESS_UNLOCK)) {
+		test_err("there were unlocked folios in the range");
 		goto out_bits;
 	}
 	btrfs_unlock_extent(tmp, start, end, NULL);
-	/* locked_page was unlocked above */
-	put_page(locked_page);
+	/* locked_folio was unlocked above */
+	folio_put(locked_folio);
 
 	/*
 	 * Test this scenario
@@ -236,16 +239,16 @@ static int test_find_delalloc(u32 sectorsize, u32 nodesize)
 	 *                    |--- search ---|
 	 */
 	test_start = max_bytes + sectorsize;
-	locked_page = find_lock_page(inode->i_mapping, test_start >>
-				     PAGE_SHIFT);
-	if (!locked_page) {
-		test_err("couldn't find the locked page");
+	locked_folio = filemap_lock_folio(inode->i_mapping, test_start >> PAGE_SHIFT);
+	if (IS_ERR(locked_folio)) {
+		test_err("couldn't find the locked folio");
+		locked_folio = NULL;
 		goto out_bits;
 	}
+	ASSERT(folio_order(locked_folio) == 0);
 	start = test_start;
 	end = start + PAGE_SIZE - 1;
-	found = find_lock_delalloc_range(inode, page_folio(locked_page), &start,
-					 &end);
+	found = find_lock_delalloc_range(inode, locked_folio, &start, &end);
 	if (found) {
 		test_err("found range when we shouldn't have");
 		goto out_bits;
@@ -265,8 +268,7 @@ static int test_find_delalloc(u32 sectorsize, u32 nodesize)
 	btrfs_set_extent_bit(tmp, max_bytes, total_dirty - 1, EXTENT_DELALLOC, NULL);
 	start = test_start;
 	end = start + PAGE_SIZE - 1;
-	found = find_lock_delalloc_range(inode, page_folio(locked_page), &start,
-					 &end);
+	found = find_lock_delalloc_range(inode, locked_folio, &start, &end);
 	if (!found) {
 		test_err("didn't find our range");
 		goto out_bits;
@@ -276,38 +278,37 @@ static int test_find_delalloc(u32 sectorsize, u32 nodesize)
 			 test_start, total_dirty - 1, start, end);
 		goto out_bits;
 	}
-	if (process_page_range(inode, start, end,
-			       PROCESS_TEST_LOCKED | PROCESS_UNLOCK)) {
-		test_err("pages in range were not all locked");
+	if (process_folio_range(inode, start, end,
+				PROCESS_TEST_LOCKED | PROCESS_UNLOCK)) {
+		test_err("folios in range were not all locked");
 		goto out_bits;
 	}
 	btrfs_unlock_extent(tmp, start, end, NULL);
 
 	/*
-	 * Now to test where we run into a page that is no longer dirty in the
+	 * Now to test where we run into a folio that is no longer dirty in the
 	 * range we want to find.
 	 */
-	page = find_get_page(inode->i_mapping,
-			     (max_bytes + SZ_1M) >> PAGE_SHIFT);
-	if (!page) {
-		test_err("couldn't find our page");
+	folio = filemap_get_folio(inode->i_mapping, (max_bytes + SZ_1M) >> PAGE_SHIFT);
+	if (IS_ERR(folio)) {
+		test_err("couldn't find our folio");
 		goto out_bits;
 	}
-	ClearPageDirty(page);
-	put_page(page);
+	ASSERT(folio_order(folio) == 0);
+	folio_clear_dirty(folio);
+	folio_put(folio);
 
 	/* We unlocked it in the previous test */
-	lock_page(locked_page);
+	folio_lock(locked_folio);
 	start = test_start;
 	end = start + PAGE_SIZE - 1;
 	/*
-	 * Currently if we fail to find dirty pages in the delalloc range we
+	 * Currently if we fail to find dirty folios in the delalloc range we
 	 * will adjust max_bytes down to PAGE_SIZE and then re-search.  If
 	 * this changes at any point in the future we will need to fix this
 	 * tests expected behavior.
 	 */
-	found = find_lock_delalloc_range(inode, page_folio(locked_page), &start,
-					 &end);
+	found = find_lock_delalloc_range(inode, locked_folio, &start, &end);
 	if (!found) {
 		test_err("didn't find our range");
 		goto out_bits;
@@ -317,22 +318,23 @@ static int test_find_delalloc(u32 sectorsize, u32 nodesize)
 			 test_start, test_start + PAGE_SIZE - 1, start, end);
 		goto out_bits;
 	}
-	if (process_page_range(inode, start, end, PROCESS_TEST_LOCKED |
-			       PROCESS_UNLOCK)) {
-		test_err("pages in range were not all locked");
+	if (process_folio_range(inode, start, end, PROCESS_TEST_LOCKED |
+				PROCESS_UNLOCK)) {
+		test_err("folios in range were not all locked");
 		goto out_bits;
 	}
 	ret = 0;
 out_bits:
 	if (ret)
 		dump_extent_io_tree(tmp);
-	btrfs_clear_extent_bits(tmp, 0, total_dirty - 1, (unsigned)-1);
+	btrfs_clear_extent_bit(tmp, 0, total_dirty - 1, (unsigned)-1, NULL);
 out:
-	if (locked_page)
-		put_page(locked_page);
-	process_page_range(inode, 0, total_dirty - 1,
-			   PROCESS_UNLOCK | PROCESS_RELEASE);
+	if (locked_folio)
+		folio_put(locked_folio);
+	process_folio_range(inode, 0, total_dirty - 1,
+			    PROCESS_UNLOCK | PROCESS_RELEASE);
 	iput(inode);
+out_root_info:
 	btrfs_free_dummy_root(root);
 	btrfs_free_dummy_fs_info(fs_info);
 	return ret;
@@ -343,11 +345,11 @@ static int check_eb_bitmap(unsigned long *bitmap, struct extent_buffer *eb)
 	unsigned long i;
 
 	for (i = 0; i < eb->len * BITS_PER_BYTE; i++) {
-		int bit, bit1;
+		bool bit_set, bit1_set;
 
-		bit = !!test_bit(i, bitmap);
-		bit1 = !!extent_buffer_test_bit(eb, 0, i);
-		if (bit1 != bit) {
+		bit_set = test_bit(i, bitmap);
+		bit1_set = extent_buffer_test_bit(eb, 0, i);
+		if (bit1_set != bit_set) {
 			u8 has;
 			u8 expect;
 
@@ -360,9 +362,9 @@ static int check_eb_bitmap(unsigned long *bitmap, struct extent_buffer *eb)
 			return -EINVAL;
 		}
 
-		bit1 = !!extent_buffer_test_bit(eb, i / BITS_PER_BYTE,
-						i % BITS_PER_BYTE);
-		if (bit1 != bit) {
+		bit1_set = extent_buffer_test_bit(eb, i / BITS_PER_BYTE,
+						  i % BITS_PER_BYTE);
+		if (bit1_set != bit_set) {
 			u8 has;
 			u8 expect;
 
@@ -505,7 +507,7 @@ static int __test_eb_bitmaps(unsigned long *bitmap, struct extent_buffer *eb)
 static int test_eb_bitmaps(u32 sectorsize, u32 nodesize)
 {
 	struct btrfs_fs_info *fs_info;
-	unsigned long *bitmap = NULL;
+	unsigned long AUTO_KFREE(bitmap);
 	struct extent_buffer *eb = NULL;
 	int ret;
 
@@ -551,7 +553,6 @@ static int test_eb_bitmaps(u32 sectorsize, u32 nodesize)
 	ret = __test_eb_bitmaps(bitmap, eb);
 out:
 	free_extent_buffer(eb);
-	kfree(bitmap);
 	btrfs_free_dummy_fs_info(fs_info);
 	return ret;
 }
@@ -662,7 +663,7 @@ static int test_find_first_clear_extent_bit(void)
 out:
 	if (ret)
 		dump_extent_io_tree(&tree);
-	btrfs_clear_extent_bits(&tree, 0, (u64)-1, CHUNK_TRIMMED | CHUNK_ALLOCATED);
+	btrfs_clear_extent_bit(&tree, 0, (u64)-1, CHUNK_TRIMMED | CHUNK_ALLOCATED, NULL);
 
 	return ret;
 }
@@ -671,8 +672,9 @@ static void dump_eb_and_memory_contents(struct extent_buffer *eb, void *memory,
 					const char *test_name)
 {
 	for (int i = 0; i < eb->len; i++) {
-		struct page *page = folio_page(eb->folios[i >> PAGE_SHIFT], 0);
-		void *addr = page_address(page) + offset_in_page(i);
+		const unsigned long idx = get_eb_folio_index(eb, i);
+		void *addr = folio_address(eb->folios[idx]) +
+			     get_eb_offset_in_folio(eb, i);
 
 		if (memcmp(addr, memory + i, 1) != 0) {
 			test_err("%s failed", test_name);
@@ -687,9 +689,12 @@ static int verify_eb_and_memory(struct extent_buffer *eb, void *memory,
 				const char *test_name)
 {
 	for (int i = 0; i < (eb->len >> PAGE_SHIFT); i++) {
-		void *eb_addr = folio_address(eb->folios[i]);
+		const unsigned long offset = i << PAGE_SHIFT;
+		const unsigned long idx = get_eb_folio_index(eb, offset);
+		void *eb_addr = folio_address(eb->folios[idx]) +
+				get_eb_offset_in_folio(eb, offset);
 
-		if (memcmp(memory + (i << PAGE_SHIFT), eb_addr, PAGE_SIZE) != 0) {
+		if (memcmp(memory + offset, eb_addr, PAGE_SIZE) != 0) {
 			dump_eb_and_memory_contents(eb, memory, test_name);
 			return -EUCLEAN;
 		}

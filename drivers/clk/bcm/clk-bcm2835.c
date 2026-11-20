@@ -403,7 +403,7 @@ static void bcm2835_debugfs_regset(struct bcm2835_cprman *cprman, u32 base,
 {
 	struct debugfs_regset32 *regset;
 
-	regset = devm_kzalloc(cprman->dev, sizeof(*regset), GFP_KERNEL);
+	regset = devm_kzalloc_obj(cprman->dev, *regset);
 	if (!regset)
 		return;
 
@@ -570,18 +570,23 @@ static long bcm2835_pll_rate_from_divisors(unsigned long parent_rate,
 	return rate >> A2W_PLL_FRAC_BITS;
 }
 
-static long bcm2835_pll_round_rate(struct clk_hw *hw, unsigned long rate,
-				   unsigned long *parent_rate)
+static int bcm2835_pll_determine_rate(struct clk_hw *hw,
+				      struct clk_rate_request *req)
 {
 	struct bcm2835_pll *pll = container_of(hw, struct bcm2835_pll, hw);
 	const struct bcm2835_pll_data *data = pll->data;
 	u32 ndiv, fdiv;
 
-	rate = clamp(rate, data->min_rate, data->max_rate);
+	req->rate = clamp(req->rate, data->min_rate, data->max_rate);
 
-	bcm2835_pll_choose_ndiv_and_fdiv(rate, *parent_rate, &ndiv, &fdiv);
+	bcm2835_pll_choose_ndiv_and_fdiv(req->rate, req->best_parent_rate,
+					 &ndiv, &fdiv);
 
-	return bcm2835_pll_rate_from_divisors(*parent_rate, ndiv, fdiv, 1);
+	req->rate = bcm2835_pll_rate_from_divisors(req->best_parent_rate,
+						   ndiv, fdiv,
+						   1);
+
+	return 0;
 }
 
 static unsigned long bcm2835_pll_get_rate(struct clk_hw *hw,
@@ -755,7 +760,7 @@ static void bcm2835_pll_debug_init(struct clk_hw *hw,
 	const struct bcm2835_pll_data *data = pll->data;
 	struct debugfs_reg32 *regs;
 
-	regs = devm_kcalloc(cprman->dev, 7, sizeof(*regs), GFP_KERNEL);
+	regs = devm_kzalloc_objs(cprman->dev, *regs, 7);
 	if (!regs)
 		return;
 
@@ -783,7 +788,7 @@ static const struct clk_ops bcm2835_pll_clk_ops = {
 	.unprepare = bcm2835_pll_off,
 	.recalc_rate = bcm2835_pll_get_rate,
 	.set_rate = bcm2835_pll_set_rate,
-	.round_rate = bcm2835_pll_round_rate,
+	.determine_rate = bcm2835_pll_determine_rate,
 	.debug_init = bcm2835_pll_debug_init,
 };
 
@@ -885,7 +890,7 @@ static void bcm2835_pll_divider_debug_init(struct clk_hw *hw,
 	const struct bcm2835_pll_divider_data *data = divider->data;
 	struct debugfs_reg32 *regs;
 
-	regs = devm_kcalloc(cprman->dev, 7, sizeof(*regs), GFP_KERNEL);
+	regs = devm_kzalloc_objs(cprman->dev, *regs, 7);
 	if (!regs)
 		return;
 
@@ -1352,7 +1357,7 @@ static struct clk_hw *bcm2835_register_pll(struct bcm2835_cprman *cprman,
 	init.ops = &bcm2835_pll_clk_ops;
 	init.flags = pll_data->flags | CLK_IGNORE_UNUSED;
 
-	pll = kzalloc(sizeof(*pll), GFP_KERNEL);
+	pll = kzalloc_obj(*pll);
 	if (!pll)
 		return NULL;
 
@@ -1395,7 +1400,7 @@ bcm2835_register_pll_divider(struct bcm2835_cprman *cprman,
 	init.ops = &bcm2835_pll_divider_clk_ops;
 	init.flags = divider_data->flags | CLK_IGNORE_UNUSED;
 
-	divider = devm_kzalloc(cprman->dev, sizeof(*divider), GFP_KERNEL);
+	divider = devm_kzalloc_obj(cprman->dev, *divider);
 	if (!divider)
 		return NULL;
 
@@ -1480,7 +1485,7 @@ static struct clk_hw *bcm2835_register_clock(struct bcm2835_cprman *cprman,
 			init.flags &= ~CLK_IS_CRITICAL;
 	}
 
-	clock = devm_kzalloc(cprman->dev, sizeof(*clock), GFP_KERNEL);
+	clock = devm_kzalloc_obj(cprman->dev, *clock);
 	if (!clock)
 		return NULL;
 
@@ -1550,7 +1555,7 @@ static const char *const bcm2835_clock_osc_parents[] = {
 	.parents = bcm2835_clock_osc_parents,				\
 	__VA_ARGS__)
 
-/* main peripherial parent mux */
+/* main peripheral parent mux */
 static const char *const bcm2835_clock_per_parents[] = {
 	"gnd",
 	"xosc",
@@ -2274,9 +2279,7 @@ static int bcm2835_clk_probe(struct platform_device *pdev)
 	if (!pdata)
 		return -ENODEV;
 
-	cprman = devm_kzalloc(dev,
-			      struct_size(cprman, onecell.hws, asize),
-			      GFP_KERNEL);
+	cprman = devm_kzalloc_flex(dev, *cprman, onecell.hws, asize);
 	if (!cprman)
 		return -ENOMEM;
 

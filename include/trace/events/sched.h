@@ -628,6 +628,7 @@ TRACE_EVENT(sched_process_hang,
 );
 #endif /* CONFIG_DETECT_HUNG_TASK */
 
+#ifdef CONFIG_NUMA_BALANCING
 /*
  * Tracks migration of tasks from one runqueue to another. Can be used to
  * detect if automatic NUMA balancing is bouncing between nodes.
@@ -720,7 +721,6 @@ DEFINE_EVENT(sched_numa_pair_template, sched_swap_numa,
 	TP_ARGS(src_tsk, src_cpu, dst_tsk, dst_cpu)
 );
 
-#ifdef CONFIG_NUMA_BALANCING
 #define NUMAB_SKIP_REASON					\
 	EM( NUMAB_SKIP_UNSUITABLE,		"unsuitable" )	\
 	EM( NUMAB_SKIP_SHARED_RO,		"shared_ro" )	\
@@ -829,8 +829,6 @@ TRACE_EVENT(sched_wake_idle_without_ipi,
 /*
  * Following tracepoints are not exported in tracefs and provide hooking
  * mechanisms only for testing and debugging purposes.
- *
- * Postfixed with _tp to make them easily identifiable in the code.
  */
 DECLARE_TRACE(pelt_cfs,
 	TP_PROTO(struct cfs_rq *cfs_rq),
@@ -882,17 +880,47 @@ DECLARE_TRACE(sched_compute_energy,
 	TP_ARGS(p, dst_cpu, energy, max_util, busy_time));
 
 DECLARE_TRACE(sched_entry,
-	TP_PROTO(bool preempt, unsigned long ip),
-	TP_ARGS(preempt, ip));
+	TP_PROTO(bool preempt),
+	TP_ARGS(preempt));
 
 DECLARE_TRACE(sched_exit,
-	TP_PROTO(bool is_switch, unsigned long ip),
-	TP_ARGS(is_switch, ip));
+	TP_PROTO(bool is_switch),
+	TP_ARGS(is_switch));
 
 DECLARE_TRACE_CONDITION(sched_set_state,
 	TP_PROTO(struct task_struct *tsk, int state),
 	TP_ARGS(tsk, state),
 	TP_CONDITION(!!(tsk->__state) != !!state));
+
+DECLARE_TRACE(sched_set_need_resched,
+	TP_PROTO(struct task_struct *tsk, int cpu, int tif),
+	TP_ARGS(tsk, cpu, tif));
+
+#define DL_OTHER 0
+#define DL_TASK 1
+#define DL_SERVER_FAIR 2
+#define DL_SERVER_EXT 3
+
+DECLARE_TRACE(sched_dl_throttle,
+	TP_PROTO(struct sched_dl_entity *dl_se, int cpu, u8 type),
+	TP_ARGS(dl_se, cpu, type));
+
+DECLARE_TRACE(sched_dl_replenish,
+	TP_PROTO(struct sched_dl_entity *dl_se, int cpu, u8 type),
+	TP_ARGS(dl_se, cpu, type));
+
+/* Call to update_curr_dl_se not involving throttle or replenish */
+DECLARE_TRACE(sched_dl_update,
+	TP_PROTO(struct sched_dl_entity *dl_se, int cpu, u8 type),
+	TP_ARGS(dl_se, cpu, type));
+
+DECLARE_TRACE(sched_dl_server_start,
+	TP_PROTO(struct sched_dl_entity *dl_se, int cpu, u8 type),
+	TP_ARGS(dl_se, cpu, type));
+
+DECLARE_TRACE(sched_dl_server_stop,
+	TP_PROTO(struct sched_dl_entity *dl_se, int cpu, u8 type),
+	TP_ARGS(dl_se, cpu, type));
 
 #endif /* _TRACE_SCHED_H */
 

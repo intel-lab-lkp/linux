@@ -51,6 +51,18 @@ static int usx2y_urb_capt_retire(struct snd_usx2y_substream *subs)
 			dev_dbg(&usx2y->dev->dev, "%s: 0 == len ERROR!\n", __func__);
 			continue;
 		}
+		/*
+		 * snd_usx2y_pcm_open() constrains the buffer to hold at least
+		 * two URBs, so this cannot happen for a device that keeps its
+		 * packets at 50 frames. Drop the packet rather than exceed the
+		 * single wrap below.
+		 */
+		if (unlikely(len > runtime->buffer_size)) {
+			dev_err_ratelimited(&usx2y->dev->dev,
+					    "%s: packet of %i frames exceeds %lu-frame buffer, dropping\n",
+					    __func__, len, runtime->buffer_size);
+			continue;
+		}
 
 		/* copy a data chunk */
 		if ((hwptr_done + len) > runtime->buffer_size) {
@@ -106,14 +118,31 @@ static int usx2y_urb_play_prepare(struct snd_usx2y_substream *subs,
 				__func__, counts);
 			return -EPIPE;
 		}
+		if (counts * usx2y->stride > subs->maxpacksize) {
+			dev_err_ratelimited(&usx2y->dev->dev,
+					    "%s: packet of %i bytes exceeds maxpacksize %u\n",
+					    __func__, counts * usx2y->stride,
+					    subs->maxpacksize);
+			return -EPIPE;
+		}
 		/* set up descriptor */
 		urb->iso_frame_desc[pack].offset = pack ?
 			urb->iso_frame_desc[pack - 1].offset +
 			urb->iso_frame_desc[pack - 1].length :
 			0;
-		urb->iso_frame_desc[pack].length = cap_urb->iso_frame_desc[pack].actual_length;
+		urb->iso_frame_desc[pack].length = counts * usx2y->stride;
 	}
 	if (atomic_read(&subs->state) >= STATE_PRERUNNING) {
+		/*
+		 * The copy below wraps once, which needs count <= buffer_size.
+		 * snd_usx2y_pcm_open() guarantees it; guard anyway.
+		 */
+		if (unlikely(count > runtime->buffer_size)) {
+			dev_err_ratelimited(&usx2y->dev->dev,
+					    "%s: URB of %i frames exceeds %lu-frame buffer, stopping\n",
+					    __func__, count, runtime->buffer_size);
+			return -EPIPE;
+		}
 		if (subs->hwptr + count > runtime->buffer_size) {
 			/* err, the transferred area goes over buffer boundary.
 			 * copy the data to the temp buffer.
@@ -167,7 +196,6 @@ static int usx2y_urb_submit(struct snd_usx2y_substream *subs, struct urb *urb, i
 	if (!urb)
 		return -ENODEV;
 	urb->start_frame = frame + NRURBS * nr_of_packs();  // let hcd do rollover sanity checks
-	urb->hcpriv = NULL;
 	urb->dev = subs->usx2y->dev; /* we need to set this at each time */
 	err = usb_submit_urb(urb, GFP_ATOMIC);
 	if (err < 0) {
@@ -657,15 +685,13 @@ static int usx2y_rate_set(struct usx2ydev *usx2y, int rate)
 	struct urb *urb;
 
 	if (usx2y->rate != rate) {
-		us = kzalloc(struct_size(us, urb, NOOF_SETRATE_URBS),
-			     GFP_KERNEL);
+		us = kzalloc_flex(*us, urb, NOOF_SETRATE_URBS);
 		if (!us) {
 			err = -ENOMEM;
 			goto cleanup;
 		}
 		us->len = NOOF_SETRATE_URBS;
-		usbdata = kmalloc_array(NOOF_SETRATE_URBS, sizeof(int),
-					GFP_KERNEL);
+		usbdata = kmalloc_objs(int, NOOF_SETRATE_URBS);
 		if (!usbdata) {
 			err = -ENOMEM;
 			goto cleanup;
@@ -751,7 +777,6 @@ static int usx2y_format_set(struct usx2ydev *usx2y, snd_pcm_format_t format)
 static int snd_usx2y_pcm_hw_params(struct snd_pcm_substream *substream,
 				   struct snd_pcm_hw_params *hw_params)
 {
-	int			err = 0;
 	unsigned int		rate = params_rate(hw_params);
 	snd_pcm_format_t	format = params_format(hw_params);
 	struct snd_card *card = substream->pstr->pcm->card;
@@ -760,7 +785,7 @@ static int snd_usx2y_pcm_hw_params(struct snd_pcm_substream *substream,
 	struct snd_pcm_substream *test_substream;
 	int i;
 
-	mutex_lock(&usx2y(card)->pcm_mutex);
+	guard(mutex)(&usx2y(card)->pcm_mutex);
 	dev_dbg(&dev->dev->dev, "%s(%p, %p)\n", __func__, substream, hw_params);
 	/* all pcm substreams off one usx2y have to operate at the same
 	 * rate & format
@@ -777,14 +802,11 @@ static int snd_usx2y_pcm_hw_params(struct snd_pcm_substream *substream,
 		     test_substream->runtime->format != format) ||
 		    (test_substream->runtime->rate &&
 		     test_substream->runtime->rate != rate)) {
-			err = -EINVAL;
-			goto error;
+			return -EINVAL;
 		}
 	}
 
- error:
-	mutex_unlock(&usx2y(card)->pcm_mutex);
-	return err;
+	return 0;
 }
 
 /*
@@ -796,7 +818,7 @@ static int snd_usx2y_pcm_hw_free(struct snd_pcm_substream *substream)
 	struct snd_usx2y_substream *subs = runtime->private_data;
 	struct snd_usx2y_substream *cap_subs, *playback_subs;
 
-	mutex_lock(&subs->usx2y->pcm_mutex);
+	guard(mutex)(&subs->usx2y->pcm_mutex);
 	dev_dbg(&subs->usx2y->dev->dev, "%s(%p)\n", __func__, substream);
 
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
@@ -816,7 +838,6 @@ static int snd_usx2y_pcm_hw_free(struct snd_pcm_substream *substream)
 			usx2y_urbs_release(subs);
 		}
 	}
-	mutex_unlock(&subs->usx2y->pcm_mutex);
 	return 0;
 }
 
@@ -835,7 +856,7 @@ static int snd_usx2y_pcm_prepare(struct snd_pcm_substream *substream)
 
 	dev_dbg(&usx2y->dev->dev, "%s(%p)\n", __func__, substream);
 
-	mutex_lock(&usx2y->pcm_mutex);
+	guard(mutex)(&usx2y->pcm_mutex);
 	usx2y_subs_prepare(subs);
 	// Start hardware streams
 	// SyncStream first....
@@ -843,25 +864,23 @@ static int snd_usx2y_pcm_prepare(struct snd_pcm_substream *substream)
 		if (usx2y->format != runtime->format) {
 			err = usx2y_format_set(usx2y, runtime->format);
 			if (err < 0)
-				goto up_prepare_mutex;
+				return err;
 		}
 		if (usx2y->rate != runtime->rate) {
 			err = usx2y_rate_set(usx2y, runtime->rate);
 			if (err < 0)
-				goto up_prepare_mutex;
+				return err;
 		}
 		dev_dbg(&usx2y->dev->dev, "%s: starting capture pipe for %s\n",
 			__func__, subs == capsubs ? "self" : "playpipe");
 		err = usx2y_urbs_start(capsubs);
 		if (err < 0)
-			goto up_prepare_mutex;
+			return err;
 	}
 
 	if (subs != capsubs && atomic_read(&subs->state) < STATE_PREPARED)
 		err = usx2y_urbs_start(subs);
 
- up_prepare_mutex:
-	mutex_unlock(&usx2y->pcm_mutex);
 	return err;
 }
 
@@ -898,6 +917,18 @@ static int snd_usx2y_pcm_open(struct snd_pcm_substream *substream)
 	runtime->private_data = subs;
 	subs->pcm_substream = substream;
 	snd_pcm_hw_constraint_minmax(runtime, SNDRV_PCM_HW_PARAM_PERIOD_TIME, 1000, 200000);
+	/*
+	 * Capture wraps the ring buffer once per packet and playback once
+	 * per URB of nr_of_packs() packets of at most 50 frames (see
+	 * usx2y_urb_play_prepare()). Playback needs the buffer to hold more
+	 * than one URB and capture more than one packet; use the URB bound
+	 * for both, and two URBs rather than one, because the position only
+	 * advances when a URB is less than the whole buffer. The bound is in
+	 * frames and does not depend on the altsetting, which is selected
+	 * in prepare.
+	 */
+	snd_pcm_hw_constraint_minmax(runtime, SNDRV_PCM_HW_PARAM_BUFFER_SIZE,
+				     2 * nr_of_packs() * 50, UINT_MAX);
 	return 0;
 }
 
@@ -951,7 +982,7 @@ static int usx2y_audio_stream_new(struct snd_card *card, int playback_endpoint, 
 
 	for (i = playback_endpoint ? SNDRV_PCM_STREAM_PLAYBACK : SNDRV_PCM_STREAM_CAPTURE;
 	     i <= SNDRV_PCM_STREAM_CAPTURE; ++i) {
-		usx2y_substream[i] = kzalloc(sizeof(struct snd_usx2y_substream), GFP_KERNEL);
+		usx2y_substream[i] = kzalloc_obj(struct snd_usx2y_substream);
 		if (!usx2y_substream[i])
 			return -ENOMEM;
 

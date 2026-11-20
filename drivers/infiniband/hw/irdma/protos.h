@@ -10,6 +10,7 @@
 #define ALL_TC2PFC		0xff
 #define CQP_COMPL_WAIT_TIME_MS	10
 #define CQP_TIMEOUT_THRESHOLD	500
+#define CQP_DEF_CMPL_TIMEOUT_THRESHOLD	2500
 
 /* init operations */
 int irdma_sc_dev_init(enum irdma_vers ver, struct irdma_sc_dev *dev,
@@ -18,8 +19,7 @@ void irdma_sc_rt_init(struct irdma_sc_dev *dev);
 void irdma_sc_cqp_post_sq(struct irdma_sc_cqp *cqp);
 __le64 *irdma_sc_cqp_get_next_send_wqe(struct irdma_sc_cqp *cqp, u64 scratch);
 int irdma_sc_mr_fast_register(struct irdma_sc_qp *qp,
-			      struct irdma_fast_reg_stag_info *info,
-			      bool post_sq);
+			      struct irdma_fast_reg_stag_info *info);
 /* HMC/FPM functions */
 int irdma_sc_init_iw_hmc(struct irdma_sc_dev *dev, u8 hmc_fn_id);
 /* stats misc */

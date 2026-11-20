@@ -69,7 +69,6 @@ struct tegra_xusb_usb2_lane {
 	struct tegra_xusb_lane base;
 
 	u32 hs_curr_level_offset;
-	bool powered_on;
 };
 
 static inline struct tegra_xusb_usb2_lane *
@@ -434,7 +433,9 @@ struct tegra_xusb_padctl_soc {
 	bool need_fake_usb3_port;
 	bool poll_trk_completed;
 	bool trk_hw_mode;
+	bool trk_update_on_idle;
 	bool supports_lp_cfg_en;
+	bool has_per_pad_term;
 };
 
 struct tegra_xusb_padctl {
@@ -512,6 +513,12 @@ extern const struct tegra_xusb_padctl_soc tegra194_xusb_padctl_soc;
 #endif
 #if defined(CONFIG_ARCH_TEGRA_234_SOC)
 extern const struct tegra_xusb_padctl_soc tegra234_xusb_padctl_soc;
+#endif
+#if defined(CONFIG_ARCH_TEGRA_238_SOC)
+extern const struct tegra_xusb_padctl_soc tegra238_xusb_padctl_soc;
+#endif
+#if defined(CONFIG_ARCH_TEGRA_264_SOC)
+extern const struct tegra_xusb_padctl_soc tegra264_xusb_padctl_soc;
 #endif
 
 #endif /* __PHY_TEGRA_XUSB_H */

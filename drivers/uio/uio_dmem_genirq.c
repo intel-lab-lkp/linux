@@ -160,7 +160,7 @@ static int uio_dmem_genirq_probe(struct platform_device *pdev)
 
 	if (pdev->dev.of_node) {
 		/* alloc uioinfo for one device */
-		uioinfo = devm_kzalloc(&pdev->dev, sizeof(*uioinfo), GFP_KERNEL);
+		uioinfo = devm_kzalloc_obj(&pdev->dev, *uioinfo);
 		if (!uioinfo) {
 			dev_err(&pdev->dev, "unable to kmalloc\n");
 			return -ENOMEM;
@@ -183,7 +183,7 @@ static int uio_dmem_genirq_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
-	priv = devm_kzalloc(&pdev->dev, sizeof(*priv), GFP_KERNEL);
+	priv = devm_kzalloc_obj(&pdev->dev, *priv);
 	if (!priv) {
 		dev_err(&pdev->dev, "unable to kmalloc\n");
 		return -ENOMEM;
@@ -297,28 +297,6 @@ static int uio_dmem_genirq_probe(struct platform_device *pdev)
 	return devm_uio_register_device(&pdev->dev, priv->uioinfo);
 }
 
-static int uio_dmem_genirq_runtime_nop(struct device *dev)
-{
-	/* Runtime PM callback shared between ->runtime_suspend()
-	 * and ->runtime_resume(). Simply returns success.
-	 *
-	 * In this driver pm_runtime_get_sync() and pm_runtime_put_sync()
-	 * are used at open() and release() time. This allows the
-	 * Runtime PM code to turn off power to the device while the
-	 * device is unused, ie before open() and after release().
-	 *
-	 * This Runtime PM callback does not need to save or restore
-	 * any registers since user space is responsbile for hardware
-	 * register reinitialization after open().
-	 */
-	return 0;
-}
-
-static const struct dev_pm_ops uio_dmem_genirq_dev_pm_ops = {
-	.runtime_suspend = uio_dmem_genirq_runtime_nop,
-	.runtime_resume = uio_dmem_genirq_runtime_nop,
-};
-
 #ifdef CONFIG_OF
 static const struct of_device_id uio_of_genirq_match[] = {
 	{ /* empty for now */ },
@@ -330,7 +308,6 @@ static struct platform_driver uio_dmem_genirq = {
 	.probe = uio_dmem_genirq_probe,
 	.driver = {
 		.name = DRIVER_NAME,
-		.pm = &uio_dmem_genirq_dev_pm_ops,
 		.of_match_table = of_match_ptr(uio_of_genirq_match),
 	},
 };

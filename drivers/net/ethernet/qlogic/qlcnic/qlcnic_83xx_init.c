@@ -1618,11 +1618,7 @@ static int qlcnic_83xx_check_hw_status(struct qlcnic_adapter *p_dev)
 	if (err)
 		return err;
 
-	err = qlcnic_83xx_check_heartbeat(p_dev);
-	if (err)
-		return err;
-
-	return err;
+	return qlcnic_83xx_check_heartbeat(p_dev);
 }
 
 static int qlcnic_83xx_poll_reg(struct qlcnic_adapter *p_dev, u32 addr,
@@ -1961,9 +1957,9 @@ static void qlcnic_83xx_template_end(struct qlcnic_adapter *p_dev)
 * qlcnic_83xx_exec_template_cmd
 *
 * @p_dev: adapter structure
-* @p_buff: Poiter to instruction template
+* @p_buff: Pointer to instruction template
 *
-* Template provides instructions to stop, restart and initalize firmware.
+* Template provides instructions to stop, restart and initialize firmware.
 * These instructions are abstracted as a series of read, write and
 * poll operations on hardware registers. Register information and operation
 * specifics are not exposed to the driver. Driver reads the template from
@@ -2051,7 +2047,7 @@ static void qlcnic_83xx_init_hw(struct qlcnic_adapter *p_dev)
 		dev_err(&p_dev->pdev->dev, "%s: failed\n", __func__);
 }
 
-/* POST FW related definations*/
+/* POST FW related definitions*/
 #define QLC_83XX_POST_SIGNATURE_REG	0x41602014
 #define QLC_83XX_POST_MODE_REG		0x41602018
 #define QLC_83XX_POST_FAST_MODE		0
@@ -2388,7 +2384,7 @@ static int qlcnic_83xx_get_fw_info(struct qlcnic_adapter *adapter)
 	struct qlc_83xx_fw_info *fw_info;
 	int err = 0;
 
-	ahw->fw_info = kzalloc(sizeof(*fw_info), GFP_KERNEL);
+	ahw->fw_info = kzalloc_obj(*fw_info);
 	if (!ahw->fw_info) {
 		err = -ENOMEM;
 	} else {

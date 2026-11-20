@@ -54,6 +54,8 @@ int aa_getprocattr(struct aa_label *label, char **string, bool newline)
 				FLAG_SHOW_MODE | FLAG_VIEW_SUBNS |
 				FLAG_HIDDEN_UNCONFINED);
 	if (len < 0) {
+		kfree(*string);
+		*string = NULL;
 		aa_put_ns(current_ns);
 		return len;
 	}
@@ -72,7 +74,8 @@ int aa_getprocattr(struct aa_label *label, char **string, bool newline)
  * @args: string to parse  (NOT NULL)
  * @token: stores returned parsed token value  (NOT NULL)
  *
- * Returns: start position of name after token else NULL on failure
+ * Returns: the name following the token, %NULL if the name is empty, or
+ * ERR_PTR(-EINVAL) if the input is malformed.
  */
 static char *split_token_from_name(const char *op, char *args, u64 *token)
 {
@@ -125,12 +128,14 @@ int aa_setprocattr_changehat(char *args, size_t size, int flags)
 		for (count = 0; (hat < end) && count < 16; ++count) {
 			char *next = hat + strlen(hat) + 1;
 			hats[count] = hat;
-			AA_DEBUG("%s: (pid %d) Magic 0x%llx count %d hat '%s'\n"
+			AA_DEBUG(DEBUG_DOMAIN,
+				 "%s: (pid %d) Magic 0x%llx count %d hat '%s'\n"
 				 , __func__, current->pid, token, count, hat);
 			hat = next;
 		}
 	} else
-		AA_DEBUG("%s: (pid %d) Magic 0x%llx count %d Hat '%s'\n",
+		AA_DEBUG(DEBUG_DOMAIN,
+			 "%s: (pid %d) Magic 0x%llx count %d Hat '%s'\n",
 			 __func__, current->pid, token, count, "<NULL>");
 
 	return aa_change_hat(hats, count, token, flags);

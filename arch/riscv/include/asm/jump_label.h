@@ -7,7 +7,7 @@
 #ifndef __ASM_JUMP_LABEL_H
 #define __ASM_JUMP_LABEL_H
 
-#ifndef __ASSEMBLY__
+#ifndef __ASSEMBLER__
 
 #include <linux/types.h>
 #include <asm/asm.h>
@@ -65,6 +65,32 @@ static __always_inline bool arch_static_branch_jump(struct static_key * const ke
 label:
 	return true;
 }
+#else
+#include <asm/asm.h>
 
-#endif  /* __ASSEMBLY__ */
+#define JUMP_TABLE_ENTRY(key, label)			\
+	.pushsection	__jump_table, "aw";		\
+	.align		RISCV_LGPTR;			\
+	.long		1b - ., label - .;		\
+	RISCV_PTR	key - .;			\
+	.popsection
+
+#define ARCH_STATIC_BRANCH_ASM(key, label)		\
+	.align		2;				\
+	.option push;					\
+	.option norelax;				\
+	.option norvc;					\
+1:	nop;						\
+	.option pop;					\
+	JUMP_TABLE_ENTRY(key, label)
+
+#define ARCH_STATIC_BRANCH_JUMP_ASM(key, label)		\
+	.align		2;				\
+	.option push;					\
+	.option norelax;				\
+	.option norvc;					\
+1:	j		label;				\
+	.option pop;					\
+	JUMP_TABLE_ENTRY(key, label)
+#endif  /* __ASSEMBLER__ */
 #endif	/* __ASM_JUMP_LABEL_H */

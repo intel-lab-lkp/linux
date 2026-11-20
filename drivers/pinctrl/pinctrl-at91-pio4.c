@@ -442,8 +442,8 @@ static struct gpio_chip atmel_gpio_chip = {
 	.get                    = atmel_gpio_get,
 	.get_multiple           = atmel_gpio_get_multiple,
 	.direction_output       = atmel_gpio_direction_output,
-	.set_rv                 = atmel_gpio_set,
-	.set_multiple_rv        = atmel_gpio_set_multiple,
+	.set                    = atmel_gpio_set,
+	.set_multiple           = atmel_gpio_set_multiple,
 	.to_irq                 = atmel_gpio_to_irq,
 	.base                   = 0,
 };
@@ -862,7 +862,7 @@ static int atmel_conf_pin_config_group_set(struct pinctrl_dev *pctldev,
 				conf |= ATMEL_PIO_IFSCEN_MASK;
 			}
 			break;
-		case PIN_CONFIG_OUTPUT:
+		case PIN_CONFIG_LEVEL:
 			conf |= ATMEL_PIO_DIR_MASK;
 			bank = ATMEL_PIO_BANK(pin_id);
 			pin = ATMEL_PIO_LINE(pin_id);
@@ -1053,6 +1053,12 @@ static const struct atmel_pioctrl_data atmel_sama5d2_pioctrl_data = {
 	.last_bank_count	= ATMEL_PIO_NPINS_PER_BANK,
 };
 
+static const struct atmel_pioctrl_data microchip_sama7d65_pioctrl_data = {
+	.nbanks			= 5,
+	.last_bank_count	= 14, /* sama7d65 has only PE0 to PE13 */
+	.slew_rate_support	= 1,
+};
+
 static const struct atmel_pioctrl_data microchip_sama7g5_pioctrl_data = {
 	.nbanks			= 5,
 	.last_bank_count	= 8, /* sama7g5 has only PE0 to PE7 */
@@ -1063,6 +1069,9 @@ static const struct of_device_id atmel_pctrl_of_match[] = {
 	{
 		.compatible = "atmel,sama5d2-pinctrl",
 		.data = &atmel_sama5d2_pioctrl_data,
+	}, {
+		.compatible = "microchip,sama7d65-pinctrl",
+		.data = &microchip_sama7d65_pioctrl_data,
 	}, {
 		.compatible = "microchip,sama7g5-pinctrl",
 		.data = &microchip_sama7g5_pioctrl_data,
@@ -1087,7 +1096,7 @@ static int atmel_pinctrl_probe(struct platform_device *pdev)
 	struct atmel_pioctrl *atmel_pioctrl;
 	const struct atmel_pioctrl_data *atmel_pioctrl_data;
 
-	atmel_pioctrl = devm_kzalloc(dev, sizeof(*atmel_pioctrl), GFP_KERNEL);
+	atmel_pioctrl = devm_kzalloc_obj(dev, *atmel_pioctrl);
 	if (!atmel_pioctrl)
 		return -ENOMEM;
 	atmel_pioctrl->dev = dev;
@@ -1115,15 +1124,12 @@ static int atmel_pinctrl_probe(struct platform_device *pdev)
 	if (IS_ERR(atmel_pioctrl->clk))
 		return dev_err_probe(dev, PTR_ERR(atmel_pioctrl->clk), "failed to get clock\n");
 
-	atmel_pioctrl->pins = devm_kcalloc(dev,
-					   atmel_pioctrl->npins,
-					   sizeof(*atmel_pioctrl->pins),
-					   GFP_KERNEL);
+	atmel_pioctrl->pins = devm_kzalloc_objs(dev, *atmel_pioctrl->pins,
+						atmel_pioctrl->npins);
 	if (!atmel_pioctrl->pins)
 		return -ENOMEM;
 
-	pin_desc = devm_kcalloc(dev, atmel_pioctrl->npins, sizeof(*pin_desc),
-				GFP_KERNEL);
+	pin_desc = devm_kzalloc_objs(dev, *pin_desc, atmel_pioctrl->npins);
 	if (!pin_desc)
 		return -ENOMEM;
 	atmel_pinctrl_desc.pins = pin_desc;
@@ -1132,16 +1138,14 @@ static int atmel_pinctrl_probe(struct platform_device *pdev)
 	atmel_pinctrl_desc.custom_params = atmel_custom_bindings;
 
 	/* One pin is one group since a pin can achieve all functions. */
-	group_names = devm_kcalloc(dev,
-				   atmel_pioctrl->npins, sizeof(*group_names),
-				   GFP_KERNEL);
+	group_names = devm_kzalloc_objs(dev, *group_names, atmel_pioctrl->npins);
 	if (!group_names)
 		return -ENOMEM;
 	atmel_pioctrl->group_names = group_names;
 
-	atmel_pioctrl->groups = devm_kcalloc(&pdev->dev,
-			atmel_pioctrl->npins, sizeof(*atmel_pioctrl->groups),
-			GFP_KERNEL);
+	atmel_pioctrl->groups = devm_kzalloc_objs(&pdev->dev,
+						  *atmel_pioctrl->groups,
+						  atmel_pioctrl->npins);
 	if (!atmel_pioctrl->groups)
 		return -ENOMEM;
 	for (i = 0 ; i < atmel_pioctrl->npins; i++) {
@@ -1149,8 +1153,8 @@ static int atmel_pinctrl_probe(struct platform_device *pdev)
 		unsigned int bank = ATMEL_PIO_BANK(i);
 		unsigned int line = ATMEL_PIO_LINE(i);
 
-		atmel_pioctrl->pins[i] = devm_kzalloc(dev,
-				sizeof(**atmel_pioctrl->pins), GFP_KERNEL);
+		atmel_pioctrl->pins[i] = devm_kzalloc_obj(dev,
+							  **atmel_pioctrl->pins);
 		if (!atmel_pioctrl->pins[i])
 			return -ENOMEM;
 
@@ -1178,24 +1182,20 @@ static int atmel_pinctrl_probe(struct platform_device *pdev)
 	atmel_pioctrl->gpio_chip->names = atmel_pioctrl->group_names;
 	atmel_pioctrl->gpio_chip->set_config = gpiochip_generic_config;
 
-	atmel_pioctrl->pm_wakeup_sources = devm_kcalloc(dev,
-			atmel_pioctrl->nbanks,
-			sizeof(*atmel_pioctrl->pm_wakeup_sources),
-			GFP_KERNEL);
+	atmel_pioctrl->pm_wakeup_sources = devm_kzalloc_objs(dev,
+							     *atmel_pioctrl->pm_wakeup_sources,
+							     atmel_pioctrl->nbanks);
 	if (!atmel_pioctrl->pm_wakeup_sources)
 		return -ENOMEM;
 
-	atmel_pioctrl->pm_suspend_backup = devm_kcalloc(dev,
-			atmel_pioctrl->nbanks,
-			sizeof(*atmel_pioctrl->pm_suspend_backup),
-			GFP_KERNEL);
+	atmel_pioctrl->pm_suspend_backup = devm_kzalloc_objs(dev,
+							     *atmel_pioctrl->pm_suspend_backup,
+							     atmel_pioctrl->nbanks);
 	if (!atmel_pioctrl->pm_suspend_backup)
 		return -ENOMEM;
 
-	atmel_pioctrl->irqs = devm_kcalloc(dev,
-					   atmel_pioctrl->nbanks,
-					   sizeof(*atmel_pioctrl->irqs),
-					   GFP_KERNEL);
+	atmel_pioctrl->irqs = devm_kzalloc_objs(dev, *atmel_pioctrl->irqs,
+						atmel_pioctrl->nbanks);
 	if (!atmel_pioctrl->irqs)
 		return -ENOMEM;
 
@@ -1212,9 +1212,9 @@ static int atmel_pinctrl_probe(struct platform_device *pdev)
 		dev_dbg(dev, "bank %i: irq=%d\n", i, ret);
 	}
 
-	atmel_pioctrl->irq_domain = irq_domain_create_linear(of_fwnode_handle(dev->of_node),
-			atmel_pioctrl->gpio_chip->ngpio,
-			&irq_domain_simple_ops, NULL);
+	atmel_pioctrl->irq_domain = irq_domain_create_linear(dev_fwnode(dev),
+							     atmel_pioctrl->gpio_chip->ngpio,
+							     &irq_domain_simple_ops, NULL);
 	if (!atmel_pioctrl->irq_domain)
 		return dev_err_probe(dev, -ENODEV, "can't add the irq domain\n");
 

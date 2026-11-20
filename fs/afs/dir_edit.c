@@ -239,7 +239,7 @@ static void afs_edit_init_block(union afs_xdr_dir_block *meta,
  * The caller must hold the inode locked.
  */
 void afs_edit_dir_add(struct afs_vnode *vnode,
-		      struct qstr *name, struct afs_fid *new_fid,
+		      const struct qstr *name, struct afs_fid *new_fid,
 		      enum afs_edit_dir_reason why)
 {
 	union afs_xdr_dir_block *meta, *block;
@@ -391,7 +391,7 @@ error:
  * The caller must hold the inode locked.
  */
 void afs_edit_dir_remove(struct afs_vnode *vnode,
-			 struct qstr *name, enum afs_edit_dir_reason why)
+			 const struct qstr *name, enum afs_edit_dir_reason why)
 {
 	union afs_xdr_dir_block *meta, *block, *pblock;
 	union afs_xdr_dirent *de, *pde;
@@ -415,7 +415,7 @@ void afs_edit_dir_remove(struct afs_vnode *vnode,
 	if (!afs_dir_init_iter(&iter, name))
 		return;
 
-	meta = afs_dir_find_block(&iter, 0);
+	meta = afs_dir_get_block(&iter, 0);
 	if (!meta)
 		return;
 
@@ -442,7 +442,7 @@ void afs_edit_dir_remove(struct afs_vnode *vnode,
 	/* Check and clear the entry. */
 	de = &block->dirents[slot];
 	if (de->u.valid != 1)
-		goto error_unmap;
+		goto error;
 
 	trace_afs_edit_dir(vnode, why, afs_edit_dir_delete, b, slot,
 			   ntohl(de->u.vnode), ntohl(de->u.unique),
@@ -458,7 +458,6 @@ void afs_edit_dir_remove(struct afs_vnode *vnode,
 	/* Clear the constituent entries. */
 	next = de->u.hash_next;
 	memset(de, 0, sizeof(*de) * iter.nr_slots);
-	kunmap_local(block);
 
 	/* Adjust the hash chain: if iter->prev_entry is 0, the hashtable head
 	 * index is previous; otherwise it's slot number of the previous entry.
@@ -485,7 +484,6 @@ void afs_edit_dir_remove(struct afs_vnode *vnode,
 		pde = &pblock->dirents[ps];
 		prev_next = pde->u.hash_next;
 		if (prev_next != htons(entry)) {
-			kunmap_local(pblock);
 			pr_warn("%llx:%llx:%x: not prev in chain b=%x p=%x,%x e=%x %*s",
 				vnode->fid.vid, vnode->fid.vnode, vnode->fid.unique,
 				iter.bucket, iter.prev_entry, prev_next, entry,
@@ -493,7 +491,6 @@ void afs_edit_dir_remove(struct afs_vnode *vnode,
 			goto error;
 		}
 		pde->u.hash_next = next;
-		kunmap_local(pblock);
 	}
 
 	netfs_single_mark_inode_dirty(&vnode->netfs.inode);
@@ -503,18 +500,16 @@ void afs_edit_dir_remove(struct afs_vnode *vnode,
 	_debug("Remove %s from %u[%u]", name->name, b, slot);
 
 out_unmap:
+	afs_dir_end_iter(&iter);
 	kunmap_local(meta);
 	_leave("");
 	return;
 
 already_invalidated:
-	kunmap_local(block);
 	trace_afs_edit_dir(vnode, why, afs_edit_dir_delete_inval,
 			   0, 0, 0, 0, name->name);
 	goto out_unmap;
 
-error_unmap:
-	kunmap_local(block);
 error:
 	trace_afs_edit_dir(vnode, why, afs_edit_dir_delete_error,
 			   0, 0, 0, 0, name->name);
@@ -522,11 +517,11 @@ error:
 }
 
 /*
- * Edit a subdirectory that has been moved between directories to update the
- * ".." entry.
+ * Edit an entry in a directory to update the vnode it refers to.  This is also
+ * used to update the ".." entry in a directory.
  */
-void afs_edit_dir_update_dotdot(struct afs_vnode *vnode, struct afs_vnode *new_dvnode,
-				enum afs_edit_dir_reason why)
+void afs_edit_dir_update(struct afs_vnode *vnode, const struct qstr *name,
+			 struct afs_vnode *new_dvnode, enum afs_edit_dir_reason why)
 {
 	union afs_xdr_dir_block *block;
 	union afs_xdr_dirent *de;
@@ -557,7 +552,7 @@ void afs_edit_dir_update_dotdot(struct afs_vnode *vnode, struct afs_vnode *new_d
 		if (!test_bit(AFS_VNODE_DIR_VALID, &vnode->flags))
 			goto already_invalidated;
 
-		slot = afs_dir_scan_block(block, &dotdot_name, b);
+		slot = afs_dir_scan_block(block, name, b);
 		if (slot >= 0)
 			goto found_dirent;
 
@@ -566,7 +561,7 @@ void afs_edit_dir_update_dotdot(struct afs_vnode *vnode, struct afs_vnode *new_d
 
 	/* Didn't find the dirent to clobber.  Download the directory again. */
 	trace_afs_edit_dir(vnode, why, afs_edit_dir_update_nodd,
-			   0, 0, 0, 0, "..");
+			   0, 0, 0, 0, name->name);
 	afs_invalidate_dir(vnode, afs_dir_invalid_edit_upd_no_dd);
 	goto out;
 
@@ -576,7 +571,7 @@ found_dirent:
 	de->u.unique = htonl(new_dvnode->fid.unique);
 
 	trace_afs_edit_dir(vnode, why, afs_edit_dir_update_dd, b, slot,
-			   ntohl(de->u.vnode), ntohl(de->u.unique), "..");
+			   ntohl(de->u.vnode), ntohl(de->u.unique), name->name);
 
 	kunmap_local(block);
 	netfs_single_mark_inode_dirty(&vnode->netfs.inode);
@@ -589,12 +584,12 @@ out:
 already_invalidated:
 	kunmap_local(block);
 	trace_afs_edit_dir(vnode, why, afs_edit_dir_update_inval,
-			   0, 0, 0, 0, "..");
+			   0, 0, 0, 0, name->name);
 	goto out;
 
 error:
 	trace_afs_edit_dir(vnode, why, afs_edit_dir_update_error,
-			   0, 0, 0, 0, "..");
+			   0, 0, 0, 0, name->name);
 	goto out;
 }
 

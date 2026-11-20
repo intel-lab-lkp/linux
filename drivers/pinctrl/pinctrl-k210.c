@@ -551,7 +551,7 @@ static int k210_pinconf_set_param(struct pinctrl_dev *pctldev,
 		else
 			val &= ~K210_PC_ST;
 		break;
-	case PIN_CONFIG_OUTPUT:
+	case PIN_CONFIG_LEVEL:
 		k210_pinmux_set_pin_function(pctldev, pin, K210_PCF_CONSTANT);
 		val = readl(&pdata->fpioa->pins[pin]);
 		val |= K210_PC_MODE_OUT;
@@ -879,7 +879,7 @@ static const struct pinctrl_ops k210_pinctrl_ops = {
 	.dt_free_map = pinconf_generic_dt_free_map,
 };
 
-static struct pinctrl_desc k210_pinctrl_desc = {
+static const struct pinctrl_desc k210_pinctrl_desc = {
 	.name = "k210-pinctrl",
 	.pins = k210_pins,
 	.npins = K210_NPINS,
@@ -927,7 +927,7 @@ static int k210_fpioa_probe(struct platform_device *pdev)
 
 	dev_info(dev, "K210 FPIOA pin controller\n");
 
-	pdata = devm_kzalloc(dev, sizeof(*pdata), GFP_KERNEL);
+	pdata = devm_kzalloc_obj(dev, *pdata);
 	if (!pdata)
 		return -ENOMEM;
 

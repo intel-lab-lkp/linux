@@ -230,7 +230,7 @@ static int mxic_ecc_init_ctx(struct nand_device *nand, struct device *dev)
 	u32 spare_reg;
 	int ret;
 
-	ctx = devm_kzalloc(dev, sizeof(*ctx), GFP_KERNEL);
+	ctx = devm_kzalloc_obj(dev, *ctx);
 	if (!ctx)
 		return -ENOMEM;
 
@@ -322,14 +322,14 @@ static int mxic_ecc_init_ctx(struct nand_device *nand, struct device *dev)
 	sg_init_table(ctx->sg, 2);
 
 	/* Configuration dump and sanity checks */
-	dev_err(dev, "DPE version number: %d\n",
+	dev_dbg(dev, "DPE version number: %d\n",
 		readl(mxic->regs + DP_VER) >> DP_VER_OFFSET);
-	dev_err(dev, "Chunk size: %d\n", readl(mxic->regs + CHUNK_SIZE));
-	dev_err(dev, "Main size: %d\n", readl(mxic->regs + MAIN_SIZE));
-	dev_err(dev, "Spare size: %d\n", SPARE_SZ(spare_reg));
-	dev_err(dev, "Rsv size: %ld\n", RSV_SZ(spare_reg));
-	dev_err(dev, "Parity size: %d\n", ctx->parity_sz);
-	dev_err(dev, "Meta size: %d\n", ctx->meta_sz);
+	dev_dbg(dev, "Chunk size: %d\n", readl(mxic->regs + CHUNK_SIZE));
+	dev_dbg(dev, "Main size: %d\n", readl(mxic->regs + MAIN_SIZE));
+	dev_dbg(dev, "Spare size: %d\n", SPARE_SZ(spare_reg));
+	dev_dbg(dev, "Rsv size: %ld\n", RSV_SZ(spare_reg));
+	dev_dbg(dev, "Parity size: %d\n", ctx->parity_sz);
+	dev_dbg(dev, "Meta size: %d\n", ctx->meta_sz);
 
 	if ((ctx->meta_sz + ctx->parity_sz + RSV_SZ(spare_reg)) !=
 	    SPARE_SZ(spare_reg)) {
@@ -799,7 +799,7 @@ static int mxic_ecc_probe(struct platform_device *pdev)
 	struct mxic_ecc_engine *mxic;
 	int ret;
 
-	mxic = devm_kzalloc(&pdev->dev, sizeof(*mxic), GFP_KERNEL);
+	mxic = devm_kzalloc_obj(&pdev->dev, *mxic);
 	if (!mxic)
 		return -ENOMEM;
 

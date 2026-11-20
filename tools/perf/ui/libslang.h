@@ -15,9 +15,7 @@
 #define ENABLE_SLFUTURE_CONST 1
 #define ENABLE_SLFUTURE_VOID 1
 
-#ifdef HAVE_SLANG_INCLUDE_SUBDIR
-#include <slang/slang.h>
-#else
+#ifdef HAVE_SLANG_SUPPORT
 #include <slang.h>
 #endif
 

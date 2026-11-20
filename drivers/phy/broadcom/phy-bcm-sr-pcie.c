@@ -220,7 +220,7 @@ static int sr_pcie_phy_probe(struct platform_device *pdev)
 	struct phy_provider *provider;
 	unsigned int phy_idx = 0;
 
-	core = devm_kzalloc(dev, sizeof(*core), GFP_KERNEL);
+	core = devm_kzalloc_obj(dev, *core);
 	if (!core)
 		return -ENOMEM;
 
@@ -276,8 +276,6 @@ static int sr_pcie_phy_probe(struct platform_device *pdev)
 		dev_err(dev, "failed to register PHY provider\n");
 		return PTR_ERR(provider);
 	}
-
-	dev_info(dev, "Stingray PCIe PHY driver initialized\n");
 
 	return 0;
 }

@@ -2,7 +2,7 @@
 /*
  *  cx18 header containing common defines.
  *
- *  Copyright (C) 2007  Hans Verkuil <hverkuil@xs4all.nl>
+ *  Copyright (C) 2007  Hans Verkuil <hverkuil@kernel.org>
  */
 
 #ifndef CX23418_H
@@ -24,7 +24,7 @@
 #define CX18_CREATE_TASK			(MGR_CMD_MASK | 0x0001)
 
 /* Description: This command destroys an instance of a task
-   IN[0] - Task handle. Hanlde of the task to destroy
+   IN[0] - Task handle. Handle of the task to destroy
    ReturnCode - One of the ERR_SYS_... */
 #define CX18_DESTROY_TASK			(MGR_CMD_MASK | 0x0002)
 

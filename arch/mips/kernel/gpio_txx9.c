@@ -70,19 +70,18 @@ static int txx9_gpio_dir_out(struct gpio_chip *chip, unsigned int offset,
 
 static struct gpio_chip txx9_gpio_chip = {
 	.get = txx9_gpio_get,
-	.set_rv = txx9_gpio_set,
+	.set = txx9_gpio_set,
 	.direction_input = txx9_gpio_dir_in,
 	.direction_output = txx9_gpio_dir_out,
 	.label = "TXx9",
 };
 
-int __init txx9_gpio_init(unsigned long baseaddr,
-			  unsigned int base, unsigned int num)
+int __init txx9_gpio_init(unsigned long baseaddr, unsigned int num)
 {
 	txx9_pioptr = ioremap(baseaddr, sizeof(struct txx9_pio_reg));
 	if (!txx9_pioptr)
 		return -ENODEV;
-	txx9_gpio_chip.base = base;
+	txx9_gpio_chip.base = -1;
 	txx9_gpio_chip.ngpio = num;
 	return gpiochip_add_data(&txx9_gpio_chip, NULL);
 }

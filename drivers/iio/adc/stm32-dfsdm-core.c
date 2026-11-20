@@ -8,6 +8,7 @@
 
 #include <linux/bitfield.h>
 #include <linux/clk.h>
+#include <linux/export.h>
 #include <linux/iio/iio.h>
 #include <linux/iio/sysfs.h>
 #include <linux/interrupt.h>
@@ -369,7 +370,7 @@ static int stm32_dfsdm_probe(struct platform_device *pdev)
 	struct stm32_dfsdm *dfsdm;
 	int ret;
 
-	priv = devm_kzalloc(&pdev->dev, sizeof(*priv), GFP_KERNEL);
+	priv = devm_kzalloc_obj(&pdev->dev, *priv);
 	if (!priv)
 		return -ENOMEM;
 
@@ -397,13 +398,13 @@ static int stm32_dfsdm_probe(struct platform_device *pdev)
 	if (ret < 0)
 		return ret;
 
-	dfsdm->fl_list = devm_kcalloc(&pdev->dev, dfsdm->num_fls,
-				      sizeof(*dfsdm->fl_list), GFP_KERNEL);
+	dfsdm->fl_list = devm_kzalloc_objs(&pdev->dev, *dfsdm->fl_list,
+					   dfsdm->num_fls);
 	if (!dfsdm->fl_list)
 		return -ENOMEM;
 
-	dfsdm->ch_list = devm_kcalloc(&pdev->dev, dfsdm->num_chs,
-				      sizeof(*dfsdm->ch_list), GFP_KERNEL);
+	dfsdm->ch_list = devm_kzalloc_objs(&pdev->dev, *dfsdm->ch_list,
+					   dfsdm->num_chs);
 	if (!dfsdm->ch_list)
 		return -ENOMEM;
 

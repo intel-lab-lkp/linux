@@ -128,7 +128,7 @@ static int get_boost_mode_x86(unsigned int cpu)
 	/* ToDo: Make this more global */
 	unsigned long pstates[MAX_HW_PSTATES] = {0,};
 
-	ret = cpufreq_has_boost_support(cpu, &support, &active, &b_states);
+	ret = cpufreq_has_x86_boost_support(cpu, &support, &active, &b_states);
 	if (ret) {
 		printf(_("Error while evaluating Boost Capabilities"
 				" on CPU %d -- are you root?\n"), cpu);
@@ -204,6 +204,18 @@ static int get_boost_mode_x86(unsigned int cpu)
 	return 0;
 }
 
+static int get_boost_mode_generic(unsigned int cpu)
+{
+	bool active;
+
+	if (!cpufreq_has_generic_boost_support(&active)) {
+		printf(_("  boost state support:\n"));
+		printf(_("    Active: %s\n"), active ? _("yes") : _("no"));
+	}
+
+	return 0;
+}
+
 /* --boost / -b */
 
 static int get_boost_mode(unsigned int cpu)
@@ -214,6 +226,8 @@ static int get_boost_mode(unsigned int cpu)
 	    cpupower_cpu_info.vendor == X86_VENDOR_HYGON ||
 	    cpupower_cpu_info.vendor == X86_VENDOR_INTEL)
 		return get_boost_mode_x86(cpu);
+	else
+		get_boost_mode_generic(cpu);
 
 	freqs = cpufreq_get_boost_frequencies(cpu);
 	if (freqs) {
@@ -256,10 +270,10 @@ static int get_freq_hardware(unsigned int cpu, unsigned int human)
 {
 	unsigned long freq;
 
-	if (cpupower_cpu_info.caps & CPUPOWER_CAP_APERF)
+	freq = cpufreq_get_freq_hardware(cpu);
+	if (!(cpupower_cpu_info.caps & CPUPOWER_CAP_APERF) && !freq)
 		return -EINVAL;
 
-	freq = cpufreq_get_freq_hardware(cpu);
 	printf(_("  current CPU frequency: "));
 	if (!freq) {
 		printf("Unable to call hardware\n");
@@ -463,12 +477,13 @@ static int get_latency(unsigned int cpu, unsigned int human)
 }
 
 /* --performance / -c */
-
 static int get_perf_cap(unsigned int cpu)
 {
 	if (cpupower_cpu_info.vendor == X86_VENDOR_AMD &&
 	    cpupower_cpu_info.caps & CPUPOWER_CAP_AMD_PSTATE)
 		amd_pstate_show_perf_and_freq(cpu, no_rounding);
+	else
+		cppc_show_perf_and_freq(cpu, no_rounding);
 
 	return 0;
 }
@@ -499,8 +514,8 @@ static void debug_output_one(unsigned int cpu)
 
 	get_available_governors(cpu);
 	get_policy(cpu);
-	if (get_freq_hardware(cpu, 1) < 0)
-		get_freq_kernel(cpu, 1);
+	get_freq_hardware(cpu, 1);
+	get_freq_kernel(cpu, 1);
 	get_boost_mode(cpu);
 	get_perf_cap(cpu);
 }
@@ -528,8 +543,6 @@ static struct option info_opts[] = {
 
 int cmd_freq_info(int argc, char **argv)
 {
-	extern char *optarg;
-	extern int optind, opterr, optopt;
 	int ret = 0, cont = 1;
 	unsigned int cpu = 0;
 	unsigned int human = 0;

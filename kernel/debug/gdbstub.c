@@ -27,9 +27,11 @@
 
 #include <linux/kernel.h>
 #include <linux/sched/signal.h>
+#include <linux/hex.h>
 #include <linux/kgdb.h>
 #include <linux/kdb.h>
 #include <linux/serial_core.h>
+#include <linux/string.h>
 #include <linux/reboot.h>
 #include <linux/uaccess.h>
 #include <asm/cacheflush.h>
@@ -41,6 +43,8 @@
 /* Our I/O buffers. */
 static char			remcom_in_buffer[BUFMAX];
 static char			remcom_out_buffer[BUFMAX];
+/* Payload bytes get_packet() stored in remcom_in_buffer, excluding the NUL. */
+static int			remcom_in_len;
 static int			gdbstub_use_prev_in_buf;
 static int			gdbstub_prev_in_buf_pos;
 
@@ -85,7 +89,7 @@ static int gdbstub_read_wait(void)
 }
 #endif
 /* scan for the sequence $<data>#<checksum> */
-static void get_packet(char *buffer)
+static int get_packet(char *buffer)
 {
 	unsigned char checksum;
 	unsigned char xmitcsum;
@@ -133,6 +137,8 @@ static void get_packet(char *buffer)
 		}
 		buffer[count] = 0;
 	} while (checksum != xmitcsum);
+
+	return count;
 }
 
 /*
@@ -319,16 +325,26 @@ int kgdb_hex2long(char **ptr, unsigned long *long_val)
  * Copy the binary array pointed to by buf into mem.  Fix $, #, and
  * 0x7d escaped with 0x7d. Return -EFAULT on failure or 0 on success.
  * The input buf is overwritten with the result to write to mem.
+ *
+ * buf_end points one past the last byte received for this packet. Each
+ * 0x7d escape consumes a second input byte, so decoding count bytes can
+ * read up to 2 * count input bytes; stop at buf_end rather than running
+ * off the end of remcom_in_buffer.
  */
-static int kgdb_ebin2mem(char *buf, char *mem, int count)
+static int kgdb_ebin2mem(char *buf, char *mem, int count, char *buf_end)
 {
 	int size = 0;
 	char *c = buf;
 
 	while (count-- > 0) {
+		if (buf >= buf_end)
+			return -EINVAL;
 		c[size] = *buf++;
-		if (c[size] == 0x7d)
+		if (c[size] == 0x7d) {
+			if (buf >= buf_end)
+				return -EINVAL;
 			c[size] = *buf++ ^ 0x20;
+		}
 		size++;
 	}
 
@@ -365,16 +381,33 @@ void gdb_regs_to_pt_regs(unsigned long *gdb_regs, struct pt_regs *regs)
 static int write_mem_msg(int binary)
 {
 	char *ptr = &remcom_in_buffer[1];
+	char *buf_end = &remcom_in_buffer[remcom_in_len];
 	unsigned long addr;
 	unsigned long length;
 	int err;
 
 	if (kgdb_hex2long(&ptr, &addr) > 0 && *(ptr++) == ',' &&
 	    kgdb_hex2long(&ptr, &length) > 0 && *(ptr++) == ':') {
-		if (binary)
-			err = kgdb_ebin2mem(ptr, (char *)addr, length);
-		else
+		/*
+		 * Trust only the bytes actually received, not length: the
+		 * client can claim more payload than it sent. 'M' decodes two
+		 * hex chars per byte in place, so it needs 2 * length bytes at
+		 * ptr; 'X' decodes one byte per byte, and kgdb_ebin2mem() bounds
+		 * its extra 0x7d-escape reads against buf_end itself.
+		 */
+		if (ptr >= buf_end)
+			return -EINVAL;
+
+		if (binary) {
+			if (length > (unsigned long)(buf_end - ptr))
+				return -EINVAL;
+			err = kgdb_ebin2mem(ptr, (char *)addr, length, buf_end);
+		} else {
+			if (length > (unsigned long)(buf_end - ptr) / 2)
+				return -EINVAL;
 			err = kgdb_hex2mem(ptr, (char *)addr, length);
+		}
+
 		if (err)
 			return err;
 		if (CACHE_FLUSH_IS_SAFE)
@@ -515,7 +548,7 @@ static void gdb_get_regs_helper(struct kgdb_state *ks)
 	/*
 	 * All threads that don't have debuggerinfo should be
 	 * in schedule() sleeping, since all other CPUs
-	 * are in kgdb_wait, and thus have debuggerinfo.
+	 * are in kgdb_cpu_enter(), and thus have debuggerinfo.
 	 */
 	if (local_debuggerinfo) {
 		pt_regs_to_gdb_regs(gdb_regs, local_debuggerinfo);
@@ -547,7 +580,7 @@ static void gdb_cmd_setregs(struct kgdb_state *ks)
 		error_packet(remcom_out_buffer, -EINVAL);
 	} else {
 		gdb_regs_to_pt_regs(gdb_regs, ks->linux_regs);
-		strcpy(remcom_out_buffer, "OK");
+		strscpy(remcom_out_buffer, "OK");
 	}
 }
 
@@ -561,6 +594,14 @@ static void gdb_cmd_memread(struct kgdb_state *ks)
 
 	if (kgdb_hex2long(&ptr, &addr) > 0 && *ptr++ == ',' &&
 					kgdb_hex2long(&ptr, &length) > 0) {
+		/*
+		 * The hex-encoded reply needs 2 * length + 1 bytes
+		 * in remcom_out_buffer[BUFMAX].
+		 */
+		if (length > (BUFMAX - 1) / 2) {
+			error_packet(remcom_out_buffer, -EINVAL);
+			return;
+		}
 		err = kgdb_mem2hex((char *)addr, remcom_out_buffer, length);
 		if (!err)
 			error_packet(remcom_out_buffer, -EINVAL);
@@ -577,7 +618,7 @@ static void gdb_cmd_memwrite(struct kgdb_state *ks)
 	if (err)
 		error_packet(remcom_out_buffer, err);
 	else
-		strcpy(remcom_out_buffer, "OK");
+		strscpy(remcom_out_buffer, "OK");
 }
 
 #if DBG_MAX_REG_NUM > 0
@@ -630,7 +671,7 @@ static void gdb_cmd_reg_set(struct kgdb_state *ks)
 	i = i / 2;
 	kgdb_hex2mem(ptr, (char *)gdb_regs, i);
 	dbg_set_reg(regnum, gdb_regs, ks->linux_regs);
-	strcpy(remcom_out_buffer, "OK");
+	strscpy(remcom_out_buffer, "OK");
 }
 #endif /* DBG_MAX_REG_NUM > 0 */
 
@@ -642,7 +683,7 @@ static void gdb_cmd_binwrite(struct kgdb_state *ks)
 	if (err)
 		error_packet(remcom_out_buffer, err);
 	else
-		strcpy(remcom_out_buffer, "OK");
+		strscpy(remcom_out_buffer, "OK");
 }
 
 /* Handle the 'D' or 'k', detach or kill packets */
@@ -656,7 +697,7 @@ static void gdb_cmd_detachkill(struct kgdb_state *ks)
 		if (error < 0) {
 			error_packet(remcom_out_buffer, error);
 		} else {
-			strcpy(remcom_out_buffer, "OK");
+			strscpy(remcom_out_buffer, "OK");
 			kgdb_connected = 0;
 		}
 		put_packet(remcom_out_buffer);
@@ -676,7 +717,7 @@ static int gdb_cmd_reboot(struct kgdb_state *ks)
 	/* For now, only honor R0 */
 	if (strcmp(remcom_in_buffer, "R0") == 0) {
 		printk(KERN_CRIT "Executing emergency reboot\n");
-		strcpy(remcom_out_buffer, "OK");
+		strscpy(remcom_out_buffer, "OK");
 		put_packet(remcom_out_buffer);
 
 		/*
@@ -739,7 +780,7 @@ static void gdb_cmd_query(struct kgdb_state *ks)
 
 	case 'C':
 		/* Current thread id */
-		strcpy(remcom_out_buffer, "QC");
+		strscpy(remcom_out_buffer, "QC");
 		ks->threadid = shadow_pid(current->pid);
 		int_to_threadref(thref, ks->threadid);
 		pack_threadid(remcom_out_buffer + 2, thref);
@@ -773,26 +814,26 @@ static void gdb_cmd_query(struct kgdb_state *ks)
 			int len = strlen(remcom_in_buffer + 6);
 
 			if ((len % 2) != 0) {
-				strcpy(remcom_out_buffer, "E01");
+				strscpy(remcom_out_buffer, "E01");
 				break;
 			}
+			len = len / 2;
 			kgdb_hex2mem(remcom_in_buffer + 6,
 				     remcom_out_buffer, len);
-			len = len / 2;
 			remcom_out_buffer[len++] = 0;
 
 			kdb_common_init_state(ks);
 			kdb_parse(remcom_out_buffer);
 			kdb_common_deinit_state();
 
-			strcpy(remcom_out_buffer, "OK");
+			strscpy(remcom_out_buffer, "OK");
 		}
 		break;
 #endif
 #ifdef CONFIG_HAVE_ARCH_KGDB_QXFER_PKT
 	case 'S':
 		if (!strncmp(remcom_in_buffer, "qSupported:", 11))
-			strcpy(remcom_out_buffer, kgdb_arch_gdb_stub_feature);
+			strscpy(remcom_out_buffer, kgdb_arch_gdb_stub_feature);
 		break;
 	case 'X':
 		if (!strncmp(remcom_in_buffer, "qXfer:", 6))
@@ -822,7 +863,7 @@ static void gdb_cmd_task(struct kgdb_state *ks)
 		}
 		kgdb_usethread = thread;
 		ks->kgdb_usethreadid = ks->threadid;
-		strcpy(remcom_out_buffer, "OK");
+		strscpy(remcom_out_buffer, "OK");
 		break;
 	case 'c':
 		ptr = &remcom_in_buffer[2];
@@ -837,7 +878,7 @@ static void gdb_cmd_task(struct kgdb_state *ks)
 			}
 			kgdb_contthread = thread;
 		}
-		strcpy(remcom_out_buffer, "OK");
+		strscpy(remcom_out_buffer, "OK");
 		break;
 	}
 }
@@ -851,7 +892,7 @@ static void gdb_cmd_thread(struct kgdb_state *ks)
 	kgdb_hex2long(&ptr, &ks->threadid);
 	thread = getthread(ks->linux_regs, ks->threadid);
 	if (thread)
-		strcpy(remcom_out_buffer, "OK");
+		strscpy(remcom_out_buffer, "OK");
 	else
 		error_packet(remcom_out_buffer, -EINVAL);
 }
@@ -913,7 +954,7 @@ static void gdb_cmd_break(struct kgdb_state *ks)
 			(int) length, *bpt_type - '0');
 
 	if (error == 0)
-		strcpy(remcom_out_buffer, "OK");
+		strscpy(remcom_out_buffer, "OK");
 	else
 		error_packet(remcom_out_buffer, error);
 }
@@ -983,7 +1024,7 @@ int gdb_serial_stub(struct kgdb_state *ks)
 		/* Clear the out buffer. */
 		memset(remcom_out_buffer, 0, sizeof(remcom_out_buffer));
 
-		get_packet(remcom_in_buffer);
+		remcom_in_len = get_packet(remcom_in_buffer);
 
 		switch (remcom_in_buffer[0]) {
 		case '?': /* gdbserial status */

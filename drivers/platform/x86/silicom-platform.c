@@ -248,12 +248,8 @@ static int silicom_gpio_direction_input(struct gpio_chip *gc,
 static int silicom_gpio_set(struct gpio_chip *gc, unsigned int offset,
 			    int value)
 {
-	int direction = silicom_gpio_get_direction(gc, offset);
 	u8 *channels = gpiochip_get_data(gc);
 	int channel = channels[offset];
-
-	if (direction == GPIO_LINE_DIRECTION_IN)
-		return -EPERM;
 
 	silicom_mec_port_set(channel, !value);
 
@@ -470,7 +466,7 @@ static struct gpio_chip silicom_gpio_chip = {
 	.direction_input = silicom_gpio_direction_input,
 	.direction_output = silicom_gpio_direction_output,
 	.get = silicom_gpio_get,
-	.set_rv = silicom_gpio_set,
+	.set = silicom_gpio_set,
 	.base = -1,
 	.ngpio = ARRAY_SIZE(plat_0222_gpio_channels),
 	.names = plat_0222_gpio_names,
@@ -736,7 +732,7 @@ static int __init silicom_mc_leds_register(struct device *dev,
 
 	for (i = 0; mc_leds[i].led_cdev.name; i++) {
 
-		led = devm_kzalloc(dev, sizeof(*led), GFP_KERNEL);
+		led = devm_kzalloc_obj(dev, *led);
 		if (!led)
 			return -ENOMEM;
 		memcpy(led, &mc_leds[i], sizeof(*led));

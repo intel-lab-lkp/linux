@@ -216,7 +216,6 @@ exit:
 		if (status2 < 0)
 			dev_err(i2cd->dev, "i2c stop failed %d\n", status2);
 	}
-	pm_runtime_mark_last_busy(i2cd->dev);
 	pm_runtime_put_autosuspend(i2cd->dev);
 	return status;
 }
@@ -276,7 +275,7 @@ static int gpu_i2c_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	struct gpu_i2c_dev *i2cd;
 	int status;
 
-	i2cd = devm_kzalloc(dev, sizeof(*i2cd), GFP_KERNEL);
+	i2cd = devm_kzalloc_obj(dev, *i2cd);
 	if (!i2cd)
 		return -ENOMEM;
 

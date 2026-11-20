@@ -97,7 +97,7 @@ static int bd71828_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct bd71828_gpio *bdgpio;
 
-	bdgpio = devm_kzalloc(dev, sizeof(*bdgpio), GFP_KERNEL);
+	bdgpio = devm_kzalloc_obj(dev, *bdgpio);
 	if (!bdgpio)
 		return -ENOMEM;
 
@@ -109,7 +109,7 @@ static int bd71828_probe(struct platform_device *pdev)
 	bdgpio->gpio.set_config = bd71828_gpio_set_config;
 	bdgpio->gpio.can_sleep = true;
 	bdgpio->gpio.get = bd71828_gpio_get;
-	bdgpio->gpio.set_rv = bd71828_gpio_set;
+	bdgpio->gpio.set = bd71828_gpio_set;
 	bdgpio->gpio.base = -1;
 
 	/*

@@ -109,6 +109,28 @@ static inline bool ctxt_has_s1poe(struct kvm_cpu_context *ctxt)
 	return kvm_has_s1poe(kern_hyp_va(vcpu->kvm));
 }
 
+static inline bool ctxt_has_ras(struct kvm_cpu_context *ctxt)
+{
+	struct kvm_vcpu *vcpu;
+
+	if (!cpus_have_final_cap(ARM64_HAS_RAS_EXTN))
+		return false;
+
+	vcpu = ctxt_to_vcpu(ctxt);
+	return kvm_has_ras(kern_hyp_va(vcpu->kvm));
+}
+
+static inline bool ctxt_has_sctlr2(struct kvm_cpu_context *ctxt)
+{
+	struct kvm_vcpu *vcpu;
+
+	if (!cpus_have_final_cap(ARM64_HAS_SCTLR2))
+		return false;
+
+	vcpu = ctxt_to_vcpu(ctxt);
+	return kvm_has_sctlr2(kern_hyp_va(vcpu->kvm));
+}
+
 static inline void __sysreg_save_el1_state(struct kvm_cpu_context *ctxt)
 {
 	ctxt_sys_reg(ctxt, SCTLR_EL1)	= read_sysreg_el1(SYS_SCTLR);
@@ -147,6 +169,13 @@ static inline void __sysreg_save_el1_state(struct kvm_cpu_context *ctxt)
 	ctxt_sys_reg(ctxt, SP_EL1)	= read_sysreg(sp_el1);
 	ctxt_sys_reg(ctxt, ELR_EL1)	= read_sysreg_el1(SYS_ELR);
 	ctxt_sys_reg(ctxt, SPSR_EL1)	= read_sysreg_el1(SYS_SPSR);
+
+	if (ctxt_has_sctlr2(ctxt))
+		ctxt_sys_reg(ctxt, SCTLR2_EL1) = read_sysreg_el1(SYS_SCTLR2);
+
+	/* Retrieve L2's HCR_EL2, and save it for future use */
+	if (is_nested_nv3_ctxt(ctxt_to_vcpu(ctxt)))
+		ctxt_sys_reg(ctxt, NVHCR_EL2) = read_sysreg_s(SYS_NVHCR_EL2);
 }
 
 static inline void __sysreg_save_el2_return_state(struct kvm_cpu_context *ctxt)
@@ -159,8 +188,13 @@ static inline void __sysreg_save_el2_return_state(struct kvm_cpu_context *ctxt)
 	if (!has_vhe() && ctxt->__hyp_running_vcpu)
 		ctxt->regs.pstate	= read_sysreg_el2(SYS_SPSR);
 
-	if (cpus_have_final_cap(ARM64_HAS_RAS_EXTN))
+	if (!cpus_have_final_cap(ARM64_HAS_RAS_EXTN))
+		return;
+
+	if (!vserror_state_is_nested(ctxt_to_vcpu(ctxt)))
 		ctxt_sys_reg(ctxt, DISR_EL1) = read_sysreg_s(SYS_VDISR_EL2);
+	else if (ctxt_has_ras(ctxt))
+		ctxt_sys_reg(ctxt, VDISR_EL2) = read_sysreg_s(SYS_VDISR_EL2);
 }
 
 static inline void __sysreg_restore_common_state(struct kvm_cpu_context *ctxt)
@@ -252,6 +286,16 @@ static inline void __sysreg_restore_el1_state(struct kvm_cpu_context *ctxt,
 	write_sysreg(ctxt_sys_reg(ctxt, SP_EL1),	sp_el1);
 	write_sysreg_el1(ctxt_sys_reg(ctxt, ELR_EL1),	SYS_ELR);
 	write_sysreg_el1(ctxt_sys_reg(ctxt, SPSR_EL1),	SYS_SPSR);
+
+	if (ctxt_has_sctlr2(ctxt))
+		write_sysreg_el1(ctxt_sys_reg(ctxt, SCTLR2_EL1), SYS_SCTLR2);
+
+	/*
+	 * Publish the L2 view of HCR_EL2 to the HW if L1 is using NV3.
+	 * Otherwise, the data is already in place in the L1's own VNCR.
+	 */
+	if (is_nested_nv3_ctxt(ctxt_to_vcpu(ctxt)))
+		write_sysreg_s(ctxt_sys_reg(ctxt, NVHCR_EL2), SYS_NVHCR_EL2);
 }
 
 /* Read the VCPU state's PSTATE, but translate (v)EL2 to EL1. */
@@ -275,6 +319,7 @@ static inline void __sysreg_restore_el2_return_state(struct kvm_cpu_context *ctx
 {
 	u64 pstate = to_hw_pstate(ctxt);
 	u64 mode = pstate & PSR_AA32_MODE_MASK;
+	u64 vdisr;
 
 	/*
 	 * Safety check to ensure we're setting the CPU up to enter the guest
@@ -293,8 +338,17 @@ static inline void __sysreg_restore_el2_return_state(struct kvm_cpu_context *ctx
 	write_sysreg_el2(ctxt->regs.pc,			SYS_ELR);
 	write_sysreg_el2(pstate,			SYS_SPSR);
 
-	if (cpus_have_final_cap(ARM64_HAS_RAS_EXTN))
-		write_sysreg_s(ctxt_sys_reg(ctxt, DISR_EL1), SYS_VDISR_EL2);
+	if (!cpus_have_final_cap(ARM64_HAS_RAS_EXTN))
+		return;
+
+	if (!vserror_state_is_nested(ctxt_to_vcpu(ctxt)))
+		vdisr = ctxt_sys_reg(ctxt, DISR_EL1);
+	else if (ctxt_has_ras(ctxt))
+		vdisr = ctxt_sys_reg(ctxt, VDISR_EL2);
+	else
+		vdisr = 0;
+
+	write_sysreg_s(vdisr, SYS_VDISR_EL2);
 }
 
 static inline void __sysreg32_save_state(struct kvm_vcpu *vcpu)

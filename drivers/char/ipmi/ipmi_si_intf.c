@@ -39,6 +39,7 @@
 #include <linux/rcupdate.h>
 #include <linux/ipmi.h>
 #include <linux/ipmi_smi.h>
+#include <linux/workqueue.h>
 #include "ipmi_si.h"
 #include "ipmi_si_sm.h"
 #include <linux/string.h>
@@ -53,6 +54,7 @@
 #define SI_TIMEOUT_JIFFIES	(SI_TIMEOUT_TIME_USEC/SI_USEC_PER_JIFFY)
 #define SI_SHORT_TIMEOUT_USEC  250 /* .25ms when the SM request a
 				      short timeout */
+#define SI_TIMEOUT_HOSED	(HZ) /* 1 second when in hosed state. */
 
 enum si_intf_state {
 	SI_NORMAL,
@@ -61,7 +63,8 @@ enum si_intf_state {
 	SI_CLEARING_FLAGS,
 	SI_GETTING_MESSAGES,
 	SI_CHECKING_ENABLES,
-	SI_SETTING_ENABLES
+	SI_SETTING_ENABLES,
+	SI_HOSED
 	/* FIXME - add watchdog stuff. */
 };
 
@@ -166,6 +169,10 @@ struct smi_info {
 			     OEM2_DATA_AVAIL)
 	unsigned char       msg_flags;
 
+	/* When requesting events and messages, don't do it forever. */
+	unsigned int        num_requests_in_a_row;
+	bool		    last_was_flag_fetch;
+
 	/* Does the BMC have an event buffer? */
 	bool		    has_event_buffer;
 
@@ -246,6 +253,8 @@ struct smi_info {
 
 	struct task_struct *thread;
 
+	struct work_struct init_work;
+
 	struct list_head link;
 };
 
@@ -266,6 +275,7 @@ static bool unload_when_empty = true;
 static int try_smi_init(struct smi_info *smi);
 static void cleanup_one_si(struct smi_info *smi_info);
 static void cleanup_ipmi_si(void);
+static void smi_init_work_fn(struct work_struct *work);
 
 #ifdef DEBUG_TIMING
 void debug_timestamp(struct smi_info *smi_info, char *msg)
@@ -273,8 +283,7 @@ void debug_timestamp(struct smi_info *smi_info, char *msg)
 	struct timespec64 t;
 
 	ktime_get_ts64(&t);
-	dev_dbg(smi_info->io.dev, "**%s: %lld.%9.9ld\n",
-		msg, t.tv_sec, t.tv_nsec);
+	dev_dbg(smi_info->io.dev, "**%s: %ptSp\n", msg, &t);
 }
 #else
 #define debug_timestamp(smi_info, x)
@@ -313,7 +322,7 @@ static void return_hosed_msg(struct smi_info *smi_info, int cCode)
 
 static enum si_sm_result start_next_msg(struct smi_info *smi_info)
 {
-	int              rv;
+	int rv;
 
 	if (!smi_info->waiting_msg) {
 		smi_info->curr_msg = NULL;
@@ -390,6 +399,17 @@ static void start_clear_flags(struct smi_info *smi_info)
 	smi_info->si_state = SI_CLEARING_FLAGS;
 }
 
+static void start_get_flags(struct smi_info *smi_info)
+{
+	unsigned char msg[2];
+
+	msg[0] = (IPMI_NETFN_APP_REQUEST << 2);
+	msg[1] = IPMI_GET_MSG_FLAGS_CMD;
+
+	start_new_msg(smi_info, msg, 2);
+	smi_info->si_state = SI_GETTING_FLAGS;
+}
+
 static void start_getting_msg_queue(struct smi_info *smi_info)
 {
 	smi_info->curr_msg->data[0] = (IPMI_NETFN_APP_REQUEST << 2);
@@ -398,7 +418,10 @@ static void start_getting_msg_queue(struct smi_info *smi_info)
 
 	start_new_msg(smi_info, smi_info->curr_msg->data,
 		      smi_info->curr_msg->data_size);
-	smi_info->si_state = SI_GETTING_MESSAGES;
+	if (smi_info->si_state != SI_GETTING_MESSAGES) {
+		smi_info->num_requests_in_a_row = 0;
+		smi_info->si_state = SI_GETTING_MESSAGES;
+	}
 }
 
 static void start_getting_events(struct smi_info *smi_info)
@@ -409,7 +432,10 @@ static void start_getting_events(struct smi_info *smi_info)
 
 	start_new_msg(smi_info, smi_info->curr_msg->data,
 		      smi_info->curr_msg->data_size);
-	smi_info->si_state = SI_GETTING_EVENTS;
+	if (smi_info->si_state != SI_GETTING_EVENTS) {
+		smi_info->num_requests_in_a_row = 0;
+		smi_info->si_state = SI_GETTING_EVENTS;
+	}
 }
 
 /*
@@ -475,15 +501,19 @@ retry:
 	} else if (smi_info->msg_flags & RECEIVE_MSG_AVAIL) {
 		/* Messages available. */
 		smi_info->curr_msg = alloc_msg_handle_irq(smi_info);
-		if (!smi_info->curr_msg)
+		if (!smi_info->curr_msg) {
+			smi_info->si_state = SI_NORMAL;
 			return;
+		}
 
 		start_getting_msg_queue(smi_info);
 	} else if (smi_info->msg_flags & EVENT_MSG_BUFFER_FULL) {
 		/* Events available. */
 		smi_info->curr_msg = alloc_msg_handle_irq(smi_info);
-		if (!smi_info->curr_msg)
+		if (!smi_info->curr_msg) {
+			smi_info->si_state = SI_NORMAL;
 			return;
+		}
 
 		start_getting_events(smi_info);
 	} else if (smi_info->msg_flags & OEM_DATA_AVAIL &&
@@ -583,6 +613,7 @@ static void handle_transaction_done(struct smi_info *smi_info)
 			smi_info->si_state = SI_NORMAL;
 		} else {
 			smi_info->msg_flags = msg[3];
+			smi_info->last_was_flag_fetch = true;
 			handle_flags(smi_info);
 		}
 		break;
@@ -618,7 +649,13 @@ static void handle_transaction_done(struct smi_info *smi_info)
 		 */
 		msg = smi_info->curr_msg;
 		smi_info->curr_msg = NULL;
-		if (msg->rsp[2] != 0) {
+		/*
+		 * It appears some BMCs, with no event data, return no
+		 * data in the message and not a 0x80 error as the
+		 * spec says they should.  Shut down processing if
+		 * the data is not the right length.
+		 */
+		if (msg->rsp[2] != 0 || msg->rsp_size != 19) {
 			/* Error getting event, probably done. */
 			msg->done(msg);
 
@@ -627,6 +664,11 @@ static void handle_transaction_done(struct smi_info *smi_info)
 			handle_flags(smi_info);
 		} else {
 			smi_inc_stat(smi_info, events);
+
+			smi_info->num_requests_in_a_row++;
+			if (smi_info->num_requests_in_a_row > 10)
+				/* Stop if we do this too many times. */
+				smi_info->msg_flags &= ~EVENT_MSG_BUFFER_FULL;
 
 			/*
 			 * Do this before we deliver the message
@@ -665,6 +707,11 @@ static void handle_transaction_done(struct smi_info *smi_info)
 			handle_flags(smi_info);
 		} else {
 			smi_inc_stat(smi_info, incoming_messages);
+
+			smi_info->num_requests_in_a_row++;
+			if (smi_info->num_requests_in_a_row > 10)
+				/* Stop if we do this too many times. */
+				smi_info->msg_flags &= ~RECEIVE_MSG_AVAIL;
 
 			/*
 			 * Do this before we deliver the message
@@ -742,6 +789,8 @@ static void handle_transaction_done(struct smi_info *smi_info)
 		}
 		break;
 	}
+	case SI_HOSED: /* Shouldn't happen. */
+		break;
 	}
 }
 
@@ -756,6 +805,10 @@ static enum si_sm_result smi_event_handler(struct smi_info *smi_info,
 	enum si_sm_result si_sm_result;
 
 restart:
+	if (smi_info->si_state == SI_HOSED)
+		/* Just in case, hosed state is only left from the timeout. */
+		return SI_SM_HOSED;
+
 	/*
 	 * There used to be a loop here that waited a little while
 	 * (around 25us) before giving up.  That turned out to be
@@ -779,18 +832,46 @@ restart:
 
 		/*
 		 * Do the before return_hosed_msg, because that
-		 * releases the lock.
+		 * releases the lock.  We just disable operations for
+		 * a while and retry in hosed state.
 		 */
-		smi_info->si_state = SI_NORMAL;
+		smi_info->si_state = SI_HOSED;
 		if (smi_info->curr_msg != NULL) {
 			/*
 			 * If we were handling a user message, format
 			 * a response to send to the upper layer to
 			 * tell it about the error.
 			 */
-			return_hosed_msg(smi_info, IPMI_ERR_UNSPECIFIED);
+			return_hosed_msg(smi_info, IPMI_BUS_ERR);
 		}
-		goto restart;
+		if (smi_info->waiting_msg != NULL) {
+			/* Also handle if there was a message waiting. */
+			smi_info->curr_msg = smi_info->waiting_msg;
+			smi_info->waiting_msg = NULL;
+			return_hosed_msg(smi_info, IPMI_BUS_ERR);
+		}
+		smi_mod_timer(smi_info, jiffies + SI_TIMEOUT_HOSED);
+		goto out;
+	}
+
+	/*
+	 * If we are currently idle, or if the last thing that was
+	 * done was a flag fetch and there is a message pending, try
+	 * to start the next message.
+	 *
+	 * We do the waiting message check to avoid a stuck flag
+	 * completely wedging the driver.  Let a message through
+	 * in between flag operations if that happens.
+	 */
+	if (si_sm_result == SI_SM_IDLE ||
+	    (si_sm_result == SI_SM_ATTN && smi_info->waiting_msg &&
+	     smi_info->last_was_flag_fetch)) {
+		smi_info->last_was_flag_fetch = false;
+		smi_inc_stat(smi_info, idles);
+
+		si_sm_result = start_next_msg(smi_info);
+		if (si_sm_result != SI_SM_IDLE)
+			goto restart;
 	}
 
 	/*
@@ -798,8 +879,6 @@ restart:
 	 * this if there is not yet an upper layer to handle anything.
 	 */
 	if (si_sm_result == SI_SM_ATTN || smi_info->got_attn) {
-		unsigned char msg[2];
-
 		if (smi_info->si_state != SI_NORMAL) {
 			/*
 			 * We got an ATTN, but we are doing something else.
@@ -817,22 +896,9 @@ restart:
 			 * interrupts work with the SMI, that's not really
 			 * possible.
 			 */
-			msg[0] = (IPMI_NETFN_APP_REQUEST << 2);
-			msg[1] = IPMI_GET_MSG_FLAGS_CMD;
-
-			start_new_msg(smi_info, msg, 2);
-			smi_info->si_state = SI_GETTING_FLAGS;
+			start_get_flags(smi_info);
 			goto restart;
 		}
-	}
-
-	/* If we are currently idle, try to start the next message. */
-	if (si_sm_result == SI_SM_IDLE) {
-		smi_inc_stat(smi_info, idles);
-
-		si_sm_result = start_next_msg(smi_info);
-		if (si_sm_result != SI_SM_IDLE)
-			goto restart;
 	}
 
 	if ((si_sm_result == SI_SM_IDLE)
@@ -894,19 +960,26 @@ static void flush_messages(void *send_info)
 	 * mode.  This means we are single-threaded, no need for locks.
 	 */
 	result = smi_event_handler(smi_info, 0);
-	while (result != SI_SM_IDLE) {
+	while (result != SI_SM_IDLE && result != SI_SM_HOSED) {
 		udelay(SI_SHORT_TIMEOUT_USEC);
 		result = smi_event_handler(smi_info, SI_SHORT_TIMEOUT_USEC);
 	}
 }
 
-static void sender(void                *send_info,
-		   struct ipmi_smi_msg *msg)
+static int sender(void *send_info, struct ipmi_smi_msg *msg)
 {
 	struct smi_info   *smi_info = send_info;
 	unsigned long     flags;
+	int rv = IPMI_CC_NO_ERROR;
 
 	debug_timestamp(smi_info, "Enqueue");
+
+	/*
+	 * Check here for run to completion mode.  A check under lock is
+	 * later.
+	 */
+	if (smi_info->si_state == SI_HOSED)
+		return IPMI_BUS_ERR;
 
 	if (smi_info->run_to_completion) {
 		/*
@@ -914,21 +987,19 @@ static void sender(void                *send_info,
 		 * layer will call flush_messages to clear it out.
 		 */
 		smi_info->waiting_msg = msg;
-		return;
+		return IPMI_CC_NO_ERROR;
 	}
 
 	spin_lock_irqsave(&smi_info->si_lock, flags);
-	/*
-	 * The following two lines don't need to be under the lock for
-	 * the lock's sake, but they do need SMP memory barriers to
-	 * avoid getting things out of order.  We are already claiming
-	 * the lock, anyway, so just do it under the lock to avoid the
-	 * ordering problem.
-	 */
-	BUG_ON(smi_info->waiting_msg);
-	smi_info->waiting_msg = msg;
-	check_start_timer_thread(smi_info);
+	if (smi_info->si_state == SI_HOSED) {
+		rv = IPMI_BUS_ERR;
+	} else {
+		BUG_ON(smi_info->waiting_msg);
+		smi_info->waiting_msg = msg;
+		check_start_timer_thread(smi_info);
+	}
 	spin_unlock_irqrestore(&smi_info->si_lock, flags);
+	return rv;
 }
 
 static void set_run_to_completion(void *send_info, bool i_run_to_completion)
@@ -1087,23 +1158,26 @@ static void smi_timeout(struct timer_list *t)
 	spin_lock_irqsave(&(smi_info->si_lock), flags);
 	debug_timestamp(smi_info, "Timer");
 
+	if (smi_info->si_state == SI_HOSED)
+		/* Try something to see if the BMC is now operational. */
+		start_get_flags(smi_info);
+
 	jiffies_now = jiffies;
 	time_diff = (((long)jiffies_now - (long)smi_info->last_timeout_jiffies)
 		     * SI_USEC_PER_JIFFY);
 	smi_result = smi_event_handler(smi_info, time_diff);
 
-	if ((smi_info->io.irq) && (!smi_info->interrupt_disabled)) {
+	if (smi_info->si_state == SI_HOSED) {
+		timeout = jiffies + SI_TIMEOUT_HOSED;
+	} else if ((smi_info->io.irq) && (!smi_info->interrupt_disabled)) {
 		/* Running with interrupts, only do long timeouts. */
 		timeout = jiffies + SI_TIMEOUT_JIFFIES;
 		smi_inc_stat(smi_info, long_timeouts);
-		goto do_mod_timer;
-	}
-
-	/*
-	 * If the state machine asks for a short delay, then shorten
-	 * the timer timeout.
-	 */
-	if (smi_result == SI_SM_CALL_WITH_DELAY) {
+	} else if (smi_result == SI_SM_CALL_WITH_DELAY) {
+		/*
+		 * If the state machine asks for a short delay, then shorten
+		 * the timer timeout.
+		 */
 		smi_inc_stat(smi_info, short_timeouts);
 		timeout = jiffies + 1;
 	} else {
@@ -1111,7 +1185,6 @@ static void smi_timeout(struct timer_list *t)
 		timeout = jiffies + SI_TIMEOUT_JIFFIES;
 	}
 
-do_mod_timer:
 	if (smi_result != SI_SM_IDLE)
 		smi_mod_timer(smi_info, timeout);
 	else
@@ -1897,10 +1970,11 @@ int ipmi_si_add_smi(struct si_sm_io *io)
 		}
 	}
 
-	new_smi = kzalloc(sizeof(*new_smi), GFP_KERNEL);
+	new_smi = kzalloc_obj(*new_smi);
 	if (!new_smi)
 		return -ENOMEM;
 	spin_lock_init(&new_smi->si_lock);
+	INIT_WORK(&new_smi->init_work, smi_init_work_fn);
 
 	new_smi->io = *io;
 
@@ -1913,7 +1987,12 @@ int ipmi_si_add_smi(struct si_sm_io *io)
 			dev_info(dup->io.dev,
 				 "Removing SMBIOS-specified %s state machine in favor of ACPI\n",
 				 si_to_str[new_smi->io.si_info->type]);
+			list_del(&dup->link);
+			mutex_unlock(&smi_infos_lock);
+
 			cleanup_one_si(dup);
+
+			mutex_lock(&smi_infos_lock);
 		} else {
 			dev_info(new_smi->io.dev,
 				 "%s-specified %s state machine: duplicate\n",
@@ -1931,8 +2010,12 @@ int ipmi_si_add_smi(struct si_sm_io *io)
 
 	list_add_tail(&new_smi->link, &smi_infos);
 
-	if (initialized)
-		rv = try_smi_init(new_smi);
+	if (initialized) {
+		if (IS_ENABLED(CONFIG_IPMI_SI_ASYNC_INIT))
+			queue_work(system_dfl_wq, &new_smi->init_work);
+		else
+			rv = try_smi_init(new_smi);
+	}
 out_err:
 	mutex_unlock(&smi_infos_lock);
 	return rv;
@@ -2105,10 +2188,18 @@ static bool __init ipmi_smi_info_same(struct smi_info *e1, struct smi_info *e2)
 		e1->io.addr_data == e2->io.addr_data);
 }
 
+static void smi_init_work_fn(struct work_struct *work)
+{
+	struct smi_info *smi = container_of(work, struct smi_info, init_work);
+
+	mutex_lock(&smi_infos_lock);
+	try_smi_init(smi);
+	mutex_unlock(&smi_infos_lock);
+}
+
 static int __init init_ipmi_si(void)
 {
 	struct smi_info *e, *e2;
-	enum ipmi_addr_src type = SI_INVALID;
 
 	if (initialized)
 		return 0;
@@ -2120,6 +2211,8 @@ static int __init init_ipmi_si(void)
 	ipmi_si_platform_init();
 
 	ipmi_si_pci_init();
+
+	ipmi_si_ls2k_init();
 
 	ipmi_si_parisc_init();
 
@@ -2149,8 +2242,12 @@ static int __init init_ipmi_si(void)
 				break;
 			}
 		}
-		if (!dup)
-			try_smi_init(e);
+		if (!dup) {
+			if (IS_ENABLED(CONFIG_IPMI_SI_ASYNC_INIT))
+				queue_work(system_unbound_wq, &e->init_work);
+			else
+				try_smi_init(e);
+		}
 	}
 
 	/*
@@ -2183,15 +2280,16 @@ static int __init init_ipmi_si(void)
 				break;
 			}
 		}
-		if (!dup)
-			try_smi_init(e);
+		if (!dup) {
+			if (IS_ENABLED(CONFIG_IPMI_SI_ASYNC_INIT))
+				queue_work(system_unbound_wq, &e->init_work);
+			else
+				try_smi_init(e);
+		}
 	}
 
 	initialized = true;
 	mutex_unlock(&smi_infos_lock);
-
-	if (type)
-		return 0;
 
 	mutex_lock(&smi_infos_lock);
 	if (unload_when_empty && list_empty(&smi_infos)) {
@@ -2211,7 +2309,8 @@ static void wait_msg_processed(struct smi_info *smi_info)
 	unsigned long jiffies_now;
 	long time_diff;
 
-	while (smi_info->curr_msg || (smi_info->si_state != SI_NORMAL)) {
+	while (smi_info->si_state != SI_HOSED &&
+		    (smi_info->curr_msg || (smi_info->si_state != SI_NORMAL))) {
 		jiffies_now = jiffies;
 		time_diff = (((long)jiffies_now - (long)smi_info->last_timeout_jiffies)
 		     * SI_USEC_PER_JIFFY);
@@ -2276,31 +2375,36 @@ static void shutdown_smi(void *send_info)
 }
 
 /*
- * Must be called with smi_infos_lock held, to serialize the
- * smi_info->intf check.
+ * Must be called with smi_info unlinked from smi_infos and smi_infos_lock released.
  */
 static void cleanup_one_si(struct smi_info *smi_info)
 {
 	if (!smi_info)
 		return;
 
-	list_del(&smi_info->link);
+	if (IS_ENABLED(CONFIG_IPMI_SI_ASYNC_INIT))
+		cancel_work_sync(&smi_info->init_work);
+
 	ipmi_unregister_smi(smi_info->intf);
 	kfree(smi_info);
 }
 
 void ipmi_si_remove_by_dev(struct device *dev)
 {
-	struct smi_info *e;
+	struct smi_info *e = NULL, *tmp;
 
 	mutex_lock(&smi_infos_lock);
-	list_for_each_entry(e, &smi_infos, link) {
-		if (e->io.dev == dev) {
-			cleanup_one_si(e);
+	list_for_each_entry(tmp, &smi_infos, link) {
+		if (tmp->io.dev == dev) {
+			e = tmp;
+			list_del(&e->link);
 			break;
 		}
 	}
 	mutex_unlock(&smi_infos_lock);
+
+	if (e)
+		cleanup_one_si(e);
 }
 
 struct device *ipmi_si_remove_by_data(int addr_space, enum si_type si_type,
@@ -2309,6 +2413,7 @@ struct device *ipmi_si_remove_by_data(int addr_space, enum si_type si_type,
 	/* remove */
 	struct smi_info *e, *tmp_e;
 	struct device *dev = NULL;
+	LIST_HEAD(to_clean);
 
 	mutex_lock(&smi_infos_lock);
 	list_for_each_entry_safe(e, tmp_e, &smi_infos, link) {
@@ -2318,10 +2423,15 @@ struct device *ipmi_si_remove_by_data(int addr_space, enum si_type si_type,
 			continue;
 		if (e->io.addr_data == addr) {
 			dev = get_device(e->io.dev);
-			cleanup_one_si(e);
+			list_move_tail(&e->link, &to_clean);
 		}
 	}
 	mutex_unlock(&smi_infos_lock);
+
+	list_for_each_entry_safe(e, tmp_e, &to_clean, link) {
+		list_del(&e->link);
+		cleanup_one_si(e);
+	}
 
 	return dev;
 }
@@ -2329,20 +2439,27 @@ struct device *ipmi_si_remove_by_data(int addr_space, enum si_type si_type,
 static void cleanup_ipmi_si(void)
 {
 	struct smi_info *e, *tmp_e;
+	LIST_HEAD(to_clean);
 
 	if (!initialized)
 		return;
 
 	ipmi_si_pci_shutdown();
 
+	ipmi_si_ls2k_shutdown();
+
 	ipmi_si_parisc_shutdown();
 
 	ipmi_si_platform_shutdown();
 
 	mutex_lock(&smi_infos_lock);
-	list_for_each_entry_safe(e, tmp_e, &smi_infos, link)
-		cleanup_one_si(e);
+	list_splice_init(&smi_infos, &to_clean);
 	mutex_unlock(&smi_infos_lock);
+
+	list_for_each_entry_safe(e, tmp_e, &to_clean, link) {
+		list_del(&e->link);
+		cleanup_one_si(e);
+	}
 
 	ipmi_si_hardcode_exit();
 	ipmi_si_hotmod_exit();

@@ -223,7 +223,6 @@ static int rk3568_rng_read(struct hwrng *rng, void *buf, size_t max, bool wait)
 	/* Read random data stored in the registers */
 	memcpy_fromio(buf, rk_rng->base + TRNG_RNG_DOUT, to_read);
 out:
-	pm_runtime_mark_last_busy(rk_rng->dev);
 	pm_runtime_put_sync_autosuspend(rk_rng->dev);
 
 	return (ret < 0) ? ret : to_read;
@@ -263,7 +262,6 @@ static int rk3576_rng_read(struct hwrng *rng, void *buf, size_t max, bool wait)
 	memcpy_fromio(buf, rk_rng->base + RKRNG_TRNG_DATA0, to_read);
 
 out:
-	pm_runtime_mark_last_busy(rk_rng->dev);
 	pm_runtime_put_sync_autosuspend(rk_rng->dev);
 
 	return (ret < 0) ? ret : to_read;
@@ -355,7 +353,6 @@ out:
 	/* close the TRNG */
 	rk_rng_writel(rk_rng, TRNG_V1_CTRL_NOP, TRNG_V1_CTRL);
 
-	pm_runtime_mark_last_busy(rk_rng->dev);
 	pm_runtime_put_sync_autosuspend(rk_rng->dev);
 
 	return (ret < 0) ? ret : to_read;
@@ -392,7 +389,7 @@ static int rk_rng_probe(struct platform_device *pdev)
 	struct rk_rng *rk_rng;
 	int ret;
 
-	rk_rng = devm_kzalloc(dev, sizeof(*rk_rng), GFP_KERNEL);
+	rk_rng = devm_kzalloc_obj(dev, *rk_rng);
 	if (!rk_rng)
 		return -ENOMEM;
 

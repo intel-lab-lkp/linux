@@ -93,14 +93,16 @@ static void _tqmx86_gpio_set(struct tqmx86_gpio_data *gpio, unsigned int offset,
 	tqmx86_gpio_write(gpio, bitmap_get_value8(gpio->output, 0), TQMX86_GPIOD);
 }
 
-static void tqmx86_gpio_set(struct gpio_chip *chip, unsigned int offset,
-			    int value)
+static int tqmx86_gpio_set(struct gpio_chip *chip, unsigned int offset,
+			   int value)
 {
 	struct tqmx86_gpio_data *gpio = gpiochip_get_data(chip);
 
 	guard(raw_spinlock_irqsave)(&gpio->spinlock);
 
 	_tqmx86_gpio_set(gpio, offset, value);
+
+	return 0;
 }
 
 static int tqmx86_gpio_direction_input(struct gpio_chip *chip,
@@ -277,19 +279,18 @@ static void tqmx86_gpio_irq_handler(struct irq_desc *desc)
 }
 
 /* Minimal runtime PM is needed by the IRQ subsystem */
-static int __maybe_unused tqmx86_gpio_runtime_suspend(struct device *dev)
+static int tqmx86_gpio_runtime_suspend(struct device *dev)
 {
 	return 0;
 }
 
-static int __maybe_unused tqmx86_gpio_runtime_resume(struct device *dev)
+static int tqmx86_gpio_runtime_resume(struct device *dev)
 {
 	return 0;
 }
 
 static const struct dev_pm_ops tqmx86_gpio_dev_pm_ops = {
-	SET_RUNTIME_PM_OPS(tqmx86_gpio_runtime_suspend,
-			   tqmx86_gpio_runtime_resume, NULL)
+	RUNTIME_PM_OPS(tqmx86_gpio_runtime_suspend, tqmx86_gpio_runtime_resume, NULL)
 };
 
 static void tqmx86_init_irq_valid_mask(struct gpio_chip *chip,
@@ -343,7 +344,7 @@ static int tqmx86_gpio_probe(struct platform_device *pdev)
 	if (!io_base)
 		return -ENOMEM;
 
-	gpio = devm_kzalloc(dev, sizeof(*gpio), GFP_KERNEL);
+	gpio = devm_kzalloc_obj(dev, *gpio);
 	if (!gpio)
 		return -ENOMEM;
 
@@ -388,9 +389,7 @@ static int tqmx86_gpio_probe(struct platform_device *pdev)
 		gpio_irq_chip_set_chip(girq, &tqmx86_gpio_irq_chip);
 		girq->parent_handler = tqmx86_gpio_irq_handler;
 		girq->num_parents = 1;
-		girq->parents = devm_kcalloc(&pdev->dev, 1,
-					     sizeof(*girq->parents),
-					     GFP_KERNEL);
+		girq->parents = devm_kzalloc_objs(&pdev->dev, *girq->parents, 1);
 		if (!girq->parents) {
 			ret = -ENOMEM;
 			goto out_pm_dis;
@@ -423,7 +422,7 @@ out_pm_dis:
 static struct platform_driver tqmx86_gpio_driver = {
 	.driver = {
 		.name = "tqmx86-gpio",
-		.pm = &tqmx86_gpio_dev_pm_ops,
+		.pm = pm_ptr(&tqmx86_gpio_dev_pm_ops),
 	},
 	.probe		= tqmx86_gpio_probe,
 };

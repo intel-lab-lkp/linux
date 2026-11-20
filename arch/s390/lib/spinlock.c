@@ -18,6 +18,7 @@
 #include <asm/alternative.h>
 #include <asm/machine.h>
 #include <asm/asm.h>
+#include <trace/events/lock.h>
 
 int spin_retry = -1;
 
@@ -96,7 +97,7 @@ static inline int arch_load_niai4(int *lock)
 
 	asm_inline volatile(
 		ALTERNATIVE("nop", ".insn rre,0xb2fa0000,4,0", ALT_FACILITY(49)) /* NIAI 4 */
-		"	l	%[owner],%[lock]\n"
+		"	l	%[owner],%[lock]"
 		: [owner] "=d" (owner) : [lock] "R" (*lock) : "memory");
 	return owner;
 }
@@ -109,7 +110,7 @@ static inline int arch_try_cmpxchg_niai8(int *lock, int old, int new)
 
 	asm_inline volatile(
 		ALTERNATIVE("nop", ".insn rre,0xb2fa0000,8,0", ALT_FACILITY(49)) /* NIAI 8 */
-		"	cs	%[old],%[new],%[lock]\n"
+		"	cs	%[old],%[new],%[lock]"
 		: [old] "+d" (old), [lock] "+Q" (*lock), "=@cc" (cc)
 		: [new] "d" (new)
 		: "memory");
@@ -124,7 +125,7 @@ static inline int arch_try_cmpxchg_niai8(int *lock, int old, int new)
 
 	asm_inline volatile(
 		ALTERNATIVE("nop", ".insn rre,0xb2fa0000,8,0", ALT_FACILITY(49)) /* NIAI 8 */
-		"	cs	%[old],%[new],%[lock]\n"
+		"	cs	%[old],%[new],%[lock]"
 		: [old] "+d" (old), [lock] "+Q" (*lock)
 		: [new] "d" (new)
 		: "cc", "memory");
@@ -281,10 +282,12 @@ static inline void arch_spin_lock_classic(arch_spinlock_t *lp)
 
 void arch_spin_lock_wait(arch_spinlock_t *lp)
 {
+	trace_contention_begin(lp, LCB_F_SPIN);
 	if (test_cpu_flag(CIF_DEDICATED_CPU))
 		arch_spin_lock_queued(lp);
 	else
 		arch_spin_lock_classic(lp);
+	trace_contention_end(lp, 0);
 }
 EXPORT_SYMBOL(arch_spin_lock_wait);
 
@@ -315,6 +318,7 @@ void arch_read_lock_wait(arch_rwlock_t *rw)
 
 	/* Remove this reader again to allow recursive read locking */
 	__atomic_add_const(-1, &rw->cnts);
+	trace_contention_begin(rw, LCB_F_SPIN | LCB_F_READ);
 	/* Put the reader into the wait queue */
 	arch_spin_lock(&rw->wait);
 	/* Now add this reader to the count value again */
@@ -323,6 +327,7 @@ void arch_read_lock_wait(arch_rwlock_t *rw)
 	while (READ_ONCE(rw->cnts) & 0x10000)
 		barrier();
 	arch_spin_unlock(&rw->wait);
+	trace_contention_end(rw, 0);
 }
 EXPORT_SYMBOL(arch_read_lock_wait);
 
@@ -330,6 +335,7 @@ void arch_write_lock_wait(arch_rwlock_t *rw)
 {
 	int old;
 
+	trace_contention_begin(rw, LCB_F_SPIN | LCB_F_WRITE);
 	/* Add this CPU to the write waiters */
 	__atomic_add(0x20000, &rw->cnts);
 
@@ -346,6 +352,7 @@ void arch_write_lock_wait(arch_rwlock_t *rw)
 	}
 
 	arch_spin_unlock(&rw->wait);
+	trace_contention_end(rw, 0);
 }
 EXPORT_SYMBOL(arch_write_lock_wait);
 

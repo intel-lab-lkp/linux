@@ -6,10 +6,9 @@
 obj-$(CONFIG_IDPF) += idpf.o
 
 idpf-y := \
-	idpf_controlq.o		\
-	idpf_controlq_setup.o	\
 	idpf_dev.o		\
 	idpf_ethtool.o		\
+	idpf_idc.o		\
 	idpf_lib.o		\
 	idpf_main.o		\
 	idpf_txrx.o		\
@@ -20,3 +19,6 @@ idpf-$(CONFIG_IDPF_SINGLEQ)	+= idpf_singleq_txrx.o
 
 idpf-$(CONFIG_PTP_1588_CLOCK)	+= idpf_ptp.o
 idpf-$(CONFIG_PTP_1588_CLOCK)	+= idpf_virtchnl_ptp.o
+
+idpf-y				+= xdp.o
+idpf-y				+= xsk.o

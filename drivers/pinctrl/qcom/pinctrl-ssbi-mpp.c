@@ -337,7 +337,7 @@ static int pm8xxx_pin_config_get(struct pinctrl_dev *pctldev,
 	case PIN_CONFIG_INPUT_ENABLE:
 		arg = pin->input;
 		break;
-	case PIN_CONFIG_OUTPUT:
+	case PIN_CONFIG_LEVEL:
 		arg = pin->output_value;
 		break;
 	case PIN_CONFIG_POWER_SOURCE:
@@ -392,7 +392,7 @@ static int pm8xxx_pin_config_set(struct pinctrl_dev *pctldev,
 		case PIN_CONFIG_INPUT_ENABLE:
 			pin->input = true;
 			break;
-		case PIN_CONFIG_OUTPUT:
+		case PIN_CONFIG_LEVEL:
 			pin->output = true;
 			pin->output_value = !!arg;
 			break;
@@ -634,7 +634,7 @@ static const struct gpio_chip pm8xxx_mpp_template = {
 	.direction_input = pm8xxx_mpp_direction_input,
 	.direction_output = pm8xxx_mpp_direction_output,
 	.get = pm8xxx_mpp_get,
-	.set_rv = pm8xxx_mpp_set,
+	.set = pm8xxx_mpp_set,
 	.of_xlate = pm8xxx_mpp_of_xlate,
 	.dbg_show = pm8xxx_mpp_dbg_show,
 	.owner = THIS_MODULE,
@@ -824,7 +824,7 @@ static int pm8xxx_mpp_probe(struct platform_device *pdev)
 	int ret;
 	int i;
 
-	pctrl = devm_kzalloc(&pdev->dev, sizeof(*pctrl), GFP_KERNEL);
+	pctrl = devm_kzalloc_obj(&pdev->dev, *pctrl);
 	if (!pctrl)
 		return -ENOMEM;
 
@@ -840,17 +840,13 @@ static int pm8xxx_mpp_probe(struct platform_device *pdev)
 	pctrl->desc = pm8xxx_pinctrl_desc;
 	pctrl->desc.npins = pctrl->npins;
 
-	pins = devm_kcalloc(&pdev->dev,
-			    pctrl->desc.npins,
-			    sizeof(struct pinctrl_pin_desc),
-			    GFP_KERNEL);
+	pins = devm_kzalloc_objs(&pdev->dev, struct pinctrl_pin_desc,
+				 pctrl->desc.npins);
 	if (!pins)
 		return -ENOMEM;
 
-	pin_data = devm_kcalloc(&pdev->dev,
-				pctrl->desc.npins,
-				sizeof(struct pm8xxx_pin_data),
-				GFP_KERNEL);
+	pin_data = devm_kzalloc_objs(&pdev->dev, struct pm8xxx_pin_data,
+				     pctrl->desc.npins);
 	if (!pin_data)
 		return -ENOMEM;
 

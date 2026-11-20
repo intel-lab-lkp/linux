@@ -42,7 +42,7 @@ static const struct alpha_pll_config lpass_lpaaudio_dig_pll_config = {
 };
 
 static const u8 clk_alpha_pll_regs_offset[][PLL_OFF_MAX_REGS] = {
-	[CLK_ALPHA_PLL_TYPE_FABIA] =  {
+	[CLK_ALPHA_PLL_TYPE_FABIA] = {
 		[PLL_OFF_L_VAL] = 0x04,
 		[PLL_OFF_CAL_L_VAL] = 0x8,
 		[PLL_OFF_USER_CTL] = 0x0c,
@@ -343,7 +343,28 @@ static const struct qcom_cc_desc lpass_core_hm_sc7180_desc = {
 	.num_gdscs = ARRAY_SIZE(lpass_core_hm_sc7180_gdscs),
 };
 
+static const u32 lpass_core_cc_sc7180_critical_cbcrs[] = {
+	0x24000, /* LPASS_AUDIO_CORE_SYSNOC_SWAY_CORE_CLK */
+};
+
+static void lpass_core_cc_sc7180_regs_configure(struct device *dev, struct regmap *regmap)
+{
+	/* PLL settings */
+	regmap_write(regmap, 0x1008, 0x20);
+	regmap_update_bits(regmap, 0x1014, BIT(0), BIT(0));
+
+	clk_fabia_pll_configure(&lpass_lpaaudio_dig_pll, regmap,
+			      &lpass_lpaaudio_dig_pll_config);
+}
+
+static const struct qcom_cc_driver_data lpass_core_cc_sc7180_driver_data = {
+	.clk_cbcrs = lpass_core_cc_sc7180_critical_cbcrs,
+	.num_clk_cbcrs = ARRAY_SIZE(lpass_core_cc_sc7180_critical_cbcrs),
+	.clk_regs_configure = lpass_core_cc_sc7180_regs_configure,
+};
+
 static const struct qcom_cc_desc lpass_core_cc_sc7180_desc = {
+	.driver_data = &lpass_core_cc_sc7180_driver_data,
 	.config = &lpass_core_cc_sc7180_regmap_config,
 	.clks = lpass_core_cc_sc7180_clocks,
 	.num_clks = ARRAY_SIZE(lpass_core_cc_sc7180_clocks),
@@ -400,19 +421,8 @@ static int lpass_core_cc_sc7180_probe(struct platform_device *pdev)
 		goto exit;
 	}
 
-	/* Keep some clocks always-on */
-	qcom_branch_set_clk_en(regmap, 0x24000); /* LPASS_AUDIO_CORE_SYSNOC_SWAY_CORE_CLK */
-
-	/* PLL settings */
-	regmap_write(regmap, 0x1008, 0x20);
-	regmap_update_bits(regmap, 0x1014, BIT(0), BIT(0));
-
-	clk_fabia_pll_configure(&lpass_lpaaudio_dig_pll, regmap,
-				&lpass_lpaaudio_dig_pll_config);
-
 	ret = qcom_cc_really_probe(&pdev->dev, &lpass_core_cc_sc7180_desc, regmap);
 
-	pm_runtime_mark_last_busy(&pdev->dev);
 exit:
 	pm_runtime_put_autosuspend(&pdev->dev);
 
@@ -433,7 +443,6 @@ static int lpass_hm_core_probe(struct platform_device *pdev)
 
 	ret = qcom_cc_probe_by_index(pdev, 0, desc);
 
-	pm_runtime_mark_last_busy(&pdev->dev);
 	pm_runtime_put_autosuspend(&pdev->dev);
 
 	return ret;

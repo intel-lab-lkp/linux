@@ -532,7 +532,7 @@ static int tps65010_probe(struct i2c_client *client)
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_SMBUS_BYTE_DATA))
 		return -EINVAL;
 
-	tps = devm_kzalloc(&client->dev, sizeof(*tps), GFP_KERNEL);
+	tps = devm_kzalloc_obj(&client->dev, *tps);
 	if (!tps)
 		return -ENOMEM;
 
@@ -620,7 +620,7 @@ static int tps65010_probe(struct i2c_client *client)
 		tps->chip.parent = &client->dev;
 		tps->chip.owner = THIS_MODULE;
 
-		tps->chip.set_rv = tps65010_gpio_set;
+		tps->chip.set = tps65010_gpio_set;
 		tps->chip.direction_output = tps65010_output;
 
 		/* NOTE:  only partial support for inputs; nyet IRQs */

@@ -41,7 +41,7 @@ static notrace long s390_kernel_write_odd(void *dst, const void *src, size_t siz
 		"	ex	%1,0(1)\n"
 		"	lg	%1,0(%3)\n"
 		"	lra	%0,0(%0)\n"
-		"	sturg	%1,%0\n"
+		"	sturg	%1,%0"
 		: "+&a" (aligned), "+&a" (count), "=m" (tmp)
 		: "a" (&tmp), "a" (&tmp[offset]), "a" (src)
 		: "cc", "memory", "1");
@@ -96,7 +96,7 @@ size_t memcpy_real_iter(struct iov_iter *iter, unsigned long src, size_t count)
 		pte = mk_pte_phys(phys, PAGE_KERNEL_RO);
 
 		mutex_lock(&memcpy_real_mutex);
-		if (pte_val(pte) != pte_val(*memcpy_real_ptep)) {
+		if (pte_val(pte) != pte_val(ptep_get(memcpy_real_ptep))) {
 			__ptep_ipte(__memcpy_real_area, memcpy_real_ptep, 0, 0, IPTE_GLOBAL);
 			set_pte(memcpy_real_ptep, pte);
 		}

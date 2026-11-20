@@ -419,7 +419,7 @@ static int ccdc_lsc_config(struct isp_ccdc_device *ccdc,
 		return -EINVAL;
 	}
 
-	req = kzalloc(sizeof(*req), GFP_KERNEL);
+	req = kzalloc_obj(*req);
 	if (req == NULL)
 		return -ENOMEM;
 
@@ -1873,12 +1873,6 @@ static int ccdc_subscribe_event(struct v4l2_subdev *sd, struct v4l2_fh *fh,
 	return v4l2_event_subscribe(fh, sub, OMAP3ISP_CCDC_NEVENTS, NULL);
 }
 
-static int ccdc_unsubscribe_event(struct v4l2_subdev *sd, struct v4l2_fh *fh,
-				  struct v4l2_event_subscription *sub)
-{
-	return v4l2_event_unsubscribe(fh, sub);
-}
-
 /*
  * ccdc_set_stream - Enable/Disable streaming on the CCDC module
  * @sd: ISP CCDC V4L2 subdevice
@@ -2238,6 +2232,7 @@ static int ccdc_enum_frame_size(struct v4l2_subdev *sd,
  * Return 0 on success or a negative error code otherwise.
  */
 static int ccdc_get_selection(struct v4l2_subdev *sd,
+			      const struct v4l2_subdev_client_info *ci,
 			      struct v4l2_subdev_state *sd_state,
 			      struct v4l2_subdev_selection *sel)
 {
@@ -2282,6 +2277,7 @@ static int ccdc_get_selection(struct v4l2_subdev *sd,
  * Return 0 on success or a negative error code otherwise.
  */
 static int ccdc_set_selection(struct v4l2_subdev *sd,
+			      const struct v4l2_subdev_client_info *ci,
 			      struct v4l2_subdev_state *sd_state,
 			      struct v4l2_subdev_selection *sel)
 {
@@ -2352,6 +2348,7 @@ static int ccdc_get_format(struct v4l2_subdev *sd,
  * to the format type.
  */
 static int ccdc_set_format(struct v4l2_subdev *sd,
+			   const struct v4l2_subdev_client_info *ci,
 			   struct v4l2_subdev_state *sd_state,
 			   struct v4l2_subdev_format *fmt)
 {
@@ -2478,7 +2475,7 @@ static int ccdc_init_formats(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
 	format.format.code = MEDIA_BUS_FMT_SGRBG10_1X10;
 	format.format.width = 4096;
 	format.format.height = 4096;
-	ccdc_set_format(sd, fh ? fh->state : NULL, &format);
+	ccdc_set_format(sd, NULL, fh ? fh->state : NULL, &format);
 
 	return 0;
 }
@@ -2487,7 +2484,7 @@ static int ccdc_init_formats(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
 static const struct v4l2_subdev_core_ops ccdc_v4l2_core_ops = {
 	.ioctl = ccdc_ioctl,
 	.subscribe_event = ccdc_subscribe_event,
-	.unsubscribe_event = ccdc_unsubscribe_event,
+	.unsubscribe_event = v4l2_event_subdev_unsubscribe,
 };
 
 /* V4L2 subdev video operations */
@@ -2681,6 +2678,7 @@ static int ccdc_init_entities(struct isp_ccdc_device *ccdc)
 	pads[CCDC_PAD_SOURCE_OF].flags = MEDIA_PAD_FL_SOURCE;
 
 	me->ops = &ccdc_media_ops;
+	me->function = MEDIA_ENT_F_PROC_VIDEO_PIXEL_ENC_CONV;
 	ret = media_entity_pads_init(me, CCDC_PADS_NUM, pads);
 	if (ret < 0)
 		return ret;

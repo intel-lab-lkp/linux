@@ -24,8 +24,8 @@ struct rzv2m_pwc_priv {
 	DECLARE_BITMAP(ch_en_bits, 2);
 };
 
-static void rzv2m_pwc_gpio_set(struct gpio_chip *chip, unsigned int offset,
-			       int value)
+static int rzv2m_pwc_gpio_set(struct gpio_chip *chip, unsigned int offset,
+			      int value)
 {
 	struct rzv2m_pwc_priv *priv = gpiochip_get_data(chip);
 	u32 reg;
@@ -38,6 +38,8 @@ static void rzv2m_pwc_gpio_set(struct gpio_chip *chip, unsigned int offset,
 	writel(reg, priv->base + PWC_GPIO);
 
 	assign_bit(offset, priv->ch_en_bits, value);
+
+	return 0;
 }
 
 static int rzv2m_pwc_gpio_get(struct gpio_chip *chip, unsigned int offset)
@@ -89,7 +91,7 @@ static int rzv2m_pwc_probe(struct platform_device *pdev)
 	struct rzv2m_pwc_priv *priv;
 	int ret;
 
-	priv = devm_kzalloc(&pdev->dev, sizeof(*priv), GFP_KERNEL);
+	priv = devm_kzalloc_obj(&pdev->dev, *priv);
 	if (!priv)
 		return -ENOMEM;
 

@@ -1,9 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * Kernel Debugger Architecture Independent Main Code
- *
- * This file is subject to the terms and conditions of the GNU General Public
- * License.  See the file "COPYING" in the main directory of this archive
- * for more details.
  *
  * Copyright (C) 1999-2004 Silicon Graphics, Inc.  All Rights Reserved.
  * Copyright (C) 2000 Stephane Eranian <eranian@hpl.hp.com>
@@ -341,6 +338,7 @@ static int kdb_setenv(const char *var, const char *val)
 		}
 	}
 
+	kfree(ep);
 	return KDB_ENVFULL;
 }
 
@@ -664,7 +662,7 @@ static int kdb_defcmd2(const char *cmdstr, const char *argv0)
 		return 0;
 	}
 
-	kms = kmalloc(sizeof(*kms), GFP_KDB);
+	kms = kmalloc_obj(*kms, GFP_KDB);
 	if (!kms) {
 		kdb_printf("Could not allocate new kdb macro command: %s\n",
 			   cmdstr);
@@ -710,7 +708,7 @@ static int kdb_defcmd(int argc, const char **argv)
 		kdb_printf("Command only available during kdb_init()\n");
 		return KDB_NOTIMP;
 	}
-	kdb_macro = kzalloc(sizeof(*kdb_macro), GFP_KDB);
+	kdb_macro = kzalloc_obj(*kdb_macro, GFP_KDB);
 	if (!kdb_macro)
 		goto fail_defcmd;
 
@@ -721,20 +719,12 @@ static int kdb_defcmd(int argc, const char **argv)
 	mp->name = kdb_strdup(argv[1], GFP_KDB);
 	if (!mp->name)
 		goto fail_name;
-	mp->usage = kdb_strdup(argv[2], GFP_KDB);
+	mp->usage = kdb_strdup_dequote(argv[2], GFP_KDB);
 	if (!mp->usage)
 		goto fail_usage;
-	mp->help = kdb_strdup(argv[3], GFP_KDB);
+	mp->help = kdb_strdup_dequote(argv[3], GFP_KDB);
 	if (!mp->help)
 		goto fail_help;
-	if (mp->usage[0] == '"') {
-		strcpy(mp->usage, argv[2]+1);
-		mp->usage[strlen(mp->usage)-1] = '\0';
-	}
-	if (mp->help[0] == '"') {
-		strcpy(mp->help, argv[3]+1);
-		mp->help[strlen(mp->help)-1] = '\0';
-	}
 
 	INIT_LIST_HEAD(&kdb_macro->statements);
 	defcmd_in_progress = true;
@@ -794,8 +784,6 @@ static int kdb_exec_defcmd(int argc, const char **argv)
 
 /* Command history */
 #define KDB_CMD_HISTORY_COUNT	32
-#define CMD_BUFLEN		200	/* kdb_printf: max printline
-					 * size == 256 */
 static unsigned int cmd_head, cmd_tail;
 static unsigned int cmdptr;
 static char cmd_hist[KDB_CMD_HISTORY_COUNT][CMD_BUFLEN];
@@ -860,7 +848,7 @@ static void parse_grep(const char *str)
 		kdb_printf("search string too long\n");
 		return;
 	}
-	strcpy(kdb_grep_string, cp);
+	memcpy(kdb_grep_string, cp, len + 1);
 	kdb_grepping_flag++;
 	return;
 }
@@ -1276,8 +1264,8 @@ static int kdb_local(kdb_reason_t reason, int error, struct pt_regs *regs,
 
 do_full_getstr:
 		/* PROMPT can only be set if we have MEM_READ permission. */
-		snprintf(kdb_prompt_str, CMD_BUFLEN, kdbgetenv("PROMPT"),
-			 raw_smp_processor_id());
+		snprintf(kdb_prompt_str, CMD_BUFLEN,
+			 kdbgetenv("PROMPT"), raw_smp_processor_id());
 
 		/*
 		 * Fetch command from keyboard

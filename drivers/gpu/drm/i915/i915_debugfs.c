@@ -26,12 +26,15 @@
  *
  */
 
+#include <linux/debugfs.h>
 #include <linux/sched/mm.h>
 #include <linux/sort.h>
 #include <linux/string_helpers.h>
 
-#include <linux/debugfs.h>
 #include <drm/drm_debugfs.h>
+#include <drm/drm_print.h>
+#include <drm/intel/intel_gmd_misc_regs.h>
+#include <drm/intel/mchbar_regs.h>
 
 #include "gem/i915_gem_context.h"
 #include "gt/intel_gt.h"
@@ -54,7 +57,7 @@
 #include "i915_irq.h"
 #include "i915_reg.h"
 #include "i915_scheduler.h"
-#include "intel_mchbar_regs.h"
+#include "i915_wait_util.h"
 
 static inline struct drm_i915_private *node_to_i915(struct drm_info_node *node)
 {
@@ -176,7 +179,7 @@ i915_debugfs_describe_obj(struct seq_file *m, struct drm_i915_gem_object *obj)
 	struct i915_vma *vma;
 	int pin_count = 0;
 
-	seq_printf(m, "%pK: %c%c%c %8zdKiB %02x %02x %s%s%s",
+	seq_printf(m, "%p: %c%c%c %8zdKiB %02x %02x %s%s%s",
 		   &obj->base,
 		   get_tiling_flag(obj),
 		   get_global_flag(obj),
@@ -206,18 +209,13 @@ i915_debugfs_describe_obj(struct seq_file *m, struct drm_i915_gem_object *obj)
 			   stringify_page_sizes(vma->resource->page_sizes_gtt,
 						NULL, 0));
 		if (i915_vma_is_ggtt(vma) || i915_vma_is_dpt(vma)) {
-			switch (vma->gtt_view.type) {
-			case I915_GTT_VIEW_NORMAL:
+			if (intel_gtt_view_is_normal(&vma->gtt_view)) {
 				seq_puts(m, ", normal");
-				break;
-
-			case I915_GTT_VIEW_PARTIAL:
+			} else if (intel_gtt_view_is_partial(&vma->gtt_view)) {
 				seq_printf(m, ", partial [%08llx+%x]",
 					   vma->gtt_view.partial.offset << PAGE_SHIFT,
 					   vma->gtt_view.partial.size << PAGE_SHIFT);
-				break;
-
-			case I915_GTT_VIEW_ROTATED:
+			} else if (intel_gtt_view_is_rotated(&vma->gtt_view)) {
 				seq_printf(m, ", rotated [(%ux%u, src_stride=%u, dst_stride=%u, offset=%u), (%ux%u, src_stride=%u, dst_stride=%u, offset=%u)]",
 					   vma->gtt_view.rotated.plane[0].width,
 					   vma->gtt_view.rotated.plane[0].height,
@@ -229,9 +227,7 @@ i915_debugfs_describe_obj(struct seq_file *m, struct drm_i915_gem_object *obj)
 					   vma->gtt_view.rotated.plane[1].src_stride,
 					   vma->gtt_view.rotated.plane[1].dst_stride,
 					   vma->gtt_view.rotated.plane[1].offset);
-				break;
-
-			case I915_GTT_VIEW_REMAPPED:
+			} else if (intel_gtt_view_is_remapped(&vma->gtt_view)) {
 				seq_printf(m, ", remapped [(%ux%u, src_stride=%u, dst_stride=%u, offset=%u), (%ux%u, src_stride=%u, dst_stride=%u, offset=%u)]",
 					   vma->gtt_view.remapped.plane[0].width,
 					   vma->gtt_view.remapped.plane[0].height,
@@ -243,11 +239,8 @@ i915_debugfs_describe_obj(struct seq_file *m, struct drm_i915_gem_object *obj)
 					   vma->gtt_view.remapped.plane[1].src_stride,
 					   vma->gtt_view.remapped.plane[1].dst_stride,
 					   vma->gtt_view.remapped.plane[1].offset);
-				break;
-
-			default:
+			} else {
 				MISSING_CASE(vma->gtt_view.type);
-				break;
 			}
 		}
 		if (vma->fence)
@@ -720,26 +713,24 @@ static const struct i915_debugfs_files {
 	{"i915_gem_drop_caches", &i915_drop_caches_fops},
 };
 
-void i915_debugfs_register(struct drm_i915_private *dev_priv)
+void i915_debugfs_register(struct drm_i915_private *i915)
 {
-	struct drm_minor *minor = dev_priv->drm.primary;
+	struct dentry *debugfs_root = i915->drm.debugfs_root;
 	int i;
 
-	i915_debugfs_params(dev_priv);
+	i915_debugfs_params(i915);
 
-	debugfs_create_file("i915_forcewake_user", S_IRUSR, minor->debugfs_root,
-			    to_i915(minor->dev), &i915_forcewake_fops);
+	debugfs_create_file("i915_forcewake_user", S_IRUSR, debugfs_root,
+			    i915, &i915_forcewake_fops);
 	for (i = 0; i < ARRAY_SIZE(i915_debugfs_files); i++) {
-		debugfs_create_file(i915_debugfs_files[i].name,
-				    S_IRUGO | S_IWUSR,
-				    minor->debugfs_root,
-				    to_i915(minor->dev),
+		debugfs_create_file(i915_debugfs_files[i].name, S_IRUGO | S_IWUSR,
+				    debugfs_root, i915,
 				    i915_debugfs_files[i].fops);
 	}
 
 	drm_debugfs_create_files(i915_debugfs_list,
 				 ARRAY_SIZE(i915_debugfs_list),
-				 minor->debugfs_root, minor);
+				 debugfs_root, i915->drm.primary);
 
-	i915_gpu_error_debugfs_register(dev_priv);
+	i915_gpu_error_debugfs_register(i915);
 }

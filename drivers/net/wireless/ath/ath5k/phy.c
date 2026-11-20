@@ -886,9 +886,7 @@ ath5k_hw_rfregs_init(struct ath5k_hw *ah,
 	 * ah->ah_rf_banks based on ah->ah_rf_banks_size
 	 * we set above */
 	if (ah->ah_rf_banks == NULL) {
-		ah->ah_rf_banks = kmalloc_array(ah->ah_rf_banks_size,
-								sizeof(u32),
-								GFP_KERNEL);
+		ah->ah_rf_banks = kmalloc_objs(u32, ah->ah_rf_banks_size);
 		if (ah->ah_rf_banks == NULL) {
 			ATH5K_ERR(ah, "out of memory\n");
 			return -ENOMEM;
@@ -3116,10 +3114,7 @@ ath5k_combine_pwr_to_pdadc_curves(struct ath5k_hw *ah,
 							pd_gain_overlap;
 
 		/* Force each power step to be at least 0.5 dB */
-		if ((pdadc_tmp[1] - pdadc_tmp[0]) > 1)
-			pwr_step = pdadc_tmp[1] - pdadc_tmp[0];
-		else
-			pwr_step = 1;
+		pwr_step = max(pdadc_tmp[1] - pdadc_tmp[0], 1);
 
 		/* If pdadc_0 is negative, we need to extrapolate
 		 * below this pdgain by a number of pwr_steps */
@@ -3144,11 +3139,8 @@ ath5k_combine_pwr_to_pdadc_curves(struct ath5k_hw *ah,
 			continue;
 
 		/* Force each power step to be at least 0.5 dB */
-		if ((pdadc_tmp[table_size - 1] - pdadc_tmp[table_size - 2]) > 1)
-			pwr_step = pdadc_tmp[table_size - 1] -
-						pdadc_tmp[table_size - 2];
-		else
-			pwr_step = 1;
+		pwr_step = max(pdadc_tmp[table_size - 1] -
+			       pdadc_tmp[table_size - 2], 1);
 
 		/* Extrapolate above */
 		while ((pdadc_0 < (s16) pdadc_n) &&

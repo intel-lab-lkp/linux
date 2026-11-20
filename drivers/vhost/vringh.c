@@ -197,8 +197,9 @@ static int move_to_indirect(const struct vringh *vrh,
 	}
 
 	len = vringh32_to_cpu(vrh, desc->len);
-	if (unlikely(len % sizeof(struct vring_desc))) {
-		vringh_bad("Strange indirect len %u", desc->len);
+	if (unlikely(len < sizeof(struct vring_desc) ||
+		     len % sizeof(struct vring_desc))) {
+		vringh_bad("Invalid indirect len %u", desc->len);
 		return -EINVAL;
 	}
 
@@ -227,7 +228,7 @@ static int resize_iovec(struct vringh_kiov *iov, gfp_t gfp)
 	if (flag)
 		new = krealloc_array(iov->iov, new_num, sizeof(*new), gfp);
 	else {
-		new = kmalloc_array(new_num, sizeof(*new), gfp);
+		new = kmalloc_objs(*new, new_num, gfp);
 		if (new) {
 			memcpy(new, iov->iov,
 			       iov->max_num * sizeof(struct iovec));
@@ -333,6 +334,17 @@ __vringh_iov(struct vringh *vrh, u16 i,
 		if (unlikely(err))
 			goto fail;
 
+		if (up_next == -1)
+			count++;
+		else
+			indirect_count++;
+
+		if (count > vrh->vring.num || indirect_count > desc_max) {
+			vringh_bad("Descriptor loop in %p", descs);
+			err = -ELOOP;
+			goto fail;
+		}
+
 		if (unlikely(desc.flags &
 			     cpu_to_vringh16(vrh, VRING_DESC_F_INDIRECT))) {
 			u64 a = vringh64_to_cpu(vrh, desc.addr);
@@ -356,17 +368,6 @@ __vringh_iov(struct vringh *vrh, u16 i,
 			if (err)
 				goto fail;
 			continue;
-		}
-
-		if (up_next == -1)
-			count++;
-		else
-			indirect_count++;
-
-		if (count > vrh->vring.num || indirect_count > desc_max) {
-			vringh_bad("Descriptor loop in %p", descs);
-			err = -ELOOP;
-			goto fail;
 		}
 
 		if (desc.flags & cpu_to_vringh16(vrh, VRING_DESC_F_WRITE))
@@ -780,22 +781,6 @@ ssize_t vringh_iov_push_user(struct vringh_iov *wiov,
 EXPORT_SYMBOL(vringh_iov_push_user);
 
 /**
- * vringh_abandon_user - we've decided not to handle the descriptor(s).
- * @vrh: the vring.
- * @num: the number of descriptors to put back (ie. num
- *	 vringh_get_user() to undo).
- *
- * The next vringh_get_user() will return the old descriptor(s) again.
- */
-void vringh_abandon_user(struct vringh *vrh, unsigned int num)
-{
-	/* We only update vring_avail_event(vr) when we want to be notified,
-	 * so we haven't changed that yet. */
-	vrh->last_avail_idx -= num;
-}
-EXPORT_SYMBOL(vringh_abandon_user);
-
-/**
  * vringh_complete_user - we've finished with descriptor, publish it.
  * @vrh: the vring.
  * @head: the head as filled in by vringh_getdesc_user.
@@ -900,20 +885,6 @@ static inline int putused_kern(const struct vringh *vrh,
 	return 0;
 }
 
-static inline int xfer_kern(const struct vringh *vrh, void *src,
-			    void *dst, size_t len)
-{
-	memcpy(dst, src, len);
-	return 0;
-}
-
-static inline int kern_xfer(const struct vringh *vrh, void *dst,
-			    void *src, size_t len)
-{
-	memcpy(dst, src, len);
-	return 0;
-}
-
 /**
  * vringh_init_kern - initialize a vringh for a kernelspace vring.
  * @vrh: the vringh to initialize.
@@ -997,51 +968,6 @@ int vringh_getdesc_kern(struct vringh *vrh,
 	return 1;
 }
 EXPORT_SYMBOL(vringh_getdesc_kern);
-
-/**
- * vringh_iov_pull_kern - copy bytes from vring_iov.
- * @riov: the riov as passed to vringh_getdesc_kern() (updated as we consume)
- * @dst: the place to copy.
- * @len: the maximum length to copy.
- *
- * Returns the bytes copied <= len or a negative errno.
- */
-ssize_t vringh_iov_pull_kern(struct vringh_kiov *riov, void *dst, size_t len)
-{
-	return vringh_iov_xfer(NULL, riov, dst, len, xfer_kern);
-}
-EXPORT_SYMBOL(vringh_iov_pull_kern);
-
-/**
- * vringh_iov_push_kern - copy bytes into vring_iov.
- * @wiov: the wiov as passed to vringh_getdesc_kern() (updated as we consume)
- * @src: the place to copy from.
- * @len: the maximum length to copy.
- *
- * Returns the bytes copied <= len or a negative errno.
- */
-ssize_t vringh_iov_push_kern(struct vringh_kiov *wiov,
-			     const void *src, size_t len)
-{
-	return vringh_iov_xfer(NULL, wiov, (void *)src, len, kern_xfer);
-}
-EXPORT_SYMBOL(vringh_iov_push_kern);
-
-/**
- * vringh_abandon_kern - we've decided not to handle the descriptor(s).
- * @vrh: the vring.
- * @num: the number of descriptors to put back (ie. num
- *	 vringh_get_kern() to undo).
- *
- * The next vringh_get_kern() will return the old descriptor(s) again.
- */
-void vringh_abandon_kern(struct vringh *vrh, unsigned int num)
-{
-	/* We only update vring_avail_event(vr) when we want to be notified,
-	 * so we haven't changed that yet. */
-	vrh->last_avail_idx -= num;
-}
-EXPORT_SYMBOL(vringh_abandon_kern);
 
 /**
  * vringh_complete_kern - we've finished with descriptor, publish it.
@@ -1190,6 +1116,7 @@ static inline int copy_from_iotlb(const struct vringh *vrh, void *dst,
 		struct iov_iter iter;
 		u64 translated;
 		int ret;
+		size_t size;
 
 		ret = iotlb_translate(vrh, (u64)(uintptr_t)src,
 				      len - total_translated, &translated,
@@ -1207,9 +1134,9 @@ static inline int copy_from_iotlb(const struct vringh *vrh, void *dst,
 				      translated);
 		}
 
-		ret = copy_from_iter(dst, translated, &iter);
-		if (ret < 0)
-			return ret;
+		size = copy_from_iter(dst, translated, &iter);
+		if (size != translated)
+			return -EFAULT;
 
 		src += translated;
 		dst += translated;
@@ -1236,6 +1163,7 @@ static inline int copy_to_iotlb(const struct vringh *vrh, void *dst,
 		struct iov_iter iter;
 		u64 translated;
 		int ret;
+		size_t size;
 
 		ret = iotlb_translate(vrh, (u64)(uintptr_t)dst,
 				      len - total_translated, &translated,
@@ -1253,9 +1181,9 @@ static inline int copy_to_iotlb(const struct vringh *vrh, void *dst,
 				      translated);
 		}
 
-		ret = copy_to_iter(src, translated, &iter);
-		if (ret < 0)
-			return ret;
+		size = copy_to_iter(src, translated, &iter);
+		if (size != translated)
+			return -EFAULT;
 
 		src += translated;
 		dst += translated;
@@ -1286,7 +1214,7 @@ static inline int getu16_iotlb(const struct vringh *vrh,
 		return ret;
 
 	if (vrh->use_va) {
-		ret = __get_user(tmp, (__virtio16 __user *)ivec.iov.iovec[0].iov_base);
+		ret = get_user(tmp, (__virtio16 __user *)ivec.iov.iovec[0].iov_base);
 		if (ret)
 			return ret;
 	} else {
@@ -1317,14 +1245,14 @@ static inline int putu16_iotlb(const struct vringh *vrh,
 
 	/* Atomic write is needed for putu16 */
 	ret = iotlb_translate(vrh, (u64)(uintptr_t)p, sizeof(*p),
-			      NULL, &ivec, VHOST_MAP_RO);
+			      NULL, &ivec, VHOST_MAP_WO);
 	if (ret < 0)
 		return ret;
 
 	tmp = cpu_to_vringh16(vrh, val);
 
 	if (vrh->use_va) {
-		ret = __put_user(tmp, (__virtio16 __user *)ivec.iov.iovec[0].iov_base);
+		ret = put_user(tmp, (__virtio16 __user *)ivec.iov.iovec[0].iov_base);
 		if (ret)
 			return ret;
 	} else {
@@ -1535,23 +1463,6 @@ ssize_t vringh_iov_push_iotlb(struct vringh *vrh,
 EXPORT_SYMBOL(vringh_iov_push_iotlb);
 
 /**
- * vringh_abandon_iotlb - we've decided not to handle the descriptor(s).
- * @vrh: the vring.
- * @num: the number of descriptors to put back (ie. num
- *	 vringh_get_iotlb() to undo).
- *
- * The next vringh_get_iotlb() will return the old descriptor(s) again.
- */
-void vringh_abandon_iotlb(struct vringh *vrh, unsigned int num)
-{
-	/* We only update vring_avail_event(vr) when we want to be notified,
-	 * so we haven't changed that yet.
-	 */
-	vrh->last_avail_idx -= num;
-}
-EXPORT_SYMBOL(vringh_abandon_iotlb);
-
-/**
  * vringh_complete_iotlb - we've finished with descriptor, publish it.
  * @vrh: the vring.
  * @head: the head as filled in by vringh_getdesc_iotlb.
@@ -1570,32 +1481,6 @@ int vringh_complete_iotlb(struct vringh *vrh, u16 head, u32 len)
 	return __vringh_complete(vrh, &used, 1, putu16_iotlb, putused_iotlb);
 }
 EXPORT_SYMBOL(vringh_complete_iotlb);
-
-/**
- * vringh_notify_enable_iotlb - we want to know if something changes.
- * @vrh: the vring.
- *
- * This always enables notifications, but returns false if there are
- * now more buffers available in the vring.
- */
-bool vringh_notify_enable_iotlb(struct vringh *vrh)
-{
-	return __vringh_notify_enable(vrh, getu16_iotlb, putu16_iotlb);
-}
-EXPORT_SYMBOL(vringh_notify_enable_iotlb);
-
-/**
- * vringh_notify_disable_iotlb - don't tell us if something changes.
- * @vrh: the vring.
- *
- * This is our normal running state: we disable and then only enable when
- * we're going to sleep.
- */
-void vringh_notify_disable_iotlb(struct vringh *vrh)
-{
-	__vringh_notify_disable(vrh, putu16_iotlb);
-}
-EXPORT_SYMBOL(vringh_notify_disable_iotlb);
 
 /**
  * vringh_need_notify_iotlb - must we tell the other side about used buffers?

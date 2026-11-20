@@ -616,8 +616,7 @@ static int hccs_get_all_port_info_on_die(struct hccs_dev *hdev,
 	int ret;
 	u8 i;
 
-	attrs = kcalloc(die->port_num, sizeof(struct hccs_port_attr),
-			GFP_KERNEL);
+	attrs = kzalloc_objs(struct hccs_port_attr, die->port_num);
 	if (!attrs)
 		return -ENOMEM;
 
@@ -738,9 +737,9 @@ static int hccs_init_type_name_maps(struct hccs_dev *hdev)
 	u16 idx = 0;
 
 	hdev->used_type_num = hccs_calc_used_type_num(hdev, hccs_ver);
-	hdev->type_name_maps = devm_kcalloc(hdev->dev, hdev->used_type_num,
-					    sizeof(struct hccs_type_name_map),
-					    GFP_KERNEL);
+	hdev->type_name_maps = devm_kzalloc_objs(hdev->dev,
+						 struct hccs_type_name_map,
+						 hdev->used_type_num);
 	if (!hdev->type_name_maps)
 		return -ENOMEM;
 
@@ -962,7 +961,7 @@ static ssize_t link_fsm_show(struct kobject *kobj,
 	struct hccs_link_status link_status = {0};
 	const struct {
 		u8 link_fsm;
-		char *str;
+		const char *str;
 	} link_fsm_map[] = {
 		{HCCS_PORT_RESET, "reset"},
 		{HCCS_PORT_SETUP, "setup"},
@@ -1295,11 +1294,11 @@ static int hccs_get_all_spec_port_idle_sta(struct hccs_dev *hdev, u8 port_type,
 				if (ret) {
 					dev_err(hdev->dev,
 						"hccs%u on chip%u/die%u get idle status failed, ret = %d.\n",
-						k, i, j, ret);
+						port->port_id, chip->chip_id, die->die_id, ret);
 					return ret;
 				} else if (idle == 0) {
 					dev_info(hdev->dev, "hccs%u on chip%u/die%u is busy.\n",
-						k, i, j);
+						 port->port_id, chip->chip_id, die->die_id);
 					return 0;
 				}
 			}
@@ -1464,7 +1463,7 @@ static ssize_t dec_lane_of_type_store(struct kobject *kobj, struct kobj_attribut
 		goto out;
 	if (!all_in_idle) {
 		ret = -EBUSY;
-		dev_err(hdev->dev, "please don't decrese lanes on high load with %s, ret = %d.\n",
+		dev_err(hdev->dev, "please don't decrease lanes on high load with %s, ret = %d.\n",
 			hccs_port_type_to_name(hdev, port_type), ret);
 		goto out;
 	}
@@ -1622,8 +1621,7 @@ static void hccs_remove_topo_dirs(struct hccs_dev *hdev)
 	hccs_remove_misc_sysfs(hdev);
 }
 
-static int hccs_create_hccs_dir(struct hccs_dev *hdev,
-				struct hccs_die_info *die,
+static int hccs_create_hccs_dir(struct hccs_die_info *die,
 				struct hccs_port_info *port)
 {
 	int ret;
@@ -1655,7 +1653,7 @@ static int hccs_create_die_dir(struct hccs_dev *hdev,
 
 	for (i = 0; i < die->port_num; i++) {
 		port = &die->ports[i];
-		ret = hccs_create_hccs_dir(hdev, die, port);
+		ret = hccs_create_hccs_dir(die, port);
 		if (ret) {
 			dev_err(hdev->dev, "create hccs%u dir failed.\n",
 				port->port_id);
@@ -1743,7 +1741,7 @@ static int hccs_probe(struct platform_device *pdev)
 	if (!acpi_dev)
 		return -ENODEV;
 
-	hdev = devm_kzalloc(&pdev->dev, sizeof(*hdev), GFP_KERNEL);
+	hdev = devm_kzalloc_obj(&pdev->dev, *hdev);
 	if (!hdev)
 		return -ENOMEM;
 	hdev->acpi_dev = acpi_dev;

@@ -9,7 +9,6 @@
 
 #include <linux/gpio/driver.h>
 #include <linux/mfd/altera-a10sr.h>
-#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/property.h>
 
@@ -69,7 +68,7 @@ static const struct gpio_chip altr_a10sr_gc = {
 	.label = "altr_a10sr_gpio",
 	.owner = THIS_MODULE,
 	.get = altr_a10sr_gpio_get,
-	.set_rv = altr_a10sr_gpio_set,
+	.set = altr_a10sr_gpio_set,
 	.direction_input = altr_a10sr_gpio_direction_input,
 	.direction_output = altr_a10sr_gpio_direction_output,
 	.can_sleep = true,
@@ -82,7 +81,7 @@ static int altr_a10sr_gpio_probe(struct platform_device *pdev)
 	struct altr_a10sr_gpio *gpio;
 	struct altr_a10sr *a10sr = dev_get_drvdata(pdev->dev.parent);
 
-	gpio = devm_kzalloc(&pdev->dev, sizeof(*gpio), GFP_KERNEL);
+	gpio = devm_kzalloc_obj(&pdev->dev, *gpio);
 	if (!gpio)
 		return -ENOMEM;
 

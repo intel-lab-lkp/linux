@@ -57,20 +57,30 @@ struct fscrypt_name {
 /* Maximum value for the third parameter of fscrypt_operations.set_context(). */
 #define FSCRYPT_SET_CONTEXT_MAX_SIZE	40
 
+/* Maximum supported number of block devices per filesystem */
+#define FSCRYPT_MAX_DEVICES	8
+
 #ifdef CONFIG_FS_ENCRYPTION
 
 /* Crypto operations for filesystems */
 struct fscrypt_operations {
+	/*
+	 * The offset of the pointer to struct fscrypt_inode_info in the
+	 * filesystem-specific part of the inode, relative to the beginning of
+	 * the common part of the inode (the 'struct inode').
+	 */
+	ptrdiff_t inode_info_offs;
 
 	/*
-	 * If set, then fs/crypto/ will allocate a global bounce page pool the
-	 * first time an encryption key is set up for a file.  The bounce page
-	 * pool is required by the following functions:
-	 *
-	 * - fscrypt_encrypt_pagecache_blocks()
-	 * - fscrypt_zeroout_range() for files not using inline crypto
-	 *
-	 * If the filesystem doesn't use those, it doesn't need to set this.
+	 * Set to 1 if the filesystem is block-based.  This causes fs/crypto/ to
+	 * set up the key for regular files as a blk_crypto_key.  The filesystem
+	 * then uses fscrypt_set_bio_crypt_ctx() and similar functions.
+	 */
+	unsigned int is_block_based : 1;
+
+	/*
+	 * Set to 1 if the filesystem uses fscrypt_encrypt_pagecache_blocks().
+	 * This enables the allocation of the bounce page pool it requires.
 	 */
 	unsigned int needs_bounce_pages : 1;
 
@@ -175,36 +185,63 @@ struct fscrypt_operations {
 	bool (*has_stable_inodes)(struct super_block *sb);
 
 	/*
-	 * Return an array of pointers to the block devices to which the
-	 * filesystem may write encrypted file contents, NULL if the filesystem
-	 * only has a single such block device, or an ERR_PTR() on error.
+	 * Retrieve the list of block devices to which the filesystem may write
+	 * encrypted file contents.
 	 *
-	 * On successful non-NULL return, *num_devs is set to the number of
-	 * devices in the returned array.  The caller must free the returned
-	 * array using kfree().
+	 * This writes the block_device pointers to @devs and returns the count
+	 * (between 1 and FSCRYPT_MAX_DEVICES inclusively).
 	 *
 	 * If the filesystem can use multiple block devices (other than block
 	 * devices that aren't used for encrypted file contents, such as
 	 * external journal devices), and wants to support inline encryption,
 	 * then it must implement this function.  Otherwise it's not needed.
 	 */
-	struct block_device **(*get_devices)(struct super_block *sb,
-					     unsigned int *num_devs);
+	unsigned int (*get_devices)(
+		struct super_block *sb,
+		struct block_device *devs[FSCRYPT_MAX_DEVICES]);
 };
 
 int fscrypt_d_revalidate(struct inode *dir, const struct qstr *name,
 			 struct dentry *dentry, unsigned int flags);
+
+/*
+ * Returns the address of the fscrypt info pointer within the
+ * filesystem-specific part of the inode.  (To save memory on filesystems that
+ * don't support fscrypt, a field in 'struct inode' itself is no longer used.)
+ */
+static inline struct fscrypt_inode_info **
+fscrypt_inode_info_addr(const struct inode *inode)
+{
+	VFS_WARN_ON_ONCE(inode->i_sb->s_cop->inode_info_offs == 0);
+	return (void *)inode + inode->i_sb->s_cop->inode_info_offs;
+}
+
+/*
+ * Load the inode's fscrypt info pointer, using a raw dereference.  Since this
+ * uses a raw dereference with no memory barrier, it is appropriate to use only
+ * when the caller knows the inode's key setup already happened, resulting in
+ * non-NULL fscrypt info.  E.g., the file contents en/decryption functions use
+ * this, since fscrypt_file_open() set up the key.
+ */
+static inline struct fscrypt_inode_info *
+fscrypt_get_inode_info_raw(const struct inode *inode)
+{
+	struct fscrypt_inode_info *ci = *fscrypt_inode_info_addr(inode);
+
+	VFS_WARN_ON_ONCE(ci == NULL);
+	return ci;
+}
 
 static inline struct fscrypt_inode_info *
 fscrypt_get_inode_info(const struct inode *inode)
 {
 	/*
 	 * Pairs with the cmpxchg_release() in fscrypt_setup_encryption_info().
-	 * I.e., another task may publish ->i_crypt_info concurrently, executing
-	 * a RELEASE barrier.  We need to use smp_load_acquire() here to safely
+	 * I.e., another task may publish the fscrypt info concurrently,
+	 * executing a RELEASE barrier.  Use smp_load_acquire() here to safely
 	 * ACQUIRE the memory the other task published.
 	 */
-	return smp_load_acquire(&inode->i_crypt_info);
+	return smp_load_acquire(fscrypt_inode_info_addr(inode));
 }
 
 /**
@@ -308,16 +345,13 @@ static inline void fscrypt_prepare_dentry(struct dentry *dentry,
 }
 
 /* crypto.c */
-void fscrypt_enqueue_decrypt_work(struct work_struct *);
 
 struct page *fscrypt_encrypt_pagecache_blocks(struct folio *folio,
 		size_t len, size_t offs, gfp_t gfp_flags);
 int fscrypt_encrypt_block_inplace(const struct inode *inode, struct page *page,
 				  unsigned int len, unsigned int offs,
-				  u64 lblk_num, gfp_t gfp_flags);
+				  u64 lblk_num);
 
-int fscrypt_decrypt_pagecache_blocks(struct folio *folio, size_t len,
-				     size_t offs);
 int fscrypt_decrypt_block_inplace(const struct inode *inode, struct page *page,
 				  unsigned int len, unsigned int offs,
 				  u64 lblk_num);
@@ -332,12 +366,13 @@ static inline struct page *fscrypt_pagecache_page(struct page *bounce_page)
 	return (struct page *)page_private(bounce_page);
 }
 
-static inline bool fscrypt_is_bounce_folio(struct folio *folio)
+static inline bool fscrypt_is_bounce_folio(const struct folio *folio)
 {
 	return folio->mapping == NULL;
 }
 
-static inline struct folio *fscrypt_pagecache_folio(struct folio *bounce_folio)
+static inline
+struct folio *fscrypt_pagecache_folio(const struct folio *bounce_folio)
 {
 	return bounce_folio->private;
 }
@@ -413,11 +448,6 @@ bool fscrypt_match_name(const struct fscrypt_name *fname,
 			const u8 *de_name, u32 de_name_len);
 u64 fscrypt_fname_siphash(const struct inode *dir, const struct qstr *name);
 
-/* bio.c */
-bool fscrypt_decrypt_bio(struct bio *bio);
-int fscrypt_zeroout_range(const struct inode *inode, pgoff_t lblk,
-			  sector_t pblk, unsigned int len);
-
 /* hooks.c */
 int fscrypt_file_open(struct inode *inode, struct file *filp);
 int __fscrypt_prepare_link(struct inode *inode, struct inode *dir,
@@ -474,9 +504,6 @@ static inline void fscrypt_prepare_dentry(struct dentry *dentry,
 }
 
 /* crypto.c */
-static inline void fscrypt_enqueue_decrypt_work(struct work_struct *work)
-{
-}
 
 static inline struct page *fscrypt_encrypt_pagecache_blocks(struct folio *folio,
 		size_t len, size_t offs, gfp_t gfp_flags)
@@ -487,14 +514,7 @@ static inline struct page *fscrypt_encrypt_pagecache_blocks(struct folio *folio,
 static inline int fscrypt_encrypt_block_inplace(const struct inode *inode,
 						struct page *page,
 						unsigned int len,
-						unsigned int offs, u64 lblk_num,
-						gfp_t gfp_flags)
-{
-	return -EOPNOTSUPP;
-}
-
-static inline int fscrypt_decrypt_pagecache_blocks(struct folio *folio,
-						   size_t len, size_t offs)
+						unsigned int offs, u64 lblk_num)
 {
 	return -EOPNOTSUPP;
 }
@@ -518,12 +538,13 @@ static inline struct page *fscrypt_pagecache_page(struct page *bounce_page)
 	return ERR_PTR(-EINVAL);
 }
 
-static inline bool fscrypt_is_bounce_folio(struct folio *folio)
+static inline bool fscrypt_is_bounce_folio(const struct folio *folio)
 {
 	return false;
 }
 
-static inline struct folio *fscrypt_pagecache_folio(struct folio *bounce_folio)
+static inline
+struct folio *fscrypt_pagecache_folio(const struct folio *bounce_folio)
 {
 	WARN_ON_ONCE(1);
 	return ERR_PTR(-EINVAL);
@@ -714,18 +735,6 @@ static inline int fscrypt_d_revalidate(struct inode *dir, const struct qstr *nam
 	return 1;
 }
 
-/* bio.c */
-static inline bool fscrypt_decrypt_bio(struct bio *bio)
-{
-	return true;
-}
-
-static inline int fscrypt_zeroout_range(const struct inode *inode, pgoff_t lblk,
-					sector_t pblk, unsigned int len)
-{
-	return -EOPNOTSUPP;
-}
-
 /* hooks.c */
 
 static inline int fscrypt_file_open(struct inode *inode, struct file *filp)
@@ -825,61 +834,30 @@ static inline void fscrypt_set_ops(struct super_block *sb,
 
 #endif	/* !CONFIG_FS_ENCRYPTION */
 
-/* inline_crypt.c */
+/* block.c */
 #ifdef CONFIG_FS_ENCRYPTION_INLINE_CRYPT
 
-bool __fscrypt_inode_uses_inline_crypto(const struct inode *inode);
-
-void fscrypt_set_bio_crypt_ctx(struct bio *bio,
-			       const struct inode *inode, u64 first_lblk,
-			       gfp_t gfp_mask);
-
-void fscrypt_set_bio_crypt_ctx_bh(struct bio *bio,
-				  const struct buffer_head *first_bh,
-				  gfp_t gfp_mask);
+void fscrypt_set_bio_crypt_ctx(struct bio *bio, const struct inode *inode,
+			       loff_t pos, gfp_t gfp_mask);
 
 bool fscrypt_mergeable_bio(struct bio *bio, const struct inode *inode,
-			   u64 next_lblk);
-
-bool fscrypt_mergeable_bio_bh(struct bio *bio,
-			      const struct buffer_head *next_bh);
-
-bool fscrypt_dio_supported(struct inode *inode);
+			   loff_t pos);
 
 u64 fscrypt_limit_io_blocks(const struct inode *inode, u64 lblk, u64 nr_blocks);
+int fscrypt_zeroout_range(const struct inode *inode, loff_t pos,
+			  sector_t sector, u64 len);
 
 #else /* CONFIG_FS_ENCRYPTION_INLINE_CRYPT */
 
-static inline bool __fscrypt_inode_uses_inline_crypto(const struct inode *inode)
-{
-	return false;
-}
-
 static inline void fscrypt_set_bio_crypt_ctx(struct bio *bio,
 					     const struct inode *inode,
-					     u64 first_lblk, gfp_t gfp_mask) { }
-
-static inline void fscrypt_set_bio_crypt_ctx_bh(
-					 struct bio *bio,
-					 const struct buffer_head *first_bh,
-					 gfp_t gfp_mask) { }
+					     loff_t pos, gfp_t gfp_mask) { }
 
 static inline bool fscrypt_mergeable_bio(struct bio *bio,
 					 const struct inode *inode,
-					 u64 next_lblk)
+					 loff_t pos)
 {
 	return true;
-}
-
-static inline bool fscrypt_mergeable_bio_bh(struct bio *bio,
-					    const struct buffer_head *next_bh)
-{
-	return true;
-}
-
-static inline bool fscrypt_dio_supported(struct inode *inode)
-{
-	return !fscrypt_needs_contents_encryption(inode);
 }
 
 static inline u64 fscrypt_limit_io_blocks(const struct inode *inode, u64 lblk,
@@ -887,37 +865,13 @@ static inline u64 fscrypt_limit_io_blocks(const struct inode *inode, u64 lblk,
 {
 	return nr_blocks;
 }
+
+static inline int fscrypt_zeroout_range(const struct inode *inode, loff_t pos,
+					sector_t sector, u64 len)
+{
+	return -EOPNOTSUPP;
+}
 #endif /* !CONFIG_FS_ENCRYPTION_INLINE_CRYPT */
-
-/**
- * fscrypt_inode_uses_inline_crypto() - test whether an inode uses inline
- *					encryption
- * @inode: an inode. If encrypted, its key must be set up.
- *
- * Return: true if the inode requires file contents encryption and if the
- *	   encryption should be done in the block layer via blk-crypto rather
- *	   than in the filesystem layer.
- */
-static inline bool fscrypt_inode_uses_inline_crypto(const struct inode *inode)
-{
-	return fscrypt_needs_contents_encryption(inode) &&
-	       __fscrypt_inode_uses_inline_crypto(inode);
-}
-
-/**
- * fscrypt_inode_uses_fs_layer_crypto() - test whether an inode uses fs-layer
- *					  encryption
- * @inode: an inode. If encrypted, its key must be set up.
- *
- * Return: true if the inode requires file contents encryption and if the
- *	   encryption should be done in the filesystem layer rather than in the
- *	   block layer via blk-crypto.
- */
-static inline bool fscrypt_inode_uses_fs_layer_crypto(const struct inode *inode)
-{
-	return fscrypt_needs_contents_encryption(inode) &&
-	       !__fscrypt_inode_uses_inline_crypto(inode);
-}
 
 /**
  * fscrypt_has_encryption_key() - check whether an inode has had its key set up
@@ -1103,17 +1057,6 @@ static inline int fscrypt_encrypt_symlink(struct inode *inode,
 	if (IS_ENCRYPTED(inode))
 		return __fscrypt_encrypt_symlink(inode, target, len, disk_link);
 	return 0;
-}
-
-/* If *pagep is a bounce page, free it and set *pagep to the pagecache page */
-static inline void fscrypt_finalize_bounce_page(struct page **pagep)
-{
-	struct page *page = *pagep;
-
-	if (fscrypt_is_bounce_page(page)) {
-		*pagep = fscrypt_pagecache_page(page);
-		fscrypt_free_bounce_page(page);
-	}
 }
 
 #endif	/* _LINUX_FSCRYPT_H */

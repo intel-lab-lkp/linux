@@ -185,9 +185,11 @@ static int s6e3fa7_panel_probe(struct mipi_dsi_device *dsi)
 	struct s6e3fa7_panel *ctx;
 	int ret;
 
-	ctx = devm_kzalloc(dev, sizeof(*ctx), GFP_KERNEL);
-	if (!ctx)
-		return -ENOMEM;
+	ctx = devm_drm_panel_alloc(dev, struct s6e3fa7_panel, panel,
+				   &s6e3fa7_panel_funcs,
+				   DRM_MODE_CONNECTOR_DSI);
+	if (IS_ERR(ctx))
+		return PTR_ERR(ctx);
 
 	ctx->reset_gpio = devm_gpiod_get(dev, "reset", GPIOD_OUT_HIGH);
 	if (IS_ERR(ctx->reset_gpio))
@@ -202,8 +204,6 @@ static int s6e3fa7_panel_probe(struct mipi_dsi_device *dsi)
 	dsi->mode_flags = MIPI_DSI_MODE_VIDEO_BURST |
 			  MIPI_DSI_CLOCK_NON_CONTINUOUS | MIPI_DSI_MODE_LPM;
 
-	drm_panel_init(&ctx->panel, dev, &s6e3fa7_panel_funcs,
-		       DRM_MODE_CONNECTOR_DSI);
 	ctx->panel.prepare_prev_first = true;
 
 	ctx->panel.backlight = s6e3fa7_panel_create_backlight(dsi);
@@ -211,28 +211,17 @@ static int s6e3fa7_panel_probe(struct mipi_dsi_device *dsi)
 		return dev_err_probe(dev, PTR_ERR(ctx->panel.backlight),
 				     "Failed to create backlight\n");
 
-	drm_panel_add(&ctx->panel);
+	ret = devm_drm_panel_add(dev, &ctx->panel);
+	if (ret)
+		return ret;
 
-	ret = mipi_dsi_attach(dsi);
+	ret = devm_mipi_dsi_attach(dev, dsi);
 	if (ret < 0) {
 		dev_err(dev, "Failed to attach to DSI host: %d\n", ret);
-		drm_panel_remove(&ctx->panel);
 		return ret;
 	}
 
 	return 0;
-}
-
-static void s6e3fa7_panel_remove(struct mipi_dsi_device *dsi)
-{
-	struct s6e3fa7_panel *ctx = mipi_dsi_get_drvdata(dsi);
-	int ret;
-
-	ret = mipi_dsi_detach(dsi);
-	if (ret < 0)
-		dev_err(&dsi->dev, "Failed to detach from DSI host: %d\n", ret);
-
-	drm_panel_remove(&ctx->panel);
 }
 
 static const struct of_device_id s6e3fa7_panel_of_match[] = {
@@ -243,7 +232,6 @@ MODULE_DEVICE_TABLE(of, s6e3fa7_panel_of_match);
 
 static struct mipi_dsi_driver s6e3fa7_panel_driver = {
 	.probe = s6e3fa7_panel_probe,
-	.remove = s6e3fa7_panel_remove,
 	.driver = {
 		.name = "panel-samsung-s6e3fa7",
 		.of_match_table = s6e3fa7_panel_of_match,

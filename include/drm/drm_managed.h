@@ -18,7 +18,7 @@ typedef void (*drmres_release_t)(struct drm_device *dev, void *res);
  * @action: function which should be called when @dev is released
  * @data: opaque pointer, passed to @action
  *
- * This function adds the @release action with optional parameter @data to the
+ * This function adds the release @action with optional parameter @data to the
  * list of cleanup actions for @dev. The cleanup actions will be run in reverse
  * order in the final drm_dev_put() call for @dev.
  */
@@ -129,14 +129,25 @@ void __drmm_mutex_release(struct drm_device *dev, void *res);
 
 void __drmm_workqueue_release(struct drm_device *device, void *wq);
 
+/**
+ * drmm_alloc_ordered_workqueue - &drm_device managed alloc_ordered_workqueue()
+ * @dev: DRM device
+ * @fmt: printf format for the name of the workqueue
+ * @flags: WQ_* flags (only WQ_FREEZABLE and WQ_MEM_RECLAIM are meaningful)
+ * @args: args for @fmt
+ *
+ * This is a &drm_device-managed version of alloc_ordered_workqueue(). The
+ * allocated workqueue is automatically destroyed on the final drm_dev_put().
+ *
+ * Returns: workqueue on success, negative ERR_PTR otherwise.
+ */
 #define drmm_alloc_ordered_workqueue(dev, fmt, flags, args...)					\
 	({											\
 		struct workqueue_struct *wq = alloc_ordered_workqueue(fmt, flags, ##args);	\
 		wq ? ({										\
 			int ret = drmm_add_action_or_reset(dev, __drmm_workqueue_release, wq);	\
 			ret ? ERR_PTR(ret) : wq;						\
-		}) :										\
-			wq;									\
+		}) : ERR_PTR(-ENOMEM);								\
 	})
 
 #endif

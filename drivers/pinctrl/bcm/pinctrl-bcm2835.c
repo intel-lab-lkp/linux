@@ -397,7 +397,7 @@ static const struct gpio_chip bcm2835_gpio_chip = {
 	.direction_output = bcm2835_gpio_direction_output,
 	.get_direction = bcm2835_gpio_get_direction,
 	.get = bcm2835_gpio_get,
-	.set_rv = bcm2835_gpio_set,
+	.set = bcm2835_gpio_set,
 	.set_config = gpiochip_generic_config,
 	.base = -1,
 	.ngpio = BCM2835_NUM_GPIOS,
@@ -414,7 +414,7 @@ static const struct gpio_chip bcm2711_gpio_chip = {
 	.direction_output = bcm2835_gpio_direction_output,
 	.get_direction = bcm2835_gpio_get_direction,
 	.get = bcm2835_gpio_get,
-	.set_rv = bcm2835_gpio_set,
+	.set = bcm2835_gpio_set,
 	.set_config = gpiochip_generic_config,
 	.base = -1,
 	.ngpio = BCM2711_NUM_GPIOS,
@@ -803,7 +803,7 @@ static int bcm2835_pctl_dt_node_to_map_pull(struct bcm2835_pinctrl *pc,
 		return -EINVAL;
 	}
 
-	configs = kzalloc(sizeof(*configs), GFP_KERNEL);
+	configs = kzalloc_obj(*configs);
 	if (!configs)
 		return -ENOMEM;
 	configs[0] = pinconf_to_config_packed(BCM2835_PINCONF_PARAM_PULL, pull);
@@ -873,8 +873,7 @@ static int bcm2835_pctl_dt_node_to_map(struct pinctrl_dev *pctldev,
 		maps_per_pin++;
 	if (num_pulls)
 		maps_per_pin++;
-	cur_map = maps = kcalloc(num_pins * maps_per_pin, sizeof(*maps),
-				 GFP_KERNEL);
+	cur_map = maps = kzalloc_objs(*maps, num_pins * maps_per_pin);
 	if (!maps)
 		return -ENOMEM;
 
@@ -1023,7 +1022,7 @@ static int bcm2835_pinconf_get(struct pinctrl_dev *pctldev,
 	/* No way to read back bias config in HW */
 
 	switch (param) {
-	case PIN_CONFIG_OUTPUT:
+	case PIN_CONFIG_LEVEL:
 		if (fsel != BCM2835_FSEL_GPIO_OUT)
 			return -EINVAL;
 
@@ -1091,7 +1090,7 @@ static int bcm2835_pinconf_set(struct pinctrl_dev *pctldev,
 			break;
 
 		/* Set output-high or output-low */
-		case PIN_CONFIG_OUTPUT:
+		case PIN_CONFIG_LEVEL:
 			bcm2835_gpio_set_bit(pc, arg ? GPSET0 : GPCLR0, pin);
 			break;
 
@@ -1202,7 +1201,7 @@ static int bcm2711_pinconf_set(struct pinctrl_dev *pctldev,
 			break;
 
 		/* Set output-high or output-low */
-		case PIN_CONFIG_OUTPUT:
+		case PIN_CONFIG_LEVEL:
 			bcm2835_gpio_set_bit(pc, arg ? GPSET0 : GPCLR0, pin);
 			break;
 
@@ -1300,7 +1299,7 @@ static int bcm2835_pinctrl_probe(struct platform_device *pdev)
 	BUILD_BUG_ON(ARRAY_SIZE(bcm2835_gpio_pins) != BCM2711_NUM_GPIOS);
 	BUILD_BUG_ON(ARRAY_SIZE(bcm2835_gpio_groups) != BCM2711_NUM_GPIOS);
 
-	pc = devm_kzalloc(dev, sizeof(*pc), GFP_KERNEL);
+	pc = devm_kzalloc_obj(dev, *pc);
 	if (!pc)
 		return -ENOMEM;
 
@@ -1351,7 +1350,6 @@ static int bcm2835_pinctrl_probe(struct platform_device *pdev)
 	pc->pctl_desc = *pdata->pctl_desc;
 	pc->pctl_dev = devm_pinctrl_register(dev, &pc->pctl_desc, pc);
 	if (IS_ERR(pc->pctl_dev)) {
-		gpiochip_remove(&pc->gpio_chip);
 		return PTR_ERR(pc->pctl_dev);
 	}
 
@@ -1364,18 +1362,15 @@ static int bcm2835_pinctrl_probe(struct platform_device *pdev)
 	gpio_irq_chip_set_chip(girq, &bcm2835_gpio_irq_chip);
 	girq->parent_handler = bcm2835_gpio_irq_handler;
 	girq->num_parents = BCM2835_NUM_IRQS;
-	girq->parents = devm_kcalloc(dev, BCM2835_NUM_IRQS,
-				     sizeof(*girq->parents),
-				     GFP_KERNEL);
+	girq->parents = devm_kzalloc_objs(dev, *girq->parents, BCM2835_NUM_IRQS);
 	if (!girq->parents) {
 		err = -ENOMEM;
 		goto out_remove;
 	}
 
 	if (is_7211) {
-		pc->wake_irq = devm_kcalloc(dev, BCM2835_NUM_IRQS,
-					    sizeof(*pc->wake_irq),
-					    GFP_KERNEL);
+		pc->wake_irq = devm_kzalloc_objs(dev, *pc->wake_irq,
+						 BCM2835_NUM_IRQS);
 		if (!pc->wake_irq) {
 			err = -ENOMEM;
 			goto out_remove;

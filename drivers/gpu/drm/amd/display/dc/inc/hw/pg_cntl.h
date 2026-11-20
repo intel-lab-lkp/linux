@@ -34,6 +34,7 @@ struct pg_cntl {
 	const struct pg_cntl_funcs *funcs;
 	bool pg_pipe_res_enable[PG_HW_PIPE_RESOURCES_NUM_ELEMENT][MAX_PIPES];
 	bool pg_res_enable[PG_HW_RESOURCES_NUM_ELEMENT];
+	unsigned int inst;
 };
 
 struct pg_cntl_funcs {
@@ -46,7 +47,10 @@ struct pg_cntl_funcs {
 	void (*opp_pg_control)(struct pg_cntl *pg_cntl, unsigned int opp_inst, bool power_on);
 	void (*optc_pg_control)(struct pg_cntl *pg_cntl, unsigned int optc_inst, bool power_on);
 	void (*dwb_pg_control)(struct pg_cntl *pg_cntl, bool power_on);
+	void (*mem_pg_control)(struct pg_cntl *pg_cntl, bool power_on);
+	void (*dio_pg_control)(struct pg_cntl *pg_cntl, bool power_on);
 	void (*init_pg_status)(struct pg_cntl *pg_cntl);
+	void (*print_pg_status)(struct pg_cntl *pg_cntl, const char *debug_func, const char *debug_log);
 };
 
 #endif //__DC_PG_CNTL_H__

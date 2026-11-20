@@ -45,10 +45,9 @@ static int uli_scr_read(struct ata_link *link, unsigned int sc_reg, u32 *val);
 static int uli_scr_write(struct ata_link *link, unsigned int sc_reg, u32 val);
 
 static const struct pci_device_id uli_pci_tbl[] = {
-	{ PCI_VDEVICE(AL, 0x5289), uli_5289 },
-	{ PCI_VDEVICE(AL, 0x5287), uli_5287 },
-	{ PCI_VDEVICE(AL, 0x5281), uli_5281 },
-
+	{ PCI_VDEVICE(AL, 0x5289), .driver_data = uli_5289 },
+	{ PCI_VDEVICE(AL, 0x5287), .driver_data = uli_5287 },
+	{ PCI_VDEVICE(AL, 0x5281), .driver_data = uli_5281 },
 	{ }	/* terminate list */
 };
 
@@ -67,7 +66,7 @@ static struct ata_port_operations uli_ops = {
 	.inherits		= &ata_bmdma_port_ops,
 	.scr_read		= uli_scr_read,
 	.scr_write		= uli_scr_write,
-	.hardreset		= ATA_OP_NULL,
+	.reset.hardreset	= ATA_OP_NULL,
 };
 
 static const struct ata_port_info uli_port_info = {
@@ -151,7 +150,7 @@ static int uli_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	if (!host)
 		return -ENOMEM;
 
-	hpriv = devm_kzalloc(&pdev->dev, sizeof(*hpriv), GFP_KERNEL);
+	hpriv = devm_kzalloc_obj(&pdev->dev, *hpriv);
 	if (!hpriv)
 		return -ENOMEM;
 	host->private_data = hpriv;

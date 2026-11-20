@@ -2,7 +2,7 @@
 /******************************************************************************
  *
  * Copyright(c) 2003 - 2014 Intel Corporation. All rights reserved.
- * Copyright(C) 2018 - 2019, 2022 - 2025 Intel Corporation
+ * Copyright(C) 2018 - 2019, 2022 - 2026 Intel Corporation
  *
  * Portions of this file are derived from the ipw3945 project, as well
  * as portions of the ieee80211 subsystem header files.
@@ -23,7 +23,6 @@
 
 #include <asm/div64.h>
 
-#include "iwl-io.h"
 #include "iwl-trans.h"
 #include "iwl-op-mode.h"
 #include "iwl-modparams.h"
@@ -375,10 +374,10 @@ static int iwlagn_mac_suspend(struct ieee80211_hw *hw,
 		goto error;
 
 	/* let the ucode operate on its own */
-	iwl_write32(priv->trans, CSR_UCODE_DRV_GP1_SET,
-		    CSR_UCODE_DRV_GP1_BIT_D3_CFG_COMPLETE);
+	iwl_trans_write32(priv->trans, CSR_UCODE_DRV_GP1_SET,
+			  CSR_UCODE_DRV_GP1_BIT_D3_CFG_COMPLETE);
 
-	iwl_trans_d3_suspend(priv->trans, false, true);
+	iwl_trans_d3_suspend(priv->trans, true);
 
 	goto out;
 
@@ -422,7 +421,6 @@ static int iwlagn_mac_resume(struct ieee80211_hw *hw)
 	struct ieee80211_vif *vif;
 	u32 base;
 	int ret;
-	enum iwl_d3_status d3_status;
 	struct error_table_start {
 		/* cf. struct iwl_error_event_table */
 		u32 valid;
@@ -451,18 +449,13 @@ static int iwlagn_mac_resume(struct ieee80211_hw *hw)
 	/* we'll clear ctx->vif during iwlagn_prepare_restart() */
 	vif = ctx->vif;
 
-	ret = iwl_trans_d3_resume(priv->trans, &d3_status, false, true);
+	ret = iwl_trans_d3_resume(priv->trans, true);
 	if (ret)
 		goto out_unlock;
 
-	if (d3_status != IWL_D3_STATUS_ALIVE) {
-		IWL_INFO(priv, "Device was reset during suspend\n");
-		goto out_unlock;
-	}
-
 	/* uCode is no longer operating by itself */
-	iwl_write32(priv->trans, CSR_UCODE_DRV_GP1_CLR,
-		    CSR_UCODE_DRV_GP1_BIT_D3_CFG_COMPLETE);
+	iwl_trans_write32(priv->trans, CSR_UCODE_DRV_GP1_CLR,
+			  CSR_UCODE_DRV_GP1_BIT_D3_CFG_COMPLETE);
 
 	base = priv->device_pointers.error_event_table;
 	if (!iwlagn_hw_valid_rtc_data_addr(base)) {

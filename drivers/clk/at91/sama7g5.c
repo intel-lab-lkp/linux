@@ -113,6 +113,7 @@ static const struct clk_pll_characteristics cpu_pll_characteristics = {
 	.num_output = ARRAY_SIZE(cpu_pll_outputs),
 	.output = cpu_pll_outputs,
 	.core_output = core_outputs,
+	.acr = UL(0x00070010),
 };
 
 /* PLL characteristics. */
@@ -121,6 +122,7 @@ static const struct clk_pll_characteristics pll_characteristics = {
 	.num_output = ARRAY_SIZE(pll_outputs),
 	.output = pll_outputs,
 	.core_output = core_outputs,
+	.acr = UL(0x00070010),
 };
 
 /*
@@ -1100,8 +1102,7 @@ static void __init sama7g5_pmc_setup(struct device_node *np)
 		struct clk_hw *tmp_parent_hws[8];
 		u32 *mux_table;
 
-		mux_table = kmalloc_array(num_parents, sizeof(*mux_table),
-					  GFP_KERNEL);
+		mux_table = kmalloc_objs(*mux_table, num_parents);
 		if (!mux_table)
 			goto err_free;
 
@@ -1196,8 +1197,7 @@ static void __init sama7g5_pmc_setup(struct device_node *np)
 		struct clk_hw *tmp_parent_hws[8];
 		u32 *mux_table;
 
-		mux_table = kmalloc_array(num_parents, sizeof(*mux_table),
-					  GFP_KERNEL);
+		mux_table = kmalloc_objs(*mux_table, num_parents);
 		if (!mux_table)
 			goto err_free;
 

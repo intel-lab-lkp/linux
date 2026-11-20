@@ -445,7 +445,7 @@ static void int_urb_complete(struct urb *urb)
 	}
 
 	if (urb->actual_length < sizeof(hdr)) {
-		dev_dbg_f(urb_dev(urb), "error: urb %p to small\n", urb);
+		dev_dbg_f(urb_dev(urb), "error: urb %p too small\n", urb);
 		goto resubmit;
 	}
 
@@ -752,7 +752,7 @@ static int __zd_usb_enable_rx(struct zd_usb *usb)
 	dev_dbg_f(zd_usb_dev(usb), "\n");
 
 	r = -ENOMEM;
-	urbs = kcalloc(RX_URBS_COUNT, sizeof(struct urb *), GFP_KERNEL);
+	urbs = kzalloc_objs(struct urb *, RX_URBS_COUNT);
 	if (!urbs)
 		goto error;
 	for (i = 0; i < RX_URBS_COUNT; i++) {
@@ -791,6 +791,7 @@ error:
 	if (urbs) {
 		for (i = 0; i < RX_URBS_COUNT; i++)
 			free_rx_urb(urbs[i]);
+		kfree(urbs);
 	}
 	return r;
 }
@@ -1351,6 +1352,14 @@ static int probe(struct usb_interface *intf, const struct usb_device_id *id)
 	struct usb_device *udev = interface_to_usbdev(intf);
 	struct zd_usb *usb;
 	struct ieee80211_hw *hw = NULL;
+
+	/*
+	 * ZD1211 devices are single-function. Reject secondary interfaces
+	 * to prevent multiple instances from conflicting on hardcoded endpoints
+	 * and triggering recursive locking warnings.
+	 */
+	if (intf->cur_altsetting->desc.bInterfaceNumber != 0)
+		return -ENODEV;
 
 	print_id(udev);
 

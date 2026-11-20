@@ -140,7 +140,7 @@ static struct ata_port_operations adma_ata_ops = {
 
 	.freeze			= adma_freeze,
 	.thaw			= adma_thaw,
-	.prereset		= adma_prereset,
+	.reset.prereset		= adma_prereset,
 
 	.port_start		= adma_port_start,
 	.port_stop		= adma_port_stop,
@@ -157,8 +157,7 @@ static struct ata_port_info adma_port_info[] = {
 };
 
 static const struct pci_device_id adma_ata_pci_tbl[] = {
-	{ PCI_VDEVICE(PDC, 0x1841), board_1841_idx },
-
+	{ PCI_VDEVICE(PDC, 0x1841), .driver_data = board_1841_idx },
 	{ }	/* terminate list */
 };
 
@@ -509,7 +508,7 @@ static int adma_port_start(struct ata_port *ap)
 	struct adma_port_priv *pp;
 
 	adma_enter_reg_mode(ap);
-	pp = devm_kzalloc(dev, sizeof(*pp), GFP_KERNEL);
+	pp = devm_kzalloc_obj(dev, *pp);
 	if (!pp)
 		return -ENOMEM;
 	pp->pkt = dmam_alloc_coherent(dev, ADMA_PKT_BYTES, &pp->pkt_dma,

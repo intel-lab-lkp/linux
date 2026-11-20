@@ -14,6 +14,7 @@
 #define ACP63_PCI_REV		0x63
 #define ACP70_PCI_REV		0x70
 #define ACP71_PCI_REV		0x71
+#define ACP72_PCI_REV		0x72
 
 #define ACP_SOFT_RESET_SOFTRESET_AUDDONE_MASK	0x00010001
 #define ACP63_PGFSM_CNTL_POWER_ON_MASK	1
@@ -293,6 +294,7 @@ struct acp63_dev_data;
  * struct acp_hw_ops - ACP PCI driver platform specific ops
  * @acp_init: ACP initialization
  * @acp_deinit: ACP de-initialization
+ * @disable_interrupts: disable ACP interrupt sources
  * @acp_get_config: function to read the acp pin configuration
  * @acp_sdw_dma_irq_thread: ACP SoundWire DMA interrupt thread
  * acp_suspend: ACP system level suspend callback
@@ -303,6 +305,7 @@ struct acp63_dev_data;
 struct acp_hw_ops {
 	int (*acp_init)(void __iomem *acp_base, struct device *dev);
 	int (*acp_deinit)(void __iomem *acp_base, struct device *dev);
+	void (*disable_interrupts)(void __iomem *acp_base);
 	void (*acp_get_config)(struct pci_dev *pci, struct acp63_dev_data *acp_data);
 	void (*acp_sdw_dma_irq_thread)(struct acp63_dev_data *acp_data);
 	int (*acp_suspend)(struct device *dev);
@@ -369,6 +372,8 @@ struct acp63_dev_data {
 	u32 addr;
 	u32 reg_range;
 	u32 acp_rev;
+	u32 subsystem_vendor;
+	u32 subsystem_device;
 	u32 acp_sw_pad_keeper_en;
 	u32 acp_pad_pulldown_ctrl;
 	u16 acp63_sdw0_dma_intr_stat[ACP63_SDW0_DMA_MAX_STREAMS];
@@ -392,6 +397,12 @@ static inline int acp_hw_deinit(struct acp63_dev_data *adata, struct device *dev
 	if (adata && adata->hw_ops && adata->hw_ops->acp_deinit)
 		return ACP_HW_OPS(adata, acp_deinit)(adata->acp63_base, dev);
 	return -EOPNOTSUPP;
+}
+
+static inline void acp_hw_disable_interrupts(struct acp63_dev_data *adata)
+{
+	if (adata && adata->hw_ops && adata->hw_ops->disable_interrupts)
+		ACP_HW_OPS(adata, disable_interrupts)(adata->acp63_base);
 }
 
 static inline void acp_hw_get_config(struct pci_dev *pci, struct acp63_dev_data *adata)

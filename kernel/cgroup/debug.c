@@ -14,7 +14,7 @@
 static struct cgroup_subsys_state *
 debug_css_alloc(struct cgroup_subsys_state *parent_css)
 {
-	struct cgroup_subsys_state *css = kzalloc(sizeof(*css), GFP_KERNEL);
+	struct cgroup_subsys_state *css = kzalloc_obj(*css);
 
 	if (!css)
 		return ERR_PTR(-ENOMEM);
@@ -45,14 +45,13 @@ static int current_css_set_read(struct seq_file *seq, void *v)
 	struct cgroup_subsys_state *css;
 	int i, refcnt;
 
-	if (!cgroup_kn_lock_live(of->kn, false))
+	if (IS_ERR(cgroup_kn_lock_live(of->kn, false)))
 		return -ENODEV;
 
 	spin_lock_irq(&css_set_lock);
-	rcu_read_lock();
 	cset = task_css_set(current);
 	refcnt = refcount_read(&cset->refcount);
-	seq_printf(seq, "css_set %pK %d", cset, refcnt);
+	seq_printf(seq, "css_set %p %d", cset, refcnt);
 	if (refcnt > cset->nr_tasks)
 		seq_printf(seq, " +%d", refcnt - cset->nr_tasks);
 	seq_puts(seq, "\n");
@@ -67,7 +66,6 @@ static int current_css_set_read(struct seq_file *seq, void *v)
 		seq_printf(seq, "%2d: %-4s\t- %p[%d]\n", ss->id, ss->name,
 			  css, css->id);
 	}
-	rcu_read_unlock();
 	spin_unlock_irq(&css_set_lock);
 	cgroup_kn_unlock(of->kn);
 	return 0;
@@ -95,7 +93,6 @@ static int current_css_set_cg_links_read(struct seq_file *seq, void *v)
 		return -ENOMEM;
 
 	spin_lock_irq(&css_set_lock);
-	rcu_read_lock();
 	cset = task_css_set(current);
 	list_for_each_entry(link, &cset->cgrp_links, cgrp_link) {
 		struct cgroup *c = link->cgrp;
@@ -104,7 +101,6 @@ static int current_css_set_cg_links_read(struct seq_file *seq, void *v)
 		seq_printf(seq, "Root %d group %s\n",
 			   c->root->hierarchy_id, name_buf);
 	}
-	rcu_read_unlock();
 	spin_unlock_irq(&css_set_lock);
 	kfree(name_buf);
 	return 0;
@@ -129,10 +125,10 @@ static int cgroup_css_links_read(struct seq_file *seq, void *v)
 		 * Print out the proc_cset and threaded_cset relationship
 		 * and highlight difference between refcount and task_count.
 		 */
-		seq_printf(seq, "css_set %pK", cset);
+		seq_printf(seq, "css_set %p", cset);
 		if (rcu_dereference_protected(cset->dom_cset, 1) != cset) {
 			threaded_csets++;
-			seq_printf(seq, "=>%pK", cset->dom_cset);
+			seq_printf(seq, "=>%p", cset->dom_cset);
 		}
 		if (!list_empty(&cset->threaded_csets)) {
 			struct css_set *tcset;
@@ -141,7 +137,7 @@ static int cgroup_css_links_read(struct seq_file *seq, void *v)
 			list_for_each_entry(tcset, &cset->threaded_csets,
 					    threaded_csets_node) {
 				seq_puts(seq, idx ? "," : "<=");
-				seq_printf(seq, "%pK", tcset);
+				seq_printf(seq, "%p", tcset);
 				idx++;
 			}
 		} else {
@@ -210,8 +206,8 @@ static int cgroup_subsys_states_read(struct seq_file *seq, void *v)
 	int i;
 
 	cgrp = cgroup_kn_lock_live(of->kn, false);
-	if (!cgrp)
-		return -ENODEV;
+	if (IS_ERR(cgrp))
+		return PTR_ERR(cgrp);
 
 	for_each_subsys(ss, i) {
 		css = rcu_dereference_check(cgrp->subsys[ss->id], true);
@@ -234,7 +230,7 @@ static int cgroup_subsys_states_read(struct seq_file *seq, void *v)
 }
 
 static void cgroup_masks_read_one(struct seq_file *seq, const char *name,
-				  u16 mask)
+				  u32 mask)
 {
 	struct cgroup_subsys *ss;
 	int ssid;
@@ -258,8 +254,8 @@ static int cgroup_masks_read(struct seq_file *seq, void *v)
 	struct cgroup *cgrp;
 
 	cgrp = cgroup_kn_lock_live(of->kn, false);
-	if (!cgrp)
-		return -ENODEV;
+	if (IS_ERR(cgrp))
+		return PTR_ERR(cgrp);
 
 	cgroup_masks_read_one(seq, "subtree_control", cgrp->subtree_control);
 	cgroup_masks_read_one(seq, "subtree_ss_mask", cgrp->subtree_ss_mask);

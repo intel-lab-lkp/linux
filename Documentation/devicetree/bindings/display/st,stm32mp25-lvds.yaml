@@ -31,7 +31,12 @@ description: |
 
 properties:
   compatible:
-    const: st,stm32mp25-lvds
+    oneOf:
+      - items:
+          - enum:
+              - st,stm32mp255-lvds
+          - const: st,stm32mp25-lvds
+      - const: st,stm32mp25-lvds
 
   "#clock-cells":
     const: 0
@@ -52,6 +57,12 @@ properties:
       - const: ref
 
   resets:
+    maxItems: 1
+
+  access-controllers:
+    maxItems: 1
+
+  power-domains:
     maxItems: 1
 
   ports:
@@ -103,14 +114,14 @@ examples:
             port@0 {
                 reg = <0>;
                 lvds_in: endpoint {
-                   remote-endpoint = <&ltdc_ep1_out>;
+                    remote-endpoint = <&ltdc_ep1_out>;
                 };
             };
 
             port@1 {
                 reg = <1>;
                 lvds_out0: endpoint {
-                   remote-endpoint = <&lvds_panel_in>;
+                    remote-endpoint = <&lvds_panel_in>;
                 };
             };
         };

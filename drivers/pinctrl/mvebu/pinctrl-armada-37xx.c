@@ -420,7 +420,8 @@ static int armada_37xx_gpio_direction_output(struct gpio_chip *chip,
 	struct armada_37xx_pinctrl *info = gpiochip_get_data(chip);
 	unsigned int en_offset = offset;
 	unsigned int reg = OUTPUT_VAL;
-	unsigned int mask, val, ret;
+	unsigned int mask, val;
+	int ret;
 
 	armada_37xx_update_reg(&reg, &offset);
 	mask = BIT(offset);
@@ -518,7 +519,7 @@ static const struct pinmux_ops armada_37xx_pmx_ops = {
 static const struct gpio_chip armada_37xx_gpiolib_chip = {
 	.request = gpiochip_generic_request,
 	.free = gpiochip_generic_free,
-	.set_rv = armada_37xx_gpio_set,
+	.set = armada_37xx_gpio_set,
 	.get = armada_37xx_gpio_get,
 	.get_direction	= armada_37xx_gpio_get_direction,
 	.direction_input = armada_37xx_gpio_direction_input,
@@ -634,8 +635,9 @@ static int armada_37xx_edge_both_irq_swap_pol(struct armada_37xx_pinctrl *info,
 {
 	u32 reg_idx = pin_idx / GPIO_PER_REG;
 	u32 bit_num = pin_idx % GPIO_PER_REG;
-	u32 p, l, ret;
 	unsigned long flags;
+	u32 p, l;
+	int ret;
 
 	regmap_read(info->regmap, INPUT_VAL + 4*reg_idx, &l);
 
@@ -783,7 +785,7 @@ static int armada_37xx_irqchip_register(struct platform_device *pdev,
 	 * the chained irq with all of them.
 	 */
 	girq->num_parents = nr_irq_parent;
-	girq->parents = devm_kcalloc(dev, nr_irq_parent, sizeof(*girq->parents), GFP_KERNEL);
+	girq->parents = devm_kzalloc_objs(dev, *girq->parents, nr_irq_parent);
 	if (!girq->parents)
 		return -ENOMEM;
 	for (i = 0; i < nr_irq_parent; i++) {
@@ -878,9 +880,8 @@ static int armada_37xx_fill_group(struct armada_37xx_pinctrl *info)
 		struct armada_37xx_pin_group *grp = &info->groups[n];
 		int i, j, f;
 
-		grp->pins = devm_kcalloc(dev, grp->npins + grp->extra_npins,
-					 sizeof(*grp->pins),
-					 GFP_KERNEL);
+		grp->pins = devm_kzalloc_objs(dev, *grp->pins,
+					      grp->npins + grp->extra_npins);
 		if (!grp->pins)
 			return -ENOMEM;
 
@@ -930,9 +931,8 @@ static int armada_37xx_fill_func(struct armada_37xx_pinctrl *info)
 		const char **groups;
 		int g;
 
-		funcs[n].groups = devm_kcalloc(dev, funcs[n].ngroups,
-					       sizeof(*(funcs[n].groups)),
-					       GFP_KERNEL);
+		funcs[n].groups = devm_kzalloc_objs(dev, *(funcs[n].groups),
+						    funcs[n].ngroups);
 		if (!funcs[n].groups)
 			return -ENOMEM;
 
@@ -972,7 +972,7 @@ static int armada_37xx_pinctrl_register(struct platform_device *pdev,
 	ctrldesc->pmxops = &armada_37xx_pmx_ops;
 	ctrldesc->confops = &armada_37xx_pinconf_ops;
 
-	pindesc = devm_kcalloc(dev, pin_data->nr_pins, sizeof(*pindesc), GFP_KERNEL);
+	pindesc = devm_kzalloc_objs(dev, *pindesc, pin_data->nr_pins);
 	if (!pindesc)
 		return -ENOMEM;
 
@@ -994,7 +994,7 @@ static int armada_37xx_pinctrl_register(struct platform_device *pdev,
 	 * we allocate functions for number of pins and hope there are
 	 * fewer unique functions than pins available
 	 */
-	info->funcs = devm_kcalloc(dev, pin_data->nr_pins, sizeof(*info->funcs), GFP_KERNEL);
+	info->funcs = devm_kzalloc_objs(dev, *info->funcs, pin_data->nr_pins);
 	if (!info->funcs)
 		return -ENOMEM;
 
@@ -1149,7 +1149,7 @@ static int __init armada_37xx_pinctrl_probe(struct platform_device *pdev)
 		return PTR_ERR(regmap);
 	}
 
-	info = devm_kzalloc(dev, sizeof(*info), GFP_KERNEL);
+	info = devm_kzalloc_obj(dev, *info);
 	if (!info)
 		return -ENOMEM;
 

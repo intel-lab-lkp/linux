@@ -6,7 +6,7 @@
  *
  * Code common to all SA11x0 machines.
  */
-#include <linux/gpio.h>
+#include <linux/gpio/consumer.h>
 #include <linux/gpio/machine.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -298,7 +298,7 @@ static struct platform_device *sa11x0_devices[] __initdata = {
 static int __init sa1100_init(void)
 {
 	struct resource wdt_res = DEFINE_RES_MEM(0x90000000, 0x20);
-	pm_power_off = sa1100_power_off;
+	register_platform_power_off(sa1100_power_off);
 
 	regulator_has_full_constraints();
 
@@ -321,7 +321,7 @@ int __init sa11x0_register_fixed_regulator(int n,
 {
 	struct regulator_init_data *id;
 
-	cfg->init_data = id = kzalloc(sizeof(*cfg->init_data), GFP_KERNEL);
+	cfg->init_data = id = kzalloc_obj(*cfg->init_data);
 	if (!cfg->init_data)
 		return -ENOMEM;
 

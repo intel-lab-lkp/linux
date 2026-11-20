@@ -10,7 +10,6 @@
 #include <linux/completion.h>
 #include <linux/debugfs.h>
 #include <linux/ktime.h>
-#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/pm_runtime.h>
 #include <linux/slab.h>
@@ -219,11 +218,11 @@ static ssize_t sof_ipc_flood_dfs_write(struct file *file, const char __user *buf
 		goto out;
 	}
 
-	/* flood test */
-	ret = sof_debug_ipc_flood_test(cdev, flood_duration_test,
-				       ipc_duration_ms, ipc_count);
+	ret = sof_client_boot_dsp(cdev);
+	if (!ret)
+		ret = sof_debug_ipc_flood_test(cdev, flood_duration_test,
+					       ipc_duration_ms, ipc_count);
 
-	pm_runtime_mark_last_busy(dev);
 	err = pm_runtime_put_autosuspend(dev);
 	if (err < 0)
 		dev_err_ratelimited(dev, "debugfs write failed to idle %d\n", err);
@@ -291,7 +290,7 @@ static int sof_ipc_flood_probe(struct auxiliary_device *auxdev,
 	struct sof_ipc_flood_priv *priv;
 
 	/* allocate memory for client data */
-	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
+	priv = devm_kzalloc_obj(dev, *priv);
 	if (!priv)
 		return -ENOMEM;
 

@@ -15,7 +15,6 @@
 #include <linux/reboot.h>
 #include <linux/types.h>
 #include <linux/mm.h>
-#include <linux/tty.h>
 #include <linux/console.h>
 #include <linux/interrupt.h>
 /* keyb */
@@ -23,7 +22,6 @@
 #include <linux/delay.h>
 /* keyb */
 #include <linux/init.h>
-#include <linux/vt_kern.h>
 #include <linux/platform_device.h>
 #include <linux/ata_platform.h>
 #include <linux/adb.h>
@@ -986,8 +984,37 @@ static int __init mac_platform_init(void)
 			.start = swim_base,
 			.end   = swim_base + 0x1FFF,
 		};
+		bool fast_fclk = false;
 
-		platform_device_register_simple("swim", -1, &swim_rsrc, 1);
+		/* Models in this list are supposed to run FCLK at 32 MHz */
+		switch (macintosh_config->ident) {
+		case MAC_MODEL_CCL:
+		case MAC_MODEL_CCLII:
+		case MAC_MODEL_LCIII:
+		case MAC_MODEL_Q605:
+		case MAC_MODEL_Q605_ACC:
+		case MAC_MODEL_Q610:
+		case MAC_MODEL_Q630:
+		case MAC_MODEL_Q650:
+		case MAC_MODEL_Q800:
+		case MAC_MODEL_P460:
+		case MAC_MODEL_P475:
+		case MAC_MODEL_P475F:
+		case MAC_MODEL_P520:
+		case MAC_MODEL_P550:
+		case MAC_MODEL_P575:
+		case MAC_MODEL_P588:
+		case MAC_MODEL_TV:
+		case MAC_MODEL_C610:
+		case MAC_MODEL_C650:
+		case MAC_MODEL_PB190:
+		case MAC_MODEL_PB520:
+			fast_fclk = true;
+			break;
+		}
+
+		platform_device_register_resndata(NULL, "swim", -1, &swim_rsrc, 1,
+						  &fast_fclk, sizeof(fast_fclk));
 	}
 
 	/*

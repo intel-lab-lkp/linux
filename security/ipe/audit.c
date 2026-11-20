@@ -6,7 +6,7 @@
 #include <linux/slab.h>
 #include <linux/audit.h>
 #include <linux/types.h>
-#include <crypto/hash.h>
+#include <crypto/sha2.h>
 
 #include "ipe.h"
 #include "eval.h"
@@ -17,7 +17,7 @@
 
 #define ACTSTR(x) ((x) == IPE_ACTION_ALLOW ? "ALLOW" : "DENY")
 
-#define IPE_AUDIT_HASH_ALG "sha256"
+#define IPE_AUDIT_HASH_ALG "sha256" /* keep in sync with audit_policy() */
 
 #define AUDIT_POLICY_LOAD_FMT "policy_name=\"%s\" policy_version=%hu.%hu.%hu "\
 			      "policy_digest=" IPE_AUDIT_HASH_ALG ":"
@@ -34,33 +34,34 @@
 				    "new_policy_digest=" IPE_AUDIT_HASH_ALG ":"
 
 static const char *const audit_op_names[__IPE_OP_MAX + 1] = {
-	"EXECUTE",
-	"FIRMWARE",
-	"KMODULE",
-	"KEXEC_IMAGE",
-	"KEXEC_INITRAMFS",
-	"POLICY",
-	"X509_CERT",
-	"UNKNOWN",
+	[IPE_OP_EXEC]			= "EXECUTE",
+	[IPE_OP_FIRMWARE]		= "FIRMWARE",
+	[IPE_OP_KERNEL_MODULE]		= "KMODULE",
+	[IPE_OP_KEXEC_IMAGE]		= "KEXEC_IMAGE",
+	[IPE_OP_KEXEC_INITRAMFS]	= "KEXEC_INITRAMFS",
+	[IPE_OP_POLICY]			= "POLICY",
+	[IPE_OP_X509]			= "X509_CERT",
+	[IPE_OP_INVALID]		= "UNKNOWN",
 };
 
 static const char *const audit_hook_names[__IPE_HOOK_MAX] = {
-	"BPRM_CHECK",
-	"MMAP",
-	"MPROTECT",
-	"KERNEL_READ",
-	"KERNEL_LOAD",
+	[IPE_HOOK_BPRM_CHECK]		= "BPRM_CHECK",
+	[IPE_HOOK_BPRM_CREDS_FOR_EXEC]	= "BPRM_CREDS_FOR_EXEC",
+	[IPE_HOOK_MMAP]			= "MMAP",
+	[IPE_HOOK_MPROTECT]		= "MPROTECT",
+	[IPE_HOOK_KERNEL_READ]		= "KERNEL_READ",
+	[IPE_HOOK_KERNEL_LOAD]		= "KERNEL_LOAD",
 };
 
 static const char *const audit_prop_names[__IPE_PROP_MAX] = {
-	"boot_verified=FALSE",
-	"boot_verified=TRUE",
-	"dmverity_roothash=",
-	"dmverity_signature=FALSE",
-	"dmverity_signature=TRUE",
-	"fsverity_digest=",
-	"fsverity_signature=FALSE",
-	"fsverity_signature=TRUE",
+	[IPE_PROP_BOOT_VERIFIED_FALSE]	= "boot_verified=FALSE",
+	[IPE_PROP_BOOT_VERIFIED_TRUE]	= "boot_verified=TRUE",
+	[IPE_PROP_DMV_ROOTHASH]		= "dmverity_roothash=",
+	[IPE_PROP_DMV_SIG_FALSE]	= "dmverity_signature=FALSE",
+	[IPE_PROP_DMV_SIG_TRUE]		= "dmverity_signature=TRUE",
+	[IPE_PROP_FSV_DIGEST]		= "fsverity_digest=",
+	[IPE_PROP_FSV_SIG_FALSE]	= "fsverity_signature=FALSE",
+	[IPE_PROP_FSV_SIG_TRUE]		= "fsverity_signature=TRUE",
 };
 
 /**
@@ -152,7 +153,7 @@ void ipe_audit_match(const struct ipe_eval_ctx *const ctx,
 		if (inode) {
 			audit_log_format(ab, " dev=");
 			audit_log_untrustedstring(ab, inode->i_sb->s_id);
-			audit_log_format(ab, " ino=%lu", inode->i_ino);
+			audit_log_format(ab, " ino=%llu", inode->i_ino);
 		} else {
 			audit_log_format(ab, " dev=? ino=?");
 		}
@@ -182,37 +183,14 @@ static void audit_policy(struct audit_buffer *ab,
 			 const char *audit_format,
 			 const struct ipe_policy *const p)
 {
-	SHASH_DESC_ON_STACK(desc, tfm);
-	struct crypto_shash *tfm;
-	u8 *digest = NULL;
+	u8 digest[SHA256_DIGEST_SIZE];
 
-	tfm = crypto_alloc_shash(IPE_AUDIT_HASH_ALG, 0, 0);
-	if (IS_ERR(tfm))
-		return;
-
-	desc->tfm = tfm;
-
-	digest = kzalloc(crypto_shash_digestsize(tfm), GFP_KERNEL);
-	if (!digest)
-		goto out;
-
-	if (crypto_shash_init(desc))
-		goto out;
-
-	if (crypto_shash_update(desc, p->pkcs7, p->pkcs7len))
-		goto out;
-
-	if (crypto_shash_final(desc, digest))
-		goto out;
+	sha256(p->pkcs7, p->pkcs7len, digest);
 
 	audit_log_format(ab, audit_format, p->parsed->name,
 			 p->parsed->version.major, p->parsed->version.minor,
 			 p->parsed->version.rev);
-	audit_log_n_hex(ab, digest, crypto_shash_digestsize(tfm));
-
-out:
-	kfree(digest);
-	crypto_free_shash(tfm);
+	audit_log_n_hex(ab, digest, sizeof(digest));
 }
 
 /**
@@ -284,18 +262,10 @@ void ipe_audit_policy_load(const struct ipe_policy *const p)
  */
 void ipe_audit_enforce(bool new_enforce, bool old_enforce)
 {
-	struct audit_buffer *ab;
-
-	ab = audit_log_start(audit_context(), GFP_KERNEL, AUDIT_MAC_STATUS);
-	if (!ab)
-		return;
-
 	audit_log(audit_context(), GFP_KERNEL, AUDIT_MAC_STATUS,
 		  "enforcing=%d old_enforcing=%d auid=%u ses=%u"
 		  " enabled=1 old-enabled=1 lsm=ipe res=1",
 		  new_enforce, old_enforce,
 		  from_kuid(&init_user_ns, audit_get_loginuid(current)),
 		  audit_get_sessionid(current));
-
-	audit_log_end(ab);
 }

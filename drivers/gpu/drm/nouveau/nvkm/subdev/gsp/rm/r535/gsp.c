@@ -64,7 +64,9 @@ r535_gsp_intr(struct nvkm_inth *inth)
 	u32 intr = nvkm_falcon_rd32(&gsp->falcon, 0x0008);
 	u32 inte = nvkm_falcon_rd32(&gsp->falcon, gsp->falcon.func->addr2 +
 						  gsp->falcon.func->riscv_irqmask);
-	u32 stat = intr & inte;
+	u32 dest = nvkm_falcon_rd32(&gsp->falcon, gsp->falcon.func->addr2 +
+						  gsp->falcon.func->riscv_irqdest);
+	u32 stat = intr & inte & dest;
 
 	if (!stat) {
 		nvkm_debug(subdev, "inte %08x %08x\n", intr, inte);
@@ -582,10 +584,13 @@ struct nv_gsp_registry_entries {
  * RMSecBusResetEnable - enables PCI secondary bus reset
  * RMForcePcieConfigSave - forces GSP-RM to preserve PCI configuration
  *   registers on any PCI reset.
+ * RMDevidCheckIgnore - allows GSP-RM to boot even if the PCI dev ID
+ *   is not found in the internal product name database.
  */
 static const struct nv_gsp_registry_entries r535_registry_entries[] = {
 	{ "RMSecBusResetEnable", 1 },
 	{ "RMForcePcieConfigSave", 1 },
+	{ "RMDevidCheckIgnore", 1 },
 };
 #define NV_GSP_REG_NUM_ENTRIES ARRAY_SIZE(r535_registry_entries)
 
@@ -701,7 +706,7 @@ r535_gsp_rpc_set_registry(struct nvkm_gsp *gsp)
 
 	build_registry(gsp, rpc);
 
-	return nvkm_gsp_rpc_wr(gsp, rpc, NVKM_GSP_RPC_REPLY_NOWAIT);
+	return nvkm_gsp_rpc_wr(gsp, rpc, NVKM_GSP_RPC_REPLY_NOSEQ);
 
 fail:
 	clean_registry(gsp);
@@ -719,7 +724,6 @@ r535_gsp_acpi_caps(acpi_handle handle, CAPS_METHOD_DATA *caps)
 	union acpi_object argv4 = {
 		.buffer.type    = ACPI_TYPE_BUFFER,
 		.buffer.length  = 4,
-		.buffer.pointer = kmalloc(argv4.buffer.length, GFP_KERNEL),
 	}, *obj;
 
 	caps->status = 0xffff;
@@ -727,17 +731,22 @@ r535_gsp_acpi_caps(acpi_handle handle, CAPS_METHOD_DATA *caps)
 	if (!acpi_check_dsm(handle, &NVOP_DSM_GUID, NVOP_DSM_REV, BIT_ULL(0x1a)))
 		return;
 
-	obj = acpi_evaluate_dsm(handle, &NVOP_DSM_GUID, NVOP_DSM_REV, 0x1a, &argv4);
-	if (!obj)
+	argv4.buffer.pointer = kmalloc(argv4.buffer.length, GFP_KERNEL);
+	if (!argv4.buffer.pointer)
 		return;
 
-	if (WARN_ON(obj->type != ACPI_TYPE_BUFFER) ||
-	    WARN_ON(obj->buffer.length != 4))
-		return;
+	obj = acpi_evaluate_dsm(handle, &NVOP_DSM_GUID, NVOP_DSM_REV, 0x1a, &argv4);
+	if (!obj)
+		goto done;
+
+	if (obj->type != ACPI_TYPE_BUFFER ||
+	    obj->buffer.length != 4)
+		goto done;
 
 	caps->status = 0;
 	caps->optimusCaps = *(u32 *)obj->buffer.pointer;
 
+done:
 	ACPI_FREE(obj);
 
 	kfree(argv4.buffer.pointer);
@@ -754,24 +763,28 @@ r535_gsp_acpi_jt(acpi_handle handle, JT_METHOD_DATA *jt)
 	union acpi_object argv4 = {
 		.buffer.type    = ACPI_TYPE_BUFFER,
 		.buffer.length  = sizeof(caps),
-		.buffer.pointer = kmalloc(argv4.buffer.length, GFP_KERNEL),
 	}, *obj;
 
 	jt->status = 0xffff;
 
-	obj = acpi_evaluate_dsm(handle, &JT_DSM_GUID, JT_DSM_REV, 0x1, &argv4);
-	if (!obj)
+	argv4.buffer.pointer = kmalloc(argv4.buffer.length, GFP_KERNEL);
+	if (!argv4.buffer.pointer)
 		return;
 
-	if (WARN_ON(obj->type != ACPI_TYPE_BUFFER) ||
-	    WARN_ON(obj->buffer.length != 4))
-		return;
+	obj = acpi_evaluate_dsm(handle, &JT_DSM_GUID, JT_DSM_REV, 0x1, &argv4);
+	if (!obj)
+		goto done;
+
+	if (obj->type != ACPI_TYPE_BUFFER ||
+	    obj->buffer.length != 4)
+		goto done;
 
 	jt->status = 0;
 	jt->jtCaps = *(u32 *)obj->buffer.pointer;
 	jt->jtRevId = (jt->jtCaps & 0xfff00000) >> 20;
 	jt->bSBIOSCaps = 0;
 
+done:
 	ACPI_FREE(obj);
 
 	kfree(argv4.buffer.pointer);
@@ -785,7 +798,8 @@ r535_gsp_acpi_mux_id(acpi_handle handle, u32 id, MUX_METHOD_DATA_ELEMENT *mode,
 	struct acpi_object_list input = { 1, &mux_arg };
 	acpi_handle iter = NULL, handle_mux = NULL;
 	acpi_status status;
-	unsigned long long value;
+	u64 value;
+	int ret;
 
 	mode->status = 0xffff;
 	part->status = 0xffff;
@@ -795,8 +809,8 @@ r535_gsp_acpi_mux_id(acpi_handle handle, u32 id, MUX_METHOD_DATA_ELEMENT *mode,
 		if (ACPI_FAILURE(status) || !iter)
 			return;
 
-		status = acpi_evaluate_integer(iter, "_ADR", NULL, &value);
-		if (ACPI_FAILURE(status) || value != id)
+		ret = acpi_get_local_u64_address(iter, &value);
+		if (ret || value != id)
 			continue;
 
 		handle_mux = iter;
@@ -850,8 +864,8 @@ r535_gsp_acpi_dod(acpi_handle handle, DOD_METHOD_DATA *dod)
 
 	_DOD = output.pointer;
 
-	if (WARN_ON(_DOD->type != ACPI_TYPE_PACKAGE) ||
-	    WARN_ON(_DOD->package.count > ARRAY_SIZE(dod->acpiIdList)))
+	if (_DOD->type != ACPI_TYPE_PACKAGE ||
+	    _DOD->package.count > ARRAY_SIZE(dod->acpiIdList))
 		return;
 
 	for (int i = 0; i < _DOD->package.count; i++) {
@@ -910,7 +924,7 @@ r535_gsp_set_system_info(struct nvkm_gsp *gsp)
 	info->pciConfigMirrorSize = device->pci->func->cfg.size;
 	r535_gsp_acpi_info(gsp, &info->acpiMethodData);
 
-	return nvkm_gsp_rpc_wr(gsp, info, NVKM_GSP_RPC_REPLY_NOWAIT);
+	return nvkm_gsp_rpc_wr(gsp, info, NVKM_GSP_RPC_REPLY_NOSEQ);
 }
 
 static int
@@ -1710,7 +1724,7 @@ r535_gsp_sr_data_size(struct nvkm_gsp *gsp)
 }
 
 int
-r535_gsp_fini(struct nvkm_gsp *gsp, bool suspend)
+r535_gsp_fini(struct nvkm_gsp *gsp, enum nvkm_suspend_state suspend)
 {
 	struct nvkm_rm *rm = gsp->rm;
 	int ret;
@@ -1744,6 +1758,17 @@ r535_gsp_fini(struct nvkm_gsp *gsp, bool suspend)
 			nvkm_gsp_sg_free(gsp->subdev.device, &gsp->sr.sgt);
 			return ret;
 		}
+
+		/*
+		 * TODO: Debug the GSP firmware / RPC handling to find out why
+		 * without this Turing (but none of the other architectures)
+		 * ends up resetting all channels after resume.
+		 * Additionally, runtime suspend on other architectures quickly
+		 * becomes unreliable without this sleep. If you're experiencing
+		 * issues with runtime suspend, try bumping this delay up and
+		 * sending a patch if it fixes your GPU.
+		 */
+		msleep(200);
 	}
 
 	ret = r535_gsp_rpc_unloading_guest_driver(gsp, suspend);
@@ -1756,6 +1781,23 @@ r535_gsp_fini(struct nvkm_gsp *gsp, bool suspend)
 	);
 
 	gsp->running = false;
+	return 0;
+}
+
+int
+r535_gsp_get_static_memsys_info(struct nvkm_gsp *gsp)
+{
+	NV2080_CTRL_INTERNAL_MEMSYS_GET_STATIC_CONFIG_PARAMS *ctrl;
+
+	ctrl = nvkm_gsp_rm_ctrl_rd(&gsp->internal.device.subdevice,
+				    NV2080_CTRL_CMD_INTERNAL_MEMSYS_GET_STATIC_CONFIG,
+				    sizeof(*ctrl));
+	if (IS_ERR(ctrl))
+		return PTR_ERR(ctrl);
+
+	gsp->memsys.use_raw_mode_comptagline_alloc = ctrl->bUseRawModeComptaglineAllocation;
+
+	nvkm_gsp_rm_ctrl_done(&gsp->internal.device.subdevice, ctrl);
 	return 0;
 }
 
@@ -1799,12 +1841,16 @@ r535_gsp_rm_boot_ctor(struct nvkm_gsp *gsp)
 	RM_RISCV_UCODE_DESC *desc;
 	int ret;
 
+	ret = nvkm_gsp_fwsec_sb_ctor(gsp);
+	if (ret)
+		return ret;
+
 	hdr = nvfw_bin_hdr(&gsp->subdev, fw->data);
 	desc = (void *)fw->data + hdr->header_offset;
 
 	ret = nvkm_gsp_mem_ctor(gsp, hdr->data_size, &gsp->boot.fw);
 	if (ret)
-		return ret;
+		goto dtor_fwsec;
 
 	memcpy(gsp->boot.fw.data, fw->data + hdr->data_offset, hdr->data_size);
 
@@ -1813,6 +1859,9 @@ r535_gsp_rm_boot_ctor(struct nvkm_gsp *gsp)
 	gsp->boot.manifest_offset = desc->manifestOffset;
 	gsp->boot.app_version = desc->appVersion;
 	return 0;
+dtor_fwsec:
+	nvkm_gsp_fwsec_sb_dtor(gsp);
+	return ret;
 }
 
 static const struct nvkm_firmware_func
@@ -1978,7 +2027,7 @@ static void r535_gsp_retain_logging(struct nvkm_gsp *gsp)
 		goto exit;
 	}
 
-	log = kzalloc(sizeof(*log), GFP_KERNEL);
+	log = kzalloc_obj(*log);
 	if (!log)
 		goto error;
 
@@ -2083,6 +2132,7 @@ r535_gsp_dtor(struct nvkm_gsp *gsp)
 	mutex_destroy(&gsp->cmdq.mutex);
 
 	nvkm_gsp_dtor_fws(gsp);
+	nvkm_gsp_fwsec_sb_dtor(gsp);
 
 	nvkm_gsp_mem_dtor(&gsp->rmargs);
 	nvkm_gsp_mem_dtor(&gsp->wpr_meta);

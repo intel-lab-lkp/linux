@@ -1245,7 +1245,7 @@ static struct clk_branch gcc_boot_rom_ahb_clk = {
 };
 
 /*
- * Clock ON depends on external parent 'config noc', so cant poll
+ * Clock ON depends on external parent 'config noc', so can't poll
  * delay and also mark as crtitical for camss boot
  */
 static struct clk_branch gcc_camera_ahb_clk = {
@@ -1398,7 +1398,7 @@ static struct clk_branch gcc_ddrss_gpu_axi_clk = {
 };
 
 /*
- * Clock ON depends on external parent 'config noc', so cant poll
+ * Clock ON depends on external parent 'config noc', so can't poll
  * delay and also mark as crtitical for disp boot
  */
 static struct clk_branch gcc_disp_ahb_clk = {
@@ -3339,7 +3339,7 @@ static struct clk_branch gcc_usb3_sec_phy_pipe_clk = {
 };
 
 /*
- * Clock ON depends on external parent 'config noc', so cant poll
+ * Clock ON depends on external parent 'config noc', so can't poll
  * delay and also mark as crtitical for video boot
  */
 static struct clk_branch gcc_video_ahb_clk = {
@@ -3808,17 +3808,7 @@ static struct platform_driver gcc_sm8150_driver = {
 	},
 };
 
-static int __init gcc_sm8150_init(void)
-{
-	return platform_driver_register(&gcc_sm8150_driver);
-}
-subsys_initcall(gcc_sm8150_init);
-
-static void __exit gcc_sm8150_exit(void)
-{
-	platform_driver_unregister(&gcc_sm8150_driver);
-}
-module_exit(gcc_sm8150_exit);
+subsys_platform_driver(gcc_sm8150_driver);
 
 MODULE_DESCRIPTION("QTI GCC SM8150 Driver");
 MODULE_LICENSE("GPL v2");

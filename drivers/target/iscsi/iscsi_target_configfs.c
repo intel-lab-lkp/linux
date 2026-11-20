@@ -665,7 +665,7 @@ static ssize_t lio_target_nacl_cmdsn_depth_store(struct config_item *item,
 	}
 	acl_ci = &se_nacl->acl_group.cg_item;
 	if (!acl_ci) {
-		pr_err("Unable to locatel acl_ci\n");
+		pr_err("Unable to locate acl_ci\n");
 		return -EINVAL;
 	}
 	tpg_ci = &acl_ci->ci_parent->ci_group->cg_item;
@@ -684,7 +684,7 @@ static ssize_t lio_target_nacl_cmdsn_depth_store(struct config_item *item,
 
 	ret = core_tpg_set_initiator_node_queue_depth(se_nacl, cmdsn_depth);
 
-	pr_debug("LIO_Target_ConfigFS: %s/%s Set CmdSN Window: %u for"
+	pr_debug("LIO_Target_ConfigFS: %s/%s Set CmdSN Window: %u for "
 		"InitiatorName: %s\n", config_item_name(wwn_ci),
 		config_item_name(tpg_ci), cmdsn_depth,
 		config_item_name(acl_ci));
@@ -1131,7 +1131,7 @@ static void lio_target_tiqn_deltpg(struct se_portal_group *se_tpg)
 
 /* End items for lio_target_tiqn_cit */
 
-/* Start LIO-Target TIQN struct contig_item lio_target_cit */
+/* Start LIO-Target TIQN struct config_item lio_target_cit */
 
 static ssize_t lio_target_wwn_lio_version_show(struct config_item *item,
 		char *page)
@@ -1306,17 +1306,24 @@ static ssize_t iscsi_disc_enforce_discovery_auth_store(struct config_item *item,
 		return -EINVAL;
 	}
 
+	if (iscsit_get_tpg(discovery_tpg) < 0)
+		return -EINVAL;
+
 	param = iscsi_find_param_from_key(AUTHMETHOD,
 				discovery_tpg->param_list);
-	if (!param)
-		return -EINVAL;
+	if (!param) {
+		err = -EINVAL;
+		goto out;
+	}
 
 	if (op) {
 		/*
 		 * Reset the AuthMethod key to CHAP.
 		 */
-		if (iscsi_update_param_value(param, CHAP) < 0)
-			return -EINVAL;
+		if (iscsi_update_param_value(param, CHAP) < 0) {
+			err = -EINVAL;
+			goto out;
+		}
 
 		discovery_tpg->tpg_attrib.authentication = 1;
 		iscsit_global->discovery_acl.node_auth.enforce_discovery_auth = 1;
@@ -1327,8 +1334,10 @@ static ssize_t iscsi_disc_enforce_discovery_auth_store(struct config_item *item,
 		/*
 		 * Reset the AuthMethod key to CHAP,None
 		 */
-		if (iscsi_update_param_value(param, "CHAP,None") < 0)
-			return -EINVAL;
+		if (iscsi_update_param_value(param, "CHAP,None") < 0) {
+			err = -EINVAL;
+			goto out;
+		}
 
 		discovery_tpg->tpg_attrib.authentication = 0;
 		iscsit_global->discovery_acl.node_auth.enforce_discovery_auth = 0;
@@ -1337,7 +1346,10 @@ static ssize_t iscsi_disc_enforce_discovery_auth_store(struct config_item *item,
 			" Discovery TPG\n");
 	}
 
-	return count;
+	err = count;
+out:
+	iscsit_put_tpg(discovery_tpg);
+	return err;
 }
 
 CONFIGFS_ATTR(iscsi_disc_, enforce_discovery_auth);
@@ -1591,6 +1603,7 @@ const struct target_core_fabric_ops iscsi_ops = {
 
 	.write_pending_must_be_called	= 1,
 
+	.default_compl_type		= TARGET_QUEUE_COMPL,
 	.default_submit_type		= TARGET_DIRECT_SUBMIT,
 	.direct_submit_supp		= 1,
 };

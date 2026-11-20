@@ -6,7 +6,7 @@
 //!
 //! C headers: [`include/linux/phy.h`](srctree/include/linux/phy.h).
 
-use crate::{error::*, prelude::*, types::Opaque};
+use crate::{device_id::RawDeviceId, error::*, prelude::*, types::Opaque};
 use core::{marker::PhantomData, ptr::addr_of_mut};
 
 pub mod reg;
@@ -123,39 +123,37 @@ impl Device {
     /// Gets the current link state.
     ///
     /// It returns true if the link is up.
+    #[inline]
     pub fn is_link_up(&self) -> bool {
-        const LINK_IS_UP: u64 = 1;
-        // TODO: the code to access to the bit field will be replaced with automatically
-        // generated code by bindgen when it becomes possible.
-        // SAFETY: The struct invariant ensures that we may access
-        // this field without additional synchronization.
-        let bit_field = unsafe { &(*self.0.get())._bitfield_1 };
-        bit_field.get(14, 1) == LINK_IS_UP
+        let phydev = self.0.get().cast_const();
+        // SAFETY: By the type invariant of `Device`, `phydev` points to a valid
+        // `struct phy_device`, and there is no concurrent write to this field.
+        let link = unsafe { bindings::phy_device::link_raw(phydev) };
+        link == 1
     }
 
     /// Gets the current auto-negotiation configuration.
     ///
     /// It returns true if auto-negotiation is enabled.
+    #[inline]
     pub fn is_autoneg_enabled(&self) -> bool {
-        // TODO: the code to access to the bit field will be replaced with automatically
-        // generated code by bindgen when it becomes possible.
-        // SAFETY: The struct invariant ensures that we may access
-        // this field without additional synchronization.
-        let bit_field = unsafe { &(*self.0.get())._bitfield_1 };
-        bit_field.get(13, 1) == bindings::AUTONEG_ENABLE as u64
+        let phydev = self.0.get().cast_const();
+        // SAFETY: By the type invariant of `Device`, `phydev` points to a valid
+        // `struct phy_device`, and there is no concurrent write to this field.
+        let autoneg = unsafe { bindings::phy_device::autoneg_raw(phydev) };
+        autoneg == bindings::AUTONEG_ENABLE
     }
 
     /// Gets the current auto-negotiation state.
     ///
     /// It returns true if auto-negotiation is completed.
+    #[inline]
     pub fn is_autoneg_completed(&self) -> bool {
-        const AUTONEG_COMPLETED: u64 = 1;
-        // TODO: the code to access to the bit field will be replaced with automatically
-        // generated code by bindgen when it becomes possible.
-        // SAFETY: The struct invariant ensures that we may access
-        // this field without additional synchronization.
-        let bit_field = unsafe { &(*self.0.get())._bitfield_1 };
-        bit_field.get(15, 1) == AUTONEG_COMPLETED
+        let phydev = self.0.get().cast_const();
+        // SAFETY: By the type invariant of `Device`, `phydev` points to a valid
+        // `struct phy_device`, and there is no concurrent write to this field.
+        let completed = unsafe { bindings::phy_device::autoneg_complete_raw(phydev) };
+        completed == 1
     }
 
     /// Sets the speed of the PHY.
@@ -196,11 +194,8 @@ impl Device {
         // SAFETY: `phydev` is pointing to a valid object by the type invariant of `Self`.
         // So it's just an FFI call.
         let ret = unsafe { bindings::phy_read_paged(phydev, page.into(), regnum.into()) };
-        if ret < 0 {
-            Err(Error::from_errno(ret))
-        } else {
-            Ok(ret as u16)
-        }
+
+        to_result(ret).map(|()| ret as u16)
     }
 
     /// Resolves the advertisements into PHY settings.
@@ -285,7 +280,7 @@ impl AsRef<kernel::device::Device> for Device {
     fn as_ref(&self) -> &kernel::device::Device {
         let phydev = self.0.get();
         // SAFETY: The struct invariant ensures that `mdio.dev` is valid.
-        unsafe { kernel::device::Device::as_ref(addr_of_mut!((*phydev).mdio.dev)) }
+        unsafe { kernel::device::Device::from_raw(addr_of_mut!((*phydev).mdio.dev)) }
     }
 }
 
@@ -419,7 +414,7 @@ impl<T: Driver> Adapter<T> {
         // where we hold `phy_device->lock`, so the accessors on
         // `Device` are okay to call.
         let dev = unsafe { Device::from_raw(phydev) };
-        T::match_phy_device(dev) as i32
+        T::match_phy_device(dev).into()
     }
 
     /// # Safety
@@ -497,9 +492,9 @@ unsafe impl Sync for DriverVTable {}
 pub const fn create_phy_driver<T: Driver>() -> DriverVTable {
     // INVARIANT: All the fields of `struct phy_driver` are initialized properly.
     DriverVTable(Opaque::new(bindings::phy_driver {
-        name: T::NAME.as_char_ptr().cast_mut(),
+        name: crate::str::as_char_ptr_in_const_context(T::NAME).cast_mut(),
         flags: T::FLAGS,
-        phy_id: T::PHY_DEVICE_ID.id,
+        phy_id: T::PHY_DEVICE_ID.id(),
         phy_id_mask: T::PHY_DEVICE_ID.mask_as_int(),
         soft_reset: if T::HAS_SOFT_RESET {
             Some(Adapter::<T>::soft_reset_callback)
@@ -662,7 +657,11 @@ impl Registration {
         // the `drivers` slice are initialized properly. `drivers` will not be moved.
         // So it's just an FFI call.
         to_result(unsafe {
-            bindings::phy_drivers_register(drivers[0].0.get(), drivers.len().try_into()?, module.0)
+            bindings::phy_drivers_register(
+                drivers[0].0.get(),
+                drivers.len().try_into()?,
+                module.as_ptr(),
+            )
         })?;
         // INVARIANT: The `drivers` slice is successfully registered to the kernel via `phy_drivers_register`.
         Ok(Registration { drivers })
@@ -683,42 +682,41 @@ impl Drop for Registration {
 ///
 /// Represents the kernel's `struct mdio_device_id`. This is used to find an appropriate
 /// PHY driver.
-pub struct DeviceId {
-    id: u32,
-    mask: DeviceMask,
-}
+#[repr(transparent)]
+#[derive(Clone, Copy)]
+pub struct DeviceId(bindings::mdio_device_id);
 
 impl DeviceId {
     /// Creates a new instance with the exact match mask.
     pub const fn new_with_exact_mask(id: u32) -> Self {
-        DeviceId {
-            id,
-            mask: DeviceMask::Exact,
-        }
+        Self(bindings::mdio_device_id {
+            phy_id: id,
+            phy_id_mask: DeviceMask::Exact.as_int(),
+        })
     }
 
     /// Creates a new instance with the model match mask.
     pub const fn new_with_model_mask(id: u32) -> Self {
-        DeviceId {
-            id,
-            mask: DeviceMask::Model,
-        }
+        Self(bindings::mdio_device_id {
+            phy_id: id,
+            phy_id_mask: DeviceMask::Model.as_int(),
+        })
     }
 
     /// Creates a new instance with the vendor match mask.
     pub const fn new_with_vendor_mask(id: u32) -> Self {
-        DeviceId {
-            id,
-            mask: DeviceMask::Vendor,
-        }
+        Self(bindings::mdio_device_id {
+            phy_id: id,
+            phy_id_mask: DeviceMask::Vendor.as_int(),
+        })
     }
 
     /// Creates a new instance with a custom match mask.
     pub const fn new_with_custom_mask(id: u32, mask: u32) -> Self {
-        DeviceId {
-            id,
-            mask: DeviceMask::Custom(mask),
-        }
+        Self(bindings::mdio_device_id {
+            phy_id: id,
+            phy_id_mask: DeviceMask::Custom(mask).as_int(),
+        })
     }
 
     /// Creates a new instance from [`Driver`].
@@ -726,19 +724,27 @@ impl DeviceId {
         T::PHY_DEVICE_ID
     }
 
-    /// Get a `mask` as u32.
+    /// Get the MDIO device's PHY ID.
+    pub const fn id(&self) -> u32 {
+        self.0.phy_id
+    }
+
+    /// Get the MDIO device's match mask.
     pub const fn mask_as_int(&self) -> u32 {
-        self.mask.as_int()
+        self.0.phy_id_mask
     }
 
     // macro use only
     #[doc(hidden)]
     pub const fn mdio_device_id(&self) -> bindings::mdio_device_id {
-        bindings::mdio_device_id {
-            phy_id: self.id,
-            phy_id_mask: self.mask.as_int(),
-        }
+        self.0
     }
+}
+
+// SAFETY: `DeviceId` is a `#[repr(transparent)]` wrapper of `struct mdio_device_id`
+// and does not add additional invariants, so it's safe to transmute to `RawType`.
+unsafe impl RawDeviceId for DeviceId {
+    type RawType = bindings::mdio_device_id;
 }
 
 enum DeviceMask {
@@ -773,7 +779,6 @@ impl DeviceMask {
 ///
 /// ```
 /// # mod module_phy_driver_sample {
-/// use kernel::c_str;
 /// use kernel::net::phy::{self, DeviceId};
 /// use kernel::prelude::*;
 ///
@@ -792,68 +797,10 @@ impl DeviceMask {
 ///
 /// #[vtable]
 /// impl phy::Driver for PhySample {
-///     const NAME: &'static CStr = c_str!("PhySample");
+///     const NAME: &'static CStr = c"PhySample";
 ///     const PHY_DEVICE_ID: phy::DeviceId = phy::DeviceId::new_with_exact_mask(0x00000001);
 /// }
 /// # }
-/// ```
-///
-/// This expands to the following code:
-///
-/// ```ignore
-/// use kernel::c_str;
-/// use kernel::net::phy::{self, DeviceId};
-/// use kernel::prelude::*;
-///
-/// struct Module {
-///     _reg: ::kernel::net::phy::Registration,
-/// }
-///
-/// module! {
-///     type: Module,
-///     name: "rust_sample_phy",
-///     authors: ["Rust for Linux Contributors"],
-///     description: "Rust sample PHYs driver",
-///     license: "GPL",
-/// }
-///
-/// struct PhySample;
-///
-/// #[vtable]
-/// impl phy::Driver for PhySample {
-///     const NAME: &'static CStr = c_str!("PhySample");
-///     const PHY_DEVICE_ID: phy::DeviceId = phy::DeviceId::new_with_exact_mask(0x00000001);
-/// }
-///
-/// const _: () = {
-///     static mut DRIVERS: [::kernel::net::phy::DriverVTable; 1] =
-///         [::kernel::net::phy::create_phy_driver::<PhySample>()];
-///
-///     impl ::kernel::Module for Module {
-///         fn init(module: &'static ::kernel::ThisModule) -> Result<Self> {
-///             let drivers = unsafe { &mut DRIVERS };
-///             let mut reg = ::kernel::net::phy::Registration::register(
-///                 module,
-///                 ::core::pin::Pin::static_mut(drivers),
-///             )?;
-///             Ok(Module { _reg: reg })
-///         }
-///     }
-/// };
-///
-/// const _DEVICE_TABLE: [::kernel::bindings::mdio_device_id; 2] = [
-///     ::kernel::bindings::mdio_device_id {
-///         phy_id: 0x00000001,
-///         phy_id_mask: 0xffffffff,
-///     },
-///     ::kernel::bindings::mdio_device_id {
-///         phy_id: 0,
-///         phy_id_mask: 0,
-///     },
-/// ];
-/// #[cfg(MODULE)]
-/// #[no_mangle]
-/// static __mod_device_table__mdio__phydev: [::kernel::bindings::mdio_device_id; 2] = _DEVICE_TABLE;
 /// ```
 #[macro_export]
 macro_rules! module_phy_driver {
@@ -864,20 +811,10 @@ macro_rules! module_phy_driver {
     };
 
     (@device_table [$($dev:expr),+]) => {
-        // SAFETY: C will not read off the end of this constant since the last element is zero.
-        const _DEVICE_TABLE: [$crate::bindings::mdio_device_id;
-            $crate::module_phy_driver!(@count_devices $($dev),+) + 1] = [
-            $($dev.mdio_device_id()),+,
-            $crate::bindings::mdio_device_id {
-                phy_id: 0,
-                phy_id_mask: 0
-            }
-        ];
-
-        #[cfg(MODULE)]
-        #[no_mangle]
-        static __mod_device_table__mdio__phydev: [$crate::bindings::mdio_device_id;
-            $crate::module_phy_driver!(@count_devices $($dev),+) + 1] = _DEVICE_TABLE;
+        $crate::module_device_table!(
+            "mdio", $crate::net::phy::DeviceId,
+            TABLE, @none, [$($dev),+]
+        );
     };
 
     (drivers: [$($driver:ident),+ $(,)?], device_table: [$($dev:expr),+ $(,)?], $($f:tt)*) => {

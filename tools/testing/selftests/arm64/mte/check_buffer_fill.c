@@ -31,7 +31,7 @@ static int check_buffer_by_byte(int mem_type, int mode)
 	int i, j, item;
 	bool err;
 
-	mte_switch_mode(mode, MTE_ALLOW_NON_ZERO_TAG);
+	mte_switch_mode(mode, MTE_ALLOW_NON_ZERO_TAG, false);
 	item = ARRAY_SIZE(sizes);
 
 	for (i = 0; i < item; i++) {
@@ -41,7 +41,7 @@ static int check_buffer_by_byte(int mem_type, int mode)
 		mte_initialize_current_context(mode, (uintptr_t)ptr, sizes[i]);
 		/* Set some value in tagged memory */
 		for (j = 0; j < sizes[i]; j++)
-			ptr[j] = '1';
+			memset_safe(&ptr[j], '1', 1);
 		mte_wait_after_trig();
 		err = cur_mte_cxt.fault_valid;
 		/* Check the buffer whether it is filled. */
@@ -68,7 +68,7 @@ static int check_buffer_underflow_by_byte(int mem_type, int mode,
 	bool err;
 	char *und_ptr = NULL;
 
-	mte_switch_mode(mode, MTE_ALLOW_NON_ZERO_TAG);
+	mte_switch_mode(mode, MTE_ALLOW_NON_ZERO_TAG, false);
 	item = ARRAY_SIZE(sizes);
 	for (i = 0; i < item; i++) {
 		ptr = (char *)mte_allocate_memory_tag_range(sizes[i], mem_type, 0,
@@ -82,7 +82,7 @@ static int check_buffer_underflow_by_byte(int mem_type, int mode,
 		/* Set some value in tagged memory and make the buffer underflow */
 		for (j = sizes[i] - 1; (j >= -underflow_range) &&
 				       (!cur_mte_cxt.fault_valid); j--) {
-			ptr[j] = '1';
+			memset_safe(&ptr[j], '1', 1);
 			last_index = j;
 		}
 		mte_wait_after_trig();
@@ -164,7 +164,7 @@ static int check_buffer_overflow_by_byte(int mem_type, int mode,
 	size_t tagged_size, overflow_size;
 	char *over_ptr = NULL;
 
-	mte_switch_mode(mode, MTE_ALLOW_NON_ZERO_TAG);
+	mte_switch_mode(mode, MTE_ALLOW_NON_ZERO_TAG, false);
 	item = ARRAY_SIZE(sizes);
 	for (i = 0; i < item; i++) {
 		ptr = (char *)mte_allocate_memory_tag_range(sizes[i], mem_type, 0,
@@ -180,7 +180,7 @@ static int check_buffer_overflow_by_byte(int mem_type, int mode,
 		/* Set some value in tagged memory and make the buffer underflow */
 		for (j = 0, last_index = 0 ; (j < (sizes[i] + overflow_range)) &&
 					     (cur_mte_cxt.fault_valid == false); j++) {
-			ptr[j] = '1';
+			memset_safe(&ptr[j], '1', 1);
 			last_index = j;
 		}
 		mte_wait_after_trig();
@@ -308,8 +308,8 @@ static int check_buffer_by_block_iterate(int mem_type, int mode, size_t size)
 		result = KSFT_PASS;
 		mte_initialize_current_context(mode, (uintptr_t)dst, size);
 		/* Set some value in memory and copy*/
-		memset((void *)src, (int)'1', size);
-		memcpy((void *)dst, (void *)src, size);
+		memset_safe((void *)src, (int)'1', size);
+		memcpy_safe((void *)dst, (void *)src, size);
 		mte_wait_after_trig();
 		if (cur_mte_cxt.fault_valid) {
 			result = KSFT_FAIL;
@@ -337,7 +337,7 @@ static int check_buffer_by_block(int mem_type, int mode)
 {
 	int i, item, result = KSFT_PASS;
 
-	mte_switch_mode(mode, MTE_ALLOW_NON_ZERO_TAG);
+	mte_switch_mode(mode, MTE_ALLOW_NON_ZERO_TAG, false);
 	item = ARRAY_SIZE(sizes);
 	cur_mte_cxt.fault_valid = false;
 	for (i = 0; i < item; i++) {
@@ -368,7 +368,7 @@ static int check_memory_initial_tags(int mem_type, int mode, int mapping)
 	int run, fd;
 	int total = ARRAY_SIZE(sizes);
 
-	mte_switch_mode(mode, MTE_ALLOW_NON_ZERO_TAG);
+	mte_switch_mode(mode, MTE_ALLOW_NON_ZERO_TAG, false);
 	for (run = 0; run < total; run++) {
 		/* check initial tags for anonymous mmap */
 		ptr = (char *)mte_allocate_memory(sizes[run], mem_type, mapping, false);
@@ -406,6 +406,8 @@ int main(int argc, char *argv[])
 	size_t page_size = getpagesize();
 	int item = ARRAY_SIZE(sizes);
 
+	ksft_print_header();
+
 	sizes[item - 3] = page_size - 1;
 	sizes[item - 2] = page_size;
 	sizes[item - 1] = page_size + 1;
@@ -415,7 +417,7 @@ int main(int argc, char *argv[])
 		return err;
 
 	/* Register SIGSEGV handler */
-	mte_register_signal(SIGSEGV, mte_default_handler);
+	mte_register_signal(SIGSEGV, mte_default_handler, false);
 
 	/* Set test plan */
 	ksft_set_plan(20);

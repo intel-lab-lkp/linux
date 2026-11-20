@@ -229,7 +229,6 @@ static const struct regmap_config qrc_regmap_config = {
 	.reg_stride = 4,
 	.val_bits = 32,
 	.max_register =	0x68,
-	.fast_io = true,
 };
 
 static const struct reg_sequence msm8976_cfg_dfs_sid[] = {
@@ -291,7 +290,7 @@ static int qcom_ramp_controller_probe(struct platform_device *pdev)
 	if (IS_ERR(base))
 		return PTR_ERR(base);
 
-	qrc = devm_kmalloc(&pdev->dev, sizeof(*qrc), GFP_KERNEL);
+	qrc = devm_kmalloc_obj(&pdev->dev, *qrc);
 	if (!qrc)
 		return -ENOMEM;
 

@@ -25,7 +25,7 @@
  * Copyright (C) 2004  Chris Kennedy <c@groovy.org>
  *
  * VBI additions & cleanup:
- * Copyright (C) 2004, 2005 Hans Verkuil <hverkuil@xs4all.nl>
+ * Copyright (C) 2004, 2005 Hans Verkuil <hverkuil@kernel.org>
  *
  * Note: the saa7126 is identical to the saa7127, and the saa7128 is
  * identical to the saa7129, except that the saa7126 and saa7128 have
@@ -722,7 +722,7 @@ static int saa7127_probe(struct i2c_client *client)
 	v4l_dbg(1, debug, client, "detecting saa7127 client on address 0x%x\n",
 			client->addr << 1);
 
-	state = devm_kzalloc(&client->dev, sizeof(*state), GFP_KERNEL);
+	state = devm_kzalloc_obj(&client->dev, *state);
 	if (state == NULL)
 		return -ENOMEM;
 
@@ -797,11 +797,11 @@ static void saa7127_remove(struct i2c_client *client)
 /* ----------------------------------------------------------------------- */
 
 static const struct i2c_device_id saa7127_id[] = {
-	{ "saa7127_auto", 0 },	/* auto-detection */
-	{ "saa7126", SAA7127 },
-	{ "saa7127", SAA7127 },
-	{ "saa7128", SAA7129 },
-	{ "saa7129", SAA7129 },
+	{ .name = "saa7127_auto", .driver_data = 0 },	/* auto-detection */
+	{ .name = "saa7126", .driver_data = SAA7127 },
+	{ .name = "saa7127", .driver_data = SAA7127 },
+	{ .name = "saa7128", .driver_data = SAA7129 },
+	{ .name = "saa7129", .driver_data = SAA7129 },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, saa7127_id);

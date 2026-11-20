@@ -404,29 +404,21 @@ static int mvebu_uart_startup(struct uart_port *port)
 		ret = devm_request_irq(port->dev, mvuart->irq[UART_IRQ_SUM],
 				       mvebu_uart_isr, port->irqflags,
 				       dev_name(port->dev), port);
-		if (ret) {
-			dev_err(port->dev, "unable to request IRQ %d\n",
-				mvuart->irq[UART_IRQ_SUM]);
+		if (ret)
 			return ret;
-		}
 	} else {
 		/* New bindings with an IRQ for RX and TX (both UART) */
 		ret = devm_request_irq(port->dev, mvuart->irq[UART_RX_IRQ],
 				       mvebu_uart_rx_isr, port->irqflags,
 				       dev_name(port->dev), port);
-		if (ret) {
-			dev_err(port->dev, "unable to request IRQ %d\n",
-				mvuart->irq[UART_RX_IRQ]);
+		if (ret)
 			return ret;
-		}
 
 		ret = devm_request_irq(port->dev, mvuart->irq[UART_TX_IRQ],
 				       mvebu_uart_tx_isr, port->irqflags,
 				       dev_name(port->dev),
 				       port);
 		if (ret) {
-			dev_err(port->dev, "unable to request IRQ %d\n",
-				mvuart->irq[UART_TX_IRQ]);
 			devm_free_irq(port->dev, mvuart->irq[UART_RX_IRQ],
 				      port);
 			return ret;
@@ -921,8 +913,7 @@ static int mvebu_uart_probe(struct platform_device *pdev)
 		return PTR_ERR(port->membase);
 	port->mapbase    = reg->start;
 
-	mvuart = devm_kzalloc(&pdev->dev, sizeof(struct mvebu_uart),
-			      GFP_KERNEL);
+	mvuart = devm_kzalloc_obj(&pdev->dev, struct mvebu_uart);
 	if (!mvuart)
 		return -ENOMEM;
 
@@ -1264,14 +1255,16 @@ static unsigned long mvebu_uart_clock_recalc_rate(struct clk_hw *hw,
 	return parent_rate / uart_clock_base->div;
 }
 
-static long mvebu_uart_clock_round_rate(struct clk_hw *hw, unsigned long rate,
-					unsigned long *parent_rate)
+static int mvebu_uart_clock_determine_rate(struct clk_hw *hw,
+					   struct clk_rate_request *req)
 {
 	struct mvebu_uart_clock *uart_clock = to_uart_clock(hw);
 	struct mvebu_uart_clock_base *uart_clock_base =
 						to_uart_clock_base(uart_clock);
 
-	return *parent_rate / uart_clock_base->div;
+	req->rate = req->best_parent_rate / uart_clock_base->div;
+
+	return 0;
 }
 
 static int mvebu_uart_clock_set_rate(struct clk_hw *hw, unsigned long rate,
@@ -1293,7 +1286,7 @@ static const struct clk_ops mvebu_uart_clock_ops = {
 	.is_enabled = mvebu_uart_clock_is_enabled,
 	.save_context = mvebu_uart_clock_save_context,
 	.restore_context = mvebu_uart_clock_restore_context,
-	.round_rate = mvebu_uart_clock_round_rate,
+	.determine_rate = mvebu_uart_clock_determine_rate,
 	.set_rate = mvebu_uart_clock_set_rate,
 	.recalc_rate = mvebu_uart_clock_recalc_rate,
 };
@@ -1336,9 +1329,7 @@ static int mvebu_uart_clock_probe(struct platform_device *pdev)
 	BUILD_BUG_ON(ARRAY_SIZE(parent_clk_names) !=
 		     ARRAY_SIZE(uart_clock_base->parent_rates));
 
-	uart_clock_base = devm_kzalloc(dev,
-				       sizeof(*uart_clock_base),
-				       GFP_KERNEL);
+	uart_clock_base = devm_kzalloc_obj(dev, *uart_clock_base);
 	if (!uart_clock_base)
 		return -ENOMEM;
 
@@ -1380,10 +1371,8 @@ static int mvebu_uart_clock_probe(struct platform_device *pdev)
 	if (!uart_clock_base->reg2)
 		return -ENOMEM;
 
-	hw_clk_data = devm_kzalloc(dev,
-				   struct_size(hw_clk_data, hws,
-					       ARRAY_SIZE(uart_clk_names)),
-				   GFP_KERNEL);
+	hw_clk_data = devm_kzalloc_flex(dev, *hw_clk_data, hws,
+					ARRAY_SIZE(uart_clk_names));
 	if (!hw_clk_data)
 		return -ENOMEM;
 

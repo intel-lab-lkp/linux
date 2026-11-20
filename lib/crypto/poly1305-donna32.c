@@ -6,9 +6,10 @@
  * public domain.
  */
 
+#include <crypto/internal/poly1305.h>
+#include <linux/export.h>
 #include <linux/kernel.h>
 #include <linux/unaligned.h>
-#include <crypto/internal/poly1305.h>
 
 void poly1305_core_setkey(struct poly1305_core_key *key,
 			  const u8 raw_key[POLY1305_BLOCK_SIZE])
@@ -30,7 +31,7 @@ EXPORT_SYMBOL(poly1305_core_setkey);
 
 void poly1305_core_blocks(struct poly1305_state *state,
 			  const struct poly1305_core_key *key, const void *src,
-			  unsigned int nblocks, u32 hibit)
+			  size_t nblocks, u32 hibit)
 {
 	const u8 *input = src;
 	u32 r0, r1, r2, r3, r4;

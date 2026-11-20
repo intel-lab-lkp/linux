@@ -64,7 +64,7 @@ static ssize_t pwm_auto_point_temp_show(struct device *dev,
 		return ret;
 
 	ret = regs[0] | regs[1] << 8;
-	return sprintf(buf, "%d\n", ret * 10);
+	return sprintf(buf, "%d\n", ret * 100);
 }
 
 static ssize_t pwm_auto_point_temp_store(struct device *dev,
@@ -99,7 +99,7 @@ static ssize_t pwm_auto_point_pwm_show(struct device *dev,
 {
 	struct sensor_device_attribute *attr = to_sensor_dev_attr(devattr);
 
-	return sprintf(buf, "%d\n", 255 * (50 + (attr->index * 10)));
+	return sprintf(buf, "%d\n", 255 * (50 + (attr->index * 10)) / 100);
 }
 
 static SENSOR_DEVICE_ATTR_RO(pwm1_auto_point1_pwm, pwm_auto_point_pwm, 0);
@@ -248,8 +248,7 @@ gsc_hwmon_get_devtree_pdata(struct device *dev)
 	if (nchannels == 0)
 		return ERR_PTR(-ENODEV);
 
-	pdata = devm_kzalloc(dev, struct_size(pdata, channels, nchannels),
-			     GFP_KERNEL);
+	pdata = devm_kzalloc_flex(dev, *pdata, channels, nchannels);
 	if (!pdata)
 		return ERR_PTR(-ENOMEM);
 	pdata->nchannels = nchannels;
@@ -314,7 +313,7 @@ static int gsc_hwmon_probe(struct platform_device *pdev)
 			return PTR_ERR(pdata);
 	}
 
-	hwmon = devm_kzalloc(dev, sizeof(*hwmon), GFP_KERNEL);
+	hwmon = devm_kzalloc_obj(dev, *hwmon);
 	if (!hwmon)
 		return -ENOMEM;
 	hwmon->gsc = gsc;

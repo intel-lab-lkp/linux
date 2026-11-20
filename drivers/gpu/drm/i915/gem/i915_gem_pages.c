@@ -3,8 +3,10 @@
  * Copyright © 2014-2016 Intel Corporation
  */
 
-#include <drm/drm_cache.h>
 #include <linux/vmalloc.h>
+
+#include <drm/drm_cache.h>
+#include <drm/drm_print.h>
 
 #include "gt/intel_gt.h"
 #include "gt/intel_tlb.h"
@@ -309,7 +311,7 @@ static void *i915_gem_object_map_page(struct drm_i915_gem_object *obj,
 
 	if (n_pages > ARRAY_SIZE(stack)) {
 		/* Too big for stack -- allocate temporary array instead */
-		pages = kvmalloc_array(n_pages, sizeof(*pages), GFP_KERNEL);
+		pages = kvmalloc_objs(*pages, n_pages);
 		if (!pages)
 			return ERR_PTR(-ENOMEM);
 	}
@@ -339,7 +341,7 @@ static void *i915_gem_object_map_pfn(struct drm_i915_gem_object *obj,
 
 	if (n_pfn > ARRAY_SIZE(stack)) {
 		/* Too big for stack -- allocate temporary array instead */
-		pfns = kvmalloc_array(n_pfn, sizeof(*pfns), GFP_KERNEL);
+		pfns = kvmalloc_objs(*pfns, n_pfn);
 		if (!pfns)
 			return ERR_PTR(-ENOMEM);
 	}
@@ -637,7 +639,7 @@ __i915_gem_object_get_page(struct drm_i915_gem_object *obj, pgoff_t n)
 	GEM_BUG_ON(!i915_gem_object_has_struct_page(obj));
 
 	sg = i915_gem_object_get_sg(obj, n, &offset);
-	return nth_page(sg_page(sg), offset);
+	return sg_page(sg) + offset;
 }
 
 /* Like i915_gem_object_get_page(), but mark the returned page dirty */

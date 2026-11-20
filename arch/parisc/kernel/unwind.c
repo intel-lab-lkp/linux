@@ -14,6 +14,7 @@
 #include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/sort.h>
+#include <linux/bsearch.h>
 #include <linux/sched/task_stack.h>
 
 #include <linux/uaccess.h>
@@ -35,6 +36,8 @@
 
 #define KERNEL_START (KERNEL_BINARY_TEXT_START)
 
+#define ALIGNMENT_OK(ptr, type) (((ptr) & (sizeof(type) - 1)) == 0)
+
 extern struct unwind_table_entry __start___unwind[];
 extern struct unwind_table_entry __stop___unwind[];
 
@@ -47,27 +50,23 @@ static DEFINE_SPINLOCK(unwind_lock);
 static struct unwind_table kernel_unwind_table __ro_after_init;
 static LIST_HEAD(unwind_tables);
 
+static int cmp_unwind_entry(const void *key, const void *elt)
+{
+	unsigned long addr = (unsigned long)key;
+	const struct unwind_table_entry *e = elt;
+
+	if (addr < e->region_start)
+		return -1;
+	if (addr > e->region_end)
+		return 1;
+	return 0;
+}
+
 static inline const struct unwind_table_entry *
 find_unwind_entry_in_table(const struct unwind_table *table, unsigned long addr)
 {
-	const struct unwind_table_entry *e = NULL;
-	unsigned long lo, hi, mid;
-
-	lo = 0; 
-	hi = table->length - 1; 
-	
-	while (lo <= hi) {
-		mid = (hi - lo) / 2 + lo;
-		e = &table->table[mid];
-		if (addr < e->region_start)
-			hi = mid - 1;
-		else if (addr > e->region_end)
-			lo = mid + 1;
-		else
-			return e;
-	}
-
-	return NULL;
+	return bsearch((void *)addr, table->table, table->length,
+		       sizeof(*table->table), cmp_unwind_entry);
 }
 
 static const struct unwind_table_entry *
@@ -155,7 +154,7 @@ unwind_table_add(const char *name, unsigned long base_addr,
 
 	unwind_table_sort(s, e);
 
-	table = kmalloc(sizeof(struct unwind_table), GFP_USER);
+	table = kmalloc_obj(struct unwind_table, GFP_USER);
 	if (table == NULL)
 		return NULL;
 	unwind_table_init(table, name, base_addr, gp, start, end);
@@ -257,12 +256,15 @@ static int unwind_special(struct unwind_frame_info *info, unsigned long pc, int 
 	if (pc_is_kernel_fn(pc, _switch_to) ||
 	    pc == (unsigned long)&_switch_to_ret) {
 		info->prev_sp = info->sp - CALLEE_SAVE_FRAME_SIZE;
-		info->prev_ip = *(unsigned long *)(info->prev_sp - RP_OFFSET);
+		if (ALIGNMENT_OK(info->prev_sp, long))
+			info->prev_ip = *(unsigned long *)(info->prev_sp - RP_OFFSET);
+		else
+			info->prev_ip = info->prev_sp = 0;
 		return 1;
 	}
 
 #ifdef CONFIG_IRQSTACKS
-	if (pc == (unsigned long)&_call_on_stack) {
+	if (pc == (unsigned long)&_call_on_stack && ALIGNMENT_OK(info->sp, long)) {
 		info->prev_sp = *(unsigned long *)(info->sp - FRAME_SIZE - REG_SZ);
 		info->prev_ip = *(unsigned long *)(info->sp - FRAME_SIZE - RP_OFFSET);
 		return 1;
@@ -370,8 +372,10 @@ static void unwind_frame_regs(struct unwind_frame_info *info)
 			info->prev_sp = info->sp - frame_size;
 			if (e->Millicode)
 				info->rp = info->r31;
-			else if (rpoffset)
+			else if (rpoffset && ALIGNMENT_OK(info->prev_sp, long))
 				info->rp = *(unsigned long *)(info->prev_sp - rpoffset);
+			else
+				info->rp = 0;
 			info->prev_ip = info->rp;
 			info->rp = 0;
 		}
@@ -401,7 +405,7 @@ void unwind_frame_init_from_blocked_task(struct unwind_frame_info *info, struct 
 	struct pt_regs *r = &t->thread.regs;
 	struct pt_regs *r2;
 
-	r2 = kmalloc(sizeof(struct pt_regs), GFP_ATOMIC);
+	r2 = kmalloc_obj(struct pt_regs, GFP_ATOMIC);
 	if (!r2)
 		return;
 	*r2 = *r;

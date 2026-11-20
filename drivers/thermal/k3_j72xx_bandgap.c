@@ -20,6 +20,8 @@
 #include <linux/delay.h>
 #include <linux/slab.h>
 
+#include "thermal_hwmon.h"
+
 #define K3_VTM_DEVINFO_PWR0_OFFSET		0x4
 #define K3_VTM_DEVINFO_PWR0_TEMPSENS_CT_MASK	0xf0
 #define K3_VTM_TMPSENS0_CTRL_OFFSET		0x300
@@ -400,7 +402,7 @@ static int k3_j72xx_bandgap_probe(struct platform_device *pdev)
 		-1157800000000,
 	};
 
-	bgp = devm_kzalloc(&pdev->dev, sizeof(*bgp), GFP_KERNEL);
+	bgp = devm_kzalloc_obj(&pdev->dev, *bgp);
 	if (!bgp)
 		return -ENOMEM;
 
@@ -454,20 +456,19 @@ static int k3_j72xx_bandgap_probe(struct platform_device *pdev)
 	bgp->cnt = val & K3_VTM_DEVINFO_PWR0_TEMPSENS_CT_MASK;
 	bgp->cnt >>= __ffs(K3_VTM_DEVINFO_PWR0_TEMPSENS_CT_MASK);
 
-	data = devm_kcalloc(bgp->dev, bgp->cnt, sizeof(*data), GFP_KERNEL);
+	data = devm_kzalloc_objs(bgp->dev, *data, bgp->cnt);
 	if (!data) {
 		ret = -ENOMEM;
 		goto err_alloc;
 	}
 
-	ref_table = kcalloc(TABLE_SIZE, sizeof(*ref_table), GFP_KERNEL);
+	ref_table = kzalloc_objs(*ref_table, TABLE_SIZE);
 	if (!ref_table) {
 		ret = -ENOMEM;
 		goto err_alloc;
 	}
 
-	derived_table = devm_kcalloc(bgp->dev, TABLE_SIZE, sizeof(*derived_table),
-				     GFP_KERNEL);
+	derived_table = devm_kzalloc_objs(bgp->dev, *derived_table, TABLE_SIZE);
 	if (!derived_table) {
 		ret = -ENOMEM;
 		goto err_free_ref_table;
@@ -513,6 +514,8 @@ static int k3_j72xx_bandgap_probe(struct platform_device *pdev)
 			ret = PTR_ERR(ti_thermal);
 			goto err_free_ref_table;
 		}
+
+		devm_thermal_add_hwmon_sysfs(bgp->dev, ti_thermal);
 	}
 
 	platform_set_drvdata(pdev, bgp);

@@ -86,7 +86,7 @@ static int mtk_ccifreq_set_voltage(struct mtk_ccifreq_drv *drv, int new_voltage)
 						      soc_data->sram_max_volt);
 				return ret;
 			}
-		} else if (pre_voltage > new_voltage) {
+		} else {
 			voltage = max(new_voltage,
 				      pre_vsram - soc_data->max_volt_shift);
 			ret = regulator_set_voltage(drv->proc_reg, voltage,
@@ -255,7 +255,7 @@ static int mtk_ccifreq_probe(struct platform_device *pdev)
 	unsigned long rate, opp_volt;
 	int ret;
 
-	drv = devm_kzalloc(dev, sizeof(*drv), GFP_KERNEL);
+	drv = devm_kzalloc_obj(dev, *drv);
 	if (!drv)
 		return -ENOMEM;
 
@@ -352,7 +352,7 @@ static int mtk_ccifreq_probe(struct platform_device *pdev)
 		goto out_remove_opp_table;
 	}
 
-	passive_data = devm_kzalloc(dev, sizeof(*passive_data), GFP_KERNEL);
+	passive_data = devm_kzalloc_obj(dev, *passive_data);
 	if (!passive_data) {
 		ret = -ENOMEM;
 		goto out_remove_opp_table;
@@ -386,7 +386,8 @@ out_disable_cci_clk:
 out_free_resources:
 	if (regulator_is_enabled(drv->proc_reg))
 		regulator_disable(drv->proc_reg);
-	if (drv->sram_reg && regulator_is_enabled(drv->sram_reg))
+	if (!IS_ERR_OR_NULL(drv->sram_reg) &&
+	    regulator_is_enabled(drv->sram_reg))
 		regulator_disable(drv->sram_reg);
 
 	return ret;

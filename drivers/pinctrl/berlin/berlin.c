@@ -204,6 +204,7 @@ static int berlin_pinctrl_build_state(struct platform_device *pdev)
 	const struct berlin_desc_group *desc_group;
 	const struct berlin_desc_function *desc_function;
 	int i, max_functions = 0;
+	struct pinfunction *new_functions;
 
 	pctrl->nfunctions = 0;
 
@@ -214,7 +215,7 @@ static int berlin_pinctrl_build_state(struct platform_device *pdev)
 	}
 
 	/* we will reallocate later */
-	pctrl->functions = kcalloc(max_functions, sizeof(*pctrl->functions), GFP_KERNEL);
+	pctrl->functions = kzalloc_objs(*pctrl->functions, max_functions);
 	if (!pctrl->functions)
 		return -ENOMEM;
 
@@ -229,12 +230,15 @@ static int berlin_pinctrl_build_state(struct platform_device *pdev)
 		}
 	}
 
-	pctrl->functions = krealloc(pctrl->functions,
+	new_functions = krealloc(pctrl->functions,
 				    pctrl->nfunctions * sizeof(*pctrl->functions),
 				    GFP_KERNEL);
-	if (!pctrl->functions)
+	if (!new_functions) {
+		kfree(pctrl->functions);
 		return -ENOMEM;
+	}
 
+	pctrl->functions = new_functions;
 	/* map functions to theirs groups */
 	for (i = 0; i < pctrl->desc->ngroups; i++) {
 		desc_group = pctrl->desc->groups + i;
@@ -260,10 +264,9 @@ static int berlin_pinctrl_build_state(struct platform_device *pdev)
 
 			if (!function->groups) {
 				function->groups =
-					devm_kcalloc(&pdev->dev,
-						     function->ngroups,
-						     sizeof(*function->groups),
-						     GFP_KERNEL);
+					devm_kzalloc_objs(&pdev->dev,
+							  *function->groups,
+							  function->ngroups);
 				if (!function->groups) {
 					kfree(pctrl->functions);
 					return -ENOMEM;
@@ -283,7 +286,7 @@ static int berlin_pinctrl_build_state(struct platform_device *pdev)
 	return 0;
 }
 
-static struct pinctrl_desc berlin_pctrl_desc = {
+static const struct pinctrl_desc berlin_pctrl_desc = {
 	.name		= "berlin-pinctrl",
 	.pctlops	= &berlin_pinctrl_ops,
 	.pmxops		= &berlin_pinmux_ops,
@@ -298,7 +301,7 @@ int berlin_pinctrl_probe_regmap(struct platform_device *pdev,
 	struct berlin_pinctrl *pctrl;
 	int ret;
 
-	pctrl = devm_kzalloc(dev, sizeof(*pctrl), GFP_KERNEL);
+	pctrl = devm_kzalloc_obj(dev, *pctrl);
 	if (!pctrl)
 		return -ENOMEM;
 

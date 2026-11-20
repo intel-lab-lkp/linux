@@ -149,6 +149,7 @@ static int rxrpc_service_prealloc_one(struct rxrpc_sock *rx,
 
 id_in_use:
 	write_unlock(&rx->call_lock);
+	rxrpc_prefail_call(call, RXRPC_CALL_LOCAL_ERROR, -EBADSLT);
 	rxrpc_cleanup_call(call);
 	_leave(" = -EBADSLT");
 	return -EBADSLT;
@@ -163,7 +164,7 @@ int rxrpc_service_prealloc(struct rxrpc_sock *rx, gfp_t gfp)
 	struct rxrpc_backlog *b = rx->backlog;
 
 	if (!b) {
-		b = kzalloc(sizeof(struct rxrpc_backlog), gfp);
+		b = kzalloc_obj(struct rxrpc_backlog, gfp);
 		if (!b)
 			return -ENOMEM;
 		rx->backlog = b;
@@ -218,6 +219,7 @@ void rxrpc_discard_prealloc(struct rxrpc_sock *rx)
 	tail = b->call_backlog_tail;
 	while (CIRC_CNT(head, tail, size) > 0) {
 		struct rxrpc_call *call = b->call_backlog[tail];
+		rxrpc_see_call(call, rxrpc_call_see_discard);
 		rcu_assign_pointer(call->socket, rx);
 		if (rx->app_ops &&
 		    rx->app_ops->discard_new_call) {
@@ -253,6 +255,9 @@ static struct rxrpc_call *rxrpc_alloc_incoming_call(struct rxrpc_sock *rx,
 	unsigned short call_head, conn_head, peer_head;
 	unsigned short call_tail, conn_tail, peer_tail;
 	unsigned short call_count, conn_count;
+
+	if (!b)
+		return NULL;
 
 	/* #calls >= #conns >= #peers must hold true. */
 	call_head = smp_load_acquire(&b->call_backlog_head);
@@ -369,8 +374,8 @@ bool rxrpc_new_incoming_call(struct rxrpc_local *local,
 	spin_lock(&rx->incoming_lock);
 	if (rx->sk.sk_state == RXRPC_SERVER_LISTEN_DISABLED ||
 	    rx->sk.sk_state == RXRPC_CLOSE) {
-		rxrpc_direct_abort(skb, rxrpc_abort_shut_down,
-				   RX_INVALID_OPERATION, -ESHUTDOWN);
+		rxrpc_direct_conn_abort(skb, rxrpc_abort_shut_down,
+					RX_INVALID_OPERATION, -ESHUTDOWN);
 		goto no_call;
 	}
 
@@ -402,6 +407,7 @@ bool rxrpc_new_incoming_call(struct rxrpc_local *local,
 
 	spin_unlock(&rx->incoming_lock);
 	read_unlock_irq(&local->services_lock);
+	rxrpc_assess_MTU_size(local, call->peer);
 
 	if (hlist_unhashed(&call->error_link)) {
 		spin_lock_irq(&call->peer->lock);
@@ -416,12 +422,12 @@ bool rxrpc_new_incoming_call(struct rxrpc_local *local,
 
 unsupported_service:
 	read_unlock_irq(&local->services_lock);
-	return rxrpc_direct_abort(skb, rxrpc_abort_service_not_offered,
-				  RX_INVALID_OPERATION, -EOPNOTSUPP);
+	return rxrpc_direct_conn_abort(skb, rxrpc_abort_service_not_offered,
+				       RX_INVALID_OPERATION, -EOPNOTSUPP);
 unsupported_security:
 	read_unlock_irq(&local->services_lock);
-	return rxrpc_direct_abort(skb, rxrpc_abort_service_not_offered,
-				  RX_INVALID_OPERATION, -EKEYREJECTED);
+	return rxrpc_direct_conn_abort(skb, rxrpc_abort_service_not_offered,
+				       RX_INVALID_OPERATION, -EKEYREJECTED);
 no_call:
 	spin_unlock(&rx->incoming_lock);
 	read_unlock_irq(&local->services_lock);
@@ -465,13 +471,26 @@ int rxrpc_kernel_charge_accept(struct socket *sock, rxrpc_notify_rx_t notify_rx,
 			       unsigned long user_call_ID, gfp_t gfp,
 			       unsigned int debug_id)
 {
-	struct rxrpc_sock *rx = rxrpc_sk(sock->sk);
-	struct rxrpc_backlog *b = rx->backlog;
+	struct rxrpc_backlog *b;
+	struct rxrpc_sock *rx;
+	struct sock *sk;
+	int ret;
 
-	if (sock->sk->sk_state == RXRPC_CLOSE)
-		return -ESHUTDOWN;
+	sk = sock->sk;
+	rx = rxrpc_sk(sk);
 
-	return rxrpc_service_prealloc_one(rx, b, notify_rx, user_call_ID,
-					  gfp, debug_id);
+	lock_sock(sk);
+	if (sk->sk_state != RXRPC_SERVER_LISTENING || !rx->backlog) {
+		ret = -ESHUTDOWN;
+		goto out;
+	}
+
+	b = rx->backlog;
+	ret = rxrpc_service_prealloc_one(rx, b, notify_rx, user_call_ID,
+					 gfp, debug_id);
+
+out:
+	release_sock(sk);
+	return ret;
 }
 EXPORT_SYMBOL(rxrpc_kernel_charge_accept);

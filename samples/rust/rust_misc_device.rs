@@ -95,19 +95,38 @@
 //! }
 //! ```
 
-use core::pin::Pin;
-
 use kernel::{
-    c_str,
     device::Device,
-    fs::File,
-    ioctl::{_IO, _IOC_SIZE, _IOR, _IOW},
-    miscdevice::{MiscDevice, MiscDeviceOptions, MiscDeviceRegistration},
+    fs::{
+        File,
+        Kiocb, //
+    },
+    ioctl::{
+        _IO,
+        _IOC_SIZE,
+        _IOR,
+        _IOW, //
+    },
+    iov::{
+        IovIterDest,
+        IovIterSource, //
+    },
+    miscdevice::{
+        MiscDevice,
+        MiscDeviceOptions,
+        MiscDeviceRegistration, //
+    },
     new_mutex,
     prelude::*,
-    sync::Mutex,
-    types::ARef,
-    uaccess::{UserSlice, UserSliceReader, UserSliceWriter},
+    sync::{
+        aref::ARef,
+        Mutex, //
+    },
+    uaccess::{
+        UserSlice,
+        UserSliceReader,
+        UserSliceWriter, //
+    },
 };
 
 const RUST_MISC_DEV_HELLO: u32 = _IO('|' as u32, 0x80);
@@ -133,21 +152,31 @@ impl kernel::InPlaceModule for RustMiscDeviceModule {
         pr_info!("Initialising Rust Misc Device Sample\n");
 
         let options = MiscDeviceOptions {
-            name: c_str!("rust-misc-device"),
+            name: c"rust-misc-device",
         };
 
         try_pin_init!(Self {
-            _miscdev <- MiscDeviceRegistration::register(options),
+            // SAFETY: `_miscdev` is stored in `RustMiscDeviceModule` and dropped when the module
+            // is unloaded; `mem::forget()` is never called on it.
+            _miscdev <- unsafe {
+                MiscDeviceRegistration::register(options, try_pin_init!(RustMiscDevice {}))
+            },
         })
     }
 }
 
 struct Inner {
     value: i32,
+    buffer: KVVec<u8>,
 }
 
+/// Data shared by all open files for the same instance of this miscdevice.
+#[pin_data]
+struct RustMiscDevice {}
+
+/// Data that is stored per file for this miscdevice.
 #[pin_data(PinnedDrop)]
-struct RustMiscDevice {
+struct RustMiscDeviceFile {
     #[pin]
     inner: Mutex<Inner>,
     dev: ARef<Device>,
@@ -155,17 +184,20 @@ struct RustMiscDevice {
 
 #[vtable]
 impl MiscDevice for RustMiscDevice {
-    type Ptr = Pin<KBox<Self>>;
+    type File = Pin<KBox<RustMiscDeviceFile>>;
 
-    fn open(_file: &File, misc: &MiscDeviceRegistration<Self>) -> Result<Pin<KBox<Self>>> {
+    fn open(_file: &File, misc: &MiscDeviceRegistration<Self>) -> Result<Self::File> {
         let dev = ARef::from(misc.device());
 
         dev_info!(dev, "Opening Rust Misc Device Sample\n");
 
         KBox::try_pin_init(
             try_pin_init! {
-                RustMiscDevice {
-                    inner <- new_mutex!( Inner{ value: 0_i32 } ),
+                RustMiscDeviceFile {
+                    inner <- new_mutex!(Inner {
+                        value: 0_i32,
+                        buffer: KVVec::new(),
+                    }),
                     dev: dev,
                 }
             },
@@ -173,9 +205,38 @@ impl MiscDevice for RustMiscDevice {
         )
     }
 
-    fn ioctl(me: Pin<&RustMiscDevice>, _file: &File, cmd: u32, arg: usize) -> Result<isize> {
+    fn read_iter(mut kiocb: Kiocb<'_, Self::File>, iov: &mut IovIterDest<'_>) -> Result<usize> {
+        let me = kiocb.file();
+        dev_info!(me.dev, "Reading from Rust Misc Device Sample\n");
+
+        let inner = me.inner.lock();
+        // Read the buffer contents, taking the file position into account.
+        let read = iov.simple_read_from_buffer(kiocb.ki_pos_mut(), &inner.buffer)?;
+
+        Ok(read)
+    }
+
+    fn write_iter(mut kiocb: Kiocb<'_, Self::File>, iov: &mut IovIterSource<'_>) -> Result<usize> {
+        let me = kiocb.file();
+        dev_info!(me.dev, "Writing to Rust Misc Device Sample\n");
+
+        let mut inner = me.inner.lock();
+
+        // Replace buffer contents.
+        inner.buffer.clear();
+        let len = iov.copy_from_iter_vec(&mut inner.buffer, GFP_KERNEL)?;
+
+        // Set position to zero so that future `read` calls will see the new contents.
+        *kiocb.ki_pos_mut() = 0;
+
+        Ok(len)
+    }
+
+    fn ioctl(me: Pin<&RustMiscDeviceFile>, _file: &File, cmd: u32, arg: usize) -> Result<isize> {
         dev_info!(me.dev, "IOCTLing Rust Misc Device Sample\n");
 
+        // Treat the ioctl argument as a user pointer.
+        let arg = UserPtr::from_addr(arg);
         let size = _IOC_SIZE(cmd);
 
         match cmd {
@@ -193,13 +254,13 @@ impl MiscDevice for RustMiscDevice {
 }
 
 #[pinned_drop]
-impl PinnedDrop for RustMiscDevice {
+impl PinnedDrop for RustMiscDeviceFile {
     fn drop(self: Pin<&mut Self>) {
         dev_info!(self.dev, "Exiting the Rust Misc Device Sample\n");
     }
 }
 
-impl RustMiscDevice {
+impl RustMiscDeviceFile {
     fn set_value(&self, mut reader: UserSliceReader) -> Result<isize> {
         let new_value = reader.read::<i32>()?;
         let mut guard = self.inner.lock();

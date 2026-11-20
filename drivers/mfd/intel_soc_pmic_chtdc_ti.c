@@ -82,6 +82,8 @@ static const struct regmap_config chtdc_ti_regmap_config = {
 	.reg_bits = 8,
 	.val_bits = 8,
 	.max_register = 0xff,
+	/* The hardware does not support reading multiple registers at once */
+	.use_single_read = true,
 };
 
 static const struct regmap_irq chtdc_ti_irqs[] = {
@@ -109,7 +111,7 @@ static int chtdc_ti_probe(struct i2c_client *i2c)
 	struct intel_soc_pmic *pmic;
 	int ret;
 
-	pmic = devm_kzalloc(dev, sizeof(*pmic), GFP_KERNEL);
+	pmic = devm_kzalloc_obj(dev, *pmic);
 	if (!pmic)
 		return -ENOMEM;
 

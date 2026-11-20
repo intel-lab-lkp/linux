@@ -90,7 +90,7 @@ static int tng_gpio_get(struct gpio_chip *chip, unsigned int offset)
 	return !!(readl(gplr) & BIT(shift));
 }
 
-static void tng_gpio_set(struct gpio_chip *chip, unsigned int offset, int value)
+static int tng_gpio_set(struct gpio_chip *chip, unsigned int offset, int value)
 {
 	struct tng_gpio *priv = gpiochip_get_data(chip);
 	void __iomem *reg;
@@ -101,6 +101,8 @@ static void tng_gpio_set(struct gpio_chip *chip, unsigned int offset, int value)
 	guard(raw_spinlock_irqsave)(&priv->lock);
 
 	writel(BIT(shift), reg);
+
+	return 0;
 }
 
 static int tng_gpio_direction_input(struct gpio_chip *chip, unsigned int offset)
@@ -417,7 +419,7 @@ int devm_tng_gpio_probe(struct device *dev, struct tng_gpio *gpio)
 	struct gpio_irq_chip *girq;
 	int ret;
 
-	gpio->ctx = devm_kcalloc(dev, nctx, sizeof(*gpio->ctx), GFP_KERNEL);
+	gpio->ctx = devm_kzalloc_objs(dev, *gpio->ctx, nctx);
 	if (!gpio->ctx)
 		return -ENOMEM;
 
@@ -443,8 +445,8 @@ int devm_tng_gpio_probe(struct device *dev, struct tng_gpio *gpio)
 	girq->init_hw = tng_irq_init_hw;
 	girq->parent_handler = tng_irq_handler;
 	girq->num_parents = 1;
-	girq->parents = devm_kcalloc(dev, girq->num_parents,
-				     sizeof(*girq->parents), GFP_KERNEL);
+	girq->parents = devm_kzalloc_objs(dev, *girq->parents,
+					  girq->num_parents);
 	if (!girq->parents)
 		return -ENOMEM;
 

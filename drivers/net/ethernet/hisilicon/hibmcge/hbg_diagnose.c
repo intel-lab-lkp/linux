@@ -156,6 +156,7 @@ static const struct hbg_push_stats_info hbg_push_stats_list[] = {
 	HBG_PUSH_STATS_I(tx_drop_cnt, 84),
 	HBG_PUSH_STATS_I(tx_excessive_length_drop_cnt, 85),
 	HBG_PUSH_STATS_I(tx_dma_err_cnt, 86),
+	HBG_PUSH_STATS_I(reset_fail_cnt, 87),
 };
 
 static int hbg_push_msg_send(struct hbg_priv *priv,
@@ -251,7 +252,7 @@ static int hbg_push_irq_cnt(struct hbg_priv *priv)
 	u64 *data;
 	int ret;
 
-	data = kcalloc(data_num, sizeof(u64), GFP_KERNEL);
+	data = kzalloc_objs(u64, data_num);
 	if (!data)
 		return -ENOMEM;
 
@@ -295,7 +296,7 @@ static int hbg_push_stats(struct hbg_priv *priv)
 	u64 *data;
 	int ret;
 
-	data = kcalloc(data_num, sizeof(u64), GFP_KERNEL);
+	data = kzalloc_objs(u64, data_num);
 	if (!data)
 		return -ENOMEM;
 

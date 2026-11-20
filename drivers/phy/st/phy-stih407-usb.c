@@ -94,7 +94,7 @@ static int stih407_usb2_picophy_probe(struct platform_device *pdev)
 	unsigned int syscon_args[2];
 	struct phy *phy;
 
-	phy_dev = devm_kzalloc(dev, sizeof(*phy_dev), GFP_KERNEL);
+	phy_dev = devm_kzalloc_obj(dev, *phy_dev);
 	if (!phy_dev)
 		return -ENOMEM;
 
@@ -138,8 +138,6 @@ static int stih407_usb2_picophy_probe(struct platform_device *pdev)
 	phy_provider = devm_of_phy_provider_register(dev, of_phy_simple_xlate);
 	if (IS_ERR(phy_provider))
 		return PTR_ERR(phy_provider);
-
-	dev_info(dev, "STiH407 USB Generic picoPHY driver probed!");
 
 	return 0;
 }

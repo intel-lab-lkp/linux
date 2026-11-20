@@ -13,6 +13,7 @@
 #include <net/genetlink.h>
 #include <linux/socket.h>
 #include <linux/workqueue.h>
+#include <linux/overflow.h>
 
 #include "vfs_cache.h"
 #include "transport_ipc.h"
@@ -55,7 +56,7 @@ static bool ksmbd_ipc_validate_version(struct genl_info *m)
 struct ksmbd_ipc_msg {
 	unsigned int		type;
 	unsigned int		sz;
-	unsigned char		payload[];
+	unsigned char		payload[] __counted_by(sz);
 };
 
 struct ipc_msg_table_entry {
@@ -242,9 +243,8 @@ static void ipc_update_last_active(void)
 static struct ksmbd_ipc_msg *ipc_msg_alloc(size_t sz)
 {
 	struct ksmbd_ipc_msg *msg;
-	size_t msg_sz = sz + sizeof(struct ksmbd_ipc_msg);
 
-	msg = kvzalloc(msg_sz, KSMBD_DEFAULT_GFP);
+	msg = kvzalloc_flex(*msg, payload, sz, KSMBD_DEFAULT_GFP);
 	if (msg)
 		msg->sz = sz;
 	return msg;
@@ -263,9 +263,15 @@ static void ipc_msg_handle_free(int handle)
 
 static int handle_response(int type, void *payload, size_t sz)
 {
-	unsigned int handle = *(unsigned int *)payload;
+	unsigned int handle;
 	struct ipc_msg_table_entry *entry;
 	int ret = 0;
+
+	/* Prevent 4-byte read beyond declared payload size */
+	if (sz < sizeof(unsigned int))
+		return -EINVAL;
+
+	handle = *(unsigned int *)payload;
 
 	ipc_update_last_active();
 	down_read(&ipc_msg_table_lock);
@@ -316,6 +322,15 @@ static int ipc_server_config_on_startup(struct ksmbd_startup_request *req)
 		goto out;
 	}
 	server_conf.share_fake_fscaps = req->share_fake_fscaps;
+
+	/* AAPL model string for Finder icon */
+	if (req->aapl_model[0])
+		strscpy(server_conf.aapl_model, req->aapl_model,
+			sizeof(server_conf.aapl_model));
+	else
+		strscpy(server_conf.aapl_model, "Xserve",
+			sizeof(server_conf.aapl_model));
+
 	ksmbd_init_domain(req->sub_auth);
 
 	if (req->smb2_max_read)
@@ -334,6 +349,16 @@ static int ipc_server_config_on_startup(struct ksmbd_startup_request *req)
 
 	if (req->max_connections)
 		server_conf.max_connections = req->max_connections;
+
+	if (req->max_ip_connections)
+		server_conf.max_ip_connections = req->max_ip_connections;
+
+	if (req->max_sessions_per_connection)
+		server_conf.max_sessions_per_connection =
+			req->max_sessions_per_connection;
+	else
+		server_conf.max_sessions_per_connection =
+			KSMBD_DEFAULT_MAX_SESSIONS_PER_CONNECTION;
 
 	ret = ksmbd_set_netbios_name(req->netbios_name);
 	ret |= ksmbd_set_server_string(req->server_string);
@@ -488,12 +513,20 @@ static int ipc_validate_msg(struct ipc_msg_table_entry *entry)
 	{
 		struct ksmbd_rpc_command *resp = entry->response;
 
-		msg_sz = sizeof(struct ksmbd_rpc_command) + resp->payload_sz;
+		if (entry->msg_sz < sizeof(struct ksmbd_rpc_command))
+			return -EINVAL;
+
+		if (check_add_overflow(sizeof(struct ksmbd_rpc_command),
+				       resp->payload_sz, &msg_sz))
+			return -EINVAL;
 		break;
 	}
 	case KSMBD_EVENT_SPNEGO_AUTHEN_REQUEST:
 	{
 		struct ksmbd_spnego_authen_response *resp = entry->response;
+
+		if (entry->msg_sz < sizeof(struct ksmbd_spnego_authen_response))
+			return -EINVAL;
 
 		msg_sz = sizeof(struct ksmbd_spnego_authen_response) +
 				resp->session_key_len + resp->spnego_blob_len;
@@ -503,20 +536,54 @@ static int ipc_validate_msg(struct ipc_msg_table_entry *entry)
 	{
 		struct ksmbd_share_config_response *resp = entry->response;
 
-		if (resp->payload_sz) {
-			if (resp->payload_sz < resp->veto_list_sz)
-				return -EINVAL;
+		if (entry->msg_sz < sizeof(struct ksmbd_share_config_response))
+			return -EINVAL;
 
-			msg_sz = sizeof(struct ksmbd_share_config_response) +
-					resp->payload_sz;
-		}
+		/*
+		 * ksmbd-tools releases before 3.5.2 leave payload_sz zero.
+		 * Derive it from the size of the message actually received so
+		 * the checks below bound the payload for those releases too.
+		 */
+		if (!resp->payload_sz)
+			resp->payload_sz = entry->msg_sz -
+				sizeof(struct ksmbd_share_config_response);
+
+		if (strnlen(resp->share_name, sizeof(resp->share_name)) ==
+		    sizeof(resp->share_name))
+			return -EINVAL;
+
+		/*
+		 * Pipe shares carry no veto list, but ksmbd-tools before 3.5.3
+		 * copy a global "veto files" setting into the IPC$ response.
+		 */
+		if (!(resp->flags & KSMBD_SHARE_FLAG_PIPE) &&
+		    resp->veto_list_sz > resp->payload_sz)
+			return -EINVAL;
+
+		if (resp->flags != KSMBD_SHARE_FLAG_INVALID &&
+		    !(resp->flags & KSMBD_SHARE_FLAG_PIPE) &&
+		    resp->payload_sz <= resp->veto_list_sz)
+			return -EINVAL;
+
+		if (check_add_overflow(sizeof(struct ksmbd_share_config_response),
+				       resp->payload_sz, &msg_sz))
+			return -EINVAL;
 		break;
 	}
 	case KSMBD_EVENT_LOGIN_REQUEST_EXT:
 	{
 		struct ksmbd_login_response_ext *resp = entry->response;
 
+		if (entry->msg_sz < sizeof(struct ksmbd_login_response_ext))
+			return -EINVAL;
+
 		if (resp->ngroups) {
+			if (resp->ngroups < 0 ||
+			    resp->ngroups > NGROUPS_MAX) {
+				pr_err("ngroups(%d) from login response exceeds max groups(%d)\n",
+				       resp->ngroups, NGROUPS_MAX);
+				return -EINVAL;
+			}
 			msg_sz = sizeof(struct ksmbd_login_response_ext) +
 					resp->ngroups * sizeof(gid_t);
 		}
@@ -544,12 +611,16 @@ static void *ipc_msg_send_request(struct ksmbd_ipc_msg *msg, unsigned int handle
 	up_write(&ipc_msg_table_lock);
 
 	ret = ipc_msg_send(msg);
-	if (ret)
+	if (ret) {
+		down_write(&ipc_msg_table_lock);
 		goto out;
+	}
 
 	ret = wait_event_interruptible_timeout(entry.wait,
 					       entry.response != NULL,
 					       IPC_WAIT_TIMEOUT);
+
+	down_write(&ipc_msg_table_lock);
 	if (entry.response) {
 		ret = ipc_validate_msg(&entry);
 		if (ret) {
@@ -558,7 +629,6 @@ static void *ipc_msg_send_request(struct ksmbd_ipc_msg *msg, unsigned int handle
 		}
 	}
 out:
-	down_write(&ipc_msg_table_lock);
 	hash_del(&entry.ipc_table_hlist);
 	up_write(&ipc_msg_table_lock);
 	return entry.response;
@@ -637,7 +707,7 @@ ksmbd_ipc_spnego_authen_request(const char *spnego_blob, int blob_len)
 		return NULL;
 
 	msg = ipc_msg_alloc(sizeof(struct ksmbd_spnego_authen_request) +
-			blob_len + 1);
+			blob_len);
 	if (!msg)
 		return NULL;
 
@@ -764,7 +834,7 @@ ksmbd_ipc_share_config_request(const char *name)
 	return resp;
 }
 
-struct ksmbd_rpc_command *ksmbd_rpc_open(struct ksmbd_session *sess, int handle)
+struct ksmbd_rpc_command *ksmbd_rpc_open(struct ksmbd_session_rpc *entry)
 {
 	struct ksmbd_ipc_msg *msg;
 	struct ksmbd_rpc_command *req;
@@ -776,8 +846,8 @@ struct ksmbd_rpc_command *ksmbd_rpc_open(struct ksmbd_session *sess, int handle)
 
 	msg->type = KSMBD_EVENT_RPC_REQUEST;
 	req = (struct ksmbd_rpc_command *)msg->payload;
-	req->handle = handle;
-	req->flags = ksmbd_session_rpc_method(sess, handle);
+	req->handle = entry->id;
+	req->flags = entry->method;
 	req->flags |= KSMBD_RPC_OPEN_METHOD;
 	req->payload_sz = 0;
 
@@ -786,7 +856,7 @@ struct ksmbd_rpc_command *ksmbd_rpc_open(struct ksmbd_session *sess, int handle)
 	return resp;
 }
 
-struct ksmbd_rpc_command *ksmbd_rpc_close(struct ksmbd_session *sess, int handle)
+struct ksmbd_rpc_command *ksmbd_rpc_close(struct ksmbd_session_rpc *entry)
 {
 	struct ksmbd_ipc_msg *msg;
 	struct ksmbd_rpc_command *req;
@@ -798,8 +868,8 @@ struct ksmbd_rpc_command *ksmbd_rpc_close(struct ksmbd_session *sess, int handle
 
 	msg->type = KSMBD_EVENT_RPC_REQUEST;
 	req = (struct ksmbd_rpc_command *)msg->payload;
-	req->handle = handle;
-	req->flags = ksmbd_session_rpc_method(sess, handle);
+	req->handle = entry->id;
+	req->flags = entry->method;
 	req->flags |= KSMBD_RPC_CLOSE_METHOD;
 	req->payload_sz = 0;
 
@@ -808,7 +878,8 @@ struct ksmbd_rpc_command *ksmbd_rpc_close(struct ksmbd_session *sess, int handle
 	return resp;
 }
 
-struct ksmbd_rpc_command *ksmbd_rpc_write(struct ksmbd_session *sess, int handle,
+struct ksmbd_rpc_command *ksmbd_rpc_write(struct ksmbd_session *sess,
+					  struct ksmbd_session_rpc *entry,
 					  void *payload, size_t payload_sz)
 {
 	struct ksmbd_ipc_msg *msg;
@@ -818,14 +889,16 @@ struct ksmbd_rpc_command *ksmbd_rpc_write(struct ksmbd_session *sess, int handle
 	if (payload_sz > KSMBD_IPC_MAX_PAYLOAD)
 		return NULL;
 
-	msg = ipc_msg_alloc(sizeof(struct ksmbd_rpc_command) + payload_sz + 1);
+	msg = ipc_msg_alloc(sizeof(struct ksmbd_rpc_command) + payload_sz);
 	if (!msg)
 		return NULL;
 
+	lockdep_assert_held(&entry->lock);
+
 	msg->type = KSMBD_EVENT_RPC_REQUEST;
 	req = (struct ksmbd_rpc_command *)msg->payload;
-	req->handle = handle;
-	req->flags = ksmbd_session_rpc_method(sess, handle);
+	req->handle = entry->id;
+	req->flags = entry->method;
 	req->flags |= rpc_context_flags(sess);
 	req->flags |= KSMBD_RPC_WRITE_METHOD;
 	req->payload_sz = payload_sz;
@@ -836,7 +909,8 @@ struct ksmbd_rpc_command *ksmbd_rpc_write(struct ksmbd_session *sess, int handle
 	return resp;
 }
 
-struct ksmbd_rpc_command *ksmbd_rpc_read(struct ksmbd_session *sess, int handle)
+struct ksmbd_rpc_command *ksmbd_rpc_read(struct ksmbd_session *sess,
+					  struct ksmbd_session_rpc *entry)
 {
 	struct ksmbd_ipc_msg *msg;
 	struct ksmbd_rpc_command *req;
@@ -846,10 +920,12 @@ struct ksmbd_rpc_command *ksmbd_rpc_read(struct ksmbd_session *sess, int handle)
 	if (!msg)
 		return NULL;
 
+	lockdep_assert_held(&entry->lock);
+
 	msg->type = KSMBD_EVENT_RPC_REQUEST;
 	req = (struct ksmbd_rpc_command *)msg->payload;
-	req->handle = handle;
-	req->flags = ksmbd_session_rpc_method(sess, handle);
+	req->handle = entry->id;
+	req->flags = entry->method;
 	req->flags |= rpc_context_flags(sess);
 	req->flags |= KSMBD_RPC_READ_METHOD;
 	req->payload_sz = 0;
@@ -859,7 +935,8 @@ struct ksmbd_rpc_command *ksmbd_rpc_read(struct ksmbd_session *sess, int handle)
 	return resp;
 }
 
-struct ksmbd_rpc_command *ksmbd_rpc_ioctl(struct ksmbd_session *sess, int handle,
+struct ksmbd_rpc_command *ksmbd_rpc_ioctl(struct ksmbd_session *sess,
+					  struct ksmbd_session_rpc *entry,
 					  void *payload, size_t payload_sz)
 {
 	struct ksmbd_ipc_msg *msg;
@@ -869,14 +946,16 @@ struct ksmbd_rpc_command *ksmbd_rpc_ioctl(struct ksmbd_session *sess, int handle
 	if (payload_sz > KSMBD_IPC_MAX_PAYLOAD)
 		return NULL;
 
-	msg = ipc_msg_alloc(sizeof(struct ksmbd_rpc_command) + payload_sz + 1);
+	msg = ipc_msg_alloc(sizeof(struct ksmbd_rpc_command) + payload_sz);
 	if (!msg)
 		return NULL;
 
+	lockdep_assert_held(&entry->lock);
+
 	msg->type = KSMBD_EVENT_RPC_REQUEST;
 	req = (struct ksmbd_rpc_command *)msg->payload;
-	req->handle = handle;
-	req->flags = ksmbd_session_rpc_method(sess, handle);
+	req->handle = entry->id;
+	req->flags = entry->method;
 	req->flags |= rpc_context_flags(sess);
 	req->flags |= KSMBD_RPC_IOCTL_METHOD;
 	req->payload_sz = payload_sz;

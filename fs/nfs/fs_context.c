@@ -96,6 +96,8 @@ enum nfs_param {
 	Opt_wsize,
 	Opt_write,
 	Opt_xprtsec,
+	Opt_cert_serial,
+	Opt_privkey_serial,
 };
 
 enum {
@@ -221,6 +223,8 @@ static const struct fs_parameter_spec nfs_fs_parameters[] = {
 	fsparam_enum  ("write",		Opt_write, nfs_param_enums_write),
 	fsparam_u32   ("wsize",		Opt_wsize),
 	fsparam_string("xprtsec",	Opt_xprtsec),
+	fsparam_s32("cert_serial",	Opt_cert_serial),
+	fsparam_s32("privkey_serial",	Opt_privkey_serial),
 	{}
 };
 
@@ -398,6 +402,7 @@ static void nfs_set_mount_transport_protocol(struct nfs_fs_context *ctx)
 		ctx->mount_server.protocol = XPRT_TRANSPORT_UDP;
 		break;
 	case XPRT_TRANSPORT_TCP:
+	case XPRT_TRANSPORT_TCP_TLS:
 	case XPRT_TRANSPORT_RDMA:
 		ctx->mount_server.protocol = XPRT_TRANSPORT_TCP;
 	}
@@ -550,6 +555,32 @@ static int nfs_parse_version_string(struct fs_context *fc,
 	}
 	return 0;
 }
+
+#ifdef CONFIG_KEYS
+static int nfs_tls_key_verify(key_serial_t key_id)
+{
+	struct key *key = key_lookup(key_id);
+	int error = 0;
+
+	if (IS_ERR(key)) {
+		pr_err("key id %08x not found\n", key_id);
+		return PTR_ERR(key);
+	}
+	if (test_bit(KEY_FLAG_REVOKED, &key->flags) ||
+	    test_bit(KEY_FLAG_INVALIDATED, &key->flags)) {
+		pr_err("key id %08x revoked\n", key_id);
+		error = -EKEYREVOKED;
+	}
+
+	key_put(key);
+	return error;
+}
+#else
+static inline int nfs_tls_key_verify(key_serial_t key_id)
+{
+	return -ENOENT;
+}
+#endif /* CONFIG_KEYS */
 
 /*
  * Parse a single mount parameter.
@@ -776,7 +807,8 @@ static int nfs_fs_context_parse_param(struct fs_context *fc,
 		ctx->mount_server.version = result.uint_32;
 		break;
 	case Opt_minorversion:
-		if (result.uint_32 > NFS4_MAX_MINOR_VERSION)
+		if (result.uint_32 < NFS4_MIN_MINOR_VERSION ||
+		    result.uint_32 > NFS4_MAX_MINOR_VERSION)
 			goto out_of_bounds;
 		ctx->minorversion = result.uint_32;
 		break;
@@ -806,6 +838,18 @@ static int nfs_fs_context_parse_param(struct fs_context *fc,
 		ret = nfs_parse_xprtsec_policy(fc, param);
 		if (ret < 0)
 			return ret;
+		break;
+	case Opt_cert_serial:
+		ret = nfs_tls_key_verify(result.int_32);
+		if (ret < 0)
+			return ret;
+		ctx->xprtsec.cert_serial = result.int_32;
+		break;
+	case Opt_privkey_serial:
+		ret = nfs_tls_key_verify(result.int_32);
+		if (ret < 0)
+			return ret;
+		ctx->xprtsec.privkey_serial = result.int_32;
 		break;
 
 	case Opt_proto:
@@ -1227,8 +1271,7 @@ static int nfs23_parse_monolithic(struct fs_context *fc,
 			int ret;
 
 			data->context[NFS_MAX_CONTEXT_LEN] = '\0';
-			ret = vfs_parse_fs_string(fc, "context",
-						  data->context, strlen(data->context));
+			ret = vfs_parse_fs_string(fc, "context", data->context);
 			if (ret < 0)
 				return ret;
 #else
@@ -1650,7 +1693,7 @@ static int nfs_init_fs_context(struct fs_context *fc)
 {
 	struct nfs_fs_context *ctx;
 
-	ctx = kzalloc(sizeof(struct nfs_fs_context), GFP_KERNEL);
+	ctx = kzalloc_obj(struct nfs_fs_context);
 	if (unlikely(!ctx))
 		return -ENOMEM;
 
@@ -1708,6 +1751,7 @@ static int nfs_init_fs_context(struct fs_context *fc)
 		ctx->minorversion	= 0;
 		ctx->need_mount		= true;
 		ctx->xprtsec.policy	= RPC_XPRTSEC_NONE;
+		ctx->xprtsec.keyring_serial	= TLS_NO_KEYRING;
 		ctx->xprtsec.cert_serial	= TLS_NO_CERT;
 		ctx->xprtsec.privkey_serial	= TLS_NO_PRIVKEY;
 
@@ -1727,7 +1771,9 @@ struct file_system_type nfs_fs_type = {
 	.init_fs_context	= nfs_init_fs_context,
 	.parameters		= nfs_fs_parameters,
 	.kill_sb		= nfs_kill_super,
-	.fs_flags		= FS_RENAME_DOES_D_MOVE|FS_BINARY_MOUNTDATA,
+	.fs_flags		= FS_RENAME_DOES_D_MOVE	|
+				  FS_BINARY_MOUNTDATA	|
+				  FS_USERNS_DELEGATABLE,
 };
 MODULE_ALIAS_FS("nfs");
 EXPORT_SYMBOL_GPL(nfs_fs_type);
@@ -1739,7 +1785,9 @@ struct file_system_type nfs4_fs_type = {
 	.init_fs_context	= nfs_init_fs_context,
 	.parameters		= nfs_fs_parameters,
 	.kill_sb		= nfs_kill_super,
-	.fs_flags		= FS_RENAME_DOES_D_MOVE|FS_BINARY_MOUNTDATA,
+	.fs_flags		= FS_RENAME_DOES_D_MOVE	|
+				  FS_BINARY_MOUNTDATA	|
+				  FS_USERNS_DELEGATABLE,
 };
 MODULE_ALIAS_FS("nfs4");
 MODULE_ALIAS("nfs4");

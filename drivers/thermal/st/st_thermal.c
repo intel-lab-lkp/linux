@@ -132,7 +132,7 @@ static int st_thermal_get_temp(struct thermal_zone_device *th, int *temperature)
 	return 0;
 }
 
-static struct thermal_zone_device_ops st_tz_ops = {
+static const struct thermal_zone_device_ops st_tz_ops = {
 	.get_temp	= st_thermal_get_temp,
 };
 
@@ -151,7 +151,7 @@ int st_thermal_register(struct platform_device *pdev,
 		return -EINVAL;
 	}
 
-	sensor = devm_kzalloc(dev, sizeof(*sensor), GFP_KERNEL);
+	sensor = devm_kzalloc_obj(dev, *sensor);
 	if (!sensor)
 		return -ENOMEM;
 

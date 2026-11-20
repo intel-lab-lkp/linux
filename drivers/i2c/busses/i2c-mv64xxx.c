@@ -766,7 +766,6 @@ mv64xxx_i2c_xfer_core(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 	drv_data->num_msgs = 0;
 	drv_data->msgs = NULL;
 
-	pm_runtime_mark_last_busy(&adap->dev);
 	pm_runtime_put_autosuspend(&adap->dev);
 
 	return ret;
@@ -984,8 +983,7 @@ mv64xxx_i2c_probe(struct platform_device *pd)
 	if ((!pdata && !pd->dev.of_node))
 		return -ENODEV;
 
-	drv_data = devm_kzalloc(&pd->dev, sizeof(struct mv64xxx_i2c_data),
-				GFP_KERNEL);
+	drv_data = devm_kzalloc_obj(&pd->dev, struct mv64xxx_i2c_data);
 	if (!drv_data)
 		return -ENOMEM;
 

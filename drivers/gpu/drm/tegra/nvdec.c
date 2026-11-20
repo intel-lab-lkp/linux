@@ -261,10 +261,8 @@ static int nvdec_load_falcon_firmware(struct nvdec *nvdec)
 
 	if (!client->group) {
 		virt = dma_alloc_coherent(nvdec->dev, size, &iova, GFP_KERNEL);
-
-		err = dma_mapping_error(nvdec->dev, iova);
-		if (err < 0)
-			return err;
+		if (!virt)
+			return -ENOMEM;
 	} else {
 		virt = tegra_drm_alloc(tegra, size, &iova);
 		if (IS_ERR(virt))
@@ -436,13 +434,13 @@ static int nvdec_probe(struct platform_device *pdev)
 		return err;
 	}
 
-	nvdec = devm_kzalloc(dev, sizeof(*nvdec), GFP_KERNEL);
+	nvdec = devm_kzalloc_obj(dev, *nvdec);
 	if (!nvdec)
 		return -ENOMEM;
 
 	nvdec->config = of_device_get_match_data(dev);
 
-	syncpts = devm_kzalloc(dev, sizeof(*syncpts), GFP_KERNEL);
+	syncpts = devm_kzalloc_obj(dev, *syncpts);
 	if (!syncpts)
 		return -ENOMEM;
 

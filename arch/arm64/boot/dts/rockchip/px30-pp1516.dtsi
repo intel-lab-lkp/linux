@@ -6,6 +6,7 @@
 /dts-v1/;
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/input/input.h>
+#include <dt-bindings/media/video-interface-devices.h>
 #include <dt-bindings/pinctrl/rockchip.h>
 #include "px30.dtsi"
 
@@ -33,7 +34,7 @@
 		compatible = "mmc-pwrseq-emmc";
 		pinctrl-0 = <&emmc_reset>;
 		pinctrl-names = "default";
-		reset-gpios = <&gpio1 RK_PB3 GPIO_ACTIVE_HIGH>;
+		reset-gpios = <&gpio1 RK_PB3 GPIO_ACTIVE_LOW>;
 	};
 
 	gpio-leds {
@@ -72,7 +73,7 @@
 	};
 
 	vcc_cam_avdd: regulator-vcc-cam-avdd {
-		compatible  = "regulator-fixed";
+		compatible = "regulator-fixed";
 		regulator-name = "vcc_cam_avdd";
 		gpio = <&gpio3 RK_PC0 GPIO_ACTIVE_LOW>;
 		pinctrl-names = "default";
@@ -83,7 +84,7 @@
 	};
 
 	vcc_cam_dovdd: regulator-vcc-cam-dovdd {
-		compatible  = "regulator-fixed";
+		compatible = "regulator-fixed";
 		regulator-name = "vcc_cam_dovdd";
 		gpio = <&gpio3 RK_PC1 GPIO_ACTIVE_LOW>;
 		pinctrl-names = "default";
@@ -94,7 +95,7 @@
 	};
 
 	vcc_cam_dvdd: regulator-vcc-cam-dvdd {
-		compatible  = "regulator-fixed";
+		compatible = "regulator-fixed";
 		regulator-name = "vcc_cam_dvdd";
 		gpio = <&gpio3 RK_PC5 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
@@ -106,7 +107,7 @@
 	};
 
 	vcc_lens_afvdd: regulator-vcc-lens-afvdd {
-		compatible  = "regulator-fixed";
+		compatible = "regulator-fixed";
 		regulator-name = "vcc_lens_afvdd";
 		gpio = <&gpio3 RK_PB2 GPIO_ACTIVE_LOW>;
 		pinctrl-names = "default";
@@ -413,7 +414,7 @@
 		dvdd-supply = <&vcc_cam_dvdd>;
 		dovdd-supply = <&vcc_cam_dovdd>;
 		lens-focus = <&focus>;
-		orientation = <0>;
+		orientation = <MEDIA_ORIENTATION_FRONT>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&cif_clkout_m0 &cam_pwdn>;
 		reset-gpios = <&gpio2 RK_PB0 GPIO_ACTIVE_LOW>;
@@ -444,8 +445,7 @@
 
 	ports {
 		port@0 {
-			mipi_in_ucam: endpoint@0 {
-				reg = <0>;
+			mipi_in_ucam: endpoint {
 				data-lanes = <1 2>;
 				remote-endpoint = <&ucam_out>;
 			};

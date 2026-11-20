@@ -4,7 +4,6 @@
  */
 
 #include <linux/clk-provider.h>
-#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
@@ -17,6 +16,7 @@
 #include "clk-regmap-divider.h"
 #include "common.h"
 #include "gdsc.h"
+#include "reset.h"
 
 enum {
 	P_BI_TCXO,
@@ -847,6 +847,11 @@ static struct gdsc *disp_cc_sc7280_gdscs[] = {
 	[DISP_CC_MDSS_CORE_GDSC] = &disp_cc_mdss_core_gdsc,
 };
 
+static const struct qcom_reset_map disp_cc_sc7280_resets[] = {
+	[DISP_CC_MDSS_CORE_BCR] = { 0x1000 },
+	[DISP_CC_MDSS_RSCC_BCR] = { 0x2000 },
+};
+
 static const struct regmap_config disp_cc_sc7280_regmap_config = {
 	.reg_bits = 32,
 	.reg_stride = 4,
@@ -855,12 +860,24 @@ static const struct regmap_config disp_cc_sc7280_regmap_config = {
 	.fast_io = true,
 };
 
+static const u32 disp_cc_sc7280_critical_cbcrs[] = {
+	0x5008, /* DISP_CC_XO_CLK */
+};
+
+static const struct qcom_cc_driver_data disp_cc_sc7280_driver_data = {
+	.clk_cbcrs = disp_cc_sc7280_critical_cbcrs,
+	.num_clk_cbcrs = ARRAY_SIZE(disp_cc_sc7280_critical_cbcrs),
+};
+
 static const struct qcom_cc_desc disp_cc_sc7280_desc = {
+	.driver_data = &disp_cc_sc7280_driver_data,
 	.config = &disp_cc_sc7280_regmap_config,
 	.clks = disp_cc_sc7280_clocks,
 	.num_clks = ARRAY_SIZE(disp_cc_sc7280_clocks),
 	.gdscs = disp_cc_sc7280_gdscs,
 	.num_gdscs = ARRAY_SIZE(disp_cc_sc7280_gdscs),
+	.resets = disp_cc_sc7280_resets,
+	.num_resets = ARRAY_SIZE(disp_cc_sc7280_resets),
 };
 
 static const struct of_device_id disp_cc_sc7280_match_table[] = {
@@ -878,9 +895,6 @@ static int disp_cc_sc7280_probe(struct platform_device *pdev)
 		return PTR_ERR(regmap);
 
 	clk_lucid_pll_configure(&disp_cc_pll0, regmap, &disp_cc_pll0_config);
-
-	/* Keep some clocks always-on */
-	qcom_branch_set_clk_en(regmap, 0x5008); /* DISP_CC_XO_CLK */
 
 	return qcom_cc_really_probe(&pdev->dev, &disp_cc_sc7280_desc, regmap);
 }

@@ -19,9 +19,6 @@ Userdata append support by Matthew Wood <thepacketgeek@gmail.com>, Jan 22 2024
 
 Sysdata append support by Breno Leitao <leitao@debian.org>, Jan 15 2025
 
-Please send bug reports to Matt Mackall <mpm@selenic.com>
-Satyam Sharma <satyam.sharma@gmail.com>, and Cong Wang <xiyou.wangcong@gmail.com>
-
 Introduction:
 =============
 
@@ -91,7 +88,7 @@ for example:
 
 	nc -u -l -p <port>' / 'nc -u -l <port>
 
-    or::
+   or::
 
 	netcat -u -l -p <port>' / 'netcat -u -l <port>
 
@@ -143,6 +140,11 @@ The interface exposes these parameters of a netconsole target to userspace:
 	remote_mac	Remote agent's MAC address		(read-write)
 	transmit_errors	Number of packet send errors		(read-only)
 	=============== =================================       ============
+
+local_ip is optional: if it is left unset, netconsole derives a source
+address from the egress interface when the target is enabled. Writing any
+value to it, including 0.0.0.0, uses that value verbatim and disables the
+automatic selection.
 
 The "enabled" attribute is also used to control whether the parameters of
 a target can be updated or not -- you can modify the parameters of only

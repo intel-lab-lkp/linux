@@ -24,12 +24,12 @@ ice_sched_add_root_node(struct ice_port_info *pi,
 
 	hw = pi->hw;
 
-	root = devm_kzalloc(ice_hw_to_dev(hw), sizeof(*root), GFP_KERNEL);
+	root = devm_kzalloc_obj(ice_hw_to_dev(hw), *root);
 	if (!root)
 		return -ENOMEM;
 
-	root->children = devm_kcalloc(ice_hw_to_dev(hw), hw->max_children[0],
-				      sizeof(*root->children), GFP_KERNEL);
+	root->children = devm_kzalloc_objs(ice_hw_to_dev(hw), *root->children,
+					   hw->max_children[0]);
 	if (!root->children) {
 		devm_kfree(ice_hw_to_dev(hw), root);
 		return -ENOMEM;
@@ -123,13 +123,13 @@ ice_aqc_send_sched_elem_cmd(struct ice_hw *hw, enum ice_adminq_opc cmd_opc,
 			    u16 *elems_resp, struct ice_sq_cd *cd)
 {
 	struct ice_aqc_sched_elem_cmd *cmd;
-	struct ice_aq_desc desc;
+	struct libie_aq_desc desc;
 	int status;
 
-	cmd = &desc.params.sched_elem_cmd;
+	cmd = libie_aq_raw(&desc);
 	ice_fill_dflt_direct_cmd_desc(&desc, cmd_opc);
 	cmd->num_elem_req = cpu_to_le16(elems_req);
-	desc.flags |= cpu_to_le16(ICE_AQ_FLAG_RD);
+	desc.flags |= cpu_to_le16(LIBIE_AQ_FLAG_RD);
 	status = ice_aq_send_cmd(hw, &desc, buf, buf_size, cd);
 	if (!status && elems_resp)
 		*elems_resp = le16_to_cpu(cmd->num_elem_resp);
@@ -202,13 +202,13 @@ ice_sched_add_node(struct ice_port_info *pi, u8 layer,
 	if (prealloc_node)
 		node = prealloc_node;
 	else
-		node = devm_kzalloc(ice_hw_to_dev(hw), sizeof(*node), GFP_KERNEL);
+		node = devm_kzalloc_obj(ice_hw_to_dev(hw), *node);
 	if (!node)
 		return -ENOMEM;
 	if (hw->max_children[layer]) {
-		node->children = devm_kcalloc(ice_hw_to_dev(hw),
-					      hw->max_children[layer],
-					      sizeof(*node->children), GFP_KERNEL);
+		node->children = devm_kzalloc_objs(ice_hw_to_dev(hw),
+						   *node->children,
+						   hw->max_children[layer]);
 		if (!node->children) {
 			devm_kfree(ice_hw_to_dev(hw), node);
 			return -ENOMEM;
@@ -371,7 +371,7 @@ void ice_free_sched_node(struct ice_port_info *pi, struct ice_sched_node *node)
 
 	devm_kfree(ice_hw_to_dev(hw), node->children);
 	kfree(node->name);
-	xa_erase(&pi->sched_node_ids, node->id);
+	xa_erase(&hw->sched_node_ids, node->id);
 	devm_kfree(ice_hw_to_dev(hw), node);
 }
 
@@ -392,10 +392,10 @@ ice_aq_get_dflt_topo(struct ice_hw *hw, u8 lport,
 		     u8 *num_branches, struct ice_sq_cd *cd)
 {
 	struct ice_aqc_get_topo *cmd;
-	struct ice_aq_desc desc;
+	struct libie_aq_desc desc;
 	int status;
 
-	cmd = &desc.params.get_topo;
+	cmd = libie_aq_raw(&desc);
 	ice_fill_dflt_direct_cmd_desc(&desc, ice_aqc_opc_get_dflt_topo);
 	cmd->port_num = lport;
 	status = ice_aq_send_cmd(hw, &desc, buf, buf_size, cd);
@@ -518,7 +518,7 @@ ice_aq_query_sched_res(struct ice_hw *hw, u16 buf_size,
 		       struct ice_aqc_query_txsched_res_resp *buf,
 		       struct ice_sq_cd *cd)
 {
-	struct ice_aq_desc desc;
+	struct libie_aq_desc desc;
 
 	ice_fill_dflt_direct_cmd_desc(&desc, ice_aqc_opc_query_sched_res);
 	return ice_aq_send_cmd(hw, &desc, buf, buf_size, cd);
@@ -583,8 +583,7 @@ ice_alloc_lan_q_ctx(struct ice_hw *hw, u16 vsi_handle, u8 tc, u16 new_numqs)
 		return -EINVAL;
 	/* allocate LAN queue contexts */
 	if (!vsi_ctx->lan_q_ctx[tc]) {
-		q_ctx = devm_kcalloc(ice_hw_to_dev(hw), new_numqs,
-				     sizeof(*q_ctx), GFP_KERNEL);
+		q_ctx = devm_kzalloc_objs(ice_hw_to_dev(hw), *q_ctx, new_numqs);
 		if (!q_ctx)
 			return -ENOMEM;
 
@@ -601,8 +600,7 @@ ice_alloc_lan_q_ctx(struct ice_hw *hw, u16 vsi_handle, u8 tc, u16 new_numqs)
 	if (new_numqs > vsi_ctx->num_lan_q_entries[tc]) {
 		u16 prev_num = vsi_ctx->num_lan_q_entries[tc];
 
-		q_ctx = devm_kcalloc(ice_hw_to_dev(hw), new_numqs,
-				     sizeof(*q_ctx), GFP_KERNEL);
+		q_ctx = devm_kzalloc_objs(ice_hw_to_dev(hw), *q_ctx, new_numqs);
 		if (!q_ctx)
 			return -ENOMEM;
 
@@ -639,10 +637,8 @@ ice_alloc_rdma_q_ctx(struct ice_hw *hw, u16 vsi_handle, u8 tc, u16 new_numqs)
 		return -EINVAL;
 	/* allocate RDMA queue contexts */
 	if (!vsi_ctx->rdma_q_ctx[tc]) {
-		vsi_ctx->rdma_q_ctx[tc] = devm_kcalloc(ice_hw_to_dev(hw),
-						       new_numqs,
-						       sizeof(*q_ctx),
-						       GFP_KERNEL);
+		vsi_ctx->rdma_q_ctx[tc] = devm_kzalloc_objs(ice_hw_to_dev(hw),
+							    *q_ctx, new_numqs);
 		if (!vsi_ctx->rdma_q_ctx[tc])
 			return -ENOMEM;
 		vsi_ctx->num_rdma_q_entries[tc] = new_numqs;
@@ -652,8 +648,7 @@ ice_alloc_rdma_q_ctx(struct ice_hw *hw, u16 vsi_handle, u8 tc, u16 new_numqs)
 	if (new_numqs > vsi_ctx->num_rdma_q_entries[tc]) {
 		u16 prev_num = vsi_ctx->num_rdma_q_entries[tc];
 
-		q_ctx = devm_kcalloc(ice_hw_to_dev(hw), new_numqs,
-				     sizeof(*q_ctx), GFP_KERNEL);
+		q_ctx = devm_kzalloc_objs(ice_hw_to_dev(hw), *q_ctx, new_numqs);
 		if (!q_ctx)
 			return -ENOMEM;
 		memcpy(q_ctx, vsi_ctx->rdma_q_ctx[tc],
@@ -683,13 +678,13 @@ ice_aq_rl_profile(struct ice_hw *hw, enum ice_adminq_opc opcode,
 		  u16 buf_size, u16 *num_processed, struct ice_sq_cd *cd)
 {
 	struct ice_aqc_rl_profile *cmd;
-	struct ice_aq_desc desc;
+	struct libie_aq_desc desc;
 	int status;
 
-	cmd = &desc.params.rl_profile;
+	cmd = libie_aq_raw(&desc);
 
 	ice_fill_dflt_direct_cmd_desc(&desc, opcode);
-	desc.flags |= cpu_to_le16(ICE_AQ_FLAG_RD);
+	desc.flags |= cpu_to_le16(LIBIE_AQ_FLAG_RD);
 	cmd->num_profiles = cpu_to_le16(num_profiles);
 	status = ice_aq_send_cmd(hw, &desc, buf, buf_size, cd);
 	if (!status && num_processed)
@@ -977,7 +972,7 @@ ice_sched_add_elems(struct ice_port_info *pi, struct ice_sched_node *tc_node,
 		if (!new_node->name)
 			return -ENOMEM;
 
-		status = xa_alloc(&pi->sched_node_ids, &new_node->id, NULL, XA_LIMIT(0, UINT_MAX),
+		status = xa_alloc(&hw->sched_node_ids, &new_node->id, NULL, XA_LIMIT(0, UINT_MAX),
 				  GFP_KERNEL);
 		if (status) {
 			ice_debug(hw, ICE_DBG_SCHED, "xa_alloc failed for sched node status =%d\n",
@@ -1353,7 +1348,7 @@ int ice_sched_query_res_alloc(struct ice_hw *hw)
 	if (hw->layer_info)
 		return status;
 
-	buf = devm_kzalloc(ice_hw_to_dev(hw), sizeof(*buf), GFP_KERNEL);
+	buf = devm_kzalloc_obj(ice_hw_to_dev(hw), *buf);
 	if (!buf)
 		return -ENOMEM;
 
@@ -2738,8 +2733,7 @@ ice_sched_cfg_agg(struct ice_port_info *pi, u32 agg_id,
 	agg_info = ice_get_agg_info(hw, agg_id);
 	if (!agg_info) {
 		/* Create new entry for new aggregator ID */
-		agg_info = devm_kzalloc(ice_hw_to_dev(hw), sizeof(*agg_info),
-					GFP_KERNEL);
+		agg_info = devm_kzalloc_obj(ice_hw_to_dev(hw), *agg_info);
 		if (!agg_info)
 			return -ENOMEM;
 
@@ -2922,8 +2916,8 @@ ice_sched_assoc_vsi_to_agg(struct ice_port_info *pi, u32 agg_id,
 	agg_vsi_info = ice_get_agg_vsi_info(agg_info, vsi_handle);
 	if (!agg_vsi_info) {
 		/* Create new entry for VSI under aggregator list */
-		agg_vsi_info = devm_kzalloc(ice_hw_to_dev(hw),
-					    sizeof(*agg_vsi_info), GFP_KERNEL);
+		agg_vsi_info = devm_kzalloc_obj(ice_hw_to_dev(hw),
+						*agg_vsi_info);
 		if (!agg_vsi_info)
 			return -EINVAL;
 
@@ -3340,8 +3334,7 @@ ice_sched_add_rl_profile(struct ice_port_info *pi,
 			return rl_prof_elem;
 
 	/* Create new profile ID */
-	rl_prof_elem = devm_kzalloc(ice_hw_to_dev(hw), sizeof(*rl_prof_elem),
-				    GFP_KERNEL);
+	rl_prof_elem = devm_kzalloc_obj(ice_hw_to_dev(hw), *rl_prof_elem);
 
 	if (!rl_prof_elem)
 		return NULL;

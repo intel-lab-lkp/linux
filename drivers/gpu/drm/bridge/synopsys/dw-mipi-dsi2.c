@@ -9,6 +9,7 @@
 
 #include <linux/bitfield.h>
 #include <linux/clk.h>
+#include <linux/export.h>
 #include <linux/iopoll.h>
 #include <linux/media-bus-format.h>
 #include <linux/module.h>
@@ -191,7 +192,6 @@ struct cmd_header {
 struct dw_mipi_dsi2 {
 	struct drm_bridge bridge;
 	struct mipi_dsi_host dsi_host;
-	struct drm_bridge *panel_bridge;
 	struct device *dev;
 	struct regmap *regmap;
 	struct clk *pclk;
@@ -527,22 +527,27 @@ static int dw_mipi_dsi2_host_attach(struct mipi_dsi_host *host,
 	dsi2->format = device->format;
 	dsi2->mode_flags = device->mode_flags;
 
-	bridge = devm_drm_of_get_bridge(dsi2->dev, dsi2->dev->of_node, 1, 0);
+	bridge = of_drm_get_bridge_by_endpoint(dsi2->dev->of_node, 1, 0);
 	if (IS_ERR(bridge))
 		return PTR_ERR(bridge);
 
 	bridge->pre_enable_prev_first = true;
-	dsi2->panel_bridge = bridge;
+	dsi2->bridge.next_bridge = bridge;
 
 	drm_bridge_add(&dsi2->bridge);
 
 	if (pdata->host_ops && pdata->host_ops->attach) {
 		ret = pdata->host_ops->attach(pdata->priv_data, device);
 		if (ret < 0)
-			return ret;
+			goto err_remove_bridge;
 	}
 
 	return 0;
+
+err_remove_bridge:
+	drm_bridge_remove(&dsi2->bridge);
+	drm_bridge_clear_and_put(&dsi2->bridge.next_bridge);
+	return ret;
 }
 
 static int dw_mipi_dsi2_host_detach(struct mipi_dsi_host *host,
@@ -559,8 +564,7 @@ static int dw_mipi_dsi2_host_detach(struct mipi_dsi_host *host,
 	}
 
 	drm_bridge_remove(&dsi2->bridge);
-
-	drm_of_panel_bridge_remove(host->dev->of_node, 1, 0);
+	drm_bridge_clear_and_put(&dsi2->bridge.next_bridge);
 
 	return 0;
 }
@@ -710,7 +714,7 @@ dw_mipi_dsi2_bridge_atomic_get_input_bus_fmts(struct drm_bridge *bridge,
 						 output_fmt, num_input_fmts);
 
 	/* Fall back to MEDIA_BUS_FMT_FIXED as the only input format. */
-	input_fmts = kmalloc(sizeof(*input_fmts), GFP_KERNEL);
+	input_fmts = kmalloc_obj(*input_fmts);
 	if (!input_fmts)
 		return NULL;
 	input_fmts[0] = MEDIA_BUS_FMT_FIXED;
@@ -745,7 +749,7 @@ static int dw_mipi_dsi2_bridge_atomic_check(struct drm_bridge *bridge,
 }
 
 static void dw_mipi_dsi2_bridge_post_atomic_disable(struct drm_bridge *bridge,
-						    struct drm_atomic_state *state)
+						    struct drm_atomic_commit *state)
 {
 	struct dw_mipi_dsi2 *dsi2 = bridge_to_dsi2(bridge);
 	const struct dw_mipi_dsi2_phy_ops *phy_ops = dsi2->plat_data->phy_ops;
@@ -821,7 +825,7 @@ static void dw_mipi_dsi2_mode_set(struct dw_mipi_dsi2 *dsi2,
 }
 
 static void dw_mipi_dsi2_bridge_atomic_pre_enable(struct drm_bridge *bridge,
-						  struct drm_atomic_state *state)
+						  struct drm_atomic_commit *state)
 {
 	struct dw_mipi_dsi2 *dsi2 = bridge_to_dsi2(bridge);
 
@@ -840,7 +844,7 @@ static void dw_mipi_dsi2_bridge_mode_set(struct drm_bridge *bridge,
 }
 
 static void dw_mipi_dsi2_bridge_atomic_enable(struct drm_bridge *bridge,
-					      struct drm_atomic_state *state)
+					      struct drm_atomic_commit *state)
 {
 	struct dw_mipi_dsi2 *dsi2 = bridge_to_dsi2(bridge);
 
@@ -879,7 +883,7 @@ static int dw_mipi_dsi2_bridge_attach(struct drm_bridge *bridge,
 	encoder->encoder_type = DRM_MODE_ENCODER_DSI;
 
 	/* Attach the panel-bridge to the dsi bridge */
-	return drm_bridge_attach(encoder, dsi2->panel_bridge, bridge,
+	return drm_bridge_attach(encoder, dsi2->bridge.next_bridge, bridge,
 				 flags);
 }
 
@@ -888,7 +892,7 @@ static const struct drm_bridge_funcs dw_mipi_dsi2_bridge_funcs = {
 	.atomic_destroy_state	= drm_atomic_helper_bridge_destroy_state,
 	.atomic_get_input_bus_fmts = dw_mipi_dsi2_bridge_atomic_get_input_bus_fmts,
 	.atomic_check		= dw_mipi_dsi2_bridge_atomic_check,
-	.atomic_reset		= drm_atomic_helper_bridge_reset,
+	.atomic_create_state		= drm_atomic_helper_bridge_create_state,
 	.atomic_pre_enable	= dw_mipi_dsi2_bridge_atomic_pre_enable,
 	.atomic_enable		= dw_mipi_dsi2_bridge_atomic_enable,
 	.atomic_post_disable	= dw_mipi_dsi2_bridge_post_atomic_disable,
@@ -902,7 +906,6 @@ static const struct regmap_config dw_mipi_dsi2_regmap_config = {
 	.reg_bits = 32,
 	.val_bits = 32,
 	.reg_stride = 4,
-	.fast_io = true,
 };
 
 static struct dw_mipi_dsi2 *
@@ -914,9 +917,10 @@ __dw_mipi_dsi2_probe(struct platform_device *pdev,
 	struct dw_mipi_dsi2 *dsi2;
 	int ret;
 
-	dsi2 = devm_kzalloc(dev, sizeof(*dsi2), GFP_KERNEL);
-	if (!dsi2)
-		return ERR_PTR(-ENOMEM);
+	dsi2 = devm_drm_bridge_alloc(dev, struct dw_mipi_dsi2, bridge,
+				     &dw_mipi_dsi2_bridge_funcs);
+	if (IS_ERR(dsi2))
+		return ERR_CAST(dsi2);
 
 	dsi2->dev = dev;
 	dsi2->plat_data = plat_data;
@@ -981,7 +985,6 @@ __dw_mipi_dsi2_probe(struct platform_device *pdev,
 	}
 
 	dsi2->bridge.driver_private = dsi2;
-	dsi2->bridge.funcs = &dw_mipi_dsi2_bridge_funcs;
 	dsi2->bridge.of_node = pdev->dev.of_node;
 
 	return dsi2;

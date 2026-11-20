@@ -137,7 +137,7 @@ static int keystone_irq_probe(struct platform_device *pdev)
 	if (np == NULL)
 		return -EINVAL;
 
-	kirq = devm_kzalloc(dev, sizeof(*kirq), GFP_KERNEL);
+	kirq = devm_kzalloc_obj(dev, *kirq);
 	if (!kirq)
 		return -ENOMEM;
 
@@ -157,8 +157,8 @@ static int keystone_irq_probe(struct platform_device *pdev)
 	kirq->chip.irq_mask	= keystone_irq_setmask;
 	kirq->chip.irq_unmask	= keystone_irq_unmask;
 
-	kirq->irqd = irq_domain_create_linear(of_fwnode_handle(np), KEYSTONE_N_IRQ,
-					      &keystone_irq_ops, kirq);
+	kirq->irqd = irq_domain_create_linear(dev_fwnode(dev), KEYSTONE_N_IRQ, &keystone_irq_ops,
+					      kirq);
 	if (!kirq->irqd) {
 		dev_err(dev, "IRQ domain registration failed\n");
 		return -ENODEV;

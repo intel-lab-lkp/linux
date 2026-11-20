@@ -193,7 +193,7 @@ static int usb_hcd_at91_probe(const struct hc_driver *driver,
 	if (irq < 0)
 		return irq;
 
-	hcd = usb_create_hcd(driver, dev, "at91");
+	hcd = usb_create_hcd(driver, dev, dev_name(dev));
 	if (!hcd)
 		return -ENOMEM;
 	ohci_at91 = hcd_to_ohci_at91_priv(hcd);
@@ -545,7 +545,7 @@ static int ohci_hcd_at91_drv_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	pdata = devm_kzalloc(&pdev->dev, sizeof(*pdata), GFP_KERNEL);
+	pdata = devm_kzalloc_obj(&pdev->dev, *pdata);
 	if (!pdata)
 		return -ENOMEM;
 

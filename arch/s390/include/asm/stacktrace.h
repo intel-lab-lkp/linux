@@ -59,13 +59,19 @@ static inline bool on_stack(struct stack_info *info,
 struct stack_frame {
 	union {
 		unsigned long empty[9];
+		/* SIE stack frame */
 		struct {
 			unsigned long sie_control_block;
 			unsigned long sie_savearea;
-			unsigned long sie_reason;
+			unsigned long sie_return;
 			unsigned long sie_flags;
 			unsigned long sie_control_block_phys;
 			unsigned long sie_guest_asce;
+			unsigned long sie_irq;
+		};
+		/* SAE stack frame */
+		struct {
+			unsigned long sae_bear;
 		};
 	};
 	unsigned long gprs[10];
@@ -199,7 +205,7 @@ static __always_inline unsigned long get_stack_pointer(struct task_struct *task,
 		"	lg	15,%[_stack]\n"				\
 		"	stg	%[_frame],%[_bc](15)\n"			\
 		"	brasl	14,%[_fn]\n"				\
-		"	lgr	15,%[_prev]\n"				\
+		"	lgr	15,%[_prev]"				\
 		: [_prev] "=&d" (prev), CALL_FMT_##nr			\
 		: [_stack] "R" (__stack),				\
 		  [_bc] "i" (offsetof(struct stack_frame, back_chain)),	\
@@ -250,7 +256,7 @@ static __always_inline unsigned long get_stack_pointer(struct task_struct *task,
 		"	lra	14,0(1)\n"				\
 		"	lpswe	%[psw_enter]\n"				\
 		"0:	lpswe	0(7)\n"					\
-		"1:\n"							\
+		"1:"							\
 		: CALL_FMT_##nr, [psw_leave] "=Q" (psw_leave)		\
 		: [psw_enter] "Q" (psw_enter)				\
 		: "7", CALL_CLOBBER_##nr);				\

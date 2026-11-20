@@ -8,15 +8,21 @@
 #include <drm/drm_managed.h>
 
 #include "regs/xe_gt_regs.h"
+#include "regs/xe_mert_regs.h"
 
 #include "xe_assert.h"
 #include "xe_bo.h"
+#include "xe_gt.h"
+#include "xe_gt_mcr.h"
 #include "xe_lmtt.h"
 #include "xe_map.h"
+#include "xe_mert.h"
 #include "xe_mmio.h"
 #include "xe_res_cursor.h"
 #include "xe_sriov.h"
-#include "xe_sriov_printk.h"
+#include "xe_tile.h"
+#include "xe_tile_sriov_printk.h"
+#include "xe_tlb_inval.h"
 
 /**
  * DOC: Local Memory Translation Table
@@ -31,7 +37,7 @@
  */
 
 #define lmtt_assert(lmtt, condition)	xe_tile_assert(lmtt_to_tile(lmtt), condition)
-#define lmtt_debug(lmtt, msg...)	xe_sriov_dbg_verbose(lmtt_to_xe(lmtt), "LMTT: " msg)
+#define lmtt_debug(lmtt, msg...)	xe_tile_sriov_dbg_verbose(lmtt_to_tile(lmtt), "LMTT: " msg)
 
 static bool xe_has_multi_level_lmtt(struct xe_device *xe)
 {
@@ -53,6 +59,23 @@ static u64 lmtt_page_size(struct xe_lmtt *lmtt)
 	return BIT_ULL(lmtt->ops->lmtt_pte_shift(0));
 }
 
+/**
+ * xe_lmtt_page_size() - Get LMTT page size.
+ * @lmtt: the &xe_lmtt
+ *
+ * This function shall be called only by PF.
+ *
+ * Return: LMTT page size.
+ */
+u64 xe_lmtt_page_size(struct xe_lmtt *lmtt)
+{
+	lmtt_assert(lmtt, IS_SRIOV_PF(lmtt_to_xe(lmtt)));
+	lmtt_assert(lmtt, xe_device_has_lmtt(lmtt_to_xe(lmtt)));
+	lmtt_assert(lmtt, lmtt->ops);
+
+	return lmtt_page_size(lmtt);
+}
+
 static struct xe_lmtt_pt *lmtt_pt_alloc(struct xe_lmtt *lmtt, unsigned int level)
 {
 	unsigned int num_entries = level ? lmtt->ops->lmtt_pte_num(level) : 0;
@@ -60,24 +83,27 @@ static struct xe_lmtt_pt *lmtt_pt_alloc(struct xe_lmtt *lmtt, unsigned int level
 	struct xe_bo *bo;
 	int err;
 
-	pt = kzalloc(struct_size(pt, entries, num_entries), GFP_KERNEL);
+	pt = kzalloc_flex(*pt, entries, num_entries);
 	if (!pt) {
 		err = -ENOMEM;
 		goto out;
 	}
 
-	bo = xe_bo_create_pin_map(lmtt_to_xe(lmtt), lmtt_to_tile(lmtt), NULL,
-				  PAGE_ALIGN(lmtt->ops->lmtt_pte_size(level) *
-					     lmtt->ops->lmtt_pte_num(level)),
-				  ttm_bo_type_kernel,
-				  XE_BO_FLAG_VRAM_IF_DGFX(lmtt_to_tile(lmtt)) |
-				  XE_BO_FLAG_NEEDS_64K);
+	bo = xe_bo_create_pin_map_novm(lmtt_to_xe(lmtt), lmtt_to_tile(lmtt),
+				       PAGE_ALIGN(lmtt->ops->lmtt_pte_size(level) *
+						  lmtt->ops->lmtt_pte_num(level)),
+				       ttm_bo_type_kernel,
+				       XE_BO_FLAG_VRAM_IF_DGFX(lmtt_to_tile(lmtt)) |
+				       XE_BO_FLAG_NEEDS_64K, false);
 	if (IS_ERR(bo)) {
 		err = PTR_ERR(bo);
 		goto out_free_pt;
 	}
 
 	lmtt_assert(lmtt, xe_bo_is_vram(bo));
+	lmtt_debug(lmtt, "level=%u addr=%#llx\n", level, (u64)xe_bo_main_addr(bo, XE_PAGE_SIZE));
+
+	xe_map_memset(lmtt_to_xe(lmtt), &bo->vmap, 0, 0, xe_bo_size(bo));
 
 	pt->level = level;
 	pt->bo = bo;
@@ -91,6 +117,9 @@ out:
 
 static void lmtt_pt_free(struct xe_lmtt_pt *pt)
 {
+	lmtt_debug(&pt->bo->tile->sriov.pf.lmtt, "level=%u addr=%llx\n",
+		   pt->level, (u64)xe_bo_main_addr(pt->bo, XE_PAGE_SIZE));
+
 	xe_bo_unpin_map_no_vm(pt->bo);
 	kfree(pt);
 }
@@ -183,37 +212,137 @@ fail:
 	return err;
 }
 
-static void lmtt_setup_dir_ptr(struct xe_lmtt *lmtt)
+static void lmtt_setup_dir_ptr_gt(struct xe_gt *gt, u32 config)
+{
+	struct xe_device *xe = gt_to_xe(gt);
+	struct xe_reg_mcr reg_mcr;
+	struct xe_reg reg;
+	u32 val_read;
+
+	if (GRAPHICS_VER(xe) < 20) {
+		reg = LMEM_CFG;
+		xe_mmio_write32(&gt->mmio, reg, config);
+		return;
+	}
+
+	if (xe_gt_is_main_type(gt)) {
+		reg_mcr = XE2_LMEM_CFG_MCR;
+		xe_gt_mcr_multicast_write(gt, reg_mcr, config);
+		val_read = xe_gt_mcr_unicast_read_any(gt, reg_mcr);
+		xe_gt_assert_msg(gt, val_read == config, "LMEM_CFG_MCR: %#x != %#x\n",
+				 config, val_read);
+	} else {
+		reg = XE2_LMEM_CFG;
+		xe_mmio_write32(&gt->mmio, reg, config);
+
+		if (MEDIA_VER(xe) >= 35) {
+			val_read = xe_mmio_read32(&gt->mmio, reg);
+			xe_gt_assert_msg(gt, val_read == config, "LMEM_CFG: %#x != %#x\n",
+					 config, val_read);
+		}
+	}
+}
+
+static void lmtt_setup_dir_ptr(struct xe_lmtt *lmtt, struct xe_gt *gt)
 {
 	struct xe_tile *tile = lmtt_to_tile(lmtt);
 	struct xe_device *xe = tile_to_xe(tile);
 	dma_addr_t offset = xe_bo_main_addr(lmtt->pd->bo, XE_PAGE_SIZE);
+	u32 config;
 
 	lmtt_debug(lmtt, "DIR offset %pad\n", &offset);
 	lmtt_assert(lmtt, xe_bo_is_vram(lmtt->pd->bo));
 	lmtt_assert(lmtt, IS_ALIGNED(offset, SZ_64K));
 
-	xe_mmio_write32(&tile->mmio,
-			GRAPHICS_VER(xe) >= 20 ? XE2_LMEM_CFG : LMEM_CFG,
-			LMEM_EN | REG_FIELD_PREP(LMTT_DIR_PTR, offset / SZ_64K));
+	config = LMEM_EN | REG_FIELD_PREP(LMTT_DIR_PTR, offset / SZ_64K);
+
+	lmtt_setup_dir_ptr_gt(gt, config);
+
+	if (xe_device_has_mert(xe) && xe_tile_is_root(tile) &&
+	    xe_gt_is_main_type(gt))
+		xe_mmio_write32(&tile->mmio, MERT_LMEM_CFG, config);
 }
 
 /**
  * xe_lmtt_init_hw - Perform LMTT hardware initialization.
- * @lmtt: the &xe_lmtt to initialize
+ * @gt: the &xe_gt for which lmtt is initialized
  *
  * This function is a second step of the LMTT initialization.
- * This function registers LMTT Root Directory prepared in xe_lmtt_init().
+ * This function registers LMTT Root Directory prepared in xe_lmtt_init()
+ * on the given GT.
  *
  * This function shall be called after every hardware reset.
  * This function shall be called only when running as a PF driver.
  */
-void xe_lmtt_init_hw(struct xe_lmtt *lmtt)
+void xe_lmtt_init_hw(struct xe_gt *gt)
 {
+	struct xe_lmtt *lmtt = &gt_to_tile(gt)->sriov.pf.lmtt;
+
 	if (!lmtt->pd)
 		return;
 
-	lmtt_setup_dir_ptr(lmtt);
+	lmtt_setup_dir_ptr(lmtt, gt);
+}
+
+static int lmtt_invalidate_hw(struct xe_lmtt *lmtt)
+{
+	struct xe_tlb_inval_fence fences[XE_MAX_GT_PER_TILE];
+	struct xe_tlb_inval_fence *fence = fences;
+	struct xe_tile *tile = lmtt_to_tile(lmtt);
+	struct xe_gt *gt;
+	int result = 0;
+	int err;
+	u8 id;
+
+	for_each_gt_on_tile(gt, tile, id) {
+		xe_tlb_inval_fence_init(&gt->tlb_inval, fence, true);
+		err = xe_tlb_inval_all(&gt->tlb_inval, fence);
+		result = result ?: err;
+		fence++;
+	}
+
+	lmtt_debug(lmtt, "num_fences=%d err=%d\n", (int)(fence - fences), result);
+
+	/*
+	 * It is fine to wait for all fences, even for those which covers the
+	 * invalidation request that failed, as such fence should be already
+	 * marked as signaled.
+	 */
+	fence = fences;
+	for_each_gt_on_tile(gt, tile, id)
+		xe_tlb_inval_fence_wait(fence++);
+
+	return result;
+}
+
+/**
+ * xe_lmtt_invalidate_hw - Invalidate LMTT hardware.
+ * @lmtt: the &xe_lmtt to invalidate
+ *
+ * Send requests to all GuCs on this tile to invalidate all TLBs.
+ * If the platform has a standalone MERT, also invalidate MERT's TLB.
+ *
+ * This function should be called only when running as a PF driver.
+ */
+void xe_lmtt_invalidate_hw(struct xe_lmtt *lmtt)
+{
+	struct xe_tile *tile = lmtt_to_tile(lmtt);
+	struct xe_device *xe = lmtt_to_xe(lmtt);
+	int err;
+
+	lmtt_assert(lmtt, IS_SRIOV_PF(xe));
+
+	err = lmtt_invalidate_hw(lmtt);
+	if (err)
+		xe_tile_sriov_err(tile, "LMTT invalidation failed (%pe)",
+				  ERR_PTR(err));
+
+	if (xe_device_has_mert(xe) && xe_tile_is_root(tile)) {
+		err = xe_mert_invalidate_lmtt(xe);
+		if (err)
+			xe_tile_sriov_err(tile, "MERT LMTT invalidation failed (%pe)",
+					  ERR_PTR(err));
+	}
 }
 
 static void lmtt_write_pte(struct xe_lmtt *lmtt, struct xe_lmtt_pt *pt,
@@ -226,9 +355,14 @@ static void lmtt_write_pte(struct xe_lmtt *lmtt, struct xe_lmtt_pt *pt,
 
 	switch (lmtt->ops->lmtt_pte_size(level)) {
 	case sizeof(u32):
+		lmtt_assert(lmtt, !overflows_type(pte, u32));
+		lmtt_assert(lmtt, !pte || !iosys_map_rd(&pt->bo->vmap, idx * sizeof(u32), u32));
+
 		xe_map_wr(lmtt_to_xe(lmtt), &pt->bo->vmap, idx * sizeof(u32), u32, pte);
 		break;
 	case sizeof(u64):
+		lmtt_assert(lmtt, !pte || !iosys_map_rd(&pt->bo->vmap, idx * sizeof(u64), u64));
+
 		xe_map_wr(lmtt_to_xe(lmtt), &pt->bo->vmap, idx * sizeof(u64), u64, pte);
 		break;
 	default:
@@ -265,6 +399,7 @@ static void lmtt_drop_pages(struct xe_lmtt *lmtt, unsigned int vfid)
 		return;
 
 	lmtt_write_pte(lmtt, pd, LMTT_PTE_INVALID, vfid);
+	lmtt_invalidate_hw(lmtt);
 
 	lmtt_assert(lmtt, pd->level > 0);
 	lmtt_assert(lmtt, pt->level == pd->level - 1);
@@ -386,11 +521,11 @@ static void lmtt_insert_bo(struct xe_lmtt *lmtt, unsigned int vfid, struct xe_bo
 	u64 addr, vram_offset;
 
 	lmtt_assert(lmtt, IS_ALIGNED(start, page_size));
-	lmtt_assert(lmtt, IS_ALIGNED(bo->size, page_size));
+	lmtt_assert(lmtt, IS_ALIGNED(xe_bo_size(bo), page_size));
 	lmtt_assert(lmtt, xe_bo_is_vram(bo));
 
 	vram_offset = vram_region_gpu_offset(bo->ttm.resource);
-	xe_res_first(bo->ttm.resource, 0, bo->size, &cur);
+	xe_res_first(bo->ttm.resource, 0, xe_bo_size(bo), &cur);
 	while (cur.remaining) {
 		addr = xe_res_dma(&cur);
 		addr += vram_offset; /* XXX */

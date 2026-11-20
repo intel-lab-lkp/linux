@@ -92,7 +92,7 @@
 #define PTE_MASK	PAGE_MASK
 #define CF_PAGE_CHG_MASK (PTE_MASK | CF_PAGE_ACCESSED | CF_PAGE_DIRTY)
 
-#ifndef __ASSEMBLY__
+#ifndef __ASSEMBLER__
 
 #define pmd_pgtable(pmd) pfn_to_virt(pmd_val(pmd) >> PAGE_SHIFT)
 
@@ -137,12 +137,6 @@ static inline int pmd_bad2(pmd_t *pmd) { return 0; }
 #define pmd_present(pmd) (!pmd_none2(&(pmd)))
 static inline void pmd_clear(pmd_t *pmdp) { pmd_val(*pmdp) = 0; }
 
-#define pte_ERROR(e) \
-	printk(KERN_ERR "%s:%d: bad pte %08lx.\n",	\
-	__FILE__, __LINE__, pte_val(e))
-#define pgd_ERROR(e) \
-	printk(KERN_ERR "%s:%d: bad pgd %08lx.\n",	\
-	__FILE__, __LINE__, pgd_val(e))
 
 /*
  * The following only work if pte_present() is true.
@@ -292,5 +286,5 @@ static inline pte_t pte_swp_clear_exclusive(pte_t pte)
 #define pfn_pte(pfn, prot)	__pte(((pfn) << PAGE_SHIFT) | pgprot_val(prot))
 #define pte_pfn(pte)		(pte_val(pte) >> PAGE_SHIFT)
 
-#endif	/* !__ASSEMBLY__ */
+#endif	/* !__ASSEMBLER__ */
 #endif	/* _MCF_PGTABLE_H */

@@ -39,7 +39,6 @@ struct mx25_tcq_priv {
 };
 
 static const struct regmap_config mx25_tcq_regconfig = {
-	.fast_io = true,
 	.max_register = 0x5c,
 	.reg_bits = 32,
 	.val_bits = 32,
@@ -506,7 +505,7 @@ static int mx25_tcq_probe(struct platform_device *pdev)
 	void __iomem *mem;
 	int error;
 
-	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
+	priv = devm_kzalloc_obj(dev, *priv);
 	if (!priv)
 		return -ENOMEM;
 	priv->dev = dev;

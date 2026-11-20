@@ -29,7 +29,7 @@
 
 #include "trace.h"
 
-const struct _kvm_stats_desc kvm_vm_stats_desc[] = {
+const struct kvm_stats_desc kvm_vm_stats_desc[] = {
 	KVM_GENERIC_VM_STATS()
 };
 
@@ -42,7 +42,7 @@ const struct kvm_stats_header kvm_vm_stats_header = {
 		       sizeof(kvm_vm_stats_desc),
 };
 
-const struct _kvm_stats_desc kvm_vcpu_stats_desc[] = {
+const struct kvm_stats_desc kvm_vcpu_stats_desc[] = {
 	KVM_GENERIC_VCPU_STATS(),
 	STATS_DESC_COUNTER(VCPU, hvc_exit_stat),
 	STATS_DESC_COUNTER(VCPU, wfe_exit_stat),
@@ -62,6 +62,7 @@ const struct kvm_stats_header kvm_vcpu_stats_header = {
 		       sizeof(kvm_vcpu_stats_desc),
 };
 
+#if ARM64_S390_COMMON == 1
 static bool core_reg_offset_is_vreg(u64 off)
 {
 	return off >= KVM_REG_ARM_CORE_REG(fp_regs.vregs) &&
@@ -134,19 +135,19 @@ static void *core_reg_addr(struct kvm_vcpu *vcpu, const struct kvm_one_reg *reg)
 	     KVM_REG_ARM_CORE_REG(regs.regs[30]):
 		off -= KVM_REG_ARM_CORE_REG(regs.regs[0]);
 		off /= 2;
-		return &vcpu->arch.ctxt.regs.regs[off];
+		return &vcpu_gp_regs(vcpu)[off];
 
 	case KVM_REG_ARM_CORE_REG(regs.sp):
-		return &vcpu->arch.ctxt.regs.sp;
+		return vcpu_sp_el0(vcpu);
 
 	case KVM_REG_ARM_CORE_REG(regs.pc):
-		return &vcpu->arch.ctxt.regs.pc;
+		return vcpu_pc(vcpu);
 
 	case KVM_REG_ARM_CORE_REG(regs.pstate):
-		return &vcpu->arch.ctxt.regs.pstate;
+		return vcpu_cpsr(vcpu);
 
 	case KVM_REG_ARM_CORE_REG(sp_el1):
-		return __ctxt_sys_reg(&vcpu->arch.ctxt, SP_EL1);
+		return vcpu_sp_el1(vcpu);
 
 	case KVM_REG_ARM_CORE_REG(elr_el1):
 		return __ctxt_sys_reg(&vcpu->arch.ctxt, ELR_EL1);
@@ -170,13 +171,13 @@ static void *core_reg_addr(struct kvm_vcpu *vcpu, const struct kvm_one_reg *reg)
 	     KVM_REG_ARM_CORE_REG(fp_regs.vregs[31]):
 		off -= KVM_REG_ARM_CORE_REG(fp_regs.vregs[0]);
 		off /= 4;
-		return &vcpu->arch.ctxt.fp_regs.vregs[off];
+		return vcpu_vreg(vcpu, off);
 
 	case KVM_REG_ARM_CORE_REG(fp_regs.fpsr):
-		return &vcpu->arch.ctxt.fp_regs.fpsr;
+		return vcpu_fpsr(vcpu);
 
 	case KVM_REG_ARM_CORE_REG(fp_regs.fpcr):
-		return &vcpu->arch.ctxt.fp_regs.fpcr;
+		return vcpu_fpcr(vcpu);
 
 	default:
 		return NULL;
@@ -305,6 +306,8 @@ static int set_core_reg(struct kvm_vcpu *vcpu, const struct kvm_one_reg *reg)
 out:
 	return err;
 }
+
+#endif /* ARM64_S390_COMMON == 1 */
 
 #define vq_word(vq) (((vq) - SVE_VQ_MIN) / 64)
 #define vq_mask(vq) ((u64)1 << ((vq) - SVE_VQ_MIN) % 64)
@@ -500,7 +503,7 @@ static int get_sve_reg(struct kvm_vcpu *vcpu, const struct kvm_one_reg *reg)
 	if (!kvm_arm_vcpu_sve_finalized(vcpu))
 		return -EPERM;
 
-	if (copy_to_user(uptr, vcpu->arch.sve_state + region.koffset,
+	if (copy_to_user(uptr, (void *)vcpu->arch.sve_state + region.koffset,
 			 region.klen) ||
 	    clear_user(uptr + region.klen, region.upad))
 		return -EFAULT;
@@ -526,7 +529,7 @@ static int set_sve_reg(struct kvm_vcpu *vcpu, const struct kvm_one_reg *reg)
 	if (!kvm_arm_vcpu_sve_finalized(vcpu))
 		return -EPERM;
 
-	if (copy_from_user(vcpu->arch.sve_state + region.koffset, uptr,
+	if (copy_from_user((void *)vcpu->arch.sve_state + region.koffset, uptr,
 			   region.klen))
 		return -EFAULT;
 
@@ -543,6 +546,7 @@ int kvm_arch_vcpu_ioctl_set_regs(struct kvm_vcpu *vcpu, struct kvm_regs *regs)
 	return -EINVAL;
 }
 
+#if ARM64_S390_COMMON == 1
 static int copy_core_reg_indices(const struct kvm_vcpu *vcpu,
 				 u64 __user *uindices)
 {
@@ -591,63 +595,7 @@ static unsigned long num_core_regs(const struct kvm_vcpu *vcpu)
 	return copy_core_reg_indices(vcpu, NULL);
 }
 
-static const u64 timer_reg_list[] = {
-	KVM_REG_ARM_TIMER_CTL,
-	KVM_REG_ARM_TIMER_CNT,
-	KVM_REG_ARM_TIMER_CVAL,
-	KVM_REG_ARM_PTIMER_CTL,
-	KVM_REG_ARM_PTIMER_CNT,
-	KVM_REG_ARM_PTIMER_CVAL,
-};
-
-#define NUM_TIMER_REGS ARRAY_SIZE(timer_reg_list)
-
-static bool is_timer_reg(u64 index)
-{
-	switch (index) {
-	case KVM_REG_ARM_TIMER_CTL:
-	case KVM_REG_ARM_TIMER_CNT:
-	case KVM_REG_ARM_TIMER_CVAL:
-	case KVM_REG_ARM_PTIMER_CTL:
-	case KVM_REG_ARM_PTIMER_CNT:
-	case KVM_REG_ARM_PTIMER_CVAL:
-		return true;
-	}
-	return false;
-}
-
-static int copy_timer_indices(struct kvm_vcpu *vcpu, u64 __user *uindices)
-{
-	for (int i = 0; i < NUM_TIMER_REGS; i++) {
-		if (put_user(timer_reg_list[i], uindices))
-			return -EFAULT;
-		uindices++;
-	}
-
-	return 0;
-}
-
-static int set_timer_reg(struct kvm_vcpu *vcpu, const struct kvm_one_reg *reg)
-{
-	void __user *uaddr = (void __user *)(long)reg->addr;
-	u64 val;
-	int ret;
-
-	ret = copy_from_user(&val, uaddr, KVM_REG_SIZE(reg->id));
-	if (ret != 0)
-		return -EFAULT;
-
-	return kvm_arm_timer_set_reg(vcpu, reg->id, val);
-}
-
-static int get_timer_reg(struct kvm_vcpu *vcpu, const struct kvm_one_reg *reg)
-{
-	void __user *uaddr = (void __user *)(long)reg->addr;
-	u64 val;
-
-	val = kvm_arm_timer_get_reg(vcpu, reg->id);
-	return copy_to_user(uaddr, &val, KVM_REG_SIZE(reg->id)) ? -EFAULT : 0;
-}
+#endif /* ARM64_S390_COMMON == 1 */
 
 static unsigned long num_sve_regs(const struct kvm_vcpu *vcpu)
 {
@@ -724,7 +672,6 @@ unsigned long kvm_arm_num_regs(struct kvm_vcpu *vcpu)
 	res += num_sve_regs(vcpu);
 	res += kvm_arm_num_sys_reg_descs(vcpu);
 	res += kvm_arm_get_fw_num_regs(vcpu);
-	res += NUM_TIMER_REGS;
 
 	return res;
 }
@@ -755,11 +702,6 @@ int kvm_arm_copy_reg_indices(struct kvm_vcpu *vcpu, u64 __user *uindices)
 		return ret;
 	uindices += kvm_arm_get_fw_num_regs(vcpu);
 
-	ret = copy_timer_indices(vcpu, uindices);
-	if (ret < 0)
-		return ret;
-	uindices += NUM_TIMER_REGS;
-
 	return kvm_arm_copy_sys_reg_indices(vcpu, uindices);
 }
 
@@ -777,9 +719,6 @@ int kvm_arm_get_reg(struct kvm_vcpu *vcpu, const struct kvm_one_reg *reg)
 	case KVM_REG_ARM64_SVE:	return get_sve_reg(vcpu, reg);
 	}
 
-	if (is_timer_reg(reg->id))
-		return get_timer_reg(vcpu, reg);
-
 	return kvm_arm_sys_reg_get_reg(vcpu, reg);
 }
 
@@ -796,9 +735,6 @@ int kvm_arm_set_reg(struct kvm_vcpu *vcpu, const struct kvm_one_reg *reg)
 		return kvm_arm_set_fw_reg(vcpu, reg);
 	case KVM_REG_ARM64_SVE:	return set_sve_reg(vcpu, reg);
 	}
-
-	if (is_timer_reg(reg->id))
-		return set_timer_reg(vcpu, reg);
 
 	return kvm_arm_sys_reg_set_reg(vcpu, reg);
 }
@@ -818,8 +754,9 @@ int kvm_arch_vcpu_ioctl_set_sregs(struct kvm_vcpu *vcpu,
 int __kvm_arm_vcpu_get_events(struct kvm_vcpu *vcpu,
 			      struct kvm_vcpu_events *events)
 {
-	events->exception.serror_pending = !!(vcpu->arch.hcr_el2 & HCR_VSE);
 	events->exception.serror_has_esr = cpus_have_final_cap(ARM64_HAS_RAS_EXTN);
+	events->exception.serror_pending = (vcpu->arch.hcr_el2 & HCR_EL2_VSE) ||
+					   vcpu_get_flag(vcpu, NESTED_SERROR_PENDING);
 
 	if (events->exception.serror_pending && events->exception.serror_has_esr)
 		events->exception.serror_esr = vcpu_get_vsesr(vcpu);
@@ -833,29 +770,69 @@ int __kvm_arm_vcpu_get_events(struct kvm_vcpu *vcpu,
 	return 0;
 }
 
+static void commit_pending_events(struct kvm_vcpu *vcpu)
+{
+	if (!vcpu_get_flag(vcpu, PENDING_EXCEPTION))
+		return;
+
+	/*
+	 * Reset the MMIO emulation state to avoid stepping PC after emulating
+	 * the exception entry.
+	 */
+	vcpu->mmio_needed = false;
+	kvm_call_hyp(__kvm_adjust_pc, vcpu);
+}
+
 int __kvm_arm_vcpu_set_events(struct kvm_vcpu *vcpu,
 			      struct kvm_vcpu_events *events)
 {
 	bool serror_pending = events->exception.serror_pending;
 	bool has_esr = events->exception.serror_has_esr;
 	bool ext_dabt_pending = events->exception.ext_dabt_pending;
+	u64 esr = events->exception.serror_esr;
+	int ret = 0;
 
-	if (serror_pending && has_esr) {
-		if (!cpus_have_final_cap(ARM64_HAS_RAS_EXTN))
-			return -EINVAL;
+	/*
+	 * EL2 injects an external abort only to complete a forwarded abort.
+	 * SError injection is forwarded.
+	 */
+	if (vcpu_is_protected(vcpu) && ext_dabt_pending)
+		return -EPERM;
 
-		if (!((events->exception.serror_esr) & ~ESR_ELx_ISS_MASK))
-			kvm_set_sei_esr(vcpu, events->exception.serror_esr);
-		else
-			return -EINVAL;
-	} else if (serror_pending) {
-		kvm_inject_vabt(vcpu);
+	/*
+	 * Immediately commit the pending SEA to the vCPU's architectural
+	 * state which is necessary since we do not return a pending SEA
+	 * to userspace via KVM_GET_VCPU_EVENTS.
+	 */
+	if (ext_dabt_pending) {
+		ret = kvm_inject_sea_dabt(vcpu, kvm_vcpu_get_hfar(vcpu));
+		commit_pending_events(vcpu);
 	}
 
-	if (ext_dabt_pending)
-		kvm_inject_dabt(vcpu, kvm_vcpu_get_hfar(vcpu));
+	if (ret < 0)
+		return ret;
 
-	return 0;
+	if (!serror_pending)
+		return 0;
+
+	if (!cpus_have_final_cap(ARM64_HAS_RAS_EXTN) && has_esr)
+		return -EINVAL;
+
+	if (has_esr && (esr & ~ESR_ELx_ISS_MASK))
+		return -EINVAL;
+
+	if (has_esr)
+		ret = kvm_inject_serror_esr(vcpu, esr);
+	else
+		ret = kvm_inject_serror(vcpu);
+
+	/*
+	 * We could've decided that the SError is due for immediate software
+	 * injection; commit the exception in case userspace decides it wants
+	 * to inject more exceptions for some strange reason.
+	 */
+	commit_pending_events(vcpu);
+	return (ret < 0) ? ret : 0;
 }
 
 u32 __attribute_const__ kvm_target_cpu(void)
@@ -918,6 +895,10 @@ int kvm_arch_vcpu_ioctl_set_guest_debug(struct kvm_vcpu *vcpu,
 					struct kvm_guest_debug *dbg)
 {
 	trace_kvm_set_guest_debug(vcpu, dbg->control);
+
+	/* A protected guest's debug state is not exposed to the host. */
+	if (vcpu_is_protected(vcpu))
+		return -EPERM;
 
 	if (dbg->control & ~KVM_GUESTDBG_VALID_MASK)
 		return -EINVAL;

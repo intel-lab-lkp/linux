@@ -55,6 +55,7 @@ int mlx5hws_cmd_flow_table_create(struct mlx5_core_dev *mdev,
 
 	MLX5_SET(create_flow_table_in, in, opcode, MLX5_CMD_OP_CREATE_FLOW_TABLE);
 	MLX5_SET(create_flow_table_in, in, table_type, ft_attr->type);
+	MLX5_SET(create_flow_table_in, in, uid, ft_attr->uid);
 
 	ft_ctx = MLX5_ADDR_OF(create_flow_table_in, in, flow_table_context);
 	MLX5_SET(flow_table_context, ft_ctx, level, ft_attr->level);
@@ -298,7 +299,7 @@ mlx5hws_cmd_forward_tbl_create(struct mlx5_core_dev *mdev,
 	struct mlx5hws_cmd_forward_tbl *tbl;
 	int ret;
 
-	tbl = kzalloc(sizeof(*tbl), GFP_KERNEL);
+	tbl = kzalloc_obj(*tbl);
 	if (!tbl)
 		return NULL;
 
@@ -397,7 +398,6 @@ int mlx5hws_cmd_rtc_create(struct mlx5_core_dev *mdev,
 	MLX5_SET(rtc, attr, update_method, rtc_attr->fw_gen_wqe);
 	MLX5_SET(rtc, attr, update_index_mode, rtc_attr->update_index_mode);
 	MLX5_SET(rtc, attr, access_index_mode, rtc_attr->access_index_mode);
-	MLX5_SET(rtc, attr, num_hash_definer, rtc_attr->num_hash_definer);
 	MLX5_SET(rtc, attr, log_depth, rtc_attr->log_depth);
 	MLX5_SET(rtc, attr, log_hash_size, rtc_attr->log_size);
 	MLX5_SET(rtc, attr, table_type, rtc_attr->table_type);
@@ -610,9 +610,11 @@ int mlx5hws_cmd_stc_modify(struct mlx5_core_dev *mdev,
 
 	ret = mlx5_cmd_exec(mdev, in, sizeof(in), out, sizeof(out));
 	if (ret)
-		mlx5_core_err(mdev, "Failed to modify STC FW action_type %d\n",
-			      stc_attr->action_type);
-
+		mlx5_core_err(mdev,
+			      "Failed to modify STC action_type %d, err %d, syndrome 0x%x\n",
+			      stc_attr->action_type, ret,
+			      MLX5_GET(general_obj_out_cmd_hdr,
+				       out, syndrome));
 	return ret;
 }
 
@@ -1171,19 +1173,13 @@ int mlx5hws_cmd_query_caps(struct mlx5_core_dev *mdev,
 		}
 
 		if (MLX5_GET(query_hca_cap_out, out,
-			     capability.esw_cap.esw_manager_vport_number_valid))
+			     capability.e_switch_cap.esw_manager_vport_number_valid))
 			caps->eswitch_manager_vport_number =
 				MLX5_GET(query_hca_cap_out, out,
-					 capability.esw_cap.esw_manager_vport_number);
+					 capability.e_switch_cap.esw_manager_vport_number);
 
 		caps->merged_eswitch = MLX5_GET(query_hca_cap_out, out,
-						capability.esw_cap.merged_eswitch);
-	}
-
-	ret = mlx5_cmd_exec(mdev, in, sizeof(in), out, out_size);
-	if (ret) {
-		mlx5_core_err(mdev, "Failed to query device attributes\n");
-		goto out;
+						capability.e_switch_cap.merged_eswitch);
 	}
 
 	snprintf(caps->fw_ver, sizeof(caps->fw_ver), "%d.%d.%d",
@@ -1199,34 +1195,20 @@ out:
 int mlx5hws_cmd_query_gvmi(struct mlx5_core_dev *mdev, bool other_function,
 			   u16 vport_number, u16 *gvmi)
 {
-	bool ec_vf_func = other_function ? mlx5_core_is_ec_vf_vport(mdev, vport_number) : false;
-	u32 in[MLX5_ST_SZ_DW(query_hca_cap_in)] = {};
-	int out_size;
-	void *out;
 	int err;
 
-	out_size = MLX5_ST_SZ_BYTES(query_hca_cap_out);
-	out = kzalloc(out_size, GFP_KERNEL);
-	if (!out)
-		return -ENOMEM;
-
-	MLX5_SET(query_hca_cap_in, in, opcode, MLX5_CMD_OP_QUERY_HCA_CAP);
-	MLX5_SET(query_hca_cap_in, in, other_function, other_function);
-	MLX5_SET(query_hca_cap_in, in, function_id,
-		 mlx5_vport_to_func_id(mdev, vport_number, ec_vf_func));
-	MLX5_SET(query_hca_cap_in, in, ec_vf_function, ec_vf_func);
-	MLX5_SET(query_hca_cap_in, in, op_mod,
-		 MLX5_SET_HCA_CAP_OP_MOD_GENERAL_DEVICE << 1 | HCA_CAP_OPMOD_GET_CUR);
-
-	err = mlx5_cmd_exec_inout(mdev, query_hca_cap, in, out);
-	if (err) {
-		kfree(out);
-		return err;
+	if (!other_function) {
+		/* self vhca_id */
+		*gvmi = MLX5_CAP_GEN(mdev, vhca_id);
+		return 0;
 	}
 
-	*gvmi = MLX5_GET(query_hca_cap_out, out, capability.cmd_hca_cap.vhca_id);
-
-	kfree(out);
+	err = mlx5_vport_get_vhca_id(mdev, vport_number, gvmi);
+	if (err) {
+		mlx5_core_err(mdev, "Failed to get vport vhca id for vport %d\n",
+			      vport_number);
+		return err;
+	}
 
 	return 0;
 }

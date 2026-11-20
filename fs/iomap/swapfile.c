@@ -3,9 +3,6 @@
  * Copyright (C) 2018 Oracle.  All Rights Reserved.
  * Author: Darrick J. Wong <darrick.wong@oracle.com>
  */
-#include <linux/module.h>
-#include <linux/compiler.h>
-#include <linux/fs.h>
 #include <linux/iomap.h>
 #include <linux/swap.h>
 
@@ -142,7 +139,7 @@ static int iomap_swapfile_iter(struct iomap_iter *iter,
  */
 int iomap_swapfile_activate(struct swap_info_struct *sis,
 		struct file *swap_file, sector_t *pagespan,
-		const struct iomap_ops *ops)
+		iomap_iter_next_fn next)
 {
 	struct inode *inode = swap_file->f_mapping->host;
 	struct iomap_iter iter = {
@@ -166,7 +163,7 @@ int iomap_swapfile_activate(struct swap_info_struct *sis,
 	if (ret)
 		return ret;
 
-	while ((ret = iomap_iter(&iter, ops)) > 0)
+	while ((ret = iomap_iter(&iter, next)) > 0)
 		iter.status = iomap_swapfile_iter(&iter, &iter.iomap, &isi);
 	if (ret < 0)
 		return ret;

@@ -50,7 +50,7 @@ static struct nd_dax *nd_dax_alloc(struct nd_region *nd_region)
 	struct nd_dax *nd_dax;
 	struct device *dev;
 
-	nd_dax = kzalloc(sizeof(*nd_dax), GFP_KERNEL);
+	nd_dax = kzalloc_obj(*nd_dax);
 	if (!nd_dax)
 		return NULL;
 
@@ -104,13 +104,13 @@ int nd_dax_probe(struct device *dev, struct nd_namespace_common *ndns)
 		return -ENODEV;
 	}
 
-	nvdimm_bus_lock(&ndns->dev);
-	nd_dax = nd_dax_alloc(nd_region);
-	dax_dev = nd_dax_devinit(nd_dax, ndns);
-	nvdimm_bus_unlock(&ndns->dev);
-	if (!dax_dev)
-		return -ENOMEM;
-	pfn_sb = devm_kmalloc(dev, sizeof(*pfn_sb), GFP_KERNEL);
+	scoped_guard(nvdimm_bus, &ndns->dev) {
+		nd_dax = nd_dax_alloc(nd_region);
+		dax_dev = nd_dax_devinit(nd_dax, ndns);
+		if (!dax_dev)
+			return -ENOMEM;
+	}
+	pfn_sb = devm_kmalloc_obj(dev, *pfn_sb);
 	nd_pfn = &nd_dax->nd_pfn;
 	nd_pfn->pfn_sb = pfn_sb;
 	rc = nd_pfn_validate(nd_pfn, DAX_SIG);

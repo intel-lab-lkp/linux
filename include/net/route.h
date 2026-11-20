@@ -129,7 +129,13 @@ struct in_device;
 
 int ip_rt_init(void);
 void rt_cache_flush(struct net *net);
+#ifdef CONFIG_INET
 void rt_flush_dev(struct net_device *dev);
+#else
+static inline void rt_flush_dev(struct net_device *dev)
+{
+}
+#endif
 
 static inline void inet_sk_init_flowi4(const struct inet_sock *inet,
 				       struct flowi4 *fl4)
@@ -189,7 +195,7 @@ static inline struct rtable *ip_route_output(struct net *net, __be32 daddr,
 {
 	struct flowi4 fl4 = {
 		.flowi4_oif = oif,
-		.flowi4_tos = inet_dscp_to_dsfield(dscp),
+		.flowi4_dscp = dscp,
 		.flowi4_scope = scope,
 		.daddr = daddr,
 		.saddr = saddr,
@@ -275,6 +281,8 @@ void rt_del_uncached_list(struct rtable *rt);
 int fib_dump_info_fnhe(struct sk_buff *skb, struct netlink_callback *cb,
 		       u32 table_id, struct fib_info *fi,
 		       int *fa_index, int fa_start, unsigned int flags);
+
+void fnhe_update_pmtu(struct fib_nh_exception *fnhe, u32 new, u32 orig);
 
 static inline void ip_rt_put(struct rtable *rt)
 {
@@ -390,7 +398,7 @@ static inline int ip4_dst_hoplimit(const struct dst_entry *dst)
 		const struct net *net;
 
 		rcu_read_lock();
-		net = dev_net_rcu(dst_dev(dst));
+		net = dst_dev_net_rcu(dst);
 		hoplimit = READ_ONCE(net->ipv4.sysctl_ip_default_ttl);
 		rcu_read_unlock();
 	}
@@ -403,8 +411,11 @@ static inline struct neighbour *ip_neigh_gw4(struct net_device *dev,
 	struct neighbour *neigh;
 
 	neigh = __ipv4_neigh_lookup_noref(dev, (__force u32)daddr);
-	if (unlikely(!neigh))
-		neigh = __neigh_create(&arp_tbl, &daddr, dev, false);
+	if (unlikely(!neigh)) {
+		struct neigh_table *tbl = arp_table(dev_net(dev));
+
+		neigh = __neigh_create(tbl, &daddr, dev, false);
+	}
 
 	return neigh;
 }

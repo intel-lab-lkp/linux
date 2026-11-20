@@ -401,6 +401,13 @@ ssize_t pm80xx_get_non_fatal_dump(struct device *cdev,
 	char *buf_copy = buf;
 
 	temp = (u32 *)pm8001_ha->memoryMap.region[FORENSIC_MEM].virt_ptr;
+
+	if (pm8001_ha->controller_fatal_error) {
+		pm8001_dbg(pm8001_ha, FAIL,
+			   "non-fatal dump not available in fatal error state\n");
+		return -EINVAL;
+	}
+
 	if (++pm8001_ha->non_fatal_count == 1) {
 		if (pm8001_ha->chip_id == chip_8001) {
 			snprintf(pm8001_ha->forensic_info.data_buf.direct_data,
@@ -1552,6 +1559,52 @@ static int mpi_uninit_check(struct pm8001_hba_info *pm8001_ha)
 }
 
 /**
+ * pm80xx_fatal_error_uevent_emit - emits a single fatal error uevent
+ * @pm8001_ha: our hba card information
+ * @error_reporter: reporter of fatal error
+ */
+void pm80xx_fatal_error_uevent_emit(struct pm8001_hba_info *pm8001_ha,
+	enum fatal_error_reporter error_reporter)
+{
+	struct kobj_uevent_env *env;
+
+	pm8001_dbg(pm8001_ha, FAIL, "emitting fatal error uevent");
+
+	env = kzalloc_obj(struct kobj_uevent_env);
+	if (!env)
+		return;
+
+	if (add_uevent_var(env, "DRIVER=%s", DRV_NAME))
+		goto exit;
+
+	if (add_uevent_var(env, "HBA_NUM=%u", pm8001_ha->id))
+		goto exit;
+
+	if (add_uevent_var(env, "EVENT_TYPE=FATAL_ERROR"))
+		goto exit;
+
+	switch (error_reporter) {
+	case REPORTER_DRIVER:
+		if (add_uevent_var(env, "REPORTED_BY=DRIVER"))
+			goto exit;
+		break;
+	case REPORTER_FIRMWARE:
+		if (add_uevent_var(env, "REPORTED_BY=FIRMWARE"))
+			goto exit;
+		break;
+	default:
+		if (add_uevent_var(env, "REPORTED_BY=OTHER"))
+			goto exit;
+		break;
+	}
+
+	kobject_uevent_env(&pm8001_ha->shost->shost_dev.kobj, KOBJ_CHANGE, env->envp);
+
+exit:
+	kfree(env);
+}
+
+/**
  * pm80xx_fatal_errors - returns non-zero *ONLY* when fatal errors
  * @pm8001_ha: our hba card information
  *
@@ -1580,6 +1633,7 @@ pm80xx_fatal_errors(struct pm8001_hba_info *pm8001_ha)
 			"Fatal error SCRATCHPAD1 = 0x%x SCRATCHPAD2 = 0x%x SCRATCHPAD3 = 0x%x SCRATCHPAD_RSVD0 = 0x%x SCRATCHPAD_RSVD1 = 0x%x\n",
 				scratch_pad1, scratch_pad2, scratch_pad3,
 				scratch_pad_rsvd0, scratch_pad_rsvd1);
+		pm80xx_fatal_error_uevent_emit(pm8001_ha, REPORTER_DRIVER);
 		ret = 1;
 	}
 
@@ -2240,6 +2294,7 @@ static void mpi_ssp_event(struct pm8001_hba_info *pm8001_ha, void *piomb)
 static void
 mpi_sata_completion(struct pm8001_hba_info *pm8001_ha,
 		struct outbound_queue_table *circularQ, void *piomb)
+	__must_hold(&circularQ->oq_lock)
 {
 	struct sas_task *t;
 	struct pm8001_ccb_info *ccb;
@@ -2293,8 +2348,7 @@ mpi_sata_completion(struct pm8001_hba_info *pm8001_ha,
 	/* Print sas address of IO failed device */
 	if ((status != IO_SUCCESS) && (status != IO_OVERFLOW) &&
 		(status != IO_UNDERFLOW)) {
-		if (!((t->dev->parent) &&
-			(dev_is_expander(t->dev->parent->dev_type)))) {
+		if (!dev_parent_is_expander(t->dev)) {
 			for (i = 0, j = 4; i <= 3 && j <= 7; i++, j++)
 				sata_addr_low[i] = pm8001_ha->sas_addr[j];
 			for (i = 0, j = 0; i <= 3 && j <= 3; i++, j++)
@@ -3243,7 +3297,7 @@ hw_event_sata_phy_up(struct pm8001_hba_info *pm8001_ha, void *piomb)
 	phy->sas_phy.oob_mode = SATA_OOB_MODE;
 	sas_notify_phy_event(&phy->sas_phy, PHYE_OOB_DONE, GFP_ATOMIC);
 	spin_lock_irqsave(&phy->sas_phy.frame_rcvd_lock, flags);
-	memcpy(phy->frame_rcvd, ((u8 *)&pPayload->sata_fis - 4),
+	memcpy(phy->frame_rcvd, &pPayload->sata_fis,
 		sizeof(struct dev_to_host_fis));
 	phy->frame_rcvd_size = sizeof(struct dev_to_host_fis);
 	phy->identify.target_port_protocols = SAS_PROTOCOL_SATA;
@@ -3803,6 +3857,7 @@ static int ssp_coalesced_comp_resp(struct pm8001_hba_info *pm8001_ha,
  */
 static void process_one_iomb(struct pm8001_hba_info *pm8001_ha,
 		struct outbound_queue_table *circularQ, void *piomb)
+	__must_hold(&circularQ->oq_lock)
 {
 	__le32 pHeader = *(__le32 *)piomb;
 	u32 opc = (u32)((le32_to_cpu(pHeader)) & 0xFFF);
@@ -4039,6 +4094,7 @@ static int process_oq(struct pm8001_hba_info *pm8001_ha, u8 vec)
 			pm8001_dbg(pm8001_ha, FAIL,
 				   "Firmware Fatal error! Regval:0x%x\n",
 				   regval);
+			pm80xx_fatal_error_uevent_emit(pm8001_ha, REPORTER_FIRMWARE);
 			pm8001_handle_event(pm8001_ha, NULL, IO_FATAL_ERROR);
 			print_scratchpad_registers(pm8001_ha);
 			return ret;
@@ -4677,8 +4733,12 @@ pm80xx_chip_phy_start_req(struct pm8001_hba_info *pm8001_ha, u8 phy_id)
 		&pm8001_ha->phy[phy_id].dev_sas_addr, SAS_ADDR_SIZE);
 	payload.sas_identify.phy_id = phy_id;
 
-	return pm8001_mpi_build_cmd(pm8001_ha, 0, opcode, &payload,
+	ret = pm8001_mpi_build_cmd(pm8001_ha, 0, opcode, &payload,
 				    sizeof(payload), 0);
+	if (ret < 0)
+		pm8001_tag_free(pm8001_ha, tag);
+
+	return ret;
 }
 
 /**
@@ -4704,8 +4764,12 @@ static int pm80xx_chip_phy_stop_req(struct pm8001_hba_info *pm8001_ha,
 	payload.tag = cpu_to_le32(tag);
 	payload.phy_id = cpu_to_le32(phy_id);
 
-	return pm8001_mpi_build_cmd(pm8001_ha, 0, opcode, &payload,
+	ret = pm8001_mpi_build_cmd(pm8001_ha, 0, opcode, &payload,
 				    sizeof(payload), 0);
+	if (ret < 0)
+		pm8001_tag_free(pm8001_ha, tag);
+
+	return ret;
 }
 
 /*
@@ -4724,7 +4788,6 @@ static int pm80xx_chip_reg_dev_req(struct pm8001_hba_info *pm8001_ha,
 	u16 firstBurstSize = 0;
 	u16 ITNT = 2000;
 	struct domain_device *dev = pm8001_dev->sas_device;
-	struct domain_device *parent_dev = dev->parent;
 	struct pm8001_port *port = dev->port->lldd_port;
 
 	memset(&payload, 0, sizeof(payload));
@@ -4743,10 +4806,8 @@ static int pm80xx_chip_reg_dev_req(struct pm8001_hba_info *pm8001_ha,
 			dev_is_expander(pm8001_dev->dev_type))
 			stp_sspsmp_sata = 0x01; /*ssp or smp*/
 	}
-	if (parent_dev && dev_is_expander(parent_dev->dev_type))
-		phy_id = parent_dev->ex_dev.ex_phy->phy_id;
-	else
-		phy_id = pm8001_dev->attached_phy;
+
+	phy_id = pm80xx_get_local_phy_id(dev);
 
 	opc = OPC_INB_REG_DEV;
 

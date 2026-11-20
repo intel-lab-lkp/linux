@@ -5,7 +5,6 @@
 #include <linux/device.h>
 #include <linux/debugfs.h>
 #include <linux/firmware.h>
-#include <linux/mod_devicetable.h>
 #include <linux/pm_runtime.h>
 #include <linux/slab.h>
 #include <linux/soundwire/sdw.h>
@@ -91,6 +90,8 @@ static int sdw_slave_reg_show(struct seq_file *s_file, void *data)
 		ret += sdw_sprintf(slave, buf, ret, i);
 	for (i = SDW_SCP_DEVID_0; i <= SDW_SCP_DEVID_5; i++)
 		ret += sdw_sprintf(slave, buf, ret, i);
+	for (i = SDW_SCP_SDCA_INT1; i <= SDW_SCP_SDCA_INTMASK4; i++)
+		ret += sdw_sprintf(slave, buf, ret, i);
 	for (i = SDW_SCP_FRAMECTRL_B0; i <= SDW_SCP_BUSCLOCK_SCALE_B0; i++)
 		ret += sdw_sprintf(slave, buf, ret, i);
 	for (i = SDW_SCP_FRAMECTRL_B1; i <= SDW_SCP_BUSCLOCK_SCALE_B1; i++)
@@ -144,6 +145,38 @@ static u32 start_addr;
 static size_t num_bytes;
 static u8 read_buffer[MAX_CMD_BYTES];
 static char *firmware_file;
+static DEFINE_MUTEX(firmware_file_lock);
+
+static ssize_t firmware_file_write(struct file *file,
+				   const char __user *user_buf,
+				   size_t count, loff_t *ppos)
+{
+	char *old, *new;
+
+	if (*ppos)
+		return -EINVAL;
+	if (count + 1 > PAGE_SIZE)
+		return -E2BIG;
+
+	new = memdup_user_nul(user_buf, count);
+	if (IS_ERR(new))
+		return PTR_ERR(new);
+	strim(new);
+
+	scoped_guard(mutex, &firmware_file_lock) {
+		old = firmware_file;
+		firmware_file = new;
+	}
+
+	kfree(old);
+	return count;
+}
+
+static const struct file_operations firmware_file_fops = {
+	.open = simple_open,
+	.write = firmware_file_write,
+	.llseek = default_llseek,
+};
 
 static int set_command(void *data, u64 value)
 {
@@ -220,15 +253,23 @@ DEFINE_DEBUGFS_ATTRIBUTE(set_num_bytes_fops, NULL,
 static int do_bpt_sequence(struct sdw_slave *slave, bool write, u8 *buffer)
 {
 	struct sdw_bpt_msg msg = {0};
+	struct sdw_bpt_section *sec;
 
-	msg.addr = start_addr;
-	msg.len = num_bytes;
+	sec = kzalloc_objs(*sec, 1);
+	if (!sec)
+		return -ENOMEM;
+	msg.sections = 1;
+
+	sec[0].addr = start_addr;
+	sec[0].len = num_bytes;
+
+	msg.sec = sec;
 	msg.dev_num = slave->dev_num;
 	if (write)
 		msg.flags = SDW_MSG_FLAG_WRITE;
 	else
 		msg.flags = SDW_MSG_FLAG_READ;
-	msg.buf = buffer;
+	sec[0].buf = buffer;
 
 	return sdw_bpt_send_sync(slave->bus, slave, &msg);
 }
@@ -237,6 +278,7 @@ static int cmd_go(void *data, u64 value)
 {
 	const struct firmware *fw = NULL;
 	struct sdw_slave *slave = data;
+	char *fw_name = NULL;
 	ktime_t start_t;
 	ktime_t finish_t;
 	int ret;
@@ -256,15 +298,24 @@ static int cmd_go(void *data, u64 value)
 	}
 
 	if (cmd == 0) {
-		ret = request_firmware(&fw, firmware_file, &slave->dev);
+		scoped_guard(mutex, &firmware_file_lock) {
+			if (firmware_file)
+				fw_name = kstrdup(firmware_file, GFP_KERNEL);
+		}
+		if (!fw_name) {
+			ret = -ENOMEM;
+			goto out;
+		}
+
+		ret = request_firmware(&fw, fw_name, &slave->dev);
 		if (ret < 0) {
-			dev_err(&slave->dev, "firmware %s not found\n", firmware_file);
+			dev_err(&slave->dev, "firmware %s not found\n", fw_name);
 			goto out;
 		}
 		if (fw->size < num_bytes) {
 			dev_err(&slave->dev,
 				"firmware %s: firmware size %zd, desired %zd\n",
-				firmware_file, fw->size, num_bytes);
+				fw_name, fw->size, num_bytes);
 			goto out;
 		}
 	}
@@ -291,15 +342,16 @@ static int cmd_go(void *data, u64 value)
 
 	finish_t = ktime_get();
 
+	dev_dbg(&slave->dev, "command completed, num_byte %zu status %d, time %lld ms\n",
+		num_bytes, ret, div_u64(finish_t - start_t, NSEC_PER_MSEC));
+
 out:
 	if (fw)
 		release_firmware(fw);
+	kfree(fw_name);
 
 	pm_runtime_mark_last_busy(&slave->dev);
 	pm_runtime_put(&slave->dev);
-
-	dev_dbg(&slave->dev, "command completed, num_byte %zu status %d, time %lld ms\n",
-		num_bytes, ret, div_u64(finish_t - start_t, NSEC_PER_MSEC));
 
 	return ret;
 }
@@ -348,8 +400,9 @@ void sdw_slave_debugfs_init(struct sdw_slave *slave)
 	debugfs_create_file("go", 0200, d, slave, &cmd_go_fops);
 
 	debugfs_create_file("read_buffer", 0400, d, slave, &read_buffer_fops);
-	firmware_file = NULL;
-	debugfs_create_str("firmware_file", 0200, d, &firmware_file);
+	if (firmware_file)
+		debugfs_create_file("firmware_file", 0200, d, NULL,
+				    &firmware_file_fops);
 
 	slave->debugfs = d;
 }
@@ -361,10 +414,18 @@ void sdw_slave_debugfs_exit(struct sdw_slave *slave)
 
 void sdw_debugfs_init(void)
 {
+	scoped_guard(mutex, &firmware_file_lock) {
+		if (!firmware_file)
+			firmware_file = kstrdup("", GFP_KERNEL);
+	}
+
 	sdw_debugfs_root = debugfs_create_dir("soundwire", NULL);
 }
 
 void sdw_debugfs_exit(void)
 {
 	debugfs_remove_recursive(sdw_debugfs_root);
+	scoped_guard(mutex, &firmware_file_lock) {
+		kfree(firmware_file);
+	}
 }

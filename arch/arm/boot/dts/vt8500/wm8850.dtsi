@@ -18,12 +18,8 @@
 			device_type = "cpu";
 			compatible = "arm,cortex-a9";
 			reg = <0x0>;
+			next-level-cache = <&l2_cache>;
 		};
-	};
-
-	memory {
-		device_type = "memory";
-		reg = <0x0 0x0>;
 	};
 
 	aliases {
@@ -183,21 +179,21 @@
 					enable-bit = <25>;
 				};
 
-                                clkuart2: uart2 {
-                                        #clock-cells = <0>;
-                                        compatible = "via,vt8500-device-clock";
-                                        clocks = <&ref24>;
-                                        enable-reg = <0x254>;
-                                        enable-bit = <26>;
-                                };
+				clkuart2: uart2 {
+					#clock-cells = <0>;
+					compatible = "via,vt8500-device-clock";
+					clocks = <&ref24>;
+					enable-reg = <0x254>;
+					enable-bit = <26>;
+				};
 
-                                clkuart3: uart3 {
-                                        #clock-cells = <0>;
-                                        compatible = "via,vt8500-device-clock";
-                                        clocks = <&ref24>;
-                                        enable-reg = <0x254>;
-                                        enable-bit = <27>;
-                                };
+				clkuart3: uart3 {
+					#clock-cells = <0>;
+					compatible = "via,vt8500-device-clock";
+					clocks = <&ref24>;
+					enable-reg = <0x254>;
+					enable-bit = <27>;
+				};
 
 				clkpwm: pwm {
 					#clock-cells = <0>;
@@ -277,21 +273,21 @@
 			status = "disabled";
 		};
 
-                uart2: serial@d8210000 {
-                        compatible = "via,vt8500-uart";
-                        reg = <0xd8210000 0x1040>;
-                        interrupts = <47>;
-                        clocks = <&clkuart2>;
+		uart2: serial@d8210000 {
+			compatible = "via,vt8500-uart";
+			reg = <0xd8210000 0x1040>;
+			interrupts = <47>;
+			clocks = <&clkuart2>;
 			status = "disabled";
-                };
+		};
 
-                uart3: serial@d82c0000 {
-                        compatible = "via,vt8500-uart";
-                        reg = <0xd82c0000 0x1040>;
-                        interrupts = <50>;
-                        clocks = <&clkuart3>;
+		uart3: serial@d82c0000 {
+			compatible = "via,vt8500-uart";
+			reg = <0xd82c0000 0x1040>;
+			interrupts = <50>;
+			clocks = <&clkuart3>;
 			status = "disabled";
-                };
+		};
 
 		rtc@d8100000 {
 			compatible = "via,vt8500-rtc";
@@ -299,7 +295,7 @@
 			interrupts = <48>;
 		};
 
-		sdhc@d800a000 {
+		mmc@d800a000 {
 			compatible = "wm,wm8505-sdhc";
 			reg = <0xd800a000 0x1000>;
 			interrupts = <20 21>;
@@ -312,6 +308,19 @@
 			compatible = "via,vt8500-rhine";
 			reg = <0xd8004000 0x100>;
 			interrupts = <10>;
-                };
+		};
+
+		l2_cache: cache-controller@d9000000 {
+			compatible = "arm,pl310-cache";
+			reg = <0xd9000000 0x1000>;
+			arm,double-linefill = <1>;
+			arm,dynamic-clock-gating = <1>;
+			arm,shared-override;
+			arm,standby-mode = <1>;
+			cache-level = <2>;
+			cache-unified;
+			prefetch-data = <1>;
+			prefetch-instr = <1>;
+		};
 	};
 };

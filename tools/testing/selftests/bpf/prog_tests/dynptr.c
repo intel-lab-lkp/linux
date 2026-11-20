@@ -9,6 +9,7 @@
 enum test_setup_type {
 	SETUP_SYSCALL_SLEEP,
 	SETUP_SKB_PROG,
+	SETUP_SKB_PROG_NONLINEAR,
 	SETUP_SKB_PROG_TP,
 	SETUP_XDP_PROG,
 };
@@ -21,9 +22,24 @@ static struct {
 	{"test_dynptr_data", SETUP_SYSCALL_SLEEP},
 	{"test_dynptr_copy", SETUP_SYSCALL_SLEEP},
 	{"test_dynptr_copy_xdp", SETUP_XDP_PROG},
+	{"test_dynptr_copy_xdp_overlap", SETUP_XDP_PROG},
+	{"test_dynptr_copy_xdp_overlap_src_linear", SETUP_XDP_PROG},
+	{"test_dynptr_copy_xdp_overlap_dst_frag", SETUP_XDP_PROG},
+	{"test_dynptr_memset_zero", SETUP_SYSCALL_SLEEP},
+	{"test_dynptr_memset_notzero", SETUP_SYSCALL_SLEEP},
+	{"test_dynptr_memset_zero_offset", SETUP_SYSCALL_SLEEP},
+	{"test_dynptr_memset_zero_adjusted", SETUP_SYSCALL_SLEEP},
+	{"test_dynptr_memset_overflow", SETUP_SYSCALL_SLEEP},
+	{"test_dynptr_memset_overflow_offset", SETUP_SYSCALL_SLEEP},
+	{"test_dynptr_memset_readonly", SETUP_SKB_PROG},
+	{"test_dynptr_memset_xdp_chunks", SETUP_XDP_PROG},
 	{"test_ringbuf", SETUP_SYSCALL_SLEEP},
 	{"test_skb_readonly", SETUP_SKB_PROG},
 	{"test_dynptr_skb_data", SETUP_SKB_PROG},
+	{"test_dynptr_skb_slice_non_linear", SETUP_SKB_PROG_NONLINEAR},
+	{"test_dynptr_skb_slice_rdwr_buffer", SETUP_SKB_PROG_NONLINEAR},
+	{"test_dynptr_skb_meta_data", SETUP_SKB_PROG},
+	{"test_dynptr_skb_meta_flags", SETUP_SKB_PROG},
 	{"test_adjust", SETUP_SYSCALL_SLEEP},
 	{"test_adjust_err", SETUP_SYSCALL_SLEEP},
 	{"test_zero_size_dynptr", SETUP_SYSCALL_SLEEP},
@@ -42,6 +58,8 @@ static struct {
 	{"test_copy_from_user_task_dynptr", SETUP_SYSCALL_SLEEP},
 	{"test_copy_from_user_task_str_dynptr", SETUP_SYSCALL_SLEEP},
 };
+
+#define PAGE_SIZE_64K 65536
 
 static void verify_success(const char *prog_name, enum test_setup_type setup_type)
 {
@@ -82,7 +100,9 @@ static void verify_success(const char *prog_name, enum test_setup_type setup_typ
 		bpf_link__destroy(link);
 		break;
 	case SETUP_SKB_PROG:
+	case SETUP_SKB_PROG_NONLINEAR:
 	{
+		struct __sk_buff ctx = {};
 		int prog_fd;
 		char buf[64];
 
@@ -93,6 +113,12 @@ static void verify_success(const char *prog_name, enum test_setup_type setup_typ
 			    .data_size_out = sizeof(buf),
 			    .repeat = 1,
 		);
+
+		if (setup_type == SETUP_SKB_PROG_NONLINEAR) {
+			ctx.data_end = ETH_HLEN + sizeof(struct iphdr);
+			topts.ctx_in = &ctx;
+			topts.ctx_size_in = sizeof(ctx);
+		}
 
 		prog_fd = bpf_program__fd(prog);
 		if (!ASSERT_GE(prog_fd, 0, "prog_fd"))
@@ -125,11 +151,14 @@ static void verify_success(const char *prog_name, enum test_setup_type setup_typ
 		);
 
 		link = bpf_program__attach(prog);
-		if (!ASSERT_OK_PTR(link, "bpf_program__attach"))
+		if (!ASSERT_OK_PTR(link, "bpf_program__attach")) {
+			bpf_object__close(obj);
 			goto cleanup;
+		}
 
 		err = bpf_prog_test_run_opts(aux_prog_fd, &topts);
 		bpf_link__destroy(link);
+		bpf_object__close(obj);
 
 		if (!ASSERT_OK(err, "test_run"))
 			goto cleanup;
@@ -138,13 +167,17 @@ static void verify_success(const char *prog_name, enum test_setup_type setup_typ
 	}
 	case SETUP_XDP_PROG:
 	{
-		char data[5000];
+		char data[90000];
 		int err, prog_fd;
 		LIBBPF_OPTS(bpf_test_run_opts, opts,
 			    .data_in = &data,
-			    .data_size_in = sizeof(data),
 			    .repeat = 1,
 		);
+
+		if (getpagesize() == PAGE_SIZE_64K)
+			opts.data_size_in = sizeof(data);
+		else
+			opts.data_size_in = 5000;
 
 		prog_fd = bpf_program__fd(prog);
 		err = bpf_prog_test_run_opts(prog_fd, &opts);

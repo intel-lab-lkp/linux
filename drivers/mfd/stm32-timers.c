@@ -5,6 +5,7 @@
  */
 
 #include <linux/bitfield.h>
+#include <linux/export.h>
 #include <linux/mfd/stm32-timers.h>
 #include <linux/module.h>
 #include <linux/of_platform.h>
@@ -291,7 +292,7 @@ static int stm32_timers_probe(struct platform_device *pdev)
 	void __iomem *mmio;
 	int ret;
 
-	ddata = devm_kzalloc(dev, sizeof(*ddata), GFP_KERNEL);
+	ddata = devm_kzalloc_obj(dev, *ddata);
 	if (!ddata)
 		return -ENOMEM;
 

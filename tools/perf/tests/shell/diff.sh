@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # perf diff tests
 # SPDX-License-Identifier: GPL-2.0
 
@@ -11,7 +11,6 @@ perfdata3=$(mktemp /tmp/__perf_test.perf.data.XXXXX)
 testprog="perf test -w thloop"
 
 shelldir=$(dirname "$0")
-# shellcheck source=lib/perf_has_symbol.sh
 . "${shelldir}"/lib/perf_has_symbol.sh
 
 testsym="test_loop"

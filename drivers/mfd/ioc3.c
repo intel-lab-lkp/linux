@@ -6,7 +6,7 @@
  *
  * Based on work by:
  *   Stanislaw Skowronek <skylark@unaligned.org>
- *   Joshua Kinard <kumba@gentoo.org>
+ *   Joshua Kinard <linux@kumba.dev>
  *   Brent Casavant <bcasavan@sgi.com> - IOC4 master driver
  *   Pat Gefre <pfg@sgi.com> - IOC3 serial port IRQ demuxer
  */
@@ -584,8 +584,7 @@ static int ioc3_mfd_probe(struct pci_dev *pdev,
 	}
 
 	/* Set up per-IOC3 data */
-	ipd = devm_kzalloc(&pdev->dev, sizeof(struct ioc3_priv_data),
-			   GFP_KERNEL);
+	ipd = devm_kzalloc_obj(&pdev->dev, struct ioc3_priv_data);
 	if (!ipd) {
 		ret = -ENOMEM;
 		goto out_disable_device;

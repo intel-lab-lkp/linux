@@ -10,7 +10,6 @@
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/irq.h>
-#include <linux/mod_devicetable.h>
 #include <linux/pinctrl/pinconf.h>
 #include <linux/pinctrl/pinconf-generic.h>
 #include <linux/pinctrl/pinctrl.h>
@@ -1156,11 +1155,14 @@ static const struct pinconf_ops pistachio_pinconf_ops = {
 	.is_generic = true,
 };
 
-static struct pinctrl_desc pistachio_pinctrl_desc = {
+static const struct pinctrl_desc pistachio_pinctrl_desc = {
 	.name = "pistachio-pinctrl",
 	.pctlops = &pistachio_pinctrl_ops,
 	.pmxops = &pistachio_pinmux_ops,
 	.confops = &pistachio_pinconf_ops,
+	.pins = pistachio_pins,
+	.npins = ARRAY_SIZE(pistachio_pins),
+
 };
 
 static int pistachio_gpio_get_direction(struct gpio_chip *chip, unsigned offset)
@@ -1328,7 +1330,7 @@ static void pistachio_gpio_irq_handler(struct irq_desc *desc)
 			.direction_input = pistachio_gpio_direction_input, \
 			.direction_output = pistachio_gpio_direction_output, \
 			.get = pistachio_gpio_get,			\
-			.set_rv = pistachio_gpio_set,			\
+			.set = pistachio_gpio_set,			\
 			.base = _pin_base,				\
 			.ngpio = _npins,				\
 		},							\
@@ -1408,9 +1410,7 @@ static int pistachio_gpio_register(struct pistachio_pinctrl *pctl)
 		gpio_irq_chip_set_chip(girq, &pistachio_gpio_irq_chip);
 		girq->parent_handler = pistachio_gpio_irq_handler;
 		girq->num_parents = 1;
-		girq->parents = devm_kcalloc(pctl->dev, 1,
-					     sizeof(*girq->parents),
-					     GFP_KERNEL);
+		girq->parents = devm_kzalloc_objs(pctl->dev, *girq->parents, 1);
 		if (!girq->parents) {
 			ret = -ENOMEM;
 			goto err;
@@ -1455,7 +1455,7 @@ static int pistachio_pinctrl_probe(struct platform_device *pdev)
 {
 	struct pistachio_pinctrl *pctl;
 
-	pctl = devm_kzalloc(&pdev->dev, sizeof(*pctl), GFP_KERNEL);
+	pctl = devm_kzalloc_obj(&pdev->dev, *pctl);
 	if (!pctl)
 		return -ENOMEM;
 	pctl->dev = &pdev->dev;
@@ -1473,9 +1473,6 @@ static int pistachio_pinctrl_probe(struct platform_device *pdev)
 	pctl->ngroups = ARRAY_SIZE(pistachio_groups);
 	pctl->gpio_banks = pistachio_gpio_banks;
 	pctl->nbanks = ARRAY_SIZE(pistachio_gpio_banks);
-
-	pistachio_pinctrl_desc.pins = pctl->pins;
-	pistachio_pinctrl_desc.npins = pctl->npins;
 
 	pctl->pctldev = devm_pinctrl_register(&pdev->dev, &pistachio_pinctrl_desc,
 					      pctl);

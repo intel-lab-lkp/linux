@@ -85,7 +85,7 @@ static const struct gpio_chip bd71815gpo_chip = {
 	.owner			= THIS_MODULE,
 	.get			= bd71815gpo_get,
 	.get_direction		= bd71815gpo_direction_get,
-	.set_rv			= bd71815gpo_set,
+	.set			= bd71815gpo_set,
 	.set_config		= bd71815_gpio_set_config,
 	.can_sleep		= true,
 };
@@ -137,7 +137,7 @@ static int gpo_bd71815_probe(struct platform_device *pdev)
 	/* The device-tree and regmap come from MFD => use parent for that */
 	parent = dev->parent;
 
-	g = devm_kzalloc(dev, sizeof(*g), GFP_KERNEL);
+	g = devm_kzalloc_obj(dev, *g);
 	if (!g)
 		return -ENOMEM;
 

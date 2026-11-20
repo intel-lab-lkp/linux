@@ -95,7 +95,7 @@ static const struct regmap_irq mt6370_irqs[] = {
 	REGMAP_IRQ_REG_LINE(MT6370_IRQ_FLED1_SHORT, 8),
 	REGMAP_IRQ_REG_LINE(MT6370_IRQ_FLED2_STRB, 8),
 	REGMAP_IRQ_REG_LINE(MT6370_IRQ_FLED1_STRB, 8),
-	REGMAP_IRQ_REG_LINE(mT6370_IRQ_FLED2_STRB_TO, 8),
+	REGMAP_IRQ_REG_LINE(MT6370_IRQ_FLED2_STRB_TO, 8),
 	REGMAP_IRQ_REG_LINE(MT6370_IRQ_FLED1_STRB_TO, 8),
 	REGMAP_IRQ_REG_LINE(MT6370_IRQ_FLED2_TOR, 8),
 	REGMAP_IRQ_REG_LINE(MT6370_IRQ_FLED1_TOR, 8),
@@ -235,7 +235,7 @@ static int mt6370_probe(struct i2c_client *i2c)
 	struct device *dev = &i2c->dev;
 	int ret, vid;
 
-	info = devm_kzalloc(dev, sizeof(*info), GFP_KERNEL);
+	info = devm_kzalloc_obj(dev, *info);
 	if (!info)
 		return -ENOMEM;
 

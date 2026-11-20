@@ -6,15 +6,21 @@
 
 /* BFD and kernel.h both define GCC_VERSION, differently */
 #undef GCC_VERSION
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
 #include <stdbool.h>
 #include <stdio.h>
+#include <errno.h>
 #include <stdlib.h>
+#include <bpf/skel_internal.h>
 #include <linux/bpf.h>
 #include <linux/compiler.h>
 #include <linux/kernel.h>
 
 #include <bpf/hashmap.h>
 #include <bpf/libbpf.h>
+#include <bpf/bpf.h>
 
 #include "json_writer.h"
 
@@ -51,6 +57,7 @@ static inline void *u64_to_ptr(__u64 ptr)
 	})
 
 #define ERR_MAX_LEN	1024
+#define MAX_SIG_SIZE	16384
 
 #define BPF_TAG_FMT	"%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx"
 
@@ -82,11 +89,16 @@ extern bool block_mount;
 extern bool verifier_logs;
 extern bool relaxed_maps;
 extern bool use_loader;
+extern bool wait_output;
 extern struct btf *base_btf;
 extern struct hashmap *refs_table;
+extern bool sign_progs;
+extern const char *private_key_path;
+extern const char *cert_path;
 
 void __printf(1, 2) p_err(const char *fmt, ...);
 void __printf(1, 2) p_info(const char *fmt, ...);
+const char *bpf_strerror(int err);
 
 bool is_prefix(const char *pfx, const char *str);
 int detect_common_prefix(const char *arg, ...);
@@ -110,6 +122,7 @@ struct obj_refs {
 };
 
 struct btf;
+struct btf_var_secinfo;
 struct bpf_line_info;
 
 int build_pinned_obj_table(struct hashmap *table,
@@ -140,8 +153,10 @@ void get_prog_full_name(const struct bpf_prog_info *prog_info, int prog_fd,
 int get_fd_type(int fd);
 const char *get_fd_type_name(enum bpf_obj_type type);
 char *get_fdinfo(int fd, const char *key);
-int open_obj_pinned(const char *path, bool quiet);
-int open_obj_pinned_any(const char *path, enum bpf_obj_type exp_type);
+int open_obj_pinned(const char *path, bool quiet,
+		    const struct bpf_obj_get_opts *opts);
+int open_obj_pinned_any(const char *path, enum bpf_obj_type exp_type,
+			const struct bpf_obj_get_opts *opts);
 int mount_bpffs_for_file(const char *file_name);
 int create_and_mount_bpffs_dir(const char *dir_name);
 int do_pin_any(int argc, char **argv, int (*get_fd_by_id)(int *, char ***));
@@ -163,14 +178,15 @@ int do_tracelog(int argc, char **arg) __weak;
 int do_feature(int argc, char **argv) __weak;
 int do_struct_ops(int argc, char **argv) __weak;
 int do_iter(int argc, char **argv) __weak;
+int do_token(int argc, char **argv) __weak;
 
 int parse_u32_arg(int *argc, char ***argv, __u32 *val, const char *what);
 int prog_parse_fd(int *argc, char ***argv);
 int prog_parse_fds(int *argc, char ***argv, int **fds);
-int map_parse_fd(int *argc, char ***argv);
-int map_parse_fds(int *argc, char ***argv, int **fds);
+int map_parse_fd(int *argc, char ***argv, __u32 open_flags);
+int map_parse_fds(int *argc, char ***argv, int **fds, __u32 open_flags);
 int map_parse_fd_and_info(int *argc, char ***argv, struct bpf_map_info *info,
-			  __u32 *info_len);
+			  __u32 *info_len, __u32 open_flags);
 
 struct bpf_prog_linfo;
 #if defined(HAVE_LLVM_SUPPORT) || defined(HAVE_LIBBFD_SUPPORT)
@@ -203,6 +219,7 @@ void print_hex_data_json(uint8_t *data, size_t len);
 
 unsigned int get_page_size(void);
 unsigned int get_possible_cpus(void);
+int get_possible_cpu_ids(int **cpu_ids);
 const char *
 ifindex_to_arch(__u32 ifindex, __u64 ns_dev, __u64 ns_ino, const char **opt);
 
@@ -224,6 +241,7 @@ int btf_dumper_type(const struct btf_dumper *d, __u32 type_id,
 		    const void *data);
 void btf_dumper_type_only(const struct btf *btf, __u32 func_type_id,
 			  char *func_only, int size);
+bool btf_var_is_piece(const struct btf *btf, const struct btf_var_secinfo *vsi);
 
 void btf_dump_linfo_plain(const struct btf *btf,
 			  const struct bpf_line_info *linfo,
@@ -271,4 +289,29 @@ int pathname_concat(char *buf, int buf_sz, const char *path,
 /* print netfilter bpf_link info */
 void netfilter_dump_plain(const struct bpf_link_info *info);
 void netfilter_dump_json(const struct bpf_link_info *info, json_writer_t *wtr);
+
+struct kernel_config_option {
+	const char *name;
+	bool macro_dump;
+};
+
+int read_kernel_config(const struct kernel_config_option *requested_options,
+		       size_t num_options, char **out_values,
+		       const char *define_prefix);
+#ifndef BPFTOOL_WITHOUT_CRYPTO
+int bpftool_prog_sign(struct bpf_load_and_run_opts *opts);
+__u32 register_session_key(const char *key_der_path);
+#else
+static inline int bpftool_prog_sign(struct bpf_load_and_run_opts *opts)
+{
+	p_err("bpftool was built without signing support");
+	return -ENOTSUP;
+}
+
+static inline __u32 register_session_key(const char *key_der_path)
+{
+	p_err("bpftool was built without signing support");
+	return -1;
+}
+#endif
 #endif

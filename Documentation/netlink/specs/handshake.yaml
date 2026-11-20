@@ -13,10 +13,17 @@ doc: Netlink protocol to request a transport layer security handshake.
 
 definitions:
   -
+    type: const
+    name: max-errno
+    value: 4095
+    header: linux/err.h
+    scope: kernel
+  -
     type: enum
     name: handler-class
     value-start: 0
-    entries: [none, tlshd, max]
+    entries: [none, tlshd]
+    render-max: true
   -
     type: enum
     name: msg-type
@@ -61,7 +68,7 @@ attribute-sets:
         enum: auth
       -
         name: peer-identity
-        type: u32
+        type: s32
         multi-attr: true
       -
         name: certificate
@@ -71,18 +78,23 @@ attribute-sets:
       -
         name: peername
         type: string
+      -
+        name: keyring
+        type: s32
   -
     name: done
     attributes:
       -
         name: status
         type: u32
+        checks:
+          max: max-errno
       -
         name: sockfd
         type: s32
       -
         name: remote-auth
-        type: u32
+        type: s32
         multi-attr: true
 
 operations:
@@ -109,10 +121,12 @@ operations:
             - peer-identity
             - certificate
             - peername
+            - keyring
     -
       name: done
       doc: Handler reports handshake completion
       attribute-set: done
+      flags: [admin-perm]
       do:
         request:
           attributes:

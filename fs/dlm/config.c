@@ -26,6 +26,7 @@
 /*
  * /config/dlm/<cluster>/spaces/<space>/nodes/<node>/nodeid (refers to <node>)
  * /config/dlm/<cluster>/spaces/<space>/nodes/<node>/weight
+ * /config/dlm/<cluster>/spaces/<space>/nodes/<node>/release_recover
  * /config/dlm/<cluster>/comms/<comm>/nodeid (refers to <comm>)
  * /config/dlm/<cluster>/comms/<comm>/local
  * /config/dlm/<cluster>/comms/<comm>/addr      (write only)
@@ -63,11 +64,37 @@ static void release_node(struct config_item *);
 static struct configfs_attribute *comm_attrs[];
 static struct configfs_attribute *node_attrs[];
 
+static u32 rsb_hashfn(const void *data, u32 len, u32 seed)
+{
+	const struct dlm_rsb_key *key = data;
+
+	return jhash(key->name, key->len, 0);
+}
+
+static u32 rsb_obj_hashfn(const void *data, u32 len, u32 seed)
+{
+	const struct dlm_rsb *r = data;
+
+	return r->res_hash;
+}
+
+static int rsb_obj_cmpfn(struct rhashtable_compare_arg *arg, const void *obj)
+{
+	const struct dlm_rsb_key *key = arg->key;
+	const struct dlm_rsb *r = obj;
+
+	if (key->len != r->res_length)
+		return -1;
+
+	return memcmp(&r->res_name, key->name, key->len);
+}
+
 const struct rhashtable_params dlm_rhash_rsb_params = {
 	.nelem_hint = 3, /* start small */
-	.key_len = DLM_RESNAME_MAXLEN,
-	.key_offset = offsetof(struct dlm_rsb, res_name),
 	.head_offset = offsetof(struct dlm_rsb, res_node),
+	.hashfn = rsb_hashfn,
+	.obj_hashfn = rsb_obj_hashfn,
+	.obj_cmpfn = rsb_obj_cmpfn,
 	.automatic_shrinking = true,
 };
 
@@ -267,6 +294,7 @@ enum {
 enum {
 	NODE_ATTR_NODEID = 0,
 	NODE_ATTR_WEIGHT,
+	NODE_ATTR_RELEASE_RECOVER,
 };
 
 struct dlm_clusters {
@@ -280,6 +308,8 @@ struct dlm_spaces {
 struct dlm_space {
 	struct config_group group;
 	struct list_head members;
+	struct list_head members_gone;
+	int members_gone_count;
 	struct mutex members_lock;
 	int members_count;
 	struct dlm_nodes *nds;
@@ -310,41 +340,49 @@ struct dlm_node {
 	int weight;
 	int new;
 	int comm_seq; /* copy of cm->seq when nd->nodeid is set */
+	unsigned int release_recover;
 };
 
-static struct configfs_group_operations clusters_ops = {
+struct dlm_member_gone {
+	int nodeid;
+	unsigned int release_recover;
+
+	struct list_head list; /* space->members_gone */
+};
+
+static const struct configfs_group_operations clusters_ops = {
 	.make_group = make_cluster,
 	.drop_item = drop_cluster,
 };
 
-static struct configfs_item_operations cluster_ops = {
+static const struct configfs_item_operations cluster_ops = {
 	.release = release_cluster,
 };
 
-static struct configfs_group_operations spaces_ops = {
+static const struct configfs_group_operations spaces_ops = {
 	.make_group = make_space,
 	.drop_item = drop_space,
 };
 
-static struct configfs_item_operations space_ops = {
+static const struct configfs_item_operations space_ops = {
 	.release = release_space,
 };
 
-static struct configfs_group_operations comms_ops = {
+static const struct configfs_group_operations comms_ops = {
 	.make_item = make_comm,
 	.drop_item = drop_comm,
 };
 
-static struct configfs_item_operations comm_ops = {
+static const struct configfs_item_operations comm_ops = {
 	.release = release_comm,
 };
 
-static struct configfs_group_operations nodes_ops = {
+static const struct configfs_group_operations nodes_ops = {
 	.make_item = make_node,
 	.drop_item = drop_node,
 };
 
-static struct configfs_item_operations node_ops = {
+static const struct configfs_item_operations node_ops = {
 	.release = release_node,
 };
 
@@ -414,9 +452,9 @@ static struct config_group *make_cluster(struct config_group *g,
 	struct dlm_spaces *sps = NULL;
 	struct dlm_comms *cms = NULL;
 
-	cl = kzalloc(sizeof(struct dlm_cluster), GFP_NOFS);
-	sps = kzalloc(sizeof(struct dlm_spaces), GFP_NOFS);
-	cms = kzalloc(sizeof(struct dlm_comms), GFP_NOFS);
+	cl = kzalloc_obj(struct dlm_cluster, GFP_NOFS);
+	sps = kzalloc_obj(struct dlm_spaces, GFP_NOFS);
+	cms = kzalloc_obj(struct dlm_comms, GFP_NOFS);
 
 	if (!cl || !sps || !cms)
 		goto fail;
@@ -468,8 +506,8 @@ static struct config_group *make_space(struct config_group *g, const char *name)
 	struct dlm_space *sp = NULL;
 	struct dlm_nodes *nds = NULL;
 
-	sp = kzalloc(sizeof(struct dlm_space), GFP_NOFS);
-	nds = kzalloc(sizeof(struct dlm_nodes), GFP_NOFS);
+	sp = kzalloc_obj(struct dlm_space, GFP_NOFS);
+	nds = kzalloc_obj(struct dlm_nodes, GFP_NOFS);
 
 	if (!sp || !nds)
 		goto fail;
@@ -480,6 +518,7 @@ static struct config_group *make_space(struct config_group *g, const char *name)
 	configfs_add_default_group(&nds->ns_group, &sp->group);
 
 	INIT_LIST_HEAD(&sp->members);
+	INIT_LIST_HEAD(&sp->members_gone);
 	mutex_init(&sp->members_lock);
 	sp->members_count = 0;
 	sp->nds = nds;
@@ -518,7 +557,7 @@ static struct config_item *make_comm(struct config_group *g, const char *name)
 	if (rv)
 		return ERR_PTR(rv);
 
-	cm = kzalloc(sizeof(struct dlm_comm), GFP_NOFS);
+	cm = kzalloc_obj(struct dlm_comm, GFP_NOFS);
 	if (!cm)
 		return ERR_PTR(-ENOMEM);
 
@@ -564,7 +603,7 @@ static struct config_item *make_node(struct config_group *g, const char *name)
 	if (rv)
 		return ERR_PTR(rv);
 
-	nd = kzalloc(sizeof(struct dlm_node), GFP_NOFS);
+	nd = kzalloc_obj(struct dlm_node, GFP_NOFS);
 	if (!nd)
 		return ERR_PTR(-ENOMEM);
 
@@ -587,10 +626,20 @@ static void drop_node(struct config_group *g, struct config_item *i)
 {
 	struct dlm_space *sp = config_item_to_space(g->cg_item.ci_parent);
 	struct dlm_node *nd = config_item_to_node(i);
+	struct dlm_member_gone *mb_gone;
+
+	mb_gone = kzalloc_obj(*mb_gone);
+	if (!mb_gone)
+		return;
 
 	mutex_lock(&sp->members_lock);
 	list_del(&nd->list);
 	sp->members_count--;
+
+	mb_gone->nodeid = nd->nodeid;
+	mb_gone->release_recover = nd->release_recover;
+	list_add(&mb_gone->list, &sp->members_gone);
+	sp->members_gone_count++;
 	mutex_unlock(&sp->members_lock);
 
 	config_item_put(i);
@@ -678,7 +727,7 @@ static ssize_t comm_addr_store(struct config_item *item, const char *buf,
 	if (cm->addr_count >= DLM_MAX_ADDR_COUNT)
 		return -ENOSPC;
 
-	addr = kzalloc(sizeof(*addr), GFP_NOFS);
+	addr = kzalloc_obj(*addr, GFP_NOFS);
 	if (!addr)
 		return -ENOMEM;
 
@@ -808,19 +857,48 @@ static ssize_t node_weight_show(struct config_item *item, char *buf)
 static ssize_t node_weight_store(struct config_item *item, const char *buf,
 				 size_t len)
 {
-	int rc = kstrtoint(buf, 0, &config_item_to_node(item)->weight);
+	struct dlm_node *node = config_item_to_node(item);
+	int weight;
+	int rc;
 
+	rc = kstrtoint(buf, 0, &weight);
 	if (rc)
 		return rc;
+	if (weight < 0)
+		return -EINVAL;
+
+	node->weight = weight;
+	return len;
+}
+
+static ssize_t node_release_recover_show(struct config_item *item, char *buf)
+{
+	struct dlm_node *n = config_item_to_node(item);
+
+	return sprintf(buf, "%u\n", n->release_recover);
+}
+
+static ssize_t node_release_recover_store(struct config_item *item,
+					  const char *buf, size_t len)
+{
+	struct dlm_node *n = config_item_to_node(item);
+	int rc;
+
+	rc = kstrtouint(buf, 0, &n->release_recover);
+	if (rc)
+		return rc;
+
 	return len;
 }
 
 CONFIGFS_ATTR(node_, nodeid);
 CONFIGFS_ATTR(node_, weight);
+CONFIGFS_ATTR(node_, release_recover);
 
 static struct configfs_attribute *node_attrs[] = {
 	[NODE_ATTR_NODEID] = &node_attr_nodeid,
 	[NODE_ATTR_WEIGHT] = &node_attr_weight,
+	[NODE_ATTR_RELEASE_RECOVER] = &node_attr_release_recover,
 	NULL,
 };
 
@@ -882,9 +960,10 @@ static void put_comm(struct dlm_comm *cm)
 int dlm_config_nodes(char *lsname, struct dlm_config_node **nodes_out,
 		     int *count_out)
 {
+	struct dlm_member_gone *mb_gone, *mb_safe;
+	struct dlm_config_node *nodes, *node;
 	struct dlm_space *sp;
 	struct dlm_node *nd;
-	struct dlm_config_node *nodes, *node;
 	int rv, count;
 
 	sp = get_space(lsname);
@@ -898,9 +977,9 @@ int dlm_config_nodes(char *lsname, struct dlm_config_node **nodes_out,
 		goto out;
 	}
 
-	count = sp->members_count;
+	count = sp->members_count + sp->members_gone_count;
 
-	nodes = kcalloc(count, sizeof(struct dlm_config_node), GFP_NOFS);
+	nodes = kzalloc_objs(struct dlm_config_node, count, GFP_NOFS);
 	if (!nodes) {
 		rv = -ENOMEM;
 		goto out;
@@ -915,6 +994,20 @@ int dlm_config_nodes(char *lsname, struct dlm_config_node **nodes_out,
 		node++;
 
 		nd->new = 0;
+	}
+
+	/* we delay the remove on nodes until here as configfs does
+	 * not support addtional attributes for rmdir().
+	 */
+	list_for_each_entry_safe(mb_gone, mb_safe, &sp->members_gone, list) {
+		node->nodeid = mb_gone->nodeid;
+		node->release_recover = mb_gone->release_recover;
+		node->gone = true;
+		node++;
+
+		list_del(&mb_gone->list);
+		sp->members_gone_count--;
+		kfree(mb_gone);
 	}
 
 	*count_out = count;

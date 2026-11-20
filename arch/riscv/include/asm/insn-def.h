@@ -25,7 +25,7 @@
 #define INSN_S_SIMM5_SHIFT		 7
 #define INSN_S_OPCODE_SHIFT		 0
 
-#ifdef __ASSEMBLY__
+#ifdef __ASSEMBLER__
 
 #ifdef CONFIG_AS_HAS_INSN
 
@@ -77,7 +77,7 @@
 #define __INSN_I(...)	insn_i __VA_ARGS__
 #define __INSN_S(...)	insn_s __VA_ARGS__
 
-#else /* ! __ASSEMBLY__ */
+#else /* ! __ASSEMBLER__ */
 
 #ifdef CONFIG_AS_HAS_INSN
 
@@ -153,7 +153,7 @@
 
 #endif
 
-#endif /* ! __ASSEMBLY__ */
+#endif /* ! __ASSEMBLER__ */
 
 #define INSN_R(opcode, func3, func7, rd, rs1, rs2)		\
 	__INSN_R(RV_##opcode, RV_##func3, RV_##func7,		\
@@ -179,6 +179,7 @@
 #define RV___RS1(v)		__RV_REG(v)
 #define RV___RS2(v)		__RV_REG(v)
 
+#define RV_OPCODE_AMO		RV_OPCODE(47)
 #define RV_OPCODE_MISC_MEM	RV_OPCODE(15)
 #define RV_OPCODE_OP_IMM	RV_OPCODE(19)
 #define RV_OPCODE_SYSTEM	RV_OPCODE(115)
@@ -191,21 +192,109 @@
 	INSN_R(OPCODE_SYSTEM, FUNC3(0), FUNC7(49),		\
 	       __RD(0), RS1(gaddr), RS2(vmid))
 
+#define ALT_SIFIVE_MAL_9092_FENCE					\
+ALTERNATIVE("nop", "fence rw, rw", SIFIVE_VENDOR_ID,			\
+	    ERRATA_SIFIVE_MAL_9092, CONFIG_ERRATA_SIFIVE_MAL_9092)
+
 #define HLVX_HU(dest, addr)					\
+	ALT_SIFIVE_MAL_9092_FENCE "\n"				\
 	INSN_R(OPCODE_SYSTEM, FUNC3(4), FUNC7(50),		\
-	       RD(dest), RS1(addr), __RS2(3))
+	       RD(dest), RS1(addr), __RS2(3)) "\n"		\
+	ALT_SIFIVE_MAL_9092_FENCE
 
 #define HLV_W(dest, addr)					\
+	ALT_SIFIVE_MAL_9092_FENCE "\n"				\
 	INSN_R(OPCODE_SYSTEM, FUNC3(4), FUNC7(52),		\
-	       RD(dest), RS1(addr), __RS2(0))
+	       RD(dest), RS1(addr), __RS2(0)) "\n"		\
+	ALT_SIFIVE_MAL_9092_FENCE
 
 #ifdef CONFIG_64BIT
 #define HLV_D(dest, addr)					\
+	ALT_SIFIVE_MAL_9092_FENCE "\n"				\
 	INSN_R(OPCODE_SYSTEM, FUNC3(4), FUNC7(54),		\
-	       RD(dest), RS1(addr), __RS2(0))
+	       RD(dest), RS1(addr), __RS2(0)) "\n"		\
+	ALT_SIFIVE_MAL_9092_FENCE
 #else
 #define HLV_D(dest, addr)					\
 	__ASM_STR(.error "hlv.d requires 64-bit support")
+#endif
+
+#define LB_AQ(dest, addr)					\
+	INSN_R(OPCODE_AMO, FUNC3(0), FUNC7(26),			\
+	       RD(dest), RS1(addr), __RS2(0))
+
+#define LB_AQRL(dest, addr)					\
+	INSN_R(OPCODE_AMO, FUNC3(0), FUNC7(27),			\
+	       RD(dest), RS1(addr), __RS2(0))
+
+#define LH_AQ(dest, addr)					\
+	INSN_R(OPCODE_AMO, FUNC3(1), FUNC7(26),			\
+	       RD(dest), RS1(addr), __RS2(0))
+
+#define LH_AQRL(dest, addr)					\
+	INSN_R(OPCODE_AMO, FUNC3(1), FUNC7(27),			\
+	       RD(dest), RS1(addr), __RS2(0))
+
+#define LW_AQ(dest, addr)					\
+	INSN_R(OPCODE_AMO, FUNC3(2), FUNC7(26),			\
+	       RD(dest), RS1(addr), __RS2(0))
+
+#define LW_AQRL(dest, addr)					\
+	INSN_R(OPCODE_AMO, FUNC3(2), FUNC7(27),			\
+	       RD(dest), RS1(addr), __RS2(0))
+
+#define SB_RL(src, addr)					\
+	INSN_R(OPCODE_AMO, FUNC3(0), FUNC7(29),			\
+	       __RD(0), RS1(addr), RS2(src))
+
+#define SB_AQRL(src, addr)					\
+	INSN_R(OPCODE_AMO, FUNC3(0), FUNC7(31),			\
+	       __RD(0), RS1(addr), RS2(src))
+
+#define SH_RL(src, addr)					\
+	INSN_R(OPCODE_AMO, FUNC3(1), FUNC7(29),			\
+	       __RD(0), RS1(addr), RS2(src))
+
+#define SH_AQRL(src, addr)					\
+	INSN_R(OPCODE_AMO, FUNC3(1), FUNC7(31),			\
+	       __RD(0), RS1(addr), RS2(src))
+
+#define SW_RL(src, addr)					\
+	INSN_R(OPCODE_AMO, FUNC3(2), FUNC7(29),			\
+	       __RD(0), RS1(addr), RS2(src))
+
+#define SW_AQRL(src, addr)					\
+	INSN_R(OPCODE_AMO, FUNC3(2), FUNC7(31),			\
+	       __RD(0), RS1(addr), RS2(src))
+
+#ifdef CONFIG_64BIT
+#define LD_AQ(dest, addr)					\
+	INSN_R(OPCODE_AMO, FUNC3(3), FUNC7(26),			\
+	       RD(dest), RS1(addr), __RS2(0))
+
+#define LD_AQRL(dest, addr)					\
+	INSN_R(OPCODE_AMO, FUNC3(3), FUNC7(27),			\
+	       RD(dest), RS1(addr), __RS2(0))
+
+#define SD_RL(src, addr)					\
+	INSN_R(OPCODE_AMO, FUNC3(3), FUNC7(29),			\
+	       __RD(0), RS1(addr), RS2(src))
+
+#define SD_AQRL(src, addr)					\
+	INSN_R(OPCODE_AMO, FUNC3(3), FUNC7(31),			\
+	       __RD(0), RS1(addr), RS2(src))
+#else
+#define LD_AQ(dest, addr)					\
+	__ASM_STR(.error "ld.aq requires 64-bit support")
+
+#define LD_AQRL(dest, addr)					\
+	__ASM_STR(.error "ld.aqrl requires 64-bit support")
+
+#define SD_RL(dest, addr)					\
+	__ASM_STR(.error "sd.rl requires 64-bit support")
+
+#define SD_AQRL(dest, addr)					\
+	__ASM_STR(.error "sd.aqrl requires 64-bit support")
 #endif
 
 #define SINVAL_VMA(vaddr, asid)					\
@@ -256,14 +345,14 @@
 	INSN_S(OPCODE_OP_IMM, FUNC3(6), __RS2(3),		\
 	       SIMM12((offset) & 0xfe0), RS1(base))
 
-#define RISCV_PAUSE	".4byte 0x100000f"
-#define ZAWRS_WRS_NTO	".4byte 0x00d00073"
-#define ZAWRS_WRS_STO	".4byte 0x01d00073"
-#define RISCV_NOP4	".4byte 0x00000013"
+#define RISCV_PAUSE	ASM_INSN_I("0x100000f")
+#define ZAWRS_WRS_NTO	ASM_INSN_I("0x00d00073")
+#define ZAWRS_WRS_STO	ASM_INSN_I("0x01d00073")
+#define RISCV_NOP4	ASM_INSN_I("0x00000013")
 
 #define RISCV_INSN_NOP4	_AC(0x00000013, U)
 
-#ifndef __ASSEMBLY__
+#ifndef __ASSEMBLER__
 #define nop()           __asm__ __volatile__ ("nop")
 #define __nops(n)       ".rept  " #n "\nnop\n.endr\n"
 #define nops(n)         __asm__ __volatile__ (__nops(n))

@@ -5,6 +5,7 @@
  */
 
 #include <linux/freezer.h>
+#include <linux/uio.h>
 
 #include "smb_common.h"
 #include "server.h"
@@ -22,7 +23,6 @@ struct interface {
 	struct socket		*ksmbd_socket;
 	struct list_head	entry;
 	char			*name;
-	struct mutex		sock_release_lock;
 	int			state;
 };
 
@@ -30,17 +30,42 @@ static LIST_HEAD(iface_list);
 
 static int bind_additional_ifaces;
 
+struct tcp_tx {
+	struct list_head		list;
+	size_t			len;
+	size_t			offset;
+	unsigned long		deadline;
+	int			msg_flags;
+	u8			data[];
+};
+
 struct tcp_transport {
 	struct ksmbd_transport		transport;
 	struct socket			*sock;
 	struct kvec			*iov;
 	unsigned int			nr_iov;
+	/* Serializes queue access and socket writes. Never taken by callbacks. */
+	struct mutex			tx_lock;
+	struct list_head		tx_queue;
+	struct delayed_work		tx_work;
+	size_t				tx_queued;
+	/* TCP byte positions for accepted PDUs and bytes passed to the socket. */
+	u64				tx_end;
+	u64				tx_sent;
+	bool				tx_stopped;
+	void				(*write_space)(struct sock *sk);
 };
 
 static const struct ksmbd_transport_ops ksmbd_tcp_transport_ops;
 
 static void tcp_stop_kthread(struct task_struct *kthread);
+static void ksmbd_tcp_stop_listener(struct interface *iface);
 static struct interface *alloc_iface(char *ifname);
+static void ksmbd_tcp_disconnect(struct ksmbd_transport *t);
+static void ksmbd_tcp_shutdown(struct ksmbd_transport *t);
+static void ksmbd_tcp_tx_work(struct work_struct *work);
+static void ksmbd_tcp_write_space(struct sock *sk);
+static void ksmbd_tcp_stop_tx(struct tcp_transport *t);
 
 #define KSMBD_TRANS(t)	(&(t)->transport)
 #define TCP_TRANS(t)	((struct tcp_transport *)container_of(t, \
@@ -56,28 +81,18 @@ static inline void ksmbd_tcp_reuseaddr(struct socket *sock)
 	sock_set_reuseaddr(sock->sk);
 }
 
-static inline void ksmbd_tcp_rcv_timeout(struct socket *sock, s64 secs)
-{
-	if (secs && secs < MAX_SCHEDULE_TIMEOUT / HZ - 1)
-		WRITE_ONCE(sock->sk->sk_rcvtimeo, secs * HZ);
-	else
-		WRITE_ONCE(sock->sk->sk_rcvtimeo, MAX_SCHEDULE_TIMEOUT);
-}
-
-static inline void ksmbd_tcp_snd_timeout(struct socket *sock, s64 secs)
-{
-	sock_set_sndtimeo(sock->sk, secs);
-}
-
 static struct tcp_transport *alloc_transport(struct socket *client_sk)
 {
 	struct tcp_transport *t;
 	struct ksmbd_conn *conn;
 
-	t = kzalloc(sizeof(*t), KSMBD_DEFAULT_GFP);
+	t = kzalloc_obj(*t, KSMBD_DEFAULT_GFP);
 	if (!t)
 		return NULL;
 	t->sock = client_sk;
+	mutex_init(&t->tx_lock);
+	INIT_LIST_HEAD(&t->tx_queue);
+	INIT_DELAYED_WORK(&t->tx_work, ksmbd_tcp_tx_work);
 
 	conn = ksmbd_conn_alloc();
 	if (!conn) {
@@ -85,9 +100,39 @@ static struct tcp_transport *alloc_transport(struct socket *client_sk)
 		return NULL;
 	}
 
+#if IS_ENABLED(CONFIG_IPV6)
+	if (client_sk->sk->sk_family == AF_INET6) {
+		memcpy(&conn->inet6_addr, &client_sk->sk->sk_v6_daddr, 16);
+		conn->inet_hash = ipv6_addr_hash(&client_sk->sk->sk_v6_daddr);
+		conn->is_ipv6 = true;
+	} else {
+		conn->inet_addr = inet_sk(client_sk->sk)->inet_daddr;
+		conn->inet_hash = ipv4_addr_hash(inet_sk(client_sk->sk)->inet_daddr);
+	}
+#else
+	conn->inet_addr = inet_sk(client_sk->sk)->inet_daddr;
+	conn->inet_hash = ipv4_addr_hash(inet_sk(client_sk->sk)->inet_daddr);
+#endif
 	conn->transport = KSMBD_TRANS(t);
 	KSMBD_TRANS(t)->conn = conn;
 	KSMBD_TRANS(t)->ops = &ksmbd_tcp_transport_ops;
+
+	lock_sock(client_sk->sk);
+	t->tx_end = tcp_sk(client_sk->sk)->bytes_acked +
+		(u32)(tcp_sk(client_sk->sk)->write_seq -
+		      tcp_sk(client_sk->sk)->snd_una);
+	t->tx_sent = t->tx_end;
+	release_sock(client_sk->sk);
+
+	write_lock_bh(&client_sk->sk->sk_callback_lock);
+	t->write_space = client_sk->sk->sk_write_space;
+	client_sk->sk->sk_user_data = t;
+	client_sk->sk->sk_write_space = ksmbd_tcp_write_space;
+	write_unlock_bh(&client_sk->sk->sk_callback_lock);
+
+	down_write(&conn_list_lock);
+	hash_add(conn_list, &conn->hlist, conn->inet_hash);
+	up_write(&conn_list_lock);
 	return t;
 }
 
@@ -95,6 +140,7 @@ static void ksmbd_tcp_free_transport(struct ksmbd_transport *kt)
 {
 	struct tcp_transport *t = TCP_TRANS(kt);
 
+	ksmbd_tcp_stop_tx(t);
 	sock_release(t->sock);
 	kfree(t->iov);
 	kfree(t);
@@ -102,7 +148,8 @@ static void ksmbd_tcp_free_transport(struct ksmbd_transport *kt)
 
 static void free_transport(struct tcp_transport *t)
 {
-	kernel_sock_shutdown(t->sock, SHUT_RDWR);
+	ksmbd_tcp_shutdown(KSMBD_TRANS(t));
+	ksmbd_tcp_stop_tx(t);
 	ksmbd_conn_free(KSMBD_TRANS(t)->conn);
 }
 
@@ -153,24 +200,13 @@ static struct kvec *get_conn_iovec(struct tcp_transport *t, unsigned int nr_segs
 		return t->iov;
 
 	/* not big enough -- allocate a new one and release the old */
-	new_iov = kmalloc_array(nr_segs, sizeof(*new_iov), KSMBD_DEFAULT_GFP);
+	new_iov = kmalloc_objs(*new_iov, nr_segs, KSMBD_DEFAULT_GFP);
 	if (new_iov) {
 		kfree(t->iov);
 		t->iov = new_iov;
 		t->nr_iov = nr_segs;
 	}
 	return new_iov;
-}
-
-static unsigned short ksmbd_tcp_get_port(const struct sockaddr *sa)
-{
-	switch (sa->sa_family) {
-	case AF_INET:
-		return ntohs(((struct sockaddr_in *)sa)->sin_port);
-	case AF_INET6:
-		return ntohs(((struct sockaddr_in6 *)sa)->sin6_port);
-	}
-	return 0;
 }
 
 /**
@@ -184,7 +220,6 @@ static unsigned short ksmbd_tcp_get_port(const struct sockaddr *sa)
  */
 static int ksmbd_tcp_new_connection(struct socket *client_sk)
 {
-	struct sockaddr *csin;
 	int rc = 0;
 	struct tcp_transport *t;
 	struct task_struct *handler;
@@ -192,29 +227,30 @@ static int ksmbd_tcp_new_connection(struct socket *client_sk)
 	t = alloc_transport(client_sk);
 	if (!t) {
 		sock_release(client_sk);
+		if (server_conf.max_connections)
+			atomic_dec(&active_num_conn);
 		return -ENOMEM;
 	}
 
-	csin = KSMBD_TCP_PEER_SOCKADDR(KSMBD_TRANS(t)->conn);
-	if (kernel_getpeername(client_sk, csin) < 0) {
-		pr_err("client ip resolution failed\n");
-		rc = -EINVAL;
-		goto out_error;
-	}
-
+#if IS_ENABLED(CONFIG_IPV6)
+	if (client_sk->sk->sk_family == AF_INET6)
+		handler = kthread_run(ksmbd_conn_handler_loop,
+				KSMBD_TRANS(t)->conn, "ksmbd:%pI6c",
+				&KSMBD_TRANS(t)->conn->inet6_addr);
+	else
+		handler = kthread_run(ksmbd_conn_handler_loop,
+				KSMBD_TRANS(t)->conn, "ksmbd:%pI4",
+				&KSMBD_TRANS(t)->conn->inet_addr);
+#else
 	handler = kthread_run(ksmbd_conn_handler_loop,
-			      KSMBD_TRANS(t)->conn,
-			      "ksmbd:%u",
-			      ksmbd_tcp_get_port(csin));
+			KSMBD_TRANS(t)->conn, "ksmbd:%pI4",
+			&KSMBD_TRANS(t)->conn->inet_addr);
+#endif
 	if (IS_ERR(handler)) {
 		pr_err("cannot start conn thread\n");
 		rc = PTR_ERR(handler);
-		free_transport(t);
+		ksmbd_tcp_disconnect(KSMBD_TRANS(t));
 	}
-	return rc;
-
-out_error:
-	free_transport(t);
 	return rc;
 }
 
@@ -228,26 +264,68 @@ static int ksmbd_kthread_fn(void *p)
 {
 	struct socket *client_sk = NULL;
 	struct interface *iface = (struct interface *)p;
-	int ret;
+	struct ksmbd_conn *conn;
+	int ret, inet_hash;
+	unsigned int max_ip_conns;
 
 	while (!kthread_should_stop()) {
-		mutex_lock(&iface->sock_release_lock);
 		if (!iface->ksmbd_socket) {
-			mutex_unlock(&iface->sock_release_lock);
 			break;
 		}
-		ret = kernel_accept(iface->ksmbd_socket, &client_sk,
-				    SOCK_NONBLOCK);
-		mutex_unlock(&iface->sock_release_lock);
-		if (ret) {
-			if (ret == -EAGAIN)
-				/* check for new connections every 100 msecs */
-				schedule_timeout_interruptible(HZ / 10);
+		ret = kernel_accept(iface->ksmbd_socket, &client_sk, 0);
+		if (ret == -EINVAL)
+			break;
+		if (ret)
+			continue;
+
+		if (!server_conf.max_ip_connections)
+			goto skip_max_ip_conns_limit;
+
+		/*
+		 * Limits repeated connections from clients with the same IP.
+		 */
+#if IS_ENABLED(CONFIG_IPV6)
+		if (client_sk->sk->sk_family == AF_INET6)
+			inet_hash = ipv6_addr_hash(&client_sk->sk->sk_v6_daddr);
+		else
+			inet_hash = ipv4_addr_hash(inet_sk(client_sk->sk)->inet_daddr);
+#else
+		inet_hash = ipv4_addr_hash(inet_sk(client_sk->sk)->inet_daddr);
+#endif
+
+		max_ip_conns = 0;
+		down_read(&conn_list_lock);
+		hash_for_each_possible(conn_list, conn, hlist, inet_hash) {
+#if IS_ENABLED(CONFIG_IPV6)
+			if (client_sk->sk->sk_family == AF_INET6) {
+				if (memcmp(&client_sk->sk->sk_v6_daddr,
+					   &conn->inet6_addr, 16) == 0)
+					max_ip_conns++;
+			} else if (inet_sk(client_sk->sk)->inet_daddr ==
+				 conn->inet_addr)
+				max_ip_conns++;
+#else
+			if (inet_sk(client_sk->sk)->inet_daddr ==
+			    conn->inet_addr)
+				max_ip_conns++;
+#endif
+			if (server_conf.max_ip_connections <= max_ip_conns) {
+				pr_info_ratelimited("Maximum IP connections exceeded (%u/%u)\n",
+						    max_ip_conns, server_conf.max_ip_connections);
+				ret = -EAGAIN;
+				break;
+			}
+		}
+		up_read(&conn_list_lock);
+		if (ret == -EAGAIN) {
+			/* Per-IP limit hit: release the just-accepted socket. */
+			sock_release(client_sk);
 			continue;
 		}
 
+skip_max_ip_conns_limit:
 		if (server_conf.max_connections &&
-		    atomic_inc_return(&active_num_conn) >= server_conf.max_connections) {
+		    atomic_inc_return(&active_num_conn) > server_conf.max_connections) {
 			pr_info_ratelimited("Limit the maximum number of connections(%u)\n",
 					    atomic_read(&active_num_conn));
 			atomic_dec(&active_num_conn);
@@ -258,6 +336,12 @@ static int ksmbd_kthread_fn(void *p)
 		ksmbd_debug(CONN, "connect success: accepted new connection\n");
 		client_sk->sk->sk_rcvtimeo = KSMBD_TCP_RECV_TIMEOUT;
 		client_sk->sk->sk_sndtimeo = KSMBD_TCP_SEND_TIMEOUT;
+		/*
+		 * Detect peers that disappear without sending a FIN or RST.
+		 * Otherwise the connection handler can retry receive timeouts
+		 * indefinitely and keep the connection in conn_list.
+		 */
+		sock_set_keepalive(client_sk->sk);
 
 		ksmbd_tcp_new_connection(client_sk);
 	}
@@ -281,13 +365,20 @@ static int ksmbd_tcp_run_kthread(struct interface *iface)
 	int rc;
 	struct task_struct *kthread;
 
-	kthread = kthread_run(ksmbd_kthread_fn, (void *)iface, "ksmbd-%s",
-			      iface->name);
+	kthread = kthread_create(ksmbd_kthread_fn, (void *)iface, "ksmbd-%s",
+				 iface->name);
 	if (IS_ERR(kthread)) {
 		rc = PTR_ERR(kthread);
 		return rc;
 	}
+
+	/*
+	 * The listener can exit after its socket is shutdown, so keep the
+	 * task_struct alive until the caller has stopped it.
+	 */
+	get_task_struct(kthread);
 	iface->ksmbd_kthread = kthread;
+	wake_up_process(kthread);
 
 	return 0;
 }
@@ -383,14 +474,251 @@ static int ksmbd_tcp_read(struct ksmbd_transport *t, char *buf,
 	return ksmbd_tcp_readv(TCP_TRANS(t), &iov, 1, to_read, max_retries);
 }
 
-static int ksmbd_tcp_writev(struct ksmbd_transport *t, struct kvec *iov,
-			    int nvecs, int size, bool need_invalidate,
-			    unsigned int remote_key)
-
+static bool ksmbd_tcp_tx_has_space(struct tcp_transport *t, size_t size)
 {
-	struct msghdr smb_msg = {.msg_flags = MSG_NOSIGNAL};
+	size_t limit = max_t(size_t, READ_ONCE(t->sock->sk->sk_sndbuf), size);
 
-	return kernel_sendmsg(TCP_TRANS(t)->sock, &smb_msg, iov, nvecs, size);
+	/* Allow one large response, but bound the retained response buffers. */
+	return READ_ONCE(t->tx_queued) <= limit - size;
+}
+
+static struct tcp_tx *ksmbd_tcp_alloc_tx(const struct ksmbd_transport_write *tx,
+					 size_t offset)
+{
+	struct tcp_tx *msg;
+	struct iov_iter iter;
+	size_t remaining = tx->size - offset;
+
+	msg = kvmalloc_flex(*msg, data, remaining, KSMBD_DEFAULT_GFP);
+	if (!msg)
+		return NULL;
+
+	iov_iter_kvec(&iter, ITER_SOURCE, tx->iov, tx->iov_cnt, tx->size);
+	iov_iter_advance(&iter, offset);
+	if (!copy_from_iter_full(msg->data, remaining, &iter)) {
+		kvfree(msg);
+		return NULL;
+	}
+	msg->len = remaining;
+	msg->offset = 0;
+	msg->msg_flags = tx->msg_flags;
+	return msg;
+}
+
+static void ksmbd_tcp_purge_tx(struct tcp_transport *t)
+{
+	struct tcp_tx *msg, *next;
+
+	list_for_each_entry_safe(msg, next, &t->tx_queue, list) {
+		list_del(&msg->list);
+		kvfree(msg);
+	}
+	WRITE_ONCE(t->tx_queued, 0);
+}
+
+static bool ksmbd_tcp_send_retry(int ret)
+{
+	return ret == -EAGAIN || ret == -EINTR || ret == -ERESTARTSYS ||
+		ret == -ENOMEM;
+}
+
+static void ksmbd_tcp_tx_work(struct work_struct *work)
+{
+	struct tcp_transport *t = container_of(to_delayed_work(work),
+					     struct tcp_transport, tx_work);
+	unsigned long delay = 0;
+	unsigned int budget = 16;
+	bool failed = false;
+	int ret;
+
+	mutex_lock(&t->tx_lock);
+	while (!READ_ONCE(t->tx_stopped) && !list_empty(&t->tx_queue) && budget--) {
+		struct tcp_tx *msg = list_first_entry(&t->tx_queue, struct tcp_tx, list);
+		struct msghdr hdr = {
+			.msg_flags = MSG_NOSIGNAL | MSG_DONTWAIT | msg->msg_flags,
+		};
+		struct kvec iov = {
+			.iov_base = msg->data + msg->offset,
+			.iov_len = msg->len - msg->offset,
+		};
+
+		/* MSG_DONTWAIT bypasses sk_sndtimeo, including for retained PDUs. */
+		if (time_after_eq(jiffies, msg->deadline)) {
+			WRITE_ONCE(t->tx_stopped, true);
+			failed = true;
+			break;
+		}
+		ret = kernel_sendmsg(t->sock, &hdr, &iov, 1, iov.iov_len);
+		if (ret > 0) {
+			msg->offset += ret;
+			t->tx_sent += ret;
+			if (msg->offset == msg->len) {
+				WRITE_ONCE(t->tx_queued, t->tx_queued - msg->len);
+				list_del(&msg->list);
+				kvfree(msg);
+				continue;
+			}
+		} else if (!ksmbd_tcp_send_retry(ret)) {
+			WRITE_ONCE(t->tx_stopped, true);
+			failed = true;
+			break;
+		}
+		/*
+		 * Write-space notifications normally resume the head of the queue.
+		 * Also retry after memory pressure, which may produce no notification.
+		 */
+		delay = max_t(unsigned long, 1, HZ / 10);
+		break;
+	}
+	if (READ_ONCE(t->tx_stopped))
+		ksmbd_tcp_purge_tx(t);
+	else if (!list_empty(&t->tx_queue))
+		queue_delayed_work(system_dfl_wq, &t->tx_work, delay);
+	mutex_unlock(&t->tx_lock);
+	wake_up_all(&t->transport.conn->req_running_q);
+
+	if (failed)
+		ksmbd_conn_abort(t->transport.conn);
+}
+
+static void ksmbd_tcp_write_space(struct sock *sk)
+{
+	struct tcp_transport *t;
+
+	read_lock_bh(&sk->sk_callback_lock);
+	t = sk->sk_user_data;
+	if (t) {
+		t->write_space(sk);
+		if (!READ_ONCE(t->tx_stopped) && sk_stream_is_writeable(sk))
+			mod_delayed_work(system_dfl_wq, &t->tx_work, 0);
+	}
+	read_unlock_bh(&sk->sk_callback_lock);
+}
+
+static void ksmbd_tcp_stop_tx(struct tcp_transport *t)
+{
+	struct sock *sk = t->sock->sk;
+
+	WRITE_ONCE(t->tx_stopped, true);
+	write_lock_bh(&sk->sk_callback_lock);
+	if (sk->sk_user_data == t) {
+		sk->sk_write_space = t->write_space;
+		sk->sk_user_data = NULL;
+	}
+	write_unlock_bh(&sk->sk_callback_lock);
+	cancel_delayed_work_sync(&t->tx_work);
+	mutex_lock(&t->tx_lock);
+	ksmbd_tcp_purge_tx(t);
+	mutex_unlock(&t->tx_lock);
+	wake_up_all(&t->transport.conn->req_running_q);
+}
+
+static int ksmbd_tcp_writev(struct ksmbd_transport *t,
+			    const struct ksmbd_transport_write *tx)
+{
+	struct tcp_transport *tt = TCP_TRANS(t);
+	struct sock *sk = tt->sock->sk;
+	struct msghdr hdr = {
+		.msg_flags = MSG_NOSIGNAL | MSG_DONTWAIT | tx->msg_flags,
+	};
+	struct tcp_tx *msg;
+	unsigned long deadline = jiffies + KSMBD_TCP_SEND_TIMEOUT;
+	long timeout;
+	int sent = 0;
+
+	for (;;) {
+		if (tx->msg_flags & MSG_DONTWAIT) {
+			if (!mutex_trylock(&tt->tx_lock))
+				return -EAGAIN;
+		} else {
+			mutex_lock(&tt->tx_lock);
+		}
+		if (READ_ONCE(tt->tx_stopped) || ksmbd_conn_exiting(t->conn) ||
+		    ksmbd_conn_releasing(t->conn)) {
+			mutex_unlock(&tt->tx_lock);
+			return -EPIPE;
+		}
+		if (ksmbd_tcp_tx_has_space(tt, tx->size))
+			break;
+		mutex_unlock(&tt->tx_lock);
+		if (tx->msg_flags & MSG_DONTWAIT)
+			return -EAGAIN;
+		timeout = deadline - jiffies;
+		if (time_after_eq(jiffies, deadline) ||
+		    !wait_event_timeout(t->conn->req_running_q,
+					READ_ONCE(tt->tx_stopped) ||
+					ksmbd_conn_exiting(t->conn) ||
+					ksmbd_conn_releasing(t->conn) ||
+					ksmbd_tcp_tx_has_space(tt, tx->size),
+					timeout)) {
+			/* A queued PDU may already have a prefix in the socket. */
+			ksmbd_conn_abort(t->conn);
+			return -EAGAIN;
+		}
+	}
+
+	/* Avoid an extra copy when the socket accepts the whole PDU at once. */
+	if (list_empty(&tt->tx_queue)) {
+		sent = kernel_sendmsg(tt->sock, &hdr, tx->iov, tx->iov_cnt, tx->size);
+		if (sent > 0) {
+			tt->tx_sent += sent;
+			if (sent == tx->size)
+				goto accepted;
+		} else if (ksmbd_tcp_send_retry(sent)) {
+			sent = 0;
+		} else {
+			WRITE_ONCE(tt->tx_stopped, true);
+			mutex_unlock(&tt->tx_lock);
+			ksmbd_conn_abort(t->conn);
+			return sent ?: -EPIPE;
+		}
+	}
+
+	/* The request buffers can be freed as soon as writev returns. */
+	msg = ksmbd_tcp_alloc_tx(tx, sent);
+	if (!msg) {
+		if (sent)
+			WRITE_ONCE(tt->tx_stopped, true);
+		mutex_unlock(&tt->tx_lock);
+		if (sent)
+			ksmbd_conn_abort(t->conn);
+		return -ENOMEM;
+	}
+	msg->deadline = deadline;
+	list_add_tail(&msg->list, &tt->tx_queue);
+	WRITE_ONCE(tt->tx_queued, tt->tx_queued + msg->len);
+	queue_delayed_work(system_dfl_wq, &tt->tx_work, 0);
+
+accepted:
+	tt->tx_end += tx->size;
+	if (tx->tracking) {
+		/* Include retained data, without retaining the caller's tracking object. */
+		tx->tracking->end = tt->tx_end;
+		lock_sock(sk);
+		tx->tracking->retry_after =
+			clamp_t(unsigned long, 6UL * inet_csk(sk)->icsk_rto,
+				DIV_ROUND_UP(1200 * HZ, MSEC_PER_SEC), 6 * HZ);
+		release_sock(sk);
+		tx->tracking->valid = true;
+	}
+	mutex_unlock(&tt->tx_lock);
+	return tx->size;
+}
+
+static bool ksmbd_tcp_is_acked(struct ksmbd_transport *t,
+			     const struct ksmbd_tx_tracking *tracking)
+{
+	struct tcp_transport *tt = TCP_TRANS(t);
+	struct sock *sk = tt->sock->sk;
+	bool acked;
+
+	mutex_lock(&tt->tx_lock);
+	lock_sock(sk);
+	acked = tt->tx_sent >= tracking->end &&
+		tcp_sk(sk)->bytes_acked >= tracking->end;
+	release_sock(sk);
+	mutex_unlock(&tt->tx_lock);
+	return acked;
 }
 
 static void ksmbd_tcp_disconnect(struct ksmbd_transport *t)
@@ -400,16 +728,19 @@ static void ksmbd_tcp_disconnect(struct ksmbd_transport *t)
 		atomic_dec(&active_num_conn);
 }
 
+static void ksmbd_tcp_shutdown(struct ksmbd_transport *t)
+{
+	WRITE_ONCE(TCP_TRANS(t)->tx_stopped, true);
+	kernel_sock_shutdown(TCP_TRANS(t)->sock, SHUT_RDWR);
+	wake_up_all(&t->conn->req_running_q);
+}
+
 static void tcp_destroy_socket(struct socket *ksmbd_socket)
 {
 	int ret;
 
 	if (!ksmbd_socket)
 		return;
-
-	/* set zero to timeout */
-	ksmbd_tcp_rcv_timeout(ksmbd_socket, 0);
-	ksmbd_tcp_snd_timeout(ksmbd_socket, 0);
 
 	ret = kernel_sock_shutdown(ksmbd_socket, SHUT_RDWR);
 	if (ret)
@@ -431,12 +762,13 @@ static int create_socket(struct interface *iface)
 	struct socket *ksmbd_socket;
 	bool ipv4 = false;
 
-	ret = sock_create(PF_INET6, SOCK_STREAM, IPPROTO_TCP, &ksmbd_socket);
+	ret = sock_create_kern(current->nsproxy->net_ns, PF_INET6, SOCK_STREAM,
+			IPPROTO_TCP, &ksmbd_socket);
 	if (ret) {
 		if (ret != -EAFNOSUPPORT)
 			pr_err("Can't create socket for ipv6, fallback to ipv4: %d\n", ret);
-		ret = sock_create(PF_INET, SOCK_STREAM, IPPROTO_TCP,
-				  &ksmbd_socket);
+		ret = sock_create_kern(current->nsproxy->net_ns, PF_INET,
+				SOCK_STREAM, IPPROTO_TCP, &ksmbd_socket);
 		if (ret) {
 			pr_err("Can't create socket for ipv4: %d\n", ret);
 			goto out_clear;
@@ -470,18 +802,21 @@ static int create_socket(struct interface *iface)
 	}
 
 	if (ipv4)
-		ret = kernel_bind(ksmbd_socket, (struct sockaddr *)&sin,
+		ret = kernel_bind(ksmbd_socket, (struct sockaddr_unsized *)&sin,
 				  sizeof(sin));
 	else
-		ret = kernel_bind(ksmbd_socket, (struct sockaddr *)&sin6,
+		ret = kernel_bind(ksmbd_socket, (struct sockaddr_unsized *)&sin6,
 				  sizeof(sin6));
 	if (ret) {
 		pr_err("Failed to bind socket: %d\n", ret);
 		goto out_error;
 	}
 
-	ksmbd_socket->sk->sk_rcvtimeo = KSMBD_TCP_RECV_TIMEOUT;
-	ksmbd_socket->sk->sk_sndtimeo = KSMBD_TCP_SEND_TIMEOUT;
+	/*
+	 * Accepted sockets inherit the listener's net reference. Keep TCP
+	 * timers alive after a kernel socket is released.
+	 */
+	sk_net_refcnt_upgrade(ksmbd_socket->sk);
 
 	ret = kernel_listen(ksmbd_socket, KSMBD_SOCKET_BACKLOG);
 	if (ret) {
@@ -523,6 +858,15 @@ static int ksmbd_netdev_event(struct notifier_block *nb, unsigned long event,
 	struct interface *iface;
 	int ret;
 
+	/*
+	 * ksmbd serves the initial namespace only. create_socket() listens in
+	 * the namespace of the task raising the event, so a container bringing
+	 * up its own interface would get a listener on its port 445, and the
+	 * name-only interface lookup would let its interfaces stop ours.
+	 */
+	if (!net_eq(dev_net(netdev), &init_net))
+		return NOTIFY_DONE;
+
 	switch (event) {
 	case NETDEV_UP:
 		if (netif_is_bridge_port(netdev))
@@ -552,13 +896,7 @@ static int ksmbd_netdev_event(struct notifier_block *nb, unsigned long event,
 		if (iface && iface->state == IFACE_STATE_CONFIGURED) {
 			ksmbd_debug(CONN, "netdev-down event: netdev(%s) is going down\n",
 					iface->name);
-			tcp_stop_kthread(iface->ksmbd_kthread);
-			iface->ksmbd_kthread = NULL;
-			mutex_lock(&iface->sock_release_lock);
-			tcp_destroy_socket(iface->ksmbd_socket);
-			iface->ksmbd_socket = NULL;
-			mutex_unlock(&iface->sock_release_lock);
-
+			ksmbd_tcp_stop_listener(iface);
 			iface->state = IFACE_STATE_DOWN;
 			break;
 		}
@@ -586,18 +924,38 @@ static void tcp_stop_kthread(struct task_struct *kthread)
 	if (!kthread)
 		return;
 
-	ret = kthread_stop(kthread);
+	ret = kthread_stop_put(kthread);
 	if (ret)
 		pr_err("failed to stop forker thread\n");
+}
+
+static void ksmbd_tcp_stop_listener(struct interface *iface)
+{
+	if (iface->ksmbd_socket)
+		kernel_sock_shutdown(iface->ksmbd_socket, SHUT_RDWR);
+
+	tcp_stop_kthread(iface->ksmbd_kthread);
+	iface->ksmbd_kthread = NULL;
+
+	if (iface->ksmbd_socket) {
+		sock_release(iface->ksmbd_socket);
+		iface->ksmbd_socket = NULL;
+	}
 }
 
 void ksmbd_tcp_destroy(void)
 {
 	struct interface *iface, *tmp;
+	LIST_HEAD(iface_list_to_free);
 
 	unregister_netdevice_notifier(&ksmbd_netdev_notifier);
 
-	list_for_each_entry_safe(iface, tmp, &iface_list, entry) {
+	rtnl_lock();
+	list_splice_init(&iface_list, &iface_list_to_free);
+	rtnl_unlock();
+
+	list_for_each_entry_safe(iface, tmp, &iface_list_to_free, entry) {
+		ksmbd_tcp_stop_listener(iface);
 		list_del(&iface->entry);
 		kfree(iface->name);
 		kfree(iface);
@@ -611,7 +969,7 @@ static struct interface *alloc_iface(char *ifname)
 	if (!ifname)
 		return NULL;
 
-	iface = kzalloc(sizeof(struct interface), KSMBD_DEFAULT_GFP);
+	iface = kzalloc_obj(struct interface, KSMBD_DEFAULT_GFP);
 	if (!iface) {
 		kfree(ifname);
 		return NULL;
@@ -620,7 +978,6 @@ static struct interface *alloc_iface(char *ifname)
 	iface->name = ifname;
 	iface->state = IFACE_STATE_DOWN;
 	list_add(&iface->entry, &iface_list);
-	mutex_init(&iface->sock_release_lock);
 	return iface;
 }
 
@@ -653,6 +1010,8 @@ int ksmbd_tcp_set_interfaces(char *ifc_list, int ifc_list_sz)
 static const struct ksmbd_transport_ops ksmbd_tcp_transport_ops = {
 	.read		= ksmbd_tcp_read,
 	.writev		= ksmbd_tcp_writev,
+	.is_acked	= ksmbd_tcp_is_acked,
 	.disconnect	= ksmbd_tcp_disconnect,
+	.shutdown	= ksmbd_tcp_shutdown,
 	.free_transport = ksmbd_tcp_free_transport,
 };

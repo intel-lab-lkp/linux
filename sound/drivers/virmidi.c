@@ -75,6 +75,12 @@ static int snd_virmidi_probe(struct platform_device *devptr)
 	int idx, err;
 	int dev = devptr->id;
 
+	if (dev < 0 || dev >= SNDRV_CARDS) {
+		dev_warn(&devptr->dev,
+			 "Invalid card index %d, using default 0\n", dev);
+		dev = 0;
+	}
+
 	err = snd_devm_card_new(&devptr->dev, index[dev], id[dev], THIS_MODULE,
 				sizeof(struct snd_card_virmidi), &card);
 	if (err < 0)
@@ -95,11 +101,11 @@ static int snd_virmidi_probe(struct platform_device *devptr)
 		if (err < 0)
 			return err;
 		vmidi->midi[idx] = rmidi;
-		strcpy(rmidi->name, "Virtual Raw MIDI");
+		strscpy(rmidi->name, "Virtual Raw MIDI");
 	}
 
-	strcpy(card->driver, "VirMIDI");
-	strcpy(card->shortname, "VirMIDI");
+	strscpy(card->driver, "VirMIDI");
+	strscpy(card->shortname, "VirMIDI");
 	sprintf(card->longname, "Virtual MIDI Card %i", dev + 1);
 
 	err = snd_card_register(card);

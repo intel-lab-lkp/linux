@@ -109,12 +109,6 @@ static int sprd_pmic_eic_direction_input(struct gpio_chip *chip,
 	return 0;
 }
 
-static void sprd_pmic_eic_set(struct gpio_chip *chip, unsigned int offset,
-			      int value)
-{
-	/* EICs are always input, nothing need to do here. */
-}
-
 static int sprd_pmic_eic_set_debounce(struct gpio_chip *chip,
 				      unsigned int offset,
 				      unsigned int debounce)
@@ -314,7 +308,7 @@ static int sprd_pmic_eic_probe(struct platform_device *pdev)
 	struct sprd_pmic_eic *pmic_eic;
 	int ret;
 
-	pmic_eic = devm_kzalloc(&pdev->dev, sizeof(*pmic_eic), GFP_KERNEL);
+	pmic_eic = devm_kzalloc_obj(&pdev->dev, *pmic_eic);
 	if (!pmic_eic)
 		return -ENOMEM;
 
@@ -351,7 +345,6 @@ static int sprd_pmic_eic_probe(struct platform_device *pdev)
 	pmic_eic->chip.request = sprd_pmic_eic_request;
 	pmic_eic->chip.free = sprd_pmic_eic_free;
 	pmic_eic->chip.set_config = sprd_pmic_eic_set_config;
-	pmic_eic->chip.set = sprd_pmic_eic_set;
 	pmic_eic->chip.get = sprd_pmic_eic_get;
 	pmic_eic->chip.can_sleep = true;
 

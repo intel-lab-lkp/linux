@@ -13,7 +13,6 @@
 #include <linux/gpio/driver.h>
 #include <linux/io.h>
 #include <linux/mfd/ocelot.h>
-#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/property.h>
@@ -264,19 +263,17 @@ static int sgpio_single_shot(struct sgpio_priv *priv)
 	 * setting.
 	 * After the manual burst, reenable the auto repeat mode again.
 	 */
-	mutex_lock(&priv->poll_lock);
+	guard(mutex)(&priv->poll_lock);
 	ret = regmap_update_bits(priv->regs, addr, single_shot | auto_repeat,
 				 single_shot);
 	if (ret)
-		goto out;
+		return ret;
 
 	ret = regmap_read_poll_timeout(priv->regs, addr, ctrl,
 				       !(ctrl & single_shot), 100, 60000);
 
 	/* reenable auto repeat mode even if there was an error */
 	ret2 = regmap_update_bits(priv->regs, addr, auto_repeat, auto_repeat);
-out:
-	mutex_unlock(&priv->poll_lock);
 
 	return ret ?: ret2;
 }
@@ -371,7 +368,7 @@ static int sgpio_pinconf_get(struct pinctrl_dev *pctldev,
 		val = !bank->is_input;
 		break;
 
-	case PIN_CONFIG_OUTPUT:
+	case PIN_CONFIG_LEVEL:
 		if (bank->is_input)
 			return -EINVAL;
 		val = sgpio_output_get(priv, &addr);
@@ -402,7 +399,7 @@ static int sgpio_pinconf_set(struct pinctrl_dev *pctldev, unsigned int pin,
 		arg = pinconf_to_config_argument(configs[cfg]);
 
 		switch (param) {
-		case PIN_CONFIG_OUTPUT:
+		case PIN_CONFIG_LEVEL:
 			if (bank->is_input)
 				return -EINVAL;
 			err = sgpio_output_set(priv, &addr, arg);
@@ -824,7 +821,7 @@ static int microchip_sgpio_register_bank(struct device *dev,
 	pctl_desc->confops = &sgpio_confops;
 	pctl_desc->owner = THIS_MODULE;
 
-	pins = devm_kzalloc(dev, sizeof(*pins)*ngpios, GFP_KERNEL);
+	pins = devm_kzalloc_objs(dev, *pins, ngpios);
 	if (!pins)
 		return -ENOMEM;
 
@@ -858,7 +855,7 @@ static int microchip_sgpio_register_bank(struct device *dev,
 	gc->direction_input	= microchip_sgpio_direction_input;
 	gc->direction_output	= microchip_sgpio_direction_output;
 	gc->get			= microchip_sgpio_get_value;
-	gc->set_rv		= microchip_sgpio_set_value;
+	gc->set			= microchip_sgpio_set_value;
 	gc->request		= gpiochip_generic_request;
 	gc->free		= gpiochip_generic_free;
 	gc->of_xlate		= microchip_sgpio_of_xlate;
@@ -877,9 +874,8 @@ static int microchip_sgpio_register_bank(struct device *dev,
 			gpio_irq_chip_set_chip(girq, &microchip_sgpio_irqchip);
 			girq->parent_handler = sgpio_irq_handler;
 			girq->num_parents = 1;
-			girq->parents = devm_kcalloc(dev, 1,
-						     sizeof(*girq->parents),
-						     GFP_KERNEL);
+			girq->parents = devm_kzalloc_objs(dev, *girq->parents,
+							  1);
 			if (!girq->parents)
 				return -ENOMEM;
 			girq->parents[0] = irq;
@@ -916,7 +912,7 @@ static int microchip_sgpio_probe(struct platform_device *pdev)
 		.reg_stride = 4,
 	};
 
-	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
+	priv = devm_kzalloc_obj(dev, *priv);
 	if (!priv)
 		return -ENOMEM;
 

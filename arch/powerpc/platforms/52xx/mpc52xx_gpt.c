@@ -253,8 +253,7 @@ mpc52xx_gpt_irq_setup(struct mpc52xx_gpt_priv *gpt, struct device_node *node)
 		return;
 	}
 
-	irq_set_handler_data(cascade_virq, gpt);
-	irq_set_chained_handler(cascade_virq, mpc52xx_gpt_irq_cascade);
+	irq_set_chained_handler_and_data(cascade_virq, mpc52xx_gpt_irq_cascade, gpt);
 
 	/* If the GPT is currently disabled, then change it to be in Input
 	 * Capture mode.  If the mode is non-zero, then the pin could be
@@ -336,7 +335,7 @@ static void mpc52xx_gpt_gpio_setup(struct mpc52xx_gpt_priv *gpt)
 	gpt->gc.direction_input  = mpc52xx_gpt_gpio_dir_in;
 	gpt->gc.direction_output = mpc52xx_gpt_gpio_dir_out;
 	gpt->gc.get = mpc52xx_gpt_gpio_get;
-	gpt->gc.set_rv = mpc52xx_gpt_gpio_set;
+	gpt->gc.set = mpc52xx_gpt_gpio_set;
 	gpt->gc.base = -1;
 	gpt->gc.parent = gpt->dev;
 
@@ -714,7 +713,7 @@ static int mpc52xx_gpt_probe(struct platform_device *ofdev)
 {
 	struct mpc52xx_gpt_priv *gpt;
 
-	gpt = devm_kzalloc(&ofdev->dev, sizeof *gpt, GFP_KERNEL);
+	gpt = devm_kzalloc_obj(&ofdev->dev, *gpt);
 	if (!gpt)
 		return -ENOMEM;
 

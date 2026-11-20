@@ -4,7 +4,7 @@
  *
  *  Derived from ivtv-driver.c
  *
- *  Copyright (C) 2007  Hans Verkuil <hverkuil@xs4all.nl>
+ *  Copyright (C) 2007  Hans Verkuil <hverkuil@kernel.org>
  *  Copyright (C) 2008  Andy Walls <awalls@md.metrocast.net>
  */
 
@@ -40,9 +40,8 @@ EXPORT_SYMBOL(cx18_ext_init);
 
 /* add your revision and whatnot here */
 static const struct pci_device_id cx18_pci_tbl[] = {
-	{PCI_VENDOR_ID_CX, PCI_DEVICE_ID_CX23418,
-	 PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0},
-	{0,}
+	{ PCI_VDEVICE(CX, PCI_DEVICE_ID_CX23418) },
+	{ }
 };
 
 MODULE_DEVICE_TABLE(pci, cx18_pci_tbl);
@@ -314,7 +313,7 @@ void cx18_read_eeprom(struct cx18 *cx, struct tveeprom *tv)
 
 	memset(tv, 0, sizeof(*tv));
 
-	c = kzalloc(sizeof(*c), GFP_KERNEL);
+	c = kzalloc_obj(*c);
 	if (!c)
 		return;
 
@@ -806,12 +805,12 @@ static int cx18_setup_pci(struct cx18 *cx, struct pci_dev *pci_dev,
 	}
 	if (dma_set_mask(&pci_dev->dev, DMA_BIT_MASK(32))) {
 		CX18_ERR("No suitable DMA available, card %d\n", cx->instance);
-		return -EIO;
+		goto err_disable_device;
 	}
 	if (!request_mem_region(cx->base_addr, CX18_MEM_SIZE, "cx18 encoder")) {
 		CX18_ERR("Cannot request encoder memory region, card %d\n",
 			 cx->instance);
-		return -EIO;
+		goto err_disable_device;
 	}
 
 	/* Enable bus mastering and memory mapped IO for the CX23418 */
@@ -835,6 +834,10 @@ static int cx18_setup_pci(struct cx18 *cx, struct pci_dev *pci_dev,
 		   cx->pci_dev->irq, pci_latency, (u64)cx->base_addr);
 
 	return 0;
+
+err_disable_device:
+	pci_disable_device(pci_dev);
+	return -EIO;
 }
 
 static void cx18_init_subdevs(struct cx18 *cx)
@@ -899,7 +902,7 @@ static int cx18_probe(struct pci_dev *pci_dev,
 		return -ENOMEM;
 	}
 
-	cx = kzalloc(sizeof(*cx), GFP_KERNEL);
+	cx = kzalloc_obj(*cx);
 	if (!cx)
 		return -ENOMEM;
 
@@ -1121,6 +1124,7 @@ free_map:
 	cx18_iounmap(cx);
 free_mem:
 	release_mem_region(cx->base_addr, CX18_MEM_SIZE);
+	pci_disable_device(pci_dev);
 free_workqueues:
 	destroy_workqueue(cx->in_work_queue);
 err:
@@ -1136,10 +1140,7 @@ int cx18_init_on_first_open(struct cx18 *cx)
 	int video_input;
 	int fw_retry_count = 3;
 	struct v4l2_frequency vf;
-	struct cx18_open_id fh;
 	v4l2_std_id std;
-
-	fh.cx = cx;
 
 	if (test_bit(CX18_F_I_FAILED, &cx->i_flags))
 		return -ENXIO;
@@ -1220,14 +1221,14 @@ int cx18_init_on_first_open(struct cx18 *cx)
 
 	video_input = cx->active_input;
 	cx->active_input++;	/* Force update of input */
-	cx18_s_input(NULL, &fh, video_input);
+	cx18_do_s_input(cx, video_input);
 
 	/* Let the VIDIOC_S_STD ioctl do all the work, keeps the code
 	   in one place. */
 	cx->std++;		/* Force full standard initialization */
 	std = (cx->tuner_std == V4L2_STD_ALL) ? V4L2_STD_NTSC_M : cx->tuner_std;
-	cx18_s_std(NULL, &fh, std);
-	cx18_s_frequency(NULL, &fh, &vf);
+	cx18_do_s_std(cx, std);
+	cx18_do_s_frequency(cx, &vf);
 	return 0;
 }
 

@@ -61,7 +61,7 @@ static int qcom_apcs_sdx55_clk_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
-	a7cc = devm_kzalloc(dev, sizeof(*a7cc), GFP_KERNEL);
+	a7cc = devm_kzalloc_obj(dev, *a7cc);
 	if (!a7cc)
 		return -ENOMEM;
 
@@ -111,7 +111,7 @@ static int qcom_apcs_sdx55_clk_probe(struct platform_device *pdev)
 	 * driver, there seems to be no better place to do this. So do it here!
 	 */
 	cpu_dev = get_cpu_device(0);
-	ret = dev_pm_domain_attach(cpu_dev, true);
+	ret = dev_pm_domain_attach(cpu_dev, PD_FLAG_ATTACH_POWER_ON);
 	if (ret) {
 		dev_err_probe(dev, ret, "can't get PM domain: %d\n", ret);
 		goto err;

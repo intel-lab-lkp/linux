@@ -36,8 +36,8 @@ struct drm_file;
 struct drm_i915_gem_object;
 struct drm_i915_private;
 struct i915_gem_ww_ctx;
-struct i915_gtt_view;
 struct i915_vma;
+struct intel_gtt_view;
 
 #define I915_GEM_GPU_DOMAINS	       \
 	(I915_GEM_DOMAIN_RENDER |      \
@@ -55,12 +55,12 @@ void i915_gem_drain_workqueue(struct drm_i915_private *i915);
 struct i915_vma * __must_check
 i915_gem_object_ggtt_pin_ww(struct drm_i915_gem_object *obj,
 			    struct i915_gem_ww_ctx *ww,
-			    const struct i915_gtt_view *view,
+			    const struct intel_gtt_view *view,
 			    u64 size, u64 alignment, u64 flags);
 
 struct i915_vma * __must_check
 i915_gem_object_ggtt_pin(struct drm_i915_gem_object *obj,
-			 const struct i915_gtt_view *view,
+			 const struct intel_gtt_view *view,
 			 u64 size, u64 alignment, u64 flags);
 
 int i915_gem_object_unbind(struct drm_i915_gem_object *obj,
@@ -133,5 +133,7 @@ int i915_gem_open(struct drm_i915_private *i915, struct drm_file *file);
 #endif
 
 #define I915_GEM_IDLE_TIMEOUT (HZ / 5)
+
+#define GEM_QUIRK_PIN_SWIZZLED_PAGES   BIT(0)
 
 #endif /* __I915_GEM_H__ */

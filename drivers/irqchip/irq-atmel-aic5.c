@@ -217,7 +217,7 @@ static void aic5_pm_shutdown(struct irq_data *d)
 	struct irq_chip_generic *gc = irq_data_get_irq_chip_data(d);
 	int i;
 
-	guard(raw_spinlock)(&bgc->lock);
+	guard(raw_spinlock_irqsave)(&bgc->lock);
 	for (i = 0; i < dgc->irqs_per_chip; i++) {
 		irq_reg_writel(bgc, i + gc->irq_base, AT91_AIC5_SSR);
 		irq_reg_writel(bgc, 1, AT91_AIC5_IDCR);
@@ -279,7 +279,7 @@ static int aic5_irq_domain_xlate(struct irq_domain *d,
 	if (ret)
 		return ret;
 
-	guard(raw_spinlock_irq)(&bgc->lock);
+	guard(raw_spinlock_irqsave)(&bgc->lock);
 	irq_reg_writel(bgc, *out_hwirq, AT91_AIC5_SSR);
 	smr = irq_reg_readl(bgc, AT91_AIC5_SMR);
 	aic_common_set_priority(intspec[2], &smr);
@@ -358,8 +358,8 @@ static int __init sama5d2_aic5_of_init(struct device_node *node,
 				       struct device_node *parent)
 {
 #ifdef CONFIG_PM
-	smr_cache = kcalloc(DIV_ROUND_UP(NR_SAMA5D2_IRQS, 32) * 32,
-			    sizeof(*smr_cache), GFP_KERNEL);
+	smr_cache = kzalloc_objs(*smr_cache,
+				 DIV_ROUND_UP(NR_SAMA5D2_IRQS, 32) * 32);
 	if (!smr_cache)
 		return -ENOMEM;
 #endif

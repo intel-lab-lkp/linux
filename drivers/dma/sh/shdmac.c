@@ -300,21 +300,30 @@ static bool sh_dmae_channel_busy(struct shdma_chan *schan)
 	return dmae_is_busy(sh_chan);
 }
 
-static void sh_dmae_setup_xfer(struct shdma_chan *schan,
-			       int slave_id)
+static int sh_dmae_setup_xfer(struct shdma_chan *schan, int slave_id)
 {
 	struct sh_dmae_chan *sh_chan = container_of(schan, struct sh_dmae_chan,
 						    shdma_chan);
 
+	int ret = 0;
 	if (slave_id >= 0) {
 		const struct sh_dmae_slave_config *cfg =
 			sh_chan->config;
 
-		dmae_set_dmars(sh_chan, cfg->mid_rid);
-		dmae_set_chcr(sh_chan, cfg->chcr);
+		ret = dmae_set_dmars(sh_chan, cfg->mid_rid);
+		if (ret < 0)
+			goto END;
+
+		ret = dmae_set_chcr(sh_chan, cfg->chcr);
+		if (ret < 0)
+			goto END;
+
 	} else {
 		dmae_init(sh_chan);
 	}
+
+END:
+	return ret;
 }
 
 /*
@@ -523,8 +532,7 @@ static int sh_dmae_chan_probe(struct sh_dmae_device *shdev, int id,
 	struct shdma_chan *schan;
 	int err;
 
-	sh_chan = devm_kzalloc(sdev->dma_dev.dev, sizeof(struct sh_dmae_chan),
-			       GFP_KERNEL);
+	sh_chan = devm_kzalloc_obj(sdev->dma_dev.dev, struct sh_dmae_chan);
 	if (!sh_chan)
 		return -ENOMEM;
 
@@ -710,8 +718,7 @@ static int sh_dmae_probe(struct platform_device *pdev)
 	if (!errirq_res)
 		return -ENODEV;
 
-	shdev = devm_kzalloc(&pdev->dev, sizeof(struct sh_dmae_device),
-			     GFP_KERNEL);
+	shdev = devm_kzalloc_obj(&pdev->dev, struct sh_dmae_device);
 	if (!shdev)
 		return -ENOMEM;
 

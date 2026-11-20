@@ -33,7 +33,7 @@
 
 #define MAILBOX			0x0F
 
-static struct pci_device_id ids[] = {
+static const struct pci_device_id ids[] = {
 	{ PCI_DEVICE(PCI_VENDOR_ID_AEC, PCI_DEVICE_ID_AEC_VITCLTC), },
 	{ 0, }
 };
@@ -71,7 +71,7 @@ static int probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	struct uio_info *info;
 	int ret;
 
-	info = devm_kzalloc(&pdev->dev, sizeof(struct uio_info), GFP_KERNEL);
+	info = devm_kzalloc_obj(&pdev->dev, struct uio_info);
 	if (!info)
 		return -ENOMEM;
 

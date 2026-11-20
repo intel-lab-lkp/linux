@@ -109,7 +109,7 @@ static const struct gpio_chip madera_gpio_chip = {
 	.direction_input	= madera_gpio_direction_in,
 	.get			= madera_gpio_get,
 	.direction_output	= madera_gpio_direction_out,
-	.set_rv			= madera_gpio_set,
+	.set			= madera_gpio_set,
 	.set_config		= gpiochip_generic_config,
 	.can_sleep		= true,
 };
@@ -121,8 +121,7 @@ static int madera_gpio_probe(struct platform_device *pdev)
 	struct madera_gpio *madera_gpio;
 	int ret;
 
-	madera_gpio = devm_kzalloc(&pdev->dev, sizeof(*madera_gpio),
-				   GFP_KERNEL);
+	madera_gpio = devm_kzalloc_obj(&pdev->dev, *madera_gpio);
 	if (!madera_gpio)
 		return -ENOMEM;
 

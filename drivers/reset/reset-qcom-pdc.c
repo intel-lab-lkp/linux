@@ -36,7 +36,6 @@ static const struct regmap_config pdc_regmap_config = {
 	.reg_stride	= 4,
 	.val_bits	= 32,
 	.max_register	= 0x20000,
-	.fast_io	= true,
 };
 
 static const struct qcom_pdc_reset_map sdm845_pdc_resets[] = {
@@ -119,7 +118,7 @@ static int qcom_pdc_reset_probe(struct platform_device *pdev)
 	if (!desc)
 		return -EINVAL;
 
-	data = devm_kzalloc(dev, sizeof(*data), GFP_KERNEL);
+	data = devm_kzalloc_obj(dev, *data);
 	if (!data)
 		return -ENOMEM;
 

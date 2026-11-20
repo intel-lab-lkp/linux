@@ -17,7 +17,6 @@
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/module.h>
-#include <linux/mod_devicetable.h>
 #include <linux/platform_device.h>
 #include <linux/property.h>
 #include <linux/sched.h>
@@ -896,7 +895,6 @@ static int at91_adc_config_emr(struct at91_adc_state *st,
 	emr |= osr | AT91_SAMA5D2_TRACKX(trackx);
 	at91_adc_writel(st, EMR, emr);
 
-	pm_runtime_mark_last_busy(st->dev);
 	pm_runtime_put_autosuspend(st->dev);
 
 	st->oversampling_ratio = oversampling_ratio;
@@ -971,7 +969,6 @@ static int at91_adc_configure_touch(struct at91_adc_state *st, bool state)
 				AT91_SAMA5D2_IER_PEN | AT91_SAMA5D2_IER_NOPEN);
 		at91_adc_writel(st, TSMR, 0);
 
-		pm_runtime_mark_last_busy(st->dev);
 		pm_runtime_put_autosuspend(st->dev);
 		return 0;
 	}
@@ -1142,10 +1139,8 @@ static int at91_adc_configure_trigger(struct iio_trigger *trig, bool state)
 
 	at91_adc_configure_trigger_registers(st, state);
 
-	if (!state) {
-		pm_runtime_mark_last_busy(st->dev);
+	if (!state)
 		pm_runtime_put_autosuspend(st->dev);
-	}
 
 	return 0;
 }
@@ -1336,7 +1331,6 @@ static int at91_adc_buffer_prepare(struct iio_dev *indio_dev)
 		at91_adc_writel(st, IER, AT91_SAMA5D2_IER_DRDY);
 
 pm_runtime_put:
-	pm_runtime_mark_last_busy(st->dev);
 	pm_runtime_put_autosuspend(st->dev);
 	return ret;
 }
@@ -1394,7 +1388,6 @@ static int at91_adc_buffer_postdisable(struct iio_dev *indio_dev)
 	if (st->dma_st.dma_chan)
 		dmaengine_terminate_sync(st->dma_st.dma_chan);
 
-	pm_runtime_mark_last_busy(st->dev);
 	pm_runtime_put_autosuspend(st->dev);
 
 	return 0;
@@ -1603,7 +1596,6 @@ static void at91_adc_setup_samp_freq(struct iio_dev *indio_dev, unsigned freq,
 	mr |= AT91_SAMA5D2_MR_TRACKTIM(tracktim);
 	at91_adc_writel(st, MR, mr);
 
-	pm_runtime_mark_last_busy(st->dev);
 	pm_runtime_put_autosuspend(st->dev);
 
 	dev_dbg(&indio_dev->dev, "freq: %u, startup: %u, prescal: %u, tracktim=%u\n",
@@ -1809,7 +1801,6 @@ static int at91_adc_read_info_raw(struct iio_dev *indio_dev,
 	at91_adc_readl(st, LCDR);
 
 pm_runtime_put:
-	pm_runtime_mark_last_busy(st->dev);
 	pm_runtime_put_autosuspend(st->dev);
 	return ret;
 }
@@ -1890,7 +1881,6 @@ static int at91_adc_read_temp(struct iio_dev *indio_dev,
 restore_config:
 	/* Revert previous settings. */
 	at91_adc_temp_sensor_configure(st, false);
-	pm_runtime_mark_last_busy(st->dev);
 	pm_runtime_put_autosuspend(st->dev);
 	if (ret < 0)
 		return ret;
@@ -2026,6 +2016,8 @@ static void at91_adc_dma_init(struct at91_adc_state *st)
 	unsigned int pages = DIV_ROUND_UP(AT91_HWFIFO_MAX_SIZE *
 					  sample_size * 2, PAGE_SIZE);
 
+	struct device *dma_dev;
+
 	if (st->dma_st.dma_chan)
 		return;
 
@@ -2036,7 +2028,8 @@ static void at91_adc_dma_init(struct at91_adc_state *st)
 		goto dma_exit;
 	}
 
-	st->dma_st.rx_buf = dma_alloc_coherent(st->dma_st.dma_chan->device->dev,
+	dma_dev = dmaengine_get_dma_device(st->dma_st.dma_chan);
+	st->dma_st.rx_buf = dma_alloc_coherent(dma_dev,
 					       pages * PAGE_SIZE,
 					       &st->dma_st.rx_dma_buf,
 					       GFP_KERNEL);
@@ -2064,7 +2057,7 @@ static void at91_adc_dma_init(struct at91_adc_state *st)
 	return;
 
 dma_free_area:
-	dma_free_coherent(st->dma_st.dma_chan->device->dev, pages * PAGE_SIZE,
+	dma_free_coherent(dma_dev, pages * PAGE_SIZE,
 			  st->dma_st.rx_buf, st->dma_st.rx_dma_buf);
 dma_chan_disable:
 	dma_release_channel(st->dma_st.dma_chan);
@@ -2088,7 +2081,7 @@ static void at91_adc_dma_disable(struct at91_adc_state *st)
 	/* wait for all transactions to be terminated first*/
 	dmaengine_terminate_sync(st->dma_st.dma_chan);
 
-	dma_free_coherent(st->dma_st.dma_chan->device->dev, pages * PAGE_SIZE,
+	dma_free_coherent(dmaengine_get_dma_device(st->dma_st.dma_chan), pages * PAGE_SIZE,
 			  st->dma_st.rx_buf, st->dma_st.rx_dma_buf);
 	dma_release_channel(st->dma_st.dma_chan);
 	st->dma_st.dma_chan = NULL;
@@ -2268,7 +2261,7 @@ static int at91_adc_temp_sensor_init(struct at91_adc_state *st,
 		return 0;
 
 	/* Get the calibration data from NVMEM. */
-	temp_calib = devm_nvmem_cell_get(dev, "temperature_calib");
+	temp_calib = nvmem_cell_get(dev, "temperature_calib");
 	if (IS_ERR(temp_calib)) {
 		ret = PTR_ERR(temp_calib);
 		if (ret != -ENOENT)
@@ -2277,6 +2270,7 @@ static int at91_adc_temp_sensor_init(struct at91_adc_state *st,
 	}
 
 	buf = nvmem_cell_read(temp_calib, &len);
+	nvmem_cell_put(temp_calib);
 	if (IS_ERR(buf)) {
 		dev_err(dev, "Failed to read calibration data!\n");
 		return PTR_ERR(buf);
@@ -2465,7 +2459,6 @@ static int at91_adc_probe(struct platform_device *pdev)
 	dev_info(&pdev->dev, "version: %x\n",
 		 readl_relaxed(st->base + st->soc_info.platform->layout->VERSION));
 
-	pm_runtime_mark_last_busy(st->dev);
 	pm_runtime_put_autosuspend(st->dev);
 
 	return 0;
@@ -2491,11 +2484,13 @@ static void at91_adc_remove(struct platform_device *pdev)
 	struct at91_adc_state *st = iio_priv(indio_dev);
 
 	iio_device_unregister(indio_dev);
+	cancel_work_sync(&st->touch_st.workq);
 
 	at91_adc_dma_disable(st);
 
 	pm_runtime_disable(st->dev);
 	pm_runtime_set_suspended(st->dev);
+	pm_runtime_dont_use_autosuspend(st->dev);
 	clk_disable_unprepare(st->per_clk);
 
 	regulator_disable(st->vref);
@@ -2516,7 +2511,7 @@ static int at91_adc_suspend(struct device *dev)
 		at91_adc_buffer_postdisable(indio_dev);
 
 	/*
-	 * Do a sofware reset of the ADC before we go to suspend.
+	 * Do a software reset of the ADC before we go to suspend.
 	 * this will ensure that all pins are free from being muxed by the ADC
 	 * and can be used by for other devices.
 	 * Otherwise, ADC will hog them and we can't go to suspend mode.
@@ -2567,7 +2562,6 @@ static int at91_adc_resume(struct device *dev)
 		at91_adc_configure_trigger_registers(st, true);
 	}
 
-	pm_runtime_mark_last_busy(st->dev);
 	pm_runtime_put_autosuspend(st->dev);
 
 	return 0;

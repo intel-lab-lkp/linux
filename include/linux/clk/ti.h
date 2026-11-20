@@ -34,14 +34,14 @@ struct clk_omap_reg {
  * @clk_ref: struct clk_hw pointer to the clock's reference clock input
  * @control_reg: register containing the DPLL mode bitfield
  * @enable_mask: mask of the DPLL mode bitfield in @control_reg
- * @last_rounded_rate: cache of the last rate result of omap2_dpll_round_rate()
- * @last_rounded_m: cache of the last M result of omap2_dpll_round_rate()
+ * @last_rounded_rate: cache of the last rate result of omap2_dpll_determine_rate()
+ * @last_rounded_m: cache of the last M result of omap2_dpll_determine_rate()
  * @last_rounded_m4xen: cache of the last M4X result of
- *			omap4_dpll_regm4xen_round_rate()
+ *			omap4_dpll_regm4xen_determine_rate()
  * @last_rounded_lpmode: cache of the last lpmode result of
  *			 omap4_dpll_lpmode_recalc()
  * @max_multiplier: maximum valid non-bypass multiplier value (actual)
- * @last_rounded_n: cache of the last N result of omap2_dpll_round_rate()
+ * @last_rounded_n: cache of the last N result of omap2_dpll_determine_rate()
  * @min_divider: minimum valid non-bypass divider value (actual)
  * @max_divider: maximum valid non-bypass divider value (actual)
  * @max_rate: maximum clock rate for the DPLL
@@ -51,7 +51,7 @@ struct clk_omap_reg {
  * @autoidle_mask: mask of the DPLL autoidle mode bitfield in @autoidle_reg
  * @freqsel_mask: mask of the DPLL jitter correction bitfield in @control_reg
  * @dcc_mask: mask of the DPLL DCC correction bitfield @mult_div1_reg
- * @dcc_rate: rate atleast which DCC @dcc_mask must be set
+ * @dcc_rate: rate at least which DCC @dcc_mask must be set
  * @idlest_mask: mask of the DPLL idle status bitfield in @idlest_reg
  * @lpmode_mask: mask of the DPLL low-power mode bitfield in @control_reg
  * @m4xen_mask: mask of the DPLL M4X multiplier bitfield in @control_reg

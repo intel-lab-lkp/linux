@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 
+#include <linux/export.h>
 #include <linux/fb.h>
 #include <linux/module.h>
 #include <linux/uaccess.h>
@@ -21,6 +22,14 @@ ssize_t fb_io_read(struct fb_info *info, char __user *buf, size_t count, loff_t 
 	total_size = info->screen_size;
 
 	if (total_size == 0)
+		total_size = info->fix.smem_len;
+
+	/*
+	 * Security Hardening: Defend against buggy legacy drivers that may
+	 * calculate a malformed screen_size. Clamp total_size to the actual
+	 * hardware mapped memory limit (smem_len) to prevent OOB access.
+	 */
+	if (info->fix.smem_len && total_size > info->fix.smem_len)
 		total_size = info->fix.smem_len;
 
 	if (p >= total_size)
@@ -60,6 +69,14 @@ ssize_t fb_io_read(struct fb_info *info, char __user *buf, size_t count, loff_t 
 		buf += c;
 		cnt += c;
 		count -= c;
+
+		/*
+		 * If there was a partial copy, the user buffer is faulty.
+		 * Break out to avoid over-advancing the src pointer and
+		 * reading out of bounds in the next iteration.
+		 */
+		if (trailing)
+			break;
 	}
 
 	kfree(buffer);
@@ -85,6 +102,14 @@ ssize_t fb_io_write(struct fb_info *info, const char __user *buf, size_t count, 
 	total_size = info->screen_size;
 
 	if (total_size == 0)
+		total_size = info->fix.smem_len;
+
+	/*
+	 * Security Hardening: Defend against buggy legacy drivers that may
+	 * calculate a malformed screen_size. Clamp total_size to the actual
+	 * hardware mapped memory limit (smem_len) to prevent OOB access.
+	 */
+	if (info->fix.smem_len && total_size > info->fix.smem_len)
 		total_size = info->fix.smem_len;
 
 	if (p > total_size)
@@ -160,7 +185,7 @@ int fb_io_mmap(struct fb_info *info, struct vm_area_struct *vma)
 		len = info->fix.mmio_len;
 	}
 
-	vma->vm_page_prot = vm_get_page_prot(vma->vm_flags);
+	vma->vm_page_prot = vma_get_page_prot(vma);
 	vma->vm_page_prot = pgprot_framebuffer(vma->vm_page_prot, vma->vm_start,
 					       vma->vm_end, start);
 

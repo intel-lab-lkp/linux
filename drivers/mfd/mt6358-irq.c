@@ -250,17 +250,13 @@ int mt6358_irq_init(struct mt6397_chip *chip)
 
 	mutex_init(&chip->irqlock);
 	irqd = chip->irq_data;
-	irqd->enable_hwirq = devm_kcalloc(chip->dev,
-					  irqd->num_pmic_irqs,
-					  sizeof(*irqd->enable_hwirq),
-					  GFP_KERNEL);
+	irqd->enable_hwirq = devm_kzalloc_objs(chip->dev, *irqd->enable_hwirq,
+					       irqd->num_pmic_irqs);
 	if (!irqd->enable_hwirq)
 		return -ENOMEM;
 
-	irqd->cache_hwirq = devm_kcalloc(chip->dev,
-					 irqd->num_pmic_irqs,
-					 sizeof(*irqd->cache_hwirq),
-					 GFP_KERNEL);
+	irqd->cache_hwirq = devm_kzalloc_objs(chip->dev, *irqd->cache_hwirq,
+					      irqd->num_pmic_irqs);
 	if (!irqd->cache_hwirq)
 		return -ENOMEM;
 
@@ -272,8 +268,7 @@ int mt6358_irq_init(struct mt6397_chip *chip)
 				     irqd->pmic_ints[i].en_reg_shift * j, 0);
 	}
 
-	chip->irq_domain = irq_domain_create_linear(of_fwnode_handle(chip->dev->of_node),
-						    irqd->num_pmic_irqs,
+	chip->irq_domain = irq_domain_create_linear(dev_fwnode(chip->dev), irqd->num_pmic_irqs,
 						    &mt6358_irq_domain_ops, chip);
 	if (!chip->irq_domain) {
 		dev_err(chip->dev, "Could not create IRQ domain\n");
@@ -286,6 +281,7 @@ int mt6358_irq_init(struct mt6397_chip *chip)
 	if (ret) {
 		dev_err(chip->dev, "Failed to register IRQ=%d, ret=%d\n",
 			chip->irq, ret);
+		irq_domain_remove(chip->irq_domain);
 		return ret;
 	}
 
