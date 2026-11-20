@@ -4773,45 +4773,23 @@ int drm_dp_link_symbol_cycles(int lane_count, int pixels, int dsc_slice_count,
 EXPORT_SYMBOL(drm_dp_link_symbol_cycles);
 
 /**
- * drm_dp_bw_overhead - Calculate the BW overhead of a DP link stream
- * @lane_count: DP link lane count
- * @hactive: pixel count of the active period in one scanline of the stream
- * @dsc_slice_count: number of slices for DSC or '0' for non-DSC
- * @bpp_x16: bits per pixel in .4 binary fixed point
+ * drm_dp_bw_margin_overhead - Calculate the margin BW overhead of a DP link stream
  * @flags: DRM_DP_OVERHEAD_x flags
  *
- * Calculate the BW allocation overhead of a DP link stream, depending
- * on the link's
- * - @lane_count
- * - SST/MST mode (@flags / %DRM_DP_OVERHEAD_MST)
- * - symbol size (@flags / %DRM_DP_OVERHEAD_UHBR)
+ * Calculate the part of the BW allocation overhead of a DP link stream which
+ * only depends on the link's
  * - FEC mode (@flags / %DRM_DP_OVERHEAD_FEC)
  * - SSC/REF_CLK mode (@flags / %DRM_DP_OVERHEAD_SSC_REF_CLK)
- * as well as the stream's
- * - @hactive timing
- * - @bpp_x16 color depth
- * - compression mode (@dsc_slice_count != 0)
- * Note that this overhead doesn't account for the 8b/10b, 128b/132b
- * channel coding efficiency, for that see
- * @drm_dp_link_bw_channel_coding_efficiency().
+ * and not on the stream's timings, that is the overhead excluding the one
+ * from the symbol alignment padding calculated by drm_dp_bw_overhead(). This
+ * is useful if the symbol alignment is accounted for in another way, for
+ * instance by the stream's effective bpp.
  *
  * Returns the overhead as 100% + overhead% in 1ppm units.
  */
-int drm_dp_bw_overhead(int lane_count, int hactive,
-		       int dsc_slice_count,
-		       int bpp_x16, unsigned long flags)
+int drm_dp_bw_margin_overhead(unsigned long flags)
 {
-	int symbol_size = flags & DRM_DP_BW_OVERHEAD_UHBR ? 32 : 8;
-	bool is_mst = flags & DRM_DP_BW_OVERHEAD_MST;
 	u32 overhead = 1000000;
-	int symbol_cycles;
-
-	if (lane_count == 0 || hactive == 0 || bpp_x16 == 0) {
-		DRM_DEBUG_KMS("Invalid BW overhead params: lane_count %d, hactive %d, bpp_x16 " FXP_Q4_FMT "\n",
-			      lane_count, hactive,
-			      FXP_Q4_ARGS(bpp_x16));
-		return 0;
-	}
 
 	/*
 	 * DP Standard v2.1 2.6.4.1
@@ -4844,6 +4822,54 @@ int drm_dp_bw_overhead(int lane_count, int hactive,
 	 */
 	WARN_ON((flags & DRM_DP_BW_OVERHEAD_UHBR) &&
 		(flags & DRM_DP_BW_OVERHEAD_FEC));
+
+	return overhead;
+}
+EXPORT_SYMBOL(drm_dp_bw_margin_overhead);
+
+/**
+ * drm_dp_bw_overhead - Calculate the BW overhead of a DP link stream
+ * @lane_count: DP link lane count
+ * @hactive: pixel count of the active period in one scanline of the stream
+ * @dsc_slice_count: number of slices for DSC or '0' for non-DSC
+ * @bpp_x16: bits per pixel in .4 binary fixed point
+ * @flags: DRM_DP_OVERHEAD_x flags
+ *
+ * Calculate the BW allocation overhead of a DP link stream, depending
+ * on the link's
+ * - @lane_count
+ * - SST/MST mode (@flags / %DRM_DP_OVERHEAD_MST)
+ * - symbol size (@flags / %DRM_DP_OVERHEAD_UHBR)
+ * - FEC mode (@flags / %DRM_DP_OVERHEAD_FEC)
+ * - SSC/REF_CLK mode (@flags / %DRM_DP_OVERHEAD_SSC_REF_CLK)
+ * as well as the stream's
+ * - @hactive timing
+ * - @bpp_x16 color depth
+ * - compression mode (@dsc_slice_count != 0)
+ * Note that this overhead doesn't account for the 8b/10b, 128b/132b
+ * channel coding efficiency, for that see
+ * @drm_dp_link_bw_channel_coding_efficiency().
+ *
+ * Returns the overhead as 100% + overhead% in 1ppm units.
+ */
+int drm_dp_bw_overhead(int lane_count, int hactive,
+		       int dsc_slice_count,
+		       int bpp_x16, unsigned long flags)
+{
+	int symbol_size = flags & DRM_DP_BW_OVERHEAD_UHBR ? 32 : 8;
+	bool is_mst = flags & DRM_DP_BW_OVERHEAD_MST;
+	u32 overhead;
+	int symbol_cycles;
+
+	if (lane_count == 0 || hactive == 0 || bpp_x16 == 0) {
+		DRM_DEBUG_KMS("Invalid BW overhead params: lane_count %d, hactive %d, bpp_x16 "
+			      FXP_Q4_FMT "\n",
+			      lane_count, hactive,
+			      FXP_Q4_ARGS(bpp_x16));
+		return 0;
+	}
+
+	overhead = drm_dp_bw_margin_overhead(flags);
 
 	symbol_cycles = drm_dp_link_symbol_cycles(lane_count, hactive,
 						  dsc_slice_count,
