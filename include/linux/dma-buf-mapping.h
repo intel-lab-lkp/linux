@@ -86,7 +86,9 @@ struct dma_buf_mapping_type {
 
 /**
  * struct dma_buf_mapping - header of a mapping made through an attachment
- * @match: The match set entry the mapping was made with
+ * @match: The entry of &dma_buf_attachment.matches the mapping was made with.
+ *         The mapping is torn down through it, whatever the attachment has
+ *         selected by then.
  *
  * A mapping is an object allocated by whoever produces it, the exporter for
  * the SGT type, embedding this header. The core fills the header in once the
@@ -125,13 +127,12 @@ int dma_buf_match_mapping(struct dma_buf_match_args *args,
  * dma_buf_attach_map_type - The match this attachment is mapped with
  * @attach: the attachment
  *
- * Returns: the entry of @attach->matches in force for the attachment: the
- * exporter's default, which is the first entry.
+ * Returns: the entry of @attach->matches the attachment is mapped with.
  */
 static inline const struct dma_buf_mapping_match *
 dma_buf_attach_map_type(const struct dma_buf_attachment *attach)
 {
-	return &attach->matches[0];
+	return &attach->matches[attach->selected_idx];
 }
 
 /*

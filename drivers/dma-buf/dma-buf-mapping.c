@@ -10,6 +10,8 @@
 #include <linux/overflow.h>
 #include <linux/align.h>
 
+#include "dma-buf-mapping-internal.h"
+
 #define MAX_SG_ENT_SZ ALIGN_DOWN(UINT_MAX, PAGE_SIZE)
 
 static struct scatterlist *fill_sg_entry(struct scatterlist *sgl, size_t length,
@@ -276,7 +278,8 @@ EXPORT_SYMBOL_NS_GPL(dma_buf_free_sgt, "DMA_BUF");
  * importer entry of the same type that the type's match() callback accepts.
  * Every such pair is recorded in @args->attach->matches, so the match set
  * preserves the exporter's priority. The first entry is the default returned
- * by dma_buf_attach_map_type().
+ * by dma_buf_attach_map_type() until &dma_buf_ops.select_mapping chooses
+ * otherwise at pin or map time.
  *
  * Because the exporter list is walked in order, the exporter controls the
  * priority of mapping types.
@@ -328,6 +331,69 @@ int dma_buf_match_mapping(struct dma_buf_match_args *args,
 	return 0;
 }
 EXPORT_SYMBOL_NS_GPL(dma_buf_match_mapping, "DMA_BUF");
+
+/**
+ * dma_buf_mapping_select - Let the exporter choose the type to map with
+ * @attach: Attachment about to be pinned or mapped
+ *
+ * Called with the dma_resv lock held by dma_buf_pin() and the map functions.
+ * The first call after attach, and after each dma_buf_invalidate_mappings(),
+ * calls &dma_buf_ops.select_mapping to pick the mapping type. Exporters without
+ * the callback get the first entry. Subsequent calls return the previous
+ * choice unchanged unless the mapping has been invalidated. This is to ensure
+ * the mapping type cannot change between unmap and remap.
+ *
+ * The choice only takes effect once the caller's pin or map has succeeded.
+ *
+ * Returns: 0 on success or the exporter's error, typically -EBUSY when the
+ * attachment cannot be served without disturbing a mapping that cannot be
+ * invalidated.
+ */
+int dma_buf_mapping_select(struct dma_buf_attachment *attach)
+{
+	int idx = 0;
+
+	dma_resv_assert_held(attach->dmabuf->resv);
+
+	if (attach->selected)
+		return 0;
+
+	if (WARN_ON(!attach->nr_matches))
+		return -EINVAL;
+
+	if (attach->dmabuf->ops->select_mapping) {
+		idx = attach->dmabuf->ops->select_mapping(attach);
+		if (idx < 0)
+			return idx;
+		if (WARN_ON(idx >= attach->nr_matches))
+			return -EINVAL;
+	}
+
+	attach->selected_idx = idx;
+	return 0;
+}
+
+/**
+ * dma_buf_mapping_unselect - Undo a selection that established nothing
+ * @attach: Attachment whose pin or map just failed
+ * @was_selected: attach->selected before the failed pin or map began
+ *
+ * A pin or map that fails after dma_buf_mapping_select() may reopen the
+ * choice only if it was the one that made it. A selection that predates the
+ * call belongs to a live pin or mapping and must survive, otherwise the next
+ * pin or map would reselect under it without an invalidate.
+ */
+void dma_buf_mapping_unselect(struct dma_buf_attachment *attach,
+			      bool was_selected)
+{
+	dma_resv_assert_held(attach->dmabuf->resv);
+
+	if (was_selected)
+		return;
+
+	attach->selected = false;
+	attach->selected_idx = 0;
+}
 
 static void
 dma_buf_sgt_finish_match(struct dma_buf_match_args *args,

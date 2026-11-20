@@ -37,6 +37,8 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/dma_buf.h>
 
+#include "dma-buf-mapping-internal.h"
+
 /*
  * dmabuf->name must be accessed with holding dmabuf->name_lock.
  * we need to take the lock around the tracepoint call itself where
@@ -1176,16 +1178,27 @@ EXPORT_SYMBOL_NS_GPL(dma_buf_detach, "DMA_BUF");
 int dma_buf_pin(struct dma_buf_attachment *attach)
 {
 	struct dma_buf *dmabuf = attach->dmabuf;
+	bool selected = attach->selected;
 	int ret = 0;
 
 	WARN_ON(!attach->importer_ops);
 
 	dma_resv_assert_held(dmabuf->resv);
 
-	if (dmabuf->ops->pin)
-		ret = dmabuf->ops->pin(attach);
+	ret = dma_buf_mapping_select(attach);
+	if (ret)
+		return ret;
 
-	return ret;
+	if (dmabuf->ops->pin) {
+		ret = dmabuf->ops->pin(attach);
+		if (ret) {
+			dma_buf_mapping_unselect(attach, selected);
+			return ret;
+		}
+	}
+
+	dma_buf_mapping_commit(attach);
+	return 0;
 }
 EXPORT_SYMBOL_NS_GPL(dma_buf_pin, "DMA_BUF");
 
@@ -1209,6 +1222,101 @@ void dma_buf_unpin(struct dma_buf_attachment *attach)
 		dmabuf->ops->unpin(attach);
 }
 EXPORT_SYMBOL_NS_GPL(dma_buf_unpin, "DMA_BUF");
+
+/* The SGT type must have been selected for the attachment already */
+static struct dma_buf_sgt_mapping *
+__dma_buf_map_sgt(struct dma_buf_attachment *attach,
+		  enum dma_data_direction direction)
+{
+	const struct dma_buf_mapping_match *match =
+		dma_buf_attach_map_type(attach);
+	const struct dma_buf_mapping_sgt_exp_ops *sgt_exp_ops =
+		dma_buf_get_sgt_ops(attach);
+	struct dma_buf_sgt_mapping *mapping;
+	signed long ret;
+
+	if (WARN_ON(!sgt_exp_ops))
+		return ERR_PTR(-EINVAL);
+
+	if (dma_buf_pin_on_map(attach)) {
+		ret = attach->dmabuf->ops->pin(attach);
+		/*
+		 * Catch exporters making buffers inaccessible even when
+		 * attachments preventing that exist.
+		 */
+		WARN_ON_ONCE(ret == -EBUSY);
+		if (ret)
+			return ERR_PTR(ret);
+	}
+
+	mapping = sgt_exp_ops->map_dma_buf(attach, direction);
+	if (!mapping)
+		mapping = ERR_PTR(-ENOMEM);
+	if (IS_ERR(mapping))
+		goto error_unpin;
+
+	/* A mapping handed out again must have been made under the same entry */
+	WARN_ON_ONCE(mapping->base.match && mapping->base.match != match);
+	mapping->base.match = match;
+
+	/*
+	 * Importers with static attachments don't wait for fences.
+	 */
+	if (!dma_buf_attachment_is_dynamic(attach)) {
+		ret = dma_resv_wait_timeout(attach->dmabuf->resv,
+					    DMA_RESV_USAGE_KERNEL, true,
+					    MAX_SCHEDULE_TIMEOUT);
+		if (ret < 0)
+			goto error_unmap;
+	}
+
+	if (IS_ENABLED(CONFIG_DMA_API_DEBUG)) {
+		struct scatterlist *sg;
+		u64 addr;
+		int len;
+		int i;
+
+		for_each_sgtable_dma_sg(&mapping->sgt, sg, i) {
+			addr = sg_dma_address(sg);
+			len = sg_dma_len(sg);
+			if (!PAGE_ALIGNED(addr) || !PAGE_ALIGNED(len)) {
+				pr_debug("%s: addr %llx or len %x is not page aligned!\n",
+					 __func__, addr, len);
+				break;
+			}
+		}
+	}
+	return mapping;
+
+error_unmap:
+	sgt_exp_ops->unmap_dma_buf(attach, mapping, direction);
+	mapping = ERR_PTR(ret);
+
+error_unpin:
+	if (dma_buf_pin_on_map(attach))
+		attach->dmabuf->ops->unpin(attach);
+
+	return mapping;
+}
+
+/* Tears @mapping down through the entry it was made with */
+static void __dma_buf_unmap_sgt(struct dma_buf_attachment *attach,
+				struct dma_buf_sgt_mapping *mapping,
+				enum dma_data_direction direction)
+{
+	const struct dma_buf_mapping_sgt_exp_ops *sgt_exp_ops;
+
+	if (WARN_ON(dma_buf_mapping_type_of(&mapping->base) !=
+		    &dma_buf_mapping_sgt_type))
+		return;
+	sgt_exp_ops = container_of(mapping->base.match->exp_ops,
+				   struct dma_buf_mapping_sgt_exp_ops, ops);
+
+	sgt_exp_ops->unmap_dma_buf(attach, mapping, direction);
+
+	if (dma_buf_pin_on_map(attach))
+		attach->dmabuf->ops->unpin(attach);
+}
 
 /**
  * dma_buf_map_sgt - Returns the scatterlist table of the attachment;
@@ -1234,83 +1342,36 @@ EXPORT_SYMBOL_NS_GPL(dma_buf_unpin, "DMA_BUF");
 struct sg_table *dma_buf_map_sgt(struct dma_buf_attachment *attach,
 				 enum dma_data_direction direction)
 {
-	const struct dma_buf_mapping_sgt_exp_ops *sgt_exp_ops;
 	struct dma_buf_sgt_mapping *mapping;
 	struct sg_table *sg_table;
-	signed long ret;
+	bool selected;
+	int ret;
 
 	might_sleep();
 
 	if (WARN_ON(!attach || !attach->dmabuf))
 		return ERR_PTR(-EINVAL);
 
-	sgt_exp_ops = dma_buf_get_sgt_ops(attach);
-	if (WARN_ON(!sgt_exp_ops))
-		return ERR_PTR(-EINVAL);
-
 	dma_resv_assert_held(attach->dmabuf->resv);
 
-	if (dma_buf_pin_on_map(attach)) {
-		ret = attach->dmabuf->ops->pin(attach);
-		/*
-		 * Catch exporters making buffers inaccessible even when
-		 * attachments preventing that exist.
-		 */
-		WARN_ON_ONCE(ret == -EBUSY);
-		if (ret)
-			return ERR_PTR(ret);
-	}
+	selected = attach->selected;
+	ret = dma_buf_mapping_select(attach);
+	if (ret)
+		return ERR_PTR(ret);
 
-	mapping = sgt_exp_ops->map_dma_buf(attach, direction);
-	if (!mapping)
-		mapping = ERR_PTR(-ENOMEM);
+	mapping = __dma_buf_map_sgt(attach, direction);
 	if (IS_ERR(mapping)) {
 		sg_table = ERR_CAST(mapping);
-		goto error_unpin;
-	}
-	mapping->base.match = dma_buf_attach_map_type(attach);
-
-	/*
-	 * Importers with static attachments don't wait for fences.
-	 */
-	if (!dma_buf_attachment_is_dynamic(attach)) {
-		ret = dma_resv_wait_timeout(attach->dmabuf->resv,
-					    DMA_RESV_USAGE_KERNEL, true,
-					    MAX_SCHEDULE_TIMEOUT);
-		if (ret < 0)
-			goto error_unmap;
-	}
-	sg_table = dma_buf_wrap_sg_table(mapping);
-	if (IS_ERR(sg_table)) {
-		ret = PTR_ERR(sg_table);
-		goto error_unmap;
+	} else {
+		sg_table = dma_buf_wrap_sg_table(mapping);
+		if (IS_ERR(sg_table))
+			__dma_buf_unmap_sgt(attach, mapping, direction);
 	}
 
-	if (IS_ENABLED(CONFIG_DMA_API_DEBUG)) {
-		struct scatterlist *sg;
-		u64 addr;
-		int len;
-		int i;
-
-		for_each_sgtable_dma_sg(&mapping->sgt, sg, i) {
-			addr = sg_dma_address(sg);
-			len = sg_dma_len(sg);
-			if (!PAGE_ALIGNED(addr) || !PAGE_ALIGNED(len)) {
-				pr_debug("%s: addr %llx or len %x is not page aligned!\n",
-					 __func__, addr, len);
-				break;
-			}
-		}
-	}
-	return sg_table;
-
-error_unmap:
-	sgt_exp_ops->unmap_dma_buf(attach, mapping, direction);
-	sg_table = ERR_PTR(ret);
-
-error_unpin:
-	if (dma_buf_pin_on_map(attach))
-		attach->dmabuf->ops->unpin(attach);
+	if (IS_ERR(sg_table))
+		dma_buf_mapping_unselect(attach, selected);
+	else
+		dma_buf_mapping_commit(attach);
 
 	return sg_table;
 }
@@ -1358,7 +1419,6 @@ void dma_buf_unmap_sgt(struct dma_buf_attachment *attach,
 				struct sg_table *sg_table,
 				enum dma_data_direction direction)
 {
-	const struct dma_buf_mapping_sgt_exp_ops *sgt_exp_ops;
 	struct dma_buf_sgt_mapping *mapping;
 
 	might_sleep();
@@ -1369,15 +1429,8 @@ void dma_buf_unmap_sgt(struct dma_buf_attachment *attach,
 	dma_resv_assert_held(attach->dmabuf->resv);
 
 	mapping = dma_buf_unwrap_sg_table(sg_table);
-	if (WARN_ON(dma_buf_mapping_type_of(&mapping->base) !=
-		    &dma_buf_mapping_sgt_type))
-		return;
-	sgt_exp_ops = container_of(mapping->base.match->exp_ops,
-				   struct dma_buf_mapping_sgt_exp_ops, ops);
-	sgt_exp_ops->unmap_dma_buf(attach, mapping, direction);
 
-	if (dma_buf_pin_on_map(attach))
-		attach->dmabuf->ops->unpin(attach);
+	__dma_buf_unmap_sgt(attach, mapping, direction);
 }
 EXPORT_SYMBOL_NS_GPL(dma_buf_unmap_sgt, "DMA_BUF");
 
@@ -1460,6 +1513,10 @@ EXPORT_SYMBOL_NS_GPL(dma_buf_attach_revocable, "DMA_BUF");
  *
  * Importers are free to request a new mapping in parallel as this function
  * returns.
+ *
+ * This also allows an attachment's mapping type to change as the core keeps
+ * the type chosen by &dma_buf_ops.select_mapping until the attachment has been
+ * invalidated here to avoid buffer ping-pong.
  */
 void dma_buf_invalidate_mappings(struct dma_buf *dmabuf)
 {
@@ -1467,10 +1524,14 @@ void dma_buf_invalidate_mappings(struct dma_buf *dmabuf)
 
 	dma_resv_assert_held(dmabuf->resv);
 
-	list_for_each_entry(attach, &dmabuf->attachments, node)
-		if (attach->importer_ops &&
-		    attach->importer_ops->invalidate_mappings)
-			attach->importer_ops->invalidate_mappings(attach);
+	list_for_each_entry(attach, &dmabuf->attachments, node) {
+		if (!attach->importer_ops ||
+		    !attach->importer_ops->invalidate_mappings)
+			continue;
+
+		attach->selected = false;
+		attach->importer_ops->invalidate_mappings(attach);
+	}
 }
 EXPORT_SYMBOL_NS_GPL(dma_buf_invalidate_mappings, "DMA_BUF");
 
