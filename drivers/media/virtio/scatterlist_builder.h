@@ -25,6 +25,11 @@
  * @sgs: descriptor chain to eventually pass to virtio functions.
  * @num_sgs: total number of entries in @sgs.
  * @cur_sg: next entry in @sgs to be used.
+ * @framevecs: Array of *struct frame_vector that is allocated to keep user
+ *             pages pinned until after a response is received. It is allocated
+ *             in scatterlist_builder_add_ext_ctrls_userptrs() and freed in
+ *             scatterlist_builder_retrieve_ext_ctrls().
+ * @cur_framevec: next entry in @framevecs to be used.
  *
  * Virtio passes data from the driver to the device (through e.g.
  * virtqueue_add_sgs()) via a scatterlist that the device interprets as a
@@ -69,6 +74,10 @@ struct scatterlist_builder {
 	struct scatterlist **sgs;
 	size_t num_sgs;
 	size_t cur_sg;
+
+	struct frame_vector **framevecs;
+	size_t num_framevecs;
+	size_t cur_framevec;
 };
 
 int scatterlist_builder_add_descriptor(struct scatterlist_builder *builder,
@@ -86,5 +95,23 @@ int scatterlist_builder_add_ioctl_cmd(struct scatterlist_builder *builder,
 
 int scatterlist_builder_add_ioctl_resp(struct scatterlist_builder *builder,
 				       struct virtio_media_session *session);
+
+int scatterlist_builder_add_ext_ctrls(struct scatterlist_builder *builder,
+				      struct v4l2_ext_controls *ctrls);
+
+int
+scatterlist_builder_allocate_framevecs(struct scatterlist_builder *builder,
+				       struct v4l2_ext_controls *ctrls);
+
+void
+scatterlist_builder_free_framevecs(struct scatterlist_builder *builder);
+
+int
+scatterlist_builder_add_ext_ctrls_userptrs(struct scatterlist_builder *builder,
+					   struct v4l2_ext_controls *ctrls);
+
+int scatterlist_builder_retrieve_ext_ctrls(struct scatterlist_builder *builder,
+					   size_t sg_index,
+					   struct v4l2_ext_controls *ctrls);
 
 #endif // __VIRTIO_MEDIA_SCATTERLIST_BUILDER_H
