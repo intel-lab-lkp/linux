@@ -26,4 +26,14 @@ static inline void dma_buf_mapping_commit(struct dma_buf_attachment *attach)
 	attach->selected = true;
 }
 
+/*
+ * Internal: .map / .unmap of the SGT type. Implemented in dma-buf.c using
+ * the exporter's &dma_buf_mapping_sgt_exp_ops.
+ */
+struct dma_buf_mapping *dma_buf_sgt_type_map(struct dma_buf_attachment *attach,
+					     enum dma_data_direction dir);
+void dma_buf_sgt_type_unmap(struct dma_buf_attachment *attach,
+			    struct dma_buf_mapping *mapping,
+			    enum dma_data_direction dir);
+
 #endif /* __DMA_BUF_MAPPING_INTERNAL_H__ */

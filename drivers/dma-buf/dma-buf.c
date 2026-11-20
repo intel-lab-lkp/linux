@@ -1228,10 +1228,9 @@ static struct dma_buf_sgt_mapping *
 __dma_buf_map_sgt(struct dma_buf_attachment *attach,
 		  enum dma_data_direction direction)
 {
-	const struct dma_buf_mapping_match *match =
-		dma_buf_attach_map_type(attach);
 	const struct dma_buf_mapping_sgt_exp_ops *sgt_exp_ops =
 		dma_buf_get_sgt_ops(attach);
+	const struct dma_buf_mapping_match *match;
 	struct dma_buf_sgt_mapping *mapping;
 	signed long ret;
 
@@ -1255,6 +1254,7 @@ __dma_buf_map_sgt(struct dma_buf_attachment *attach,
 	if (IS_ERR(mapping))
 		goto error_unpin;
 
+	match = dma_buf_attach_map_type(attach);
 	/* A mapping handed out again must have been made under the same entry */
 	WARN_ON_ONCE(mapping->base.match && mapping->base.match != match);
 	mapping->base.match = match;
@@ -1336,6 +1336,10 @@ static void __dma_buf_unmap_sgt(struct dma_buf_attachment *attach,
  * therefore users/importers should not hold onto a mapping for undue amounts of
  * time.
  *
+ * This is dma_buf_mapping_map() for importers that listed the SGT type alone:
+ * the exporter's mapping is made the same way and dma_buf_unmap_sgt() finds
+ * it again behind the returned table.
+ *
  * Important: Dynamic importers must wait for the exclusive fence of the struct
  * dma_resv attached to the DMA-BUF first.
  */
@@ -1343,39 +1347,53 @@ struct sg_table *dma_buf_map_sgt(struct dma_buf_attachment *attach,
 				 enum dma_data_direction direction)
 {
 	struct dma_buf_sgt_mapping *mapping;
+	struct dma_buf_mapping *base;
 	struct sg_table *sg_table;
 	bool selected;
-	int ret;
 
-	might_sleep();
-
-	if (WARN_ON(!attach || !attach->dmabuf))
+	if (WARN_ON(!attach))
 		return ERR_PTR(-EINVAL);
 
-	dma_resv_assert_held(attach->dmabuf->resv);
-
 	selected = attach->selected;
-	ret = dma_buf_mapping_select(attach);
-	if (ret)
-		return ERR_PTR(ret);
+	base = dma_buf_mapping_map(attach, direction);
+	if (IS_ERR(base))
+		return ERR_CAST(base);
 
-	mapping = __dma_buf_map_sgt(attach, direction);
-	if (IS_ERR(mapping)) {
-		sg_table = ERR_CAST(mapping);
+	if (WARN_ON(dma_buf_mapping_type_of(base) != &dma_buf_mapping_sgt_type)) {
+		sg_table = ERR_PTR(-EINVAL);
 	} else {
+		mapping = container_of(base, struct dma_buf_sgt_mapping, base);
 		sg_table = dma_buf_wrap_sg_table(mapping);
-		if (IS_ERR(sg_table))
-			__dma_buf_unmap_sgt(attach, mapping, direction);
 	}
 
-	if (IS_ERR(sg_table))
+	if (IS_ERR(sg_table)) {
+		dma_buf_mapping_unmap(attach, base, direction);
 		dma_buf_mapping_unselect(attach, selected);
-	else
-		dma_buf_mapping_commit(attach);
+	}
 
 	return sg_table;
 }
 EXPORT_SYMBOL_NS_GPL(dma_buf_map_sgt, "DMA_BUF");
+
+/* &dma_buf_mapping_type.map / .unmap of the SGT type */
+struct dma_buf_mapping *dma_buf_sgt_type_map(struct dma_buf_attachment *attach,
+					     enum dma_data_direction dir)
+{
+	struct dma_buf_sgt_mapping *mapping = __dma_buf_map_sgt(attach, dir);
+
+	if (IS_ERR(mapping))
+		return ERR_CAST(mapping);
+	return &mapping->base;
+}
+
+void dma_buf_sgt_type_unmap(struct dma_buf_attachment *attach,
+			    struct dma_buf_mapping *base,
+			    enum dma_data_direction dir)
+{
+	__dma_buf_unmap_sgt(attach,
+			    container_of(base, struct dma_buf_sgt_mapping, base),
+			    dir);
+}
 
 /**
  * dma_buf_map_sgt_unlocked - Returns the scatterlist table of the attachment;
@@ -1413,7 +1431,9 @@ EXPORT_SYMBOL_NS_GPL(dma_buf_map_sgt_unlocked, "DMA_BUF");
  * @sg_table:	[in]	scatterlist info of the buffer to unmap
  * @direction:  [in]    direction of DMA transfer
  *
- * This unmaps a DMA mapping for @attached obtained by dma_buf_map_sgt().
+ * This unmaps a DMA mapping for @attached obtained by dma_buf_map_sgt(), with
+ * the type it was made with even if the attachment has been invalidated and
+ * another type selected since.
  */
 void dma_buf_unmap_sgt(struct dma_buf_attachment *attach,
 				struct sg_table *sg_table,
@@ -1429,8 +1449,7 @@ void dma_buf_unmap_sgt(struct dma_buf_attachment *attach,
 	dma_resv_assert_held(attach->dmabuf->resv);
 
 	mapping = dma_buf_unwrap_sg_table(sg_table);
-
-	__dma_buf_unmap_sgt(attach, mapping, direction);
+	dma_buf_mapping_unmap(attach, &mapping->base, direction);
 }
 EXPORT_SYMBOL_NS_GPL(dma_buf_unmap_sgt, "DMA_BUF");
 

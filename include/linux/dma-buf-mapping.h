@@ -82,6 +82,32 @@ struct dma_buf_mapping_type {
 	 */
 	void (*debugfs_dump)(struct seq_file *s,
 			     struct dma_buf_attachment *attach);
+
+	/**
+	 * @map:
+	 *
+	 * Produce a mapping of this type for @attach, for which this type has
+	 * already been selected. Called by dma_buf_mapping_map() with the
+	 * dma_resv lock held. The result embeds &struct dma_buf_mapping, which
+	 * the core fills in once this returns. A map that may unmap its result
+	 * on its own unwind must record the entry in it first, since every
+	 * unmap reads it. Responsible for pin-on-map of static importers if
+	 * the type supports them.
+	 */
+	struct dma_buf_mapping *(*map)(struct dma_buf_attachment *attach,
+				       enum dma_data_direction dir);
+
+	/**
+	 * @unmap:
+	 *
+	 * Release a mapping returned by @map. Called by dma_buf_mapping_unmap()
+	 * with the dma_resv lock held and with dma_buf_attach_map_type()
+	 * naming the entry the mapping was made with, which need not be the
+	 * attachment's current selection.
+	 */
+	void (*unmap)(struct dma_buf_attachment *attach,
+		      struct dma_buf_mapping *mapping,
+		      enum dma_data_direction dir);
 };
 
 /**
@@ -91,8 +117,9 @@ struct dma_buf_mapping_type {
  *         selected by then.
  *
  * A mapping is an object allocated by whoever produces it, the exporter for
- * the SGT type, embedding this header. The core fills the header in once the
- * producer's map callback has returned and reads it to tear the mapping down.
+ * the SGT type, embedding this header. The core fills the header in, at the
+ * latest once the producer's map callback has returned, and reads it to tear
+ * the mapping down.
  */
 struct dma_buf_mapping {
 	const struct dma_buf_mapping_match *match;
@@ -109,6 +136,12 @@ dma_buf_mapping_type_of(const struct dma_buf_mapping *mapping)
 {
 	return mapping->match->type;
 }
+
+struct dma_buf_mapping *dma_buf_mapping_map(struct dma_buf_attachment *attach,
+					    enum dma_data_direction dir);
+void dma_buf_mapping_unmap(struct dma_buf_attachment *attach,
+			   struct dma_buf_mapping *mapping,
+			   enum dma_data_direction dir);
 
 struct dma_buf_sgt_mapping *
 dma_buf_phys_vec_to_sgt(struct dma_buf_attachment *attach,
@@ -292,6 +325,23 @@ static inline struct device *
 dma_buf_sgt_mapping_dma_device(const struct dma_buf_sgt_mapping *mapping)
 {
 	return mapping->base.match->sgt_data.importing_dma_device;
+}
+
+/**
+ * dma_buf_sgt_mapping_table - The sg_table for a mapping of the SGT type
+ * @mapping: what dma_buf_mapping_map() returned
+ *
+ * For importers that listed more than one type and got the SGT type.
+ *
+ * Returns: the embedded &struct sg_table, or NULL if @mapping is not of the
+ * SGT type.
+ */
+static inline struct sg_table *
+dma_buf_sgt_mapping_table(struct dma_buf_mapping *mapping)
+{
+	if (WARN_ON(dma_buf_mapping_type_of(mapping) != &dma_buf_mapping_sgt_type))
+		return NULL;
+	return &container_of(mapping, struct dma_buf_sgt_mapping, base)->sgt;
 }
 
 /*
