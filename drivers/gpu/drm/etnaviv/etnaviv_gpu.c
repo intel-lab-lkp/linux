@@ -506,6 +506,80 @@ static void etnaviv_gpu_load_clock(struct etnaviv_gpu *gpu, u32 clock)
 	gpu_write(gpu, VIVS_HI_CLOCK_CONTROL, clock);
 }
 
+static void etnaviv_gpu_record_clock(struct etnaviv_gpu *gpu, u32 flags,
+				     u64 begin_ns, u64 end_ns,
+				     unsigned long rate)
+{
+	spin_lock(&gpu->clock_lock);
+	gpu->clock_seq++;
+	gpu->clock_records[gpu->clock_seq % ETNA_NR_CLOCK_RECORDS] =
+		(struct drm_etnaviv_clock_record){
+			.begin_ns = begin_ns,
+			.end_ns = end_ns,
+			.rate = rate,
+			.seq = gpu->clock_seq,
+			.flags = flags,
+		};
+	spin_unlock(&gpu->clock_lock);
+}
+
+static u64 etnaviv_gpu_clock_oldest(u64 last)
+{
+	if (last > ETNA_NR_CLOCK_RECORDS)
+		return last - ETNA_NR_CLOCK_RECORDS + 1;
+
+	return 1;
+}
+
+int etnaviv_gpu_clock_history(struct etnaviv_gpu *gpu,
+			      struct drm_etnaviv_clock_history *args)
+{
+	u64 last, start;
+	u32 size, n = 0, i;
+
+	if (args->flags)
+		return -EINVAL;
+
+	/* records can grow, a reader gets the part of each one it knows */
+	if (args->record_size <
+	    offsetofend(struct drm_etnaviv_clock_record, pad))
+		return -EINVAL;
+	size = min_t(u32, args->record_size,
+		     sizeof(struct drm_etnaviv_clock_record));
+
+	spin_lock(&gpu->clock_lock);
+	last = gpu->clock_seq;
+	spin_unlock(&gpu->clock_lock);
+
+	if (args->since_seq < last) {
+		start = max(args->since_seq + 1, etnaviv_gpu_clock_oldest(last));
+		n = min_t(u64, last - start + 1, args->count);
+	}
+
+	for (i = 0; i < n; i++) {
+		void __user *dst = u64_to_user_ptr(args->records +
+						   (u64)i * args->record_size);
+		struct drm_etnaviv_clock_record record;
+
+		spin_lock(&gpu->clock_lock);
+		record = gpu->clock_records[(start + i) % ETNA_NR_CLOCK_RECORDS];
+		spin_unlock(&gpu->clock_lock);
+
+		/* overwritten since clock_seq was read */
+		if (record.seq != start + i)
+			break;
+
+		if (copy_to_user(dst, &record, size))
+			return -EFAULT;
+	}
+
+	args->count = i;
+	args->record_size = size;
+	args->last_seq = last;
+
+	return 0;
+}
+
 /* begin_ns is when the switch, or the restart that includes it, began */
 static void etnaviv_gpu_update_clock(struct etnaviv_gpu *gpu, u32 flags,
 				     u64 begin_ns)
@@ -538,6 +612,8 @@ static void etnaviv_gpu_update_clock(struct etnaviv_gpu *gpu, u32 flags,
 
 	/* a resume or reset that keeps the rate is not worth a report */
 	if (scaled || rate_before != gpu->core_rate) {
+		etnaviv_gpu_record_clock(gpu, flags, begin_ns, end_ns,
+					 gpu->core_rate);
 		trace_etnaviv_gpu_clock_change(gpu->dev, flags, begin_ns,
 					       end_ns, rate_before,
 					       gpu->core_rate);
@@ -2008,7 +2084,14 @@ static int etnaviv_gpu_platform_probe(struct platform_device *pdev)
 
 	gpu->dev = dev;
 	mutex_init(&gpu->lock);
+	spin_lock_init(&gpu->clock_lock);
 	mutex_init(&gpu->sched_lock);
+
+	gpu->clock_records = devm_kcalloc(dev, ETNA_NR_CLOCK_RECORDS,
+					  sizeof(*gpu->clock_records),
+					  GFP_KERNEL);
+	if (!gpu->clock_records)
+		return -ENOMEM;
 
 	/* Map registers: */
 	gpu->mmio = devm_platform_ioremap_resource(pdev, 0);

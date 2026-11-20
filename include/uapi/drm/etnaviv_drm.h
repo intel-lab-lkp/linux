@@ -284,6 +284,45 @@ struct drm_etnaviv_pm_signal {
 #define ETNA_CLOCK_RESET               0x0002
 #define ETNA_CLOCK_BUSY                0x0004
 
+/*
+ * The kernel also records the clock changes. The switch happens between
+ * begin_ns and end_ns. For RESUME and RESET the window covers the whole
+ * restart, from before the first reset attempt or the clock enable. That
+ * is wider than needed, but no job runs in it.
+ *
+ * The first record is written when the GPU is initialized after it is
+ * bound. So a GPU has at least one record, unless its core clock rate is
+ * unknown.
+ *
+ * DRM_IOCTL_ETNAVIV_CLOCK_HISTORY returns the records after since_seq, oldest
+ * first. It can return fewer than requested even if more exist, call it again
+ * until the last returned seq reaches last_seq. A reader that fell behind
+ * sees a gap between since_seq and the first seq returned.
+ *
+ * record_size is the stride of the records array and at least the size of
+ * the record below. So that the record can grow, the kernel writes the
+ * smaller of record_size and its own record size to each element and returns
+ * that size in record_size.
+ */
+struct drm_etnaviv_clock_record {
+	__u64 begin_ns;    /* CLOCK_MONOTONIC right before the switch */
+	__u64 end_ns;      /* CLOCK_MONOTONIC right after the switch */
+	__u64 rate;        /* core clock rate after the switch, in Hz */
+	__u64 seq;         /* increments by one per record, starts at 1 */
+	__u32 flags;       /* ETNA_CLOCK_x */
+	__u32 pad;         /* out, zero */
+};
+
+struct drm_etnaviv_clock_history {
+	__u32 pipe;        /* in */
+	__u32 count;       /* in, capacity of records, out, records returned */
+	__u32 record_size; /* in, stride of records, out, bytes written each */
+	__u32 flags;       /* in, must be zero */
+	__u64 since_seq;   /* in, return records with seq > since_seq */
+	__u64 last_seq;    /* out, newest record */
+	__u64 records;     /* in, pointer to struct drm_etnaviv_clock_record */
+};
+
 #define DRM_ETNAVIV_GET_PARAM          0x00
 /* placeholder:
 #define DRM_ETNAVIV_SET_PARAM          0x01
@@ -298,7 +337,8 @@ struct drm_etnaviv_pm_signal {
 #define DRM_ETNAVIV_GEM_WAIT           0x09
 #define DRM_ETNAVIV_PM_QUERY_DOM       0x0a
 #define DRM_ETNAVIV_PM_QUERY_SIG       0x0b
-#define DRM_ETNAVIV_NUM_IOCTLS         0x0c
+#define DRM_ETNAVIV_CLOCK_HISTORY      0x0c
+#define DRM_ETNAVIV_NUM_IOCTLS         0x0d
 
 #define DRM_IOCTL_ETNAVIV_GET_PARAM    DRM_IOWR(DRM_COMMAND_BASE + DRM_ETNAVIV_GET_PARAM, struct drm_etnaviv_param)
 #define DRM_IOCTL_ETNAVIV_GEM_NEW      DRM_IOWR(DRM_COMMAND_BASE + DRM_ETNAVIV_GEM_NEW, struct drm_etnaviv_gem_new)
@@ -311,6 +351,7 @@ struct drm_etnaviv_pm_signal {
 #define DRM_IOCTL_ETNAVIV_GEM_WAIT     DRM_IOW(DRM_COMMAND_BASE + DRM_ETNAVIV_GEM_WAIT, struct drm_etnaviv_gem_wait)
 #define DRM_IOCTL_ETNAVIV_PM_QUERY_DOM DRM_IOWR(DRM_COMMAND_BASE + DRM_ETNAVIV_PM_QUERY_DOM, struct drm_etnaviv_pm_domain)
 #define DRM_IOCTL_ETNAVIV_PM_QUERY_SIG DRM_IOWR(DRM_COMMAND_BASE + DRM_ETNAVIV_PM_QUERY_SIG, struct drm_etnaviv_pm_signal)
+#define DRM_IOCTL_ETNAVIV_CLOCK_HISTORY DRM_IOWR(DRM_COMMAND_BASE + DRM_ETNAVIV_CLOCK_HISTORY, struct drm_etnaviv_clock_history)
 
 #if defined(__cplusplus)
 }

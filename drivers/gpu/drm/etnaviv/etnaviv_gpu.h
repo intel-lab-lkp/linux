@@ -96,6 +96,7 @@ struct clk;
 struct reset_control;
 
 #define ETNA_NR_EVENTS 30
+#define ETNA_NR_CLOCK_RECORDS 256
 
 enum etnaviv_gpu_state {
 	ETNA_GPU_STATE_UNKNOWN = 0,
@@ -168,6 +169,11 @@ struct etnaviv_gpu {
 	unsigned long base_rate_core;
 	unsigned long core_rate;
 	unsigned long base_rate_shader;
+
+	/* protects clock_seq and clock_records */
+	spinlock_t clock_lock;
+	u64 clock_seq;
+	struct drm_etnaviv_clock_record *clock_records;
 };
 
 static inline void gpu_write(struct etnaviv_gpu *gpu, u32 reg, u32 data)
@@ -236,5 +242,8 @@ int etnaviv_gpu_wait_idle(struct etnaviv_gpu *gpu, unsigned int timeout_ms);
 void etnaviv_gpu_start_fe(struct etnaviv_gpu *gpu, u32 address, u16 prefetch);
 
 extern struct platform_driver etnaviv_gpu_driver;
+
+int etnaviv_gpu_clock_history(struct etnaviv_gpu *gpu,
+			      struct drm_etnaviv_clock_history *args);
 
 #endif /* __ETNAVIV_GPU_H__ */
