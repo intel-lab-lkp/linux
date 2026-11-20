@@ -78,6 +78,14 @@
 #define ARMV8_PMUV3_PERFCTR_STALL_SLOT_FRONTEND			0x003E
 #define ARMV8_PMUV3_PERFCTR_STALL_SLOT				0x003F
 
+/*
+ * PMCEID{0,1} report ARMV8_PMUV3_MAX_COMMON_EVENTS common events from 0 in
+ * bits [31:0], and as many from ARMV8_PMUV3_EXT_COMMON_EVENT_BASE in bits
+ * [63:32] from PMUv3p1.
+ */
+#define ARMV8_PMUV3_MAX_COMMON_EVENTS				0x40
+#define ARMV8_PMUV3_EXT_COMMON_EVENT_BASE			0x4000
+
 /* Statistical profiling extension microarchitectural events */
 #define ARMV8_SPE_PERFCTR_SAMPLE_POP				0x4000
 #define ARMV8_SPE_PERFCTR_SAMPLE_FEED				0x4001
