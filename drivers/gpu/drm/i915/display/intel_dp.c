@@ -1313,6 +1313,52 @@ intel_dp_pcon_dsc_enc_compute(struct intel_dp *intel_dp,
 }
 
 /*
+ * The PCON passes the DSC stream of the source to the HDMI sink as is, so
+ * the stream has to be one the HDMI sink can decode.
+ */
+static bool
+intel_dp_pcon_dsc_passthrough_ok(struct intel_dp *intel_dp,
+				 const struct intel_crtc_state *crtc_state)
+{
+	struct intel_connector *connector = intel_dp->attached_connector;
+	const struct drm_display_info *info = &connector->base.display_info;
+	const struct drm_display_mode *adjusted_mode = &crtc_state->hw.adjusted_mode;
+	int num_slices = intel_dsc_line_slice_count(&crtc_state->dsc.slice_config);
+	int bpp_x16 = crtc_state->dsc.compressed_bpp_x16;
+	int bpc = crtc_state->pipe_bpp / 3;
+	int min_dsc_bpp, max_dsc_bpp;
+
+	if (!intel_dp_pcon_can_passthrough_dsc(intel_dp))
+		return false;
+
+	/* The PCON can't convert the format of a compressed stream */
+	if (crtc_state->output_format != crtc_state->sink_format)
+		return false;
+
+	if (num_slices > info->hdmi.dsc_cap.max_slices ||
+	    !intel_hdmi_dsc_get_num_slices(adjusted_mode, adjusted_mode->crtc_clock,
+					   crtc_state->sink_format, num_slices,
+					   INT_MAX, info->hdmi.dsc_cap.max_slices,
+					   info->hdmi.dsc_cap.clk_per_slice))
+		return false;
+
+	intel_hdmi_dsc_get_min_max_bpp(crtc_state->sink_format, bpc,
+				       info->hdmi.dsc_cap.all_bpp,
+				       &min_dsc_bpp, &max_dsc_bpp);
+	if (bpp_x16 < min_dsc_bpp * 16 || bpp_x16 > max_dsc_bpp * 16)
+		return false;
+
+	if (!intel_hdmi_dsc_bpp_fits_chunk_bytes(DIV_ROUND_UP(bpp_x16, 16), num_slices,
+						 crtc_state->dsc.config.slice_width,
+						 info->hdmi.dsc_cap.total_chunk_kbytes * 1024))
+		return false;
+
+	/* The compressed stream has to fit the FRL link */
+	return DIV_ROUND_UP(adjusted_mode->crtc_clock * bpp_x16, 16) <=
+		intel_dp_hdmi_frl_payload_bw(intel_dp, true);
+}
+
+/*
  * Whether the PCON can compress a stream that doesn't fit the HDMI FRL link
  * uncompressed. The DP stream has to be compressed for that as well.
  */
@@ -3216,24 +3262,33 @@ intel_dp_pcon_compute_config(struct intel_dp *intel_dp,
 		return 0;
 
 	/*
-	 * The HDMI link needs DSC. The PCON can only get it from a compressed DP
-	 * stream, and re-encoding is only valid for a DSC 1.1 stream.
+	 * The HDMI link needs DSC, which the PCON can only get from a compressed
+	 * DP stream. It passes a DSC 1.2a stream through, and it can only
+	 * re-encode a DSC 1.1 stream.
 	 */
-	if (!crtc_state->dsc.compression_enable ||
-	    intel_dp_dsc_stream_version_minor(connector) >= 2 ||
-	    !intel_dp_pcon_dsc_enc_compute(intel_dp, adjusted_mode,
-					   adjusted_mode->crtc_clock, bpc,
-					   crtc_state->sink_format,
-					   &crtc_state->pcon_config.dsc_enc)) {
-		drm_dbg_kms(display->drm,
-			    "HDMI link needs DSC, but the PCON can't provide it\n");
-		return -EINVAL;
+	if (crtc_state->dsc.compression_enable) {
+		if (intel_dp_dsc_stream_version_minor(connector) >= 2) {
+			if (intel_dp_pcon_dsc_passthrough_ok(intel_dp, crtc_state)) {
+				crtc_state->pcon_config.dsc_op = INTEL_PCON_DSC_PASSTHROUGH;
+				crtc_state->pcon_config.frl_rate_gbps =
+					intel_dp_pcon_max_frl_rate(intel_dp, true);
+				return 0;
+			}
+		} else if (intel_dp_pcon_dsc_enc_compute(intel_dp, adjusted_mode,
+							 adjusted_mode->crtc_clock, bpc,
+							 crtc_state->sink_format,
+							 &crtc_state->pcon_config.dsc_enc)) {
+			crtc_state->pcon_config.dsc_op = INTEL_PCON_DSC_DECODE_ENCODE;
+			crtc_state->pcon_config.frl_rate_gbps =
+				intel_dp_pcon_max_frl_rate(intel_dp, true);
+			return 0;
+		}
 	}
 
-	crtc_state->pcon_config.dsc_op = INTEL_PCON_DSC_DECODE_ENCODE;
-	crtc_state->pcon_config.frl_rate_gbps = intel_dp_pcon_max_frl_rate(intel_dp, true);
+	drm_dbg_kms(display->drm,
+		    "HDMI link needs DSC, but the PCON can't provide it\n");
 
-	return 0;
+	return -EINVAL;
 }
 
 static int
