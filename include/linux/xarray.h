@@ -192,6 +192,17 @@ static inline bool xa_is_zero(const void *entry)
 }
 
 /**
+ * xa_zero_to_null() - Convert an internal zero entry into a NULL pointer.
+ * @entry: XArray entry.
+ *
+ * Return: %NULL if @entry is a zero entry, @entry otherwise.
+ */
+static inline void *xa_zero_to_null(void *entry)
+{
+	return xa_is_zero(entry) ? NULL : entry;
+}
+
+/**
  * xa_is_err() - Report whether an XArray operation returned an error
  * @entry: Result from calling an XArray function
  *
@@ -1435,6 +1446,21 @@ struct xa_state {
 static inline int xas_error(const struct xa_state *xas)
 {
 	return xa_err(xas->xa_node);
+}
+
+/**
+ * xas_result() - Extract the result of an XArray operation.
+ * @xas: XArray operation state.
+ * @curr: Entry returned by the operation.
+ *
+ * Return: @curr if the operation succeeded, the error encoded in @xas
+ * otherwise.
+ */
+static inline void *xas_result(struct xa_state *xas, void *curr)
+{
+	if (xas_error(xas))
+		curr = xas->xa_node;
+	return curr;
 }
 
 /**
