@@ -357,6 +357,78 @@ static int scatterlist_builder_add_userptr(struct scatterlist_builder *builder,
 }
 
 /**
+ * scatterlist_builder_add_buffer() - Add a &struct v4l2_buffer and its planes
+ *                                    to the descriptor chain.
+ * @builder: builder to use.
+ * @b: &struct v4l2_buffer to add.
+ */
+int scatterlist_builder_add_buffer(struct scatterlist_builder *builder,
+				   struct v4l2_buffer *b)
+{
+	int ret;
+
+	/* v4l2_buffer */
+	ret = scatterlist_builder_add_data(builder, b, sizeof(*b));
+	if (ret)
+		return ret;
+
+	if (V4L2_TYPE_IS_MULTIPLANAR(b->type) && b->length > 0) {
+		/* Array of v4l2_planes */
+		ret = scatterlist_builder_add_data(builder, b->m.planes,
+						   sizeof(struct v4l2_plane) *
+							   b->length);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
+/**
+ * scatterlist_builder_retrieve_buffer() - Retrieve a &struct v4l2_buffer
+ *                                         written by the device on the shadow
+ *                                         buffer, if needed.
+ * @builder: builder to use.
+ * @sg_index: index of the first SG entry of the buffer in the builder's
+ *            descriptor chain.
+ * @b: &struct v4l2_buffer to copy shadow buffer data into.
+ * @orig_planes: the original ``planes`` pointer, to be restored if the buffer
+ *               is multi-planar.
+ *
+ * If the &struct v4l2_buffer pointed to by @sg_index was copied into the
+ * shadow buffer, then its updated content is copied back into @b.
+ * Otherwise nothing is done as the device has written into @b directly.
+ *
+ * @orig_planes is used to restore the original ``planes`` pointer in case it
+ * gets modified by the host. The specification stipulates that the host should
+ * not modify it, but we enforce this for additional safety.
+ */
+int scatterlist_builder_retrieve_buffer(struct scatterlist_builder *builder,
+					size_t sg_index, struct v4l2_buffer *b,
+					struct v4l2_plane *orig_planes)
+{
+	int ret;
+
+	ret = scatterlist_builder_retrieve_data(builder, sg_index++, b);
+	if (ret)
+		return ret;
+
+	if (V4L2_TYPE_IS_MULTIPLANAR(b->type)) {
+		b->m.planes = orig_planes;
+
+		if (orig_planes) {
+			ret = scatterlist_builder_retrieve_data(builder,
+								sg_index++,
+								b->m.planes);
+			if (ret)
+				return ret;
+		}
+	}
+
+	return 0;
+}
+
+/**
  * scatterlist_builder_add_ext_ctrls() - Add a &struct v4l2_ext_controls and its
  *                                       controls to @builder.
  * @builder: builder to use.
