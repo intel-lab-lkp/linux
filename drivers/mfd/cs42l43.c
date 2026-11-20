@@ -515,19 +515,6 @@ static const struct regmap_irq cs42l43_regmap_irqs[] = {
 	CS42L43_IRQ_REG(HP_LOADDET_DONE,			HPOUT),
 };
 
-static const struct regmap_irq_chip cs42l43_irq_chip = {
-	.name = "cs42l43",
-
-	.status_base = CS42L43_DECIM_INT,
-	.mask_base = CS42L43_DECIM_MASK,
-	.num_regs = 16,
-
-	.irqs = cs42l43_regmap_irqs,
-	.num_irqs = ARRAY_SIZE(cs42l43_regmap_irqs),
-
-	.runtime_pm = true,
-};
-
 static const char * const cs42l43_core_supplies[] = {
 	"vdd-a", "vdd-io", "vdd-cp",
 };
@@ -917,7 +904,14 @@ static int cs42l43_irq_config(struct cs42l43 *cs42l43)
 	if (cs42l43->sdw)
 		cs42l43->irq = cs42l43->sdw->irq;
 
-	cs42l43->irq_chip = cs42l43_irq_chip;
+	/* Manually fill so extra settings from bus are preserved */
+	cs42l43->irq_chip.name = "cs42l43",
+	cs42l43->irq_chip.status_base = CS42L43_DECIM_INT,
+	cs42l43->irq_chip.mask_base = CS42L43_DECIM_MASK,
+	cs42l43->irq_chip.num_regs = 16,
+	cs42l43->irq_chip.irqs = cs42l43_regmap_irqs,
+	cs42l43->irq_chip.num_irqs = ARRAY_SIZE(cs42l43_regmap_irqs),
+	cs42l43->irq_chip.runtime_pm = true,
 	cs42l43->irq_chip.irq_drv_data = cs42l43;
 
 	irq_data = irq_get_irq_data(cs42l43->irq);

@@ -112,9 +112,11 @@ static int cs42l43_sdw_update_status(struct sdw_slave *sdw, enum sdw_slave_statu
 	return 0;
 }
 
-static int cs42l43_sdw_interrupt(struct sdw_slave *sdw,
-				 struct sdw_slave_intr_status *status)
+static int cs42l43_sdw_interrupt(void *data)
 {
+	struct cs42l43 *cs42l43 = data;
+	struct sdw_slave *sdw = cs42l43->sdw;
+
 	/*
 	 * The IRQ itself was handled through the regmap_irq handler, this is
 	 * just clearing up the additional Cirrus SoundWire registers that are
@@ -155,7 +157,6 @@ static int cs42l43_sdw_bus_config(struct sdw_slave *sdw,
 static const struct sdw_slave_ops cs42l43_sdw_ops = {
 	.read_prop		= cs42l43_read_prop,
 	.update_status		= cs42l43_sdw_update_status,
-	.interrupt_callback	= cs42l43_sdw_interrupt,
 	.bus_config		= cs42l43_sdw_bus_config,
 };
 
@@ -171,6 +172,8 @@ static int cs42l43_sdw_probe(struct sdw_slave *sdw, const struct sdw_device_id *
 	cs42l43->dev = dev;
 	cs42l43->sdw = sdw;
 	cs42l43->variant_id = (long)id->driver_data;
+
+	cs42l43->irq_chip.handle_post_irq = cs42l43_sdw_interrupt;
 
 	cs42l43->regmap = devm_regmap_init_sdw(sdw, &cs42l43_sdw_regmap);
 	if (IS_ERR(cs42l43->regmap))
