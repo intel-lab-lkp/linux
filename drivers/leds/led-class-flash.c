@@ -12,6 +12,7 @@
 #include <linux/leds.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/sysfs.h>
 
 #define has_flash_op(fled_cdev, op)				\
 	(fled_cdev && fled_cdev->ops->op)
@@ -34,7 +35,8 @@ static const char * const led_flash_fault_names[] = {
 };
 
 static ssize_t flash_brightness_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t size)
+				      const struct device_attribute *attr, const char *buf,
+				      size_t size)
 {
 	struct led_classdev *led_cdev = dev_get_drvdata(dev);
 	struct led_classdev_flash *fled_cdev = lcdev_to_flcdev(led_cdev);
@@ -62,8 +64,8 @@ unlock:
 	return ret;
 }
 
-static ssize_t flash_brightness_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
+static ssize_t flash_brightness_show(struct device *dev, const struct device_attribute *attr,
+				     char *buf)
 {
 	struct led_classdev *led_cdev = dev_get_drvdata(dev);
 	struct led_classdev_flash *fled_cdev = lcdev_to_flcdev(led_cdev);
@@ -73,20 +75,20 @@ static ssize_t flash_brightness_show(struct device *dev,
 
 	return sysfs_emit(buf, "%u\n", fled_cdev->brightness.val);
 }
-static DEVICE_ATTR_RW(flash_brightness);
+static const DEVICE_ATTR_RW(flash_brightness);
 
-static ssize_t max_flash_brightness_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
+static ssize_t max_flash_brightness_show(struct device *dev, const struct device_attribute *attr,
+					 char *buf)
 {
 	struct led_classdev *led_cdev = dev_get_drvdata(dev);
 	struct led_classdev_flash *fled_cdev = lcdev_to_flcdev(led_cdev);
 
 	return sysfs_emit(buf, "%u\n", fled_cdev->brightness.max);
 }
-static DEVICE_ATTR_RO(max_flash_brightness);
+static const DEVICE_ATTR_RO(max_flash_brightness);
 
-static ssize_t flash_strobe_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t size)
+static ssize_t flash_strobe_store(struct device *dev, const struct device_attribute *attr,
+				  const char *buf, size_t size)
 {
 	struct led_classdev *led_cdev = dev_get_drvdata(dev);
 	struct led_classdev_flash *fled_cdev = lcdev_to_flcdev(led_cdev);
@@ -116,8 +118,7 @@ unlock:
 	return ret;
 }
 
-static ssize_t flash_strobe_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
+static ssize_t flash_strobe_show(struct device *dev, const struct device_attribute *attr, char *buf)
 {
 	struct led_classdev *led_cdev = dev_get_drvdata(dev);
 	struct led_classdev_flash *fled_cdev = lcdev_to_flcdev(led_cdev);
@@ -131,10 +132,10 @@ static ssize_t flash_strobe_show(struct device *dev,
 
 	return sysfs_emit(buf, "%u\n", state);
 }
-static DEVICE_ATTR_RW(flash_strobe);
+static const DEVICE_ATTR_RW(flash_strobe);
 
-static ssize_t flash_timeout_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t size)
+static ssize_t flash_timeout_store(struct device *dev, const struct device_attribute *attr,
+				   const char *buf, size_t size)
 {
 	struct led_classdev *led_cdev = dev_get_drvdata(dev);
 	struct led_classdev_flash *fled_cdev = lcdev_to_flcdev(led_cdev);
@@ -162,28 +163,27 @@ unlock:
 	return ret;
 }
 
-static ssize_t flash_timeout_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
+static ssize_t flash_timeout_show(struct device *dev, const struct device_attribute *attr,
+				  char *buf)
 {
 	struct led_classdev *led_cdev = dev_get_drvdata(dev);
 	struct led_classdev_flash *fled_cdev = lcdev_to_flcdev(led_cdev);
 
 	return sysfs_emit(buf, "%u\n", fled_cdev->timeout.val);
 }
-static DEVICE_ATTR_RW(flash_timeout);
+static const DEVICE_ATTR_RW(flash_timeout);
 
-static ssize_t max_flash_timeout_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
+static ssize_t max_flash_timeout_show(struct device *dev, const struct device_attribute *attr,
+				      char *buf)
 {
 	struct led_classdev *led_cdev = dev_get_drvdata(dev);
 	struct led_classdev_flash *fled_cdev = lcdev_to_flcdev(led_cdev);
 
 	return sysfs_emit(buf, "%u\n", fled_cdev->timeout.max);
 }
-static DEVICE_ATTR_RO(max_flash_timeout);
+static const DEVICE_ATTR_RO(max_flash_timeout);
 
-static ssize_t flash_fault_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
+static ssize_t flash_fault_show(struct device *dev, const struct device_attribute *attr, char *buf)
 {
 	struct led_classdev *led_cdev = dev_get_drvdata(dev);
 	struct led_classdev_flash *fled_cdev = lcdev_to_flcdev(led_cdev);
@@ -205,44 +205,44 @@ static ssize_t flash_fault_show(struct device *dev,
 	ret += sysfs_emit_at(buf, ret, "\n");
 	return ret;
 }
-static DEVICE_ATTR_RO(flash_fault);
+static const DEVICE_ATTR_RO(flash_fault);
 
-static struct attribute *led_flash_strobe_attrs[] = {
+static const struct attribute *const led_flash_strobe_attrs[] = {
 	&dev_attr_flash_strobe.attr,
 	NULL,
 };
 
-static struct attribute *led_flash_timeout_attrs[] = {
+static const struct attribute *const led_flash_timeout_attrs[] = {
 	&dev_attr_flash_timeout.attr,
 	&dev_attr_max_flash_timeout.attr,
 	NULL,
 };
 
-static struct attribute *led_flash_brightness_attrs[] = {
+static const struct attribute *const led_flash_brightness_attrs[] = {
 	&dev_attr_flash_brightness.attr,
 	&dev_attr_max_flash_brightness.attr,
 	NULL,
 };
 
-static struct attribute *led_flash_fault_attrs[] = {
+static const struct attribute *const led_flash_fault_attrs[] = {
 	&dev_attr_flash_fault.attr,
 	NULL,
 };
 
 static const struct attribute_group led_flash_strobe_group = {
-	.attrs = led_flash_strobe_attrs,
+	.attrs_const = led_flash_strobe_attrs,
 };
 
 static const struct attribute_group led_flash_timeout_group = {
-	.attrs = led_flash_timeout_attrs,
+	.attrs_const = led_flash_timeout_attrs,
 };
 
 static const struct attribute_group led_flash_brightness_group = {
-	.attrs = led_flash_brightness_attrs,
+	.attrs_const = led_flash_brightness_attrs,
 };
 
 static const struct attribute_group led_flash_fault_group = {
-	.attrs = led_flash_fault_attrs,
+	.attrs_const = led_flash_fault_attrs,
 };
 
 static void led_flash_resume(struct led_classdev *led_cdev)
