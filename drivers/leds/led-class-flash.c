@@ -13,6 +13,7 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/sysfs.h>
+#include "leds.h"
 
 #define has_flash_op(fled_cdev, op)				\
 	(fled_cdev && fled_cdev->ops->op)
@@ -207,42 +208,56 @@ static ssize_t flash_fault_show(struct device *dev, const struct device_attribut
 }
 static const DEVICE_ATTR_RO(flash_fault);
 
-static const struct attribute *const led_flash_strobe_attrs[] = {
+static const struct attribute *const led_flash_attrs[] = {
 	&dev_attr_flash_strobe.attr,
-	NULL,
-};
-
-static const struct attribute *const led_flash_timeout_attrs[] = {
 	&dev_attr_flash_timeout.attr,
 	&dev_attr_max_flash_timeout.attr,
-	NULL,
-};
-
-static const struct attribute *const led_flash_brightness_attrs[] = {
 	&dev_attr_flash_brightness.attr,
 	&dev_attr_max_flash_brightness.attr,
-	NULL,
-};
-
-static const struct attribute *const led_flash_fault_attrs[] = {
 	&dev_attr_flash_fault.attr,
 	NULL,
 };
 
-static const struct attribute_group led_flash_strobe_group = {
-	.attrs_const = led_flash_strobe_attrs,
+static umode_t led_flash_is_visible(struct kobject *kobj, const struct attribute *attr, int n)
+{
+	struct device *dev = kobj_to_dev(kobj);
+	struct led_classdev *led_cdev = dev_get_drvdata(dev);
+	struct led_classdev_flash *fled_cdev = lcdev_to_flcdev(led_cdev);
+
+	if (attr == &dev_attr_flash_strobe.attr)
+		return attr->mode;
+
+        if (attr == &dev_attr_flash_timeout.attr && fled_cdev->ops->timeout_set)
+                return attr->mode;
+
+	if (attr == &dev_attr_max_flash_timeout.attr && fled_cdev->ops->timeout_set)
+		return attr->mode;
+
+	if (attr == &dev_attr_flash_brightness.attr && fled_cdev->ops->flash_brightness_set)
+		return attr->mode;
+
+	if (attr == &dev_attr_max_flash_brightness.attr && fled_cdev->ops->flash_brightness_set)
+		return attr->mode;
+
+	if (attr == &dev_attr_flash_fault.attr && fled_cdev->ops->fault_get)
+		return attr->mode;
+
+        return 0;
+}
+
+static const struct attribute_group led_flash_group = {
+	.is_visible_const = led_flash_is_visible,
+	.attrs_const = led_flash_attrs,
 };
 
-static const struct attribute_group led_flash_timeout_group = {
-	.attrs_const = led_flash_timeout_attrs,
+static const struct attribute_group *led_flash_groups[] = {
+	&led_flash_group,
+	NULL,
 };
 
-static const struct attribute_group led_flash_brightness_group = {
-	.attrs_const = led_flash_brightness_attrs,
-};
-
-static const struct attribute_group led_flash_fault_group = {
-	.attrs_const = led_flash_fault_attrs,
+static const struct device_type led_flash_device_type = {
+	.name = "flash",
+	.groups = led_flash_groups,
 };
 
 static void led_flash_resume(struct led_classdev *led_cdev)
@@ -252,30 +267,6 @@ static void led_flash_resume(struct led_classdev *led_cdev)
 	call_flash_op(fled_cdev, flash_brightness_set,
 					fled_cdev->brightness.val);
 	call_flash_op(fled_cdev, timeout_set, fled_cdev->timeout.val);
-}
-
-static void led_flash_init_sysfs_groups(struct led_classdev_flash *fled_cdev)
-{
-	struct led_classdev *led_cdev = &fled_cdev->led_cdev;
-	const struct led_flash_ops *ops = fled_cdev->ops;
-	const struct attribute_group **flash_groups = fled_cdev->sysfs_groups;
-
-	int num_sysfs_groups = 0;
-
-	flash_groups[num_sysfs_groups++] = &led_flash_strobe_group;
-
-	if (ops->flash_brightness_set)
-		flash_groups[num_sysfs_groups++] = &led_flash_brightness_group;
-
-	if (ops->timeout_set)
-		flash_groups[num_sysfs_groups++] = &led_flash_timeout_group;
-
-	if (ops->fault_get)
-		flash_groups[num_sysfs_groups++] = &led_flash_fault_group;
-
-	flash_groups[num_sysfs_groups] = NULL;
-
-	led_cdev->groups = flash_groups;
 }
 
 int led_classdev_flash_register_ext(struct device *parent,
@@ -291,26 +282,26 @@ int led_classdev_flash_register_ext(struct device *parent,
 
 	led_cdev = &fled_cdev->led_cdev;
 
-	if (led_cdev->flags & LED_DEV_CAP_FLASH) {
-		if (!led_cdev->brightness_set_blocking)
-			return -EINVAL;
+	if (!(led_cdev->flags & LED_DEV_CAP_FLASH))
+		return led_classdev_register_ext(parent, led_cdev, init_data);
 
-		ops = fled_cdev->ops;
-		if (!ops || !ops->strobe_set)
-			return -EINVAL;
+	if (!led_cdev->brightness_set_blocking)
+		return -EINVAL;
 
-		led_cdev->flash_resume = led_flash_resume;
+	ops = fled_cdev->ops;
+	if (!ops || !ops->strobe_set)
+		return -EINVAL;
 
-		/* Select the sysfs attributes to be created for the device */
-		led_flash_init_sysfs_groups(fled_cdev);
-	}
+	led_cdev->flash_resume = led_flash_resume;
 
 	/* Register led class device */
-	ret = led_classdev_register_ext(parent, led_cdev, init_data);
+	ret = led_classdev_init(parent, led_cdev, init_data);
 	if (ret < 0)
 		return ret;
 
-	return 0;
+	led_cdev->dev->type = &led_flash_device_type;
+
+	return led_classdev_add(led_cdev, init_data);
 }
 EXPORT_SYMBOL_GPL(led_classdev_flash_register_ext);
 
