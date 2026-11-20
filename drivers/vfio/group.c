@@ -184,7 +184,8 @@ static int vfio_df_group_open(struct vfio_device_file *df)
 	 * Before the first device open, get the KVM pointer currently
 	 * associated with the group (if there is one) and obtain a reference
 	 * now that will be held until the open_count reaches 0 again.  Save
-	 * the pointer in the device for use by drivers.
+	 * the pointer in the device for use by drivers. Both only if the
+	 * driver set needs_kvm_ref.
 	 */
 	if (device->open_count == 0)
 		vfio_device_group_get_kvm_safe(device);

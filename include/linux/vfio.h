@@ -54,6 +54,8 @@ struct vfio_device {
 	struct list_head dev_set_list;
 	unsigned int migration_flags;
 	u8 precopy_info_v2;
+	/* Drivers that use kvm must set this before registering the device */
+	bool needs_kvm_ref;
 	struct file *kvm;
 
 	/* Members below here are private, not for driver use */

@@ -476,7 +476,8 @@ void vfio_device_get_kvm(struct vfio_device *device, struct file *kvm)
 {
 	lockdep_assert_held(&device->dev_set->lock);
 
-	if (!kvm)
+	/* Only a driver that reads device->kvm needs the KVM referenced */
+	if (!kvm || !device->needs_kvm_ref)
 		return;
 
 	device->kvm = get_file(kvm);
@@ -1536,7 +1537,8 @@ static void vfio_device_file_set_kvm(struct file *file, struct file *kvm)
  * @kvm: KVM file to link
  *
  * When a VFIO device is first opened the KVM will be available in
- * device->kvm if one was associated with the file.
+ * device->kvm if one was associated with the file and the driver set
+ * needs_kvm_ref.
  */
 void vfio_file_set_kvm(struct file *vfio_file, struct file *kvm)
 {

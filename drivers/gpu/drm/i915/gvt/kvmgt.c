@@ -1420,6 +1420,7 @@ static int intel_vgpu_init_dev(struct vfio_device *vfio_dev)
 	int ret;
 
 	vgpu->gvt = kdev_to_i915(mdev->type->parent->dev)->gvt;
+	vfio_dev->needs_kvm_ref = true;
 	ret = intel_gvt_create_vgpu(vgpu, type->conf);
 	if (ret)
 		return ret;

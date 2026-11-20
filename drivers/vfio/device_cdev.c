@@ -157,7 +157,8 @@ long vfio_df_ioctl_bind_iommufd(struct vfio_device_file *df,
 	 * Before the device open, get the KVM pointer currently
 	 * associated with the device file (if there is) and obtain
 	 * a reference.  This reference is held until device closed.
-	 * Save the pointer in the device for use by drivers.
+	 * Save the pointer in the device for use by drivers. Both only
+	 * if the driver set needs_kvm_ref.
 	 */
 	vfio_df_get_kvm_safe(df);
 

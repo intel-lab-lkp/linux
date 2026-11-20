@@ -786,6 +786,7 @@ static int vfio_ap_mdev_init_dev(struct vfio_device *vdev)
 		container_of(vdev, struct ap_matrix_mdev, vdev);
 
 	matrix_mdev->mdev = to_mdev_device(vdev->dev);
+	vdev->needs_kvm_ref = true;
 	vfio_ap_matrix_init(&matrix_dev->info, &matrix_mdev->matrix);
 	matrix_mdev->pqap_hook = handle_pqap;
 	vfio_ap_matrix_init(&matrix_dev->info, &matrix_mdev->shadow_apcb);
