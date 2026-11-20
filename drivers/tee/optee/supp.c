@@ -91,13 +91,6 @@ u32 optee_supp_thrd_req(struct tee_context *ctx, u32 func, size_t num_params,
 	struct optee_supp_req *req;
 	u32 ret;
 
-	/*
-	 * Return in case there is no supplicant available and
-	 * non-blocking request.
-	 */
-	if (!supp->ctx && ctx->supp_nowait)
-		return TEEC_ERROR_COMMUNICATION;
-
 	req = kzalloc_obj(*req);
 	if (!req)
 		return TEEC_ERROR_OUT_OF_MEMORY;
@@ -109,6 +102,16 @@ u32 optee_supp_thrd_req(struct tee_context *ctx, u32 func, size_t num_params,
 
 	/* Insert the request in the request list */
 	mutex_lock(&supp->mutex);
+	/*
+	 * Return in case there is no supplicant available and
+	 * non-blocking request.
+	 */
+	if (!supp->ctx && ctx->supp_nowait) {
+		mutex_unlock(&supp->mutex);
+		kfree(req);
+		return TEEC_ERROR_COMMUNICATION;
+	}
+
 	req->id = idr_alloc(&supp->idr, req, 1, 0, GFP_KERNEL);
 	if (req->id < 0) {
 		mutex_unlock(&supp->mutex);
