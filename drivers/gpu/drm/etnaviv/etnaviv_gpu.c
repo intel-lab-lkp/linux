@@ -1452,6 +1452,14 @@ struct dma_fence *etnaviv_gpu_submit(struct etnaviv_gem_submit *submit)
 
 	mutex_lock(&gpu->lock);
 
+	/* a clock change waits for the queued jobs, don't add new ones */
+	while (gpu->clock_change_pending) {
+		mutex_unlock(&gpu->lock);
+		wait_var_event(&gpu->clock_change_pending,
+			       !READ_ONCE(gpu->clock_change_pending));
+		mutex_lock(&gpu->lock);
+	}
+
 	gpu_fence = etnaviv_gpu_fence_alloc(gpu);
 	if (!gpu_fence) {
 		for (i = 0; i < nr_events; i++)
@@ -1541,6 +1549,13 @@ void etnaviv_gpu_recover_hang(struct etnaviv_gem_submit *submit)
 	for_each_set_bit(i, gpu->event_bitmap, ETNA_NR_EVENTS)
 		event_free(gpu, i);
 	spin_unlock(&gpu->event_spinlock);
+
+	/*
+	 * The dropped jobs never complete, count them as completed so a clock
+	 * change does not wait for them. Resubmitted jobs get new fences.
+	 */
+	WRITE_ONCE(gpu->completed_fence, gpu->next_fence);
+	wake_up_all(&gpu->fence_event);
 
 	etnaviv_gpu_hw_init(gpu);
 
@@ -1652,11 +1667,19 @@ static irqreturn_t irq_handler(int irq, void *data)
 			 * we can end up processing event 0 first, then 1.
 			 */
 			if (fence_after(fence->seqno, gpu->completed_fence))
-				gpu->completed_fence = fence->seqno;
+				WRITE_ONCE(gpu->completed_fence, fence->seqno);
 			dma_fence_signal_timestamp(fence, now);
 
 			event_free(gpu, event);
 		}
+
+		/*
+		 * A clock change waits on fence_event for the queued jobs.
+		 * Job cleanup wakes it, but a submit held back for the clock
+		 * change blocks the ordered scheduler workqueue and with it
+		 * the cleanup. So wake it from here as well.
+		 */
+		wake_up_all(&gpu->fence_event);
 
 		ret = IRQ_HANDLED;
 	}
@@ -1789,6 +1812,7 @@ etnaviv_gpu_cooling_set_cur_state(struct thermal_cooling_device *cdev,
 				  unsigned long state)
 {
 	struct etnaviv_gpu *gpu = cdev->devdata;
+	u32 fence;
 
 	mutex_lock(&gpu->lock);
 	if (state == gpu->freq_scale) {
@@ -1798,8 +1822,33 @@ etnaviv_gpu_cooling_set_cur_state(struct thermal_cooling_device *cdev,
 
 	gpu->freq_scale = state;
 	/* a suspended or not yet reset GPU picks up freq_scale later */
+	if (gpu->state < ETNA_GPU_STATE_RESET) {
+		mutex_unlock(&gpu->lock);
+		return 0;
+	}
+
+	/*
+	 * Change the clock between jobs: hold back new jobs and wait for the
+	 * queued ones, as a job that runs across a clock change can hang the
+	 * GPU. The wait must be bounded: a hang recovery stops the scheduler,
+	 * which waits for the job held back in etnaviv_gpu_submit(), and that
+	 * job waits for the clock change. So give up after one job timeout and
+	 * change the clock anyway.
+	 */
+	WRITE_ONCE(gpu->clock_change_pending, true);
+	fence = gpu->next_fence;
+	mutex_unlock(&gpu->lock);
+
+	if (!wait_event_timeout(gpu->fence_event,
+				!fence_after(fence, READ_ONCE(gpu->completed_fence)),
+				gpu->sched.timeout))
+		dev_dbg(gpu->dev, "clock change while jobs are running\n");
+
+	mutex_lock(&gpu->lock);
+	/* the GPU may have suspended while waiting, the resume applies it */
 	if (gpu->state >= ETNA_GPU_STATE_RESET)
 		etnaviv_gpu_update_clock(gpu);
+	store_release_wake_up(&gpu->clock_change_pending, false);
 	mutex_unlock(&gpu->lock);
 
 	return 0;
