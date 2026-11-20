@@ -647,6 +647,7 @@ int tpm1_do_selftest(struct tpm_chip *chip)
 		 * until the self test duration expires.
 		 */
 		if (rc == -ETIME) {
+			chip->flags &= ~TPM_CHIP_FLAG_MISSED_RESPONSE;
 			dev_info(&chip->dev, HW_ERR "TPM command timed out during continue self test");
 			tpm_msleep(delay_msec);
 			continue;

@@ -26,6 +26,7 @@
 #include <linux/spinlock.h>
 #include <linux/suspend.h>
 #include <linux/freezer.h>
+#include <linux/sched/signal.h>
 #include <linux/tpm_eventlog.h>
 
 #include "tpm.h"
@@ -267,6 +268,20 @@ ssize_t tpm_transmit(struct tpm_chip *chip, u8 *buf, size_t bufsiz)
 		tpm_msleep(delay_msec);
 		delay_msec *= 2;
 		memcpy(buf, save, save_size);
+	}
+
+	if (ret >= 0)
+		chip->flags &= ~TPM_CHIP_FLAG_MISSED_RESPONSE;
+
+	/* Some drivers also return -ETIME when a signal interrupts the wait. */
+	if (ret == -ETIME && !signal_pending(current)) {
+		if (!(chip->flags & TPM_CHIP_FLAG_MISSED_RESPONSE)) {
+			chip->flags |= TPM_CHIP_FLAG_MISSED_RESPONSE;
+		} else if (!(chip->flags & TPM_CHIP_FLAG_DISABLE)) {
+			dev_err(&chip->dev,
+				"two commands in a row timed out, disabling the TPM\n");
+			chip->flags |= TPM_CHIP_FLAG_DISABLE;
+		}
 	}
 	return ret;
 }
