@@ -27,7 +27,17 @@ __rust_helper void rust_helper_xa_unlock(struct xarray *xa)
 	return xa_unlock(xa);
 }
 
+__rust_helper void *rust_helper_xas_result(struct xa_state *xas, void *curr)
+{
+	return xas_result(xas, curr);
+}
+
 __rust_helper void *rust_helper_xa_zero_to_null(void *entry)
 {
 	return xa_zero_to_null(entry);
+}
+
+__rust_helper int rust_helper_xas_error(const struct xa_state *xas)
+{
+	return xas_error(xas);
 }
