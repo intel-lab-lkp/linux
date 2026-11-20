@@ -11,6 +11,7 @@
 #include <linux/kernel.h>
 #include <linux/errno.h>
 #include <linux/dma-buf.h>
+#include <linux/dma-buf-mapping.h>
 #include <linux/dma-direct.h>
 #include <linux/slab.h>
 #include <linux/types.h>
@@ -62,7 +63,7 @@ struct gntdev_dmabuf_wait_obj {
 };
 
 struct gntdev_dmabuf_attachment {
-	struct sg_table *sgt;
+	struct dma_buf_sgt_mapping *mapping;
 	enum dma_data_direction dir;
 };
 
@@ -194,28 +195,28 @@ static int dmabuf_exp_wait_released(struct gntdev_dmabuf_priv *priv, int fd,
 
 /* DMA buffer export support. */
 
-static struct sg_table *
+static struct dma_buf_sgt_mapping *
 dmabuf_pages_to_sgt(struct page **pages, unsigned int nr_pages)
 {
-	struct sg_table *sgt;
+	struct dma_buf_sgt_mapping *mapping;
 	int ret;
 
-	sgt = kmalloc_obj(*sgt);
-	if (!sgt) {
+	mapping = kzalloc_obj(*mapping);
+	if (!mapping) {
 		ret = -ENOMEM;
 		goto out;
 	}
 
-	ret = sg_alloc_table_from_pages(sgt, pages, nr_pages, 0,
+	ret = sg_alloc_table_from_pages(&mapping->sgt, pages, nr_pages, 0,
 					nr_pages << PAGE_SHIFT,
 					GFP_KERNEL);
 	if (ret)
 		goto out;
 
-	return sgt;
+	return mapping;
 
 out:
-	kfree(sgt);
+	kfree(mapping);
 	return ERR_PTR(ret);
 }
 
@@ -239,39 +240,43 @@ static void dmabuf_exp_ops_detach(struct dma_buf *dma_buf,
 	struct gntdev_dmabuf_attachment *gntdev_dmabuf_attach = attach->priv;
 
 	if (gntdev_dmabuf_attach) {
-		struct sg_table *sgt = gntdev_dmabuf_attach->sgt;
+		struct dma_buf_sgt_mapping *mapping =
+			gntdev_dmabuf_attach->mapping;
 
-		if (sgt) {
+		if (mapping) {
+			struct device *dma_dev = dma_buf_sgt_dma_device(attach);
+
 			if (gntdev_dmabuf_attach->dir != DMA_NONE)
-				dma_unmap_sgtable(attach->dev, sgt,
+				dma_unmap_sgtable(dma_dev, &mapping->sgt,
 						  gntdev_dmabuf_attach->dir,
 						  DMA_ATTR_SKIP_CPU_SYNC);
-			sg_free_table(sgt);
+			sg_free_table(&mapping->sgt);
 		}
 
-		kfree(sgt);
+		kfree(mapping);
 		kfree(gntdev_dmabuf_attach);
 		attach->priv = NULL;
 	}
 }
 
-static struct sg_table *
+static struct dma_buf_sgt_mapping *
 dmabuf_exp_ops_map_dma_buf(struct dma_buf_attachment *attach,
 			   enum dma_data_direction dir)
 {
+	struct device *dma_dev = dma_buf_sgt_dma_device(attach);
 	struct gntdev_dmabuf_attachment *gntdev_dmabuf_attach = attach->priv;
 	struct gntdev_dmabuf *gntdev_dmabuf = attach->dmabuf->priv;
-	struct sg_table *sgt;
+	struct dma_buf_sgt_mapping *mapping;
 
 	pr_debug("Mapping %d pages for dev %p\n", gntdev_dmabuf->nr_pages,
-		 attach->dev);
+		 dma_dev);
 
 	if (dir == DMA_NONE || !gntdev_dmabuf_attach)
 		return ERR_PTR(-EINVAL);
 
 	/* Return the cached mapping when possible. */
 	if (gntdev_dmabuf_attach->dir == dir)
-		return gntdev_dmabuf_attach->sgt;
+		return gntdev_dmabuf_attach->mapping;
 
 	/*
 	 * Two mappings with different directions for the same attachment are
@@ -280,26 +285,26 @@ dmabuf_exp_ops_map_dma_buf(struct dma_buf_attachment *attach,
 	if (gntdev_dmabuf_attach->dir != DMA_NONE)
 		return ERR_PTR(-EBUSY);
 
-	sgt = dmabuf_pages_to_sgt(gntdev_dmabuf->pages,
-				  gntdev_dmabuf->nr_pages);
-	if (!IS_ERR(sgt)) {
-		if (dma_map_sgtable(attach->dev, sgt, dir,
+	mapping = dmabuf_pages_to_sgt(gntdev_dmabuf->pages,
+				      gntdev_dmabuf->nr_pages);
+	if (!IS_ERR(mapping)) {
+		if (dma_map_sgtable(dma_dev, &mapping->sgt, dir,
 				    DMA_ATTR_SKIP_CPU_SYNC)) {
-			sg_free_table(sgt);
-			kfree(sgt);
-			sgt = ERR_PTR(-ENOMEM);
+			sg_free_table(&mapping->sgt);
+			kfree(mapping);
+			mapping = ERR_PTR(-ENOMEM);
 		} else {
-			gntdev_dmabuf_attach->sgt = sgt;
+			gntdev_dmabuf_attach->mapping = mapping;
 			gntdev_dmabuf_attach->dir = dir;
 		}
 	}
-	if (IS_ERR(sgt))
-		pr_debug("Failed to map sg table for dev %p\n", attach->dev);
-	return sgt;
+	if (IS_ERR(mapping))
+		pr_debug("Failed to map sg table for dev %p\n", dma_dev);
+	return mapping;
 }
 
 static void dmabuf_exp_ops_unmap_dma_buf(struct dma_buf_attachment *attach,
-					 struct sg_table *sgt,
+					 struct dma_buf_sgt_mapping *mapping,
 					 enum dma_data_direction dir)
 {
 	/* Not implemented. The unmap is done at dmabuf_exp_ops_detach(). */
@@ -340,9 +345,9 @@ static void dmabuf_exp_ops_release(struct dma_buf *dma_buf)
 static const struct dma_buf_ops dmabuf_exp_ops =  {
 	.attach = dmabuf_exp_ops_attach,
 	.detach = dmabuf_exp_ops_detach,
-	.map_dma_buf = dmabuf_exp_ops_map_dma_buf,
-	.unmap_dma_buf = dmabuf_exp_ops_unmap_dma_buf,
 	.release = dmabuf_exp_ops_release,
+	DMA_BUF_SIMPLE_SGT_EXP_MATCH(dmabuf_exp_ops_map_dma_buf,
+				     dmabuf_exp_ops_unmap_dma_buf),
 };
 
 struct gntdev_dmabuf_export_args {

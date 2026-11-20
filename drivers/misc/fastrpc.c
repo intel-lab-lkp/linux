@@ -5,6 +5,7 @@
 #include <linux/completion.h>
 #include <linux/device.h>
 #include <linux/dma-buf.h>
+#include <linux/dma-buf-mapping.h>
 #include <linux/dma-mapping.h>
 #include <linux/dma-resv.h>
 #include <linux/idr.h>
@@ -234,7 +235,7 @@ struct fastrpc_buf {
 
 struct fastrpc_dma_buf_attachment {
 	struct device *dev;
-	struct sg_table sgt;
+	struct dma_buf_sgt_mapping mapping;
 	struct list_head node;
 };
 
@@ -770,27 +771,26 @@ err_idr:
 	return ERR_PTR(ret);
 }
 
-static struct sg_table *
+static struct dma_buf_sgt_mapping *
 fastrpc_map_dma_buf(struct dma_buf_attachment *attachment,
 		    enum dma_data_direction dir)
 {
 	struct fastrpc_dma_buf_attachment *a = attachment->priv;
-	struct sg_table *table;
 	int ret;
 
-	table = &a->sgt;
-
-	ret = dma_map_sgtable(attachment->dev, table, dir, 0);
+	ret = dma_map_sgtable(dma_buf_sgt_dma_device(attachment),
+			      &a->mapping.sgt, dir, 0);
 	if (ret)
-		table = ERR_PTR(ret);
-	return table;
+		return ERR_PTR(ret);
+	return &a->mapping;
 }
 
 static void fastrpc_unmap_dma_buf(struct dma_buf_attachment *attach,
-				  struct sg_table *table,
+				  struct dma_buf_sgt_mapping *mapping,
 				  enum dma_data_direction dir)
 {
-	dma_unmap_sgtable(attach->dev, table, dir, 0);
+	dma_unmap_sgtable(dma_buf_sgt_mapping_dma_device(mapping),
+			  &mapping->sgt, dir, 0);
 }
 
 static void fastrpc_release(struct dma_buf *dmabuf)
@@ -811,7 +811,7 @@ static int fastrpc_dma_buf_attach(struct dma_buf *dmabuf,
 	if (!a)
 		return -ENOMEM;
 
-	ret = dma_get_sgtable(buffer->dev, &a->sgt, buffer->virt,
+	ret = dma_get_sgtable(buffer->dev, &a->mapping.sgt, buffer->virt,
 			      fastrpc_ipa_to_dma_addr(buffer->fl->cctx, buffer->dma_addr),
 			      buffer->size);
 	if (ret < 0) {
@@ -820,7 +820,7 @@ static int fastrpc_dma_buf_attach(struct dma_buf *dmabuf,
 		return -EINVAL;
 	}
 
-	a->dev = attachment->dev;
+	a->dev = dma_buf_sgt_dma_device(attachment);
 	INIT_LIST_HEAD(&a->node);
 	attachment->priv = a;
 
@@ -840,7 +840,7 @@ static void fastrpc_dma_buf_detatch(struct dma_buf *dmabuf,
 	mutex_lock(&buffer->lock);
 	list_del(&a->node);
 	mutex_unlock(&buffer->lock);
-	sg_free_table(&a->sgt);
+	sg_free_table(&a->mapping.sgt);
 	kfree(a);
 }
 
@@ -868,11 +868,11 @@ static int fastrpc_mmap(struct dma_buf *dmabuf,
 static const struct dma_buf_ops fastrpc_dma_buf_ops = {
 	.attach = fastrpc_dma_buf_attach,
 	.detach = fastrpc_dma_buf_detatch,
-	.map_dma_buf = fastrpc_map_dma_buf,
-	.unmap_dma_buf = fastrpc_unmap_dma_buf,
 	.mmap = fastrpc_mmap,
 	.vmap = fastrpc_vmap,
 	.release = fastrpc_release,
+	DMA_BUF_SIMPLE_SGT_EXP_MATCH(fastrpc_map_dma_buf,
+				     fastrpc_unmap_dma_buf),
 };
 
 static dma_addr_t fastrpc_compute_dma_addr(struct fastrpc_user *fl, dma_addr_t sg_dma_addr)

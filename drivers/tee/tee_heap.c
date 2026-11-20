@@ -4,6 +4,7 @@
  */
 
 #include <linux/dma-buf.h>
+#include <linux/dma-buf-mapping.h>
 #include <linux/dma-heap.h>
 #include <linux/genalloc.h>
 #include <linux/module.h>
@@ -33,7 +34,7 @@ struct tee_heap_buffer {
 };
 
 struct tee_heap_attachment {
-	struct sg_table table;
+	struct dma_buf_sgt_mapping mapping;
 	struct device *dev;
 };
 
@@ -98,13 +99,13 @@ static int tee_heap_attach(struct dma_buf *dmabuf,
 	if (!a)
 		return -ENOMEM;
 
-	ret = copy_sg_table(&a->table, &buf->table);
+	ret = copy_sg_table(&a->mapping.sgt, &buf->table);
 	if (ret) {
 		kfree(a);
 		return ret;
 	}
 
-	a->dev = attachment->dev;
+	a->dev = dma_buf_sgt_dma_device(attachment);
 	attachment->priv = a;
 
 	return 0;
@@ -115,35 +116,36 @@ static void tee_heap_detach(struct dma_buf *dmabuf,
 {
 	struct tee_heap_attachment *a = attachment->priv;
 
-	sg_free_table(&a->table);
+	sg_free_table(&a->mapping.sgt);
 	kfree(a);
 }
 
-static struct sg_table *
+static struct dma_buf_sgt_mapping *
 tee_heap_map_dma_buf(struct dma_buf_attachment *attachment,
 		     enum dma_data_direction direction)
 {
 	struct tee_heap_attachment *a = attachment->priv;
 	int ret;
 
-	ret = dma_map_sgtable(attachment->dev, &a->table, direction,
+	ret = dma_map_sgtable(dma_buf_sgt_dma_device(attachment),
+			      &a->mapping.sgt, direction,
 			      DMA_ATTR_SKIP_CPU_SYNC);
 	if (ret)
 		return ERR_PTR(ret);
 
-	return &a->table;
+	return &a->mapping;
 }
 
 static void tee_heap_unmap_dma_buf(struct dma_buf_attachment *attachment,
-				   struct sg_table *table,
+				   struct dma_buf_sgt_mapping *mapping,
 				   enum dma_data_direction direction)
 {
 	struct tee_heap_attachment *a = attachment->priv;
 
-	WARN_ON(&a->table != table);
+	WARN_ON(&a->mapping != mapping);
 
-	dma_unmap_sgtable(attachment->dev, table, direction,
-			  DMA_ATTR_SKIP_CPU_SYNC);
+	dma_unmap_sgtable(dma_buf_sgt_mapping_dma_device(mapping),
+			  &mapping->sgt, direction, DMA_ATTR_SKIP_CPU_SYNC);
 }
 
 static void tee_heap_buf_free(struct dma_buf *dmabuf)
@@ -160,9 +162,9 @@ static void tee_heap_buf_free(struct dma_buf *dmabuf)
 static const struct dma_buf_ops tee_heap_buf_ops = {
 	.attach = tee_heap_attach,
 	.detach = tee_heap_detach,
-	.map_dma_buf = tee_heap_map_dma_buf,
-	.unmap_dma_buf = tee_heap_unmap_dma_buf,
 	.release = tee_heap_buf_free,
+	DMA_BUF_SIMPLE_SGT_EXP_MATCH(tee_heap_map_dma_buf,
+				     tee_heap_unmap_dma_buf),
 };
 
 static struct dma_buf *tee_dma_heap_alloc(struct dma_heap *heap,

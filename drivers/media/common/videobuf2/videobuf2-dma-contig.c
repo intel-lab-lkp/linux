@@ -11,6 +11,7 @@
  */
 
 #include <linux/dma-buf.h>
+#include <linux/dma-buf-mapping.h>
 #include <linux/module.h>
 #include <linux/refcount.h>
 #include <linux/scatterlist.h>
@@ -311,7 +312,7 @@ static int vb2_dc_mmap(void *buf_priv, struct vm_area_struct *vma)
 /*********************************************/
 
 struct vb2_dc_attachment {
-	struct sg_table sgt;
+	struct dma_buf_sgt_mapping mapping;
 	enum dma_data_direction dma_dir;
 };
 
@@ -329,7 +330,7 @@ static int vb2_dc_dmabuf_ops_attach(struct dma_buf *dbuf,
 	if (!attach)
 		return -ENOMEM;
 
-	sgt = &attach->sgt;
+	sgt = &attach->mapping.sgt;
 	/* Copy the buf->base_sgt scatter list to the attachment, as we can't
 	 * map the same scatter list to multiple attachments at the same time.
 	 */
@@ -362,7 +363,7 @@ static void vb2_dc_dmabuf_ops_detach(struct dma_buf *dbuf,
 	if (!attach)
 		return;
 
-	sgt = &attach->sgt;
+	sgt = &attach->mapping.sgt;
 
 	/* release the scatterlist cache */
 	if (attach->dma_dir != DMA_NONE)
@@ -372,28 +373,29 @@ static void vb2_dc_dmabuf_ops_detach(struct dma_buf *dbuf,
 		 * memory locations do not require any explicit cache
 		 * maintenance prior or after being used by the device.
 		 */
-		dma_unmap_sgtable(db_attach->dev, sgt, attach->dma_dir,
-				  DMA_ATTR_SKIP_CPU_SYNC);
+		dma_unmap_sgtable(dma_buf_sgt_dma_device(db_attach), sgt,
+				  attach->dma_dir, DMA_ATTR_SKIP_CPU_SYNC);
 	sg_free_table(sgt);
 	kfree(attach);
 	db_attach->priv = NULL;
 }
 
-static struct sg_table *vb2_dc_dmabuf_ops_map(
-	struct dma_buf_attachment *db_attach, enum dma_data_direction dma_dir)
+static struct dma_buf_sgt_mapping *
+vb2_dc_dmabuf_ops_map(struct dma_buf_attachment *db_attach,
+		      enum dma_data_direction dma_dir)
 {
 	struct vb2_dc_attachment *attach = db_attach->priv;
 	struct sg_table *sgt;
 
-	sgt = &attach->sgt;
+	sgt = &attach->mapping.sgt;
 	/* return previously mapped sg table */
 	if (attach->dma_dir == dma_dir)
-		return sgt;
+		return &attach->mapping;
 
 	/* release any previous cache */
 	if (attach->dma_dir != DMA_NONE) {
-		dma_unmap_sgtable(db_attach->dev, sgt, attach->dma_dir,
-				  DMA_ATTR_SKIP_CPU_SYNC);
+		dma_unmap_sgtable(dma_buf_sgt_dma_device(db_attach), sgt,
+				  attach->dma_dir, DMA_ATTR_SKIP_CPU_SYNC);
 		attach->dma_dir = DMA_NONE;
 	}
 
@@ -401,7 +403,7 @@ static struct sg_table *vb2_dc_dmabuf_ops_map(
 	 * mapping to the client with new direction, no cache sync
 	 * required see comment in vb2_dc_dmabuf_ops_detach()
 	 */
-	if (dma_map_sgtable(db_attach->dev, sgt, dma_dir,
+	if (dma_map_sgtable(dma_buf_sgt_dma_device(db_attach), sgt, dma_dir,
 			    DMA_ATTR_SKIP_CPU_SYNC)) {
 		pr_err("failed to map scatterlist\n");
 		return ERR_PTR(-EIO);
@@ -409,11 +411,11 @@ static struct sg_table *vb2_dc_dmabuf_ops_map(
 
 	attach->dma_dir = dma_dir;
 
-	return sgt;
+	return &attach->mapping;
 }
 
 static void vb2_dc_dmabuf_ops_unmap(struct dma_buf_attachment *db_attach,
-	struct sg_table *sgt, enum dma_data_direction dma_dir)
+	struct dma_buf_sgt_mapping *mapping, enum dma_data_direction dma_dir)
 {
 	/* nothing to be done here */
 }
@@ -462,13 +464,13 @@ static int vb2_dc_dmabuf_ops_mmap(struct dma_buf *dbuf,
 static const struct dma_buf_ops vb2_dc_dmabuf_ops = {
 	.attach = vb2_dc_dmabuf_ops_attach,
 	.detach = vb2_dc_dmabuf_ops_detach,
-	.map_dma_buf = vb2_dc_dmabuf_ops_map,
-	.unmap_dma_buf = vb2_dc_dmabuf_ops_unmap,
 	.begin_cpu_access = vb2_dc_dmabuf_ops_begin_cpu_access,
 	.end_cpu_access = vb2_dc_dmabuf_ops_end_cpu_access,
 	.vmap = vb2_dc_dmabuf_ops_vmap,
 	.mmap = vb2_dc_dmabuf_ops_mmap,
 	.release = vb2_dc_dmabuf_ops_release,
+	DMA_BUF_SIMPLE_SGT_EXP_MATCH(vb2_dc_dmabuf_ops_map,
+				     vb2_dc_dmabuf_ops_unmap),
 };
 
 static struct sg_table *vb2_dc_get_base_sgt(struct vb2_dc_buf *buf)

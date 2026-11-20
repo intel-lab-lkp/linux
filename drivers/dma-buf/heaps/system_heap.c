@@ -12,6 +12,7 @@
 
 #include <linux/cc_platform.h>
 #include <linux/dma-buf.h>
+#include <linux/dma-buf-mapping.h>
 #include <linux/dma-mapping.h>
 #include <linux/dma-heap.h>
 #include <linux/err.h>
@@ -42,7 +43,7 @@ struct system_heap_buffer {
 
 struct dma_heap_attachment {
 	struct device *dev;
-	struct sg_table table;
+	struct dma_buf_sgt_mapping mapping;
 	struct list_head list;
 	bool mapped;
 	bool cc_shared;
@@ -122,13 +123,13 @@ static int system_heap_attach(struct dma_buf *dmabuf,
 	if (!a)
 		return -ENOMEM;
 
-	ret = dup_sg_table(&buffer->sg_table, &a->table);
+	ret = dup_sg_table(&buffer->sg_table, &a->mapping.sgt);
 	if (ret) {
 		kfree(a);
 		return ret;
 	}
 
-	a->dev = attachment->dev;
+	a->dev = dma_buf_sgt_dma_device(attachment);
 	INIT_LIST_HEAD(&a->list);
 	a->mapped = false;
 	a->cc_shared = buffer->cc_shared;
@@ -152,35 +153,38 @@ static void system_heap_detach(struct dma_buf *dmabuf,
 	list_del(&a->list);
 	mutex_unlock(&buffer->lock);
 
-	sg_free_table(&a->table);
+	sg_free_table(&a->mapping.sgt);
 	kfree(a);
 }
 
-static struct sg_table *system_heap_map_dma_buf(struct dma_buf_attachment *attachment,
-						enum dma_data_direction direction)
+static struct dma_buf_sgt_mapping *
+system_heap_map_dma_buf(struct dma_buf_attachment *attachment,
+			enum dma_data_direction direction)
 {
 	struct dma_heap_attachment *a = attachment->priv;
-	struct sg_table *table = &a->table;
+	struct sg_table *table = &a->mapping.sgt;
 	unsigned long attrs;
 	int ret;
 
 	attrs = cc_shared_buffer(a) ? DMA_ATTR_CC_SHARED : 0;
-	ret = dma_map_sgtable(attachment->dev, table, direction, attrs);
+	ret = dma_map_sgtable(dma_buf_sgt_dma_device(attachment), table,
+			      direction, attrs);
 	if (ret)
 		return ERR_PTR(ret);
 
 	a->mapped = true;
-	return table;
+	return &a->mapping;
 }
 
 static void system_heap_unmap_dma_buf(struct dma_buf_attachment *attachment,
-				      struct sg_table *table,
+				      struct dma_buf_sgt_mapping *mapping,
 				      enum dma_data_direction direction)
 {
 	struct dma_heap_attachment *a = attachment->priv;
 
 	a->mapped = false;
-	dma_unmap_sgtable(attachment->dev, table, direction, 0);
+	dma_unmap_sgtable(dma_buf_sgt_mapping_dma_device(mapping),
+			  &mapping->sgt, direction, 0);
 }
 
 static int system_heap_dma_buf_begin_cpu_access(struct dma_buf *dmabuf,
@@ -197,7 +201,7 @@ static int system_heap_dma_buf_begin_cpu_access(struct dma_buf *dmabuf,
 	list_for_each_entry(a, &buffer->attachments, list) {
 		if (!a->mapped)
 			continue;
-		dma_sync_sgtable_for_cpu(a->dev, &a->table, direction);
+		dma_sync_sgtable_for_cpu(a->dev, &a->mapping.sgt, direction);
 	}
 	mutex_unlock(&buffer->lock);
 
@@ -218,7 +222,7 @@ static int system_heap_dma_buf_end_cpu_access(struct dma_buf *dmabuf,
 	list_for_each_entry(a, &buffer->attachments, list) {
 		if (!a->mapped)
 			continue;
-		dma_sync_sgtable_for_device(a->dev, &a->table, direction);
+		dma_sync_sgtable_for_device(a->dev, &a->mapping.sgt, direction);
 	}
 	mutex_unlock(&buffer->lock);
 
@@ -365,14 +369,14 @@ static void system_heap_dma_buf_release(struct dma_buf *dmabuf)
 static const struct dma_buf_ops system_heap_buf_ops = {
 	.attach = system_heap_attach,
 	.detach = system_heap_detach,
-	.map_dma_buf = system_heap_map_dma_buf,
-	.unmap_dma_buf = system_heap_unmap_dma_buf,
 	.begin_cpu_access = system_heap_dma_buf_begin_cpu_access,
 	.end_cpu_access = system_heap_dma_buf_end_cpu_access,
 	.mmap = system_heap_mmap,
 	.vmap = system_heap_vmap,
 	.vunmap = system_heap_vunmap,
 	.release = system_heap_dma_buf_release,
+	DMA_BUF_SIMPLE_SGT_EXP_MATCH(system_heap_map_dma_buf,
+				     system_heap_unmap_dma_buf),
 };
 
 static struct page *alloc_largest_available(unsigned long size,
