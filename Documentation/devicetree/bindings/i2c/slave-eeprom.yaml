@@ -1,0 +1,59 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/i2c/slave-eeprom.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: I2C target EEPROM backend
+
+maintainers:
+  - Arun Iyengar <aiyengar1990@gmail.com>
+
+description:
+  The I2C controller answers on its own address as a target and behaves
+  like a 24Cxx EEPROM towards the other controllers on the bus. The
+  compatible selects the EEPROM type that is simulated. The "ro" variants
+  ignore writes from the bus.
+
+properties:
+  compatible:
+    enum:
+      - slave-24c02
+      - slave-24c02ro
+      - slave-24c32
+      - slave-24c32ro
+      - slave-24c64
+      - slave-24c64ro
+      - slave-24c512
+      - slave-24c512ro
+
+  reg:
+    maxItems: 1
+    description:
+      Own address of the controller on the bus. The I2C_OWN_SLAVE_ADDRESS
+      flag must be set.
+
+  firmware-name:
+    maxItems: 1
+    description:
+      File with the initial content. Without it all bytes start as 0xff.
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/i2c/i2c.h>
+
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        eeprom@64 {
+            compatible = "slave-24c02";
+            reg = <(0x64 | I2C_OWN_SLAVE_ADDRESS)>;
+        };
+    };
