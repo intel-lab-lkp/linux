@@ -130,6 +130,7 @@ bool intel_dp_is_edp(struct intel_dp *intel_dp)
 static void intel_dp_unset_edid(struct intel_dp *intel_dp);
 static int intel_dp_hdmi_sink_max_frl(struct intel_dp *intel_dp);
 static bool intel_dp_is_hdmi_2_1_sink(struct intel_dp *intel_dp);
+static int intel_dp_dsc_stream_version_minor(const struct intel_connector *connector);
 
 /* Is link rate UHBR and thus 128b/132b? */
 bool intel_dp_is_uhbr(const struct intel_crtc_state *crtc_state)
@@ -1230,6 +1231,69 @@ intel_dp_pcon_sink_support_frl(struct intel_dp *intel_dp)
 {
 	return intel_dp->dfp.pcon_max_frl_bw &&
 		intel_dp_hdmi_sink_max_frl(intel_dp);
+}
+
+static bool intel_dp_pcon_can_encode_dsc(struct intel_dp *intel_dp)
+{
+	struct intel_connector *connector = intel_dp->attached_connector;
+
+	return intel_dp_is_hdmi_2_1_sink(intel_dp) &&
+		connector->base.display_info.hdmi.dsc_cap.v_1p2 &&
+		drm_dp_pcon_enc_is_dsc_1_2(intel_dp->pcon_dsc_dpcd);
+}
+
+/*
+ * Compute the PCON DSC encoder parameters for the stream sent to the HDMI
+ * sink, which is in @sink_format. @enc can be NULL to only check feasibility.
+ */
+static bool
+intel_dp_pcon_dsc_enc_compute(struct intel_dp *intel_dp,
+			      const struct drm_display_mode *mode, int pixel_clock,
+			      int bpc, enum intel_output_format sink_format,
+			      struct intel_pcon_dsc_enc_config *enc)
+{
+	struct intel_connector *connector = intel_dp->attached_connector;
+	const struct drm_display_info *info = &connector->base.display_info;
+	int pcon_max_slices = drm_dp_pcon_dsc_max_slices(intel_dp->pcon_dsc_dpcd);
+	int pcon_max_slice_width = drm_dp_pcon_dsc_max_slice_width(intel_dp->pcon_dsc_dpcd);
+	int slice_height, num_slices, slice_width, max_link_dsc_bpp, bpp_x16;
+
+	if (!intel_dp_pcon_can_encode_dsc(intel_dp))
+		return false;
+
+	slice_height = intel_hdmi_dsc_get_slice_height(mode->vdisplay);
+	if (!slice_height)
+		return false;
+
+	num_slices = intel_hdmi_dsc_get_num_slices(mode, pixel_clock, sink_format,
+						   pcon_max_slices, pcon_max_slice_width,
+						   info->hdmi.dsc_cap.max_slices,
+						   info->hdmi.dsc_cap.clk_per_slice);
+	if (!num_slices)
+		return false;
+
+	slice_width = DIV_ROUND_UP(mode->hdisplay, num_slices);
+
+	/* The compressed stream has to fit the FRL link */
+	max_link_dsc_bpp = intel_dp_hdmi_frl_payload_bw(intel_dp) / pixel_clock;
+	if (!max_link_dsc_bpp)
+		return false;
+
+	bpp_x16 = intel_hdmi_dsc_get_bpp(drm_dp_pcon_dsc_bpp_incr(intel_dp->pcon_dsc_dpcd),
+					 slice_width, num_slices, sink_format, bpc,
+					 info->hdmi.dsc_cap.all_bpp,
+					 info->hdmi.dsc_cap.total_chunk_kbytes * 1024,
+					 max_link_dsc_bpp);
+	if (!bpp_x16)
+		return false;
+
+	if (enc) {
+		enc->slice_height = slice_height;
+		enc->slice_width = slice_width;
+		enc->bpp_x16 = bpp_x16;
+	}
+
+	return true;
 }
 
 static enum drm_mode_status
@@ -3026,13 +3090,43 @@ bool intel_dp_joiner_needs_dsc(struct intel_display *display,
 
 static int
 intel_dp_pcon_compute_config(struct intel_dp *intel_dp,
-			     struct intel_crtc_state *crtc_state)
+			     struct intel_crtc_state *crtc_state,
+			     bool respect_downstream_limits)
 {
+	struct intel_display *display = to_intel_display(intel_dp);
+	struct intel_connector *connector = intel_dp->attached_connector;
+	const struct drm_display_mode *adjusted_mode = &crtc_state->hw.adjusted_mode;
+	int bpc = crtc_state->pipe_bpp / 3;
+
 	if (!intel_dp_is_hdmi_2_1_sink(intel_dp))
 		return 0;
 
 	if (crtc_state->dsc.compression_enable)
 		crtc_state->pcon_config.dsc_op = INTEL_PCON_DSC_DECODE;
+
+	if (!respect_downstream_limits || !intel_dp_pcon_sink_support_frl(intel_dp))
+		return 0;
+
+	if (intel_dp_frl_bw_valid(intel_dp, adjusted_mode->crtc_clock, bpc,
+				  crtc_state->sink_format, true) == MODE_OK)
+		return 0;
+
+	/*
+	 * The HDMI link needs DSC. The PCON can only get it from a compressed DP
+	 * stream, and re-encoding is only valid for a DSC 1.1 stream.
+	 */
+	if (!crtc_state->dsc.compression_enable ||
+	    intel_dp_dsc_stream_version_minor(connector) >= 2 ||
+	    !intel_dp_pcon_dsc_enc_compute(intel_dp, adjusted_mode,
+					   adjusted_mode->crtc_clock, bpc,
+					   crtc_state->sink_format,
+					   &crtc_state->pcon_config.dsc_enc)) {
+		drm_dbg_kms(display->drm,
+			    "HDMI link needs DSC, but the PCON can't provide it\n");
+		return -EINVAL;
+	}
+
+	crtc_state->pcon_config.dsc_op = INTEL_PCON_DSC_DECODE_ENCODE;
 
 	return 0;
 }
@@ -3122,7 +3216,8 @@ intel_dp_compute_link_for_joined_pipes(struct intel_encoder *encoder,
 			return -EINVAL;
 	}
 
-	ret = intel_dp_pcon_compute_config(intel_dp, pipe_config);
+	ret = intel_dp_pcon_compute_config(intel_dp, pipe_config,
+					   respect_downstream_limits);
 	if (ret)
 		return ret;
 
@@ -4545,79 +4640,16 @@ void intel_dp_check_frl_training(struct intel_dp *intel_dp)
 	}
 }
 
-static int
-intel_dp_pcon_dsc_enc_slice_height(const struct intel_crtc_state *crtc_state)
-{
-	int vactive = crtc_state->hw.adjusted_mode.vdisplay;
-
-	return intel_hdmi_dsc_get_slice_height(vactive);
-}
-
-static int
-intel_dp_pcon_dsc_enc_slices(struct intel_dp *intel_dp,
-			     const struct intel_crtc_state *crtc_state)
-{
-	struct intel_connector *connector = intel_dp->attached_connector;
-	const struct drm_display_info *info = &connector->base.display_info;
-	int hdmi_throughput = info->hdmi.dsc_cap.clk_per_slice;
-	int hdmi_max_slices = info->hdmi.dsc_cap.max_slices;
-	int pcon_max_slices = drm_dp_pcon_dsc_max_slices(intel_dp->pcon_dsc_dpcd);
-	int pcon_max_slice_width = drm_dp_pcon_dsc_max_slice_width(intel_dp->pcon_dsc_dpcd);
-
-	return intel_hdmi_dsc_get_num_slices(&crtc_state->hw.adjusted_mode,
-					     crtc_state->hw.adjusted_mode.crtc_clock,
-					     crtc_state->output_format,
-					     pcon_max_slices,
-					     pcon_max_slice_width,
-					     hdmi_max_slices, hdmi_throughput);
-}
-
-static int
-intel_dp_pcon_dsc_enc_bpp(struct intel_dp *intel_dp,
-			  const struct intel_crtc_state *crtc_state,
-			  int num_slices, int slice_width)
-{
-	struct intel_connector *connector = intel_dp->attached_connector;
-	const struct drm_display_info *info = &connector->base.display_info;
-	int output_format = crtc_state->output_format;
-	bool hdmi_all_bpp = info->hdmi.dsc_cap.all_bpp;
-	int pcon_fractional_bpp = drm_dp_pcon_dsc_bpp_incr(intel_dp->pcon_dsc_dpcd);
-	int hdmi_max_chunk_bytes =
-		info->hdmi.dsc_cap.total_chunk_kbytes * 1024;
-	int bpc = crtc_state->pipe_bpp / 3;
-
-	return intel_hdmi_dsc_get_bpp(pcon_fractional_bpp, slice_width,
-				      num_slices, output_format, bpc, hdmi_all_bpp,
-				      hdmi_max_chunk_bytes, 0);
-}
-
 void
 intel_dp_pcon_dsc_configure(struct intel_dp *intel_dp,
 			    const struct intel_crtc_state *crtc_state)
 {
 	struct intel_display *display = to_intel_display(intel_dp);
-	struct intel_connector *connector = intel_dp->attached_connector;
-	const struct drm_display_info *info;
+	const struct intel_pcon_dsc_enc_config *enc = &crtc_state->pcon_config.dsc_enc;
 	u8 pps_param[6];
-	int slice_height;
-	int slice_width;
-	int num_slices;
-	int bits_per_pixel;
 	int ret;
-	bool hdmi_is_dsc_1_2;
 
-	if (!intel_dp_is_hdmi_2_1_sink(intel_dp))
-		return;
-
-	if (!connector)
-		return;
-
-	info = &connector->base.display_info;
-
-	hdmi_is_dsc_1_2 = info->hdmi.dsc_cap.v_1p2;
-
-	if (!drm_dp_pcon_enc_is_dsc_1_2(intel_dp->pcon_dsc_dpcd) ||
-	    !hdmi_is_dsc_1_2)
+	if (!intel_dp_pcon_can_encode_dsc(intel_dp))
 		return;
 
 	if (crtc_state->pcon_config.dsc_op != INTEL_PCON_DSC_DECODE_ENCODE) {
@@ -4627,28 +4659,12 @@ intel_dp_pcon_dsc_configure(struct intel_dp *intel_dp,
 		return;
 	}
 
-	slice_height = intel_dp_pcon_dsc_enc_slice_height(crtc_state);
-	if (!slice_height)
-		return;
-
-	num_slices = intel_dp_pcon_dsc_enc_slices(intel_dp, crtc_state);
-	if (!num_slices)
-		return;
-
-	slice_width = DIV_ROUND_UP(crtc_state->hw.adjusted_mode.hdisplay,
-				   num_slices);
-
-	bits_per_pixel = intel_dp_pcon_dsc_enc_bpp(intel_dp, crtc_state,
-						   num_slices, slice_width);
-	if (!bits_per_pixel)
-		return;
-
-	pps_param[0] = slice_height & 0xFF;
-	pps_param[1] = slice_height >> 8;
-	pps_param[2] = slice_width & 0xFF;
-	pps_param[3] = slice_width >> 8;
-	pps_param[4] = bits_per_pixel & 0xFF;
-	pps_param[5] = (bits_per_pixel >> 8) & 0x3;
+	pps_param[0] = enc->slice_height & 0xFF;
+	pps_param[1] = enc->slice_height >> 8;
+	pps_param[2] = enc->slice_width & 0xFF;
+	pps_param[3] = enc->slice_width >> 8;
+	pps_param[4] = enc->bpp_x16 & 0xFF;
+	pps_param[5] = (enc->bpp_x16 >> 8) & 0x3;
 
 	ret = drm_dp_pcon_pps_override_param(&intel_dp->aux, pps_param);
 	if (ret < 0)
