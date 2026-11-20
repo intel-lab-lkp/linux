@@ -3489,6 +3489,14 @@ int kvm_mmu_max_mapping_level(struct kvm *kvm, struct kvm_page_fault *fault,
 	} else {
 		max_level = PG_LEVEL_NUM;
 		is_private = kvm_is_private_gfn(kvm, gfn);
+
+		/*
+		 * is_private (set in VM attributes) should never have been used
+		 * with a non-guest_memfd memslot. Return PG_LEVEL_4K to prevent
+		 * hugepage recovery.
+		 */
+		if (is_private && !kvm_slot_has_gmem(slot))
+			return PG_LEVEL_4K;
 	}
 
 	max_level = min(max_level, max_huge_page_level);
