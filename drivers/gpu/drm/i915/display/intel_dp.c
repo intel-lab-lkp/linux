@@ -1190,6 +1190,18 @@ static int frl_required_bw(int clock, int bpc,
 	return clock * bpc * 3;
 }
 
+/*
+ * Both the PCON and the HDMI 2.1 sink limit the FRL rate. FRL uses 16b/18b
+ * line coding, so only 16/18 of the raw rate carries payload. Returns kbps.
+ */
+static int intel_dp_hdmi_frl_payload_bw(struct intel_dp *intel_dp)
+{
+	int max_frl_rate = min(intel_dp->dfp.pcon_max_frl_bw,
+			       intel_dp_hdmi_sink_max_frl(intel_dp));
+
+	return max_frl_rate * 1000000 * 16 / 18;
+}
+
 static enum drm_mode_status
 intel_dp_frl_bw_valid(struct intel_dp *intel_dp, int target_clock,
 		      int bpc, enum intel_output_format sink_format,
@@ -1204,14 +1216,7 @@ intel_dp_frl_bw_valid(struct intel_dp *intel_dp, int target_clock,
 	target_bw = frl_required_bw(target_clock, bpc, sink_format);
 
 	/* check for MAX FRL BW for both PCON and HDMI2.1 sink */
-	max_frl_bw = min(intel_dp->dfp.pcon_max_frl_bw,
-			 intel_dp_hdmi_sink_max_frl(intel_dp));
-
-	/*
-	 * Convert the rate from Gbps to kbps. FRL uses 16b/18b line coding, so
-	 * only 16/18 of the raw rate carries payload.
-	 */
-	max_frl_bw = max_frl_bw * 1000000 * 16 / 18;
+	max_frl_bw = intel_dp_hdmi_frl_payload_bw(intel_dp);
 
 	/* #FIXME check bandwidth with DSC if both PCON and HDMI sink support DSC */
 	if (target_bw > max_frl_bw)
