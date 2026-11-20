@@ -38,6 +38,14 @@ struct link_config_limits {
 		/* Compressed or uncompressed link output bpp in 1/16 bpp units */
 		int min_bpp_x16, max_bpp_x16;
 	} link;
+	struct {
+		/*
+		 * DSC limits of the downstream facing port: the slice count per
+		 * line, for an HDMI sink behind a PCON passing the DSC stream
+		 * through. No limit: 0 and INT_MAX.
+		 */
+		int min_slices, max_slices;
+	} dfp_dsc;
 };
 
 void intel_edp_fixup_vbt_bpp(struct intel_encoder *encoder, int pipe_bpp);

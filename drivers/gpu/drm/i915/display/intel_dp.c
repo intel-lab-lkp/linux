@@ -910,6 +910,7 @@ static bool
 intel_dp_dsc_get_slice_config(const struct intel_connector *connector,
 			      int mode_clock, int mode_hdisplay,
 			      int num_joined_pipes,
+			      int dfp_min_slices, int dfp_max_slices,
 			      struct intel_dsc_slice_config *config_ret)
 {
 	struct intel_display *display = to_intel_display(connector);
@@ -920,6 +921,8 @@ intel_dp_dsc_get_slice_config(const struct intel_connector *connector,
 	u32 sink_slice_count_mask =
 		drm_dp_dsc_sink_slice_count_mask(connector->dp.dsc_dpcd, is_edp);
 	int slices_per_pipe;
+
+	min_slice_count = max(min_slice_count, dfp_min_slices);
 
 	/*
 	 * Find the closest match to the valid slice count values
@@ -948,6 +951,9 @@ intel_dp_dsc_get_slice_config(const struct intel_connector *connector,
 
 		if (!(drm_dp_dsc_slice_count_to_mask(slices_per_line) &
 		      sink_slice_count_mask))
+			continue;
+
+		if (slices_per_line > dfp_max_slices)
 			continue;
 
 		if (mode_hdisplay % slices_per_line)
@@ -979,7 +985,7 @@ u8 intel_dp_dsc_get_slice_count(const struct intel_connector *connector,
 
 	if (!intel_dp_dsc_get_slice_config(connector,
 					   mode_clock, mode_hdisplay,
-					   num_joined_pipes, &config))
+					   num_joined_pipes, 0, INT_MAX, &config))
 		return 0;
 
 	return intel_dsc_line_slice_count(&config);
@@ -2741,6 +2747,8 @@ int intel_dp_dsc_compute_config(struct intel_dp *intel_dp,
 
 	if (!intel_dp_dsc_get_slice_config(connector, adjusted_mode->crtc_clock,
 					   adjusted_mode->crtc_hdisplay, num_joined_pipes,
+					   limits->dfp_dsc.min_slices,
+					   limits->dfp_dsc.max_slices,
 					   &pipe_config->dsc.slice_config))
 		return -EINVAL;
 
@@ -3091,6 +3099,9 @@ intel_dp_compute_config_limits(struct intel_dp *intel_dp,
 		to_intel_connector(conn_state->connector);
 
 	limits->link_config_filter = INTEL_DP_LINK_CAPS_FILTER_ALL;
+
+	limits->dfp_dsc.min_slices = 0;
+	limits->dfp_dsc.max_slices = INT_MAX;
 
 	limits->pipe.min_bpp = intel_dp_min_bpp(crtc_state->output_format);
 	if (is_mst) {
