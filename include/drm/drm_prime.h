@@ -54,6 +54,7 @@ struct device;
 struct dma_buf_export_info;
 struct dma_buf;
 struct dma_buf_attachment;
+struct dma_buf_sgt_mapping;
 struct iosys_map;
 
 enum dma_data_direction;
@@ -81,10 +82,11 @@ int drm_gem_map_attach(struct dma_buf *dma_buf,
 		       struct dma_buf_attachment *attach);
 void drm_gem_map_detach(struct dma_buf *dma_buf,
 			struct dma_buf_attachment *attach);
-struct sg_table *drm_gem_map_dma_buf(struct dma_buf_attachment *attach,
-				     enum dma_data_direction dir);
+struct dma_buf_sgt_mapping *
+drm_gem_map_dma_buf(struct dma_buf_attachment *attach,
+		    enum dma_data_direction dir);
 void drm_gem_unmap_dma_buf(struct dma_buf_attachment *attach,
-			   struct sg_table *sgt,
+			   struct dma_buf_sgt_mapping *mapping,
 			   enum dma_data_direction dir);
 int drm_gem_dmabuf_vmap(struct dma_buf *dma_buf, struct iosys_map *map);
 void drm_gem_dmabuf_vunmap(struct dma_buf *dma_buf, struct iosys_map *map);

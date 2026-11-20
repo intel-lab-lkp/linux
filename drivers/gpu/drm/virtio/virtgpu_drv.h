@@ -153,6 +153,7 @@ struct virtio_gpu_object_array {
 	struct drm_gem_object *objs[] __counted_by(total);
 };
 
+struct dma_buf_sgt_mapping;
 struct virtio_gpu_vbuffer;
 struct virtio_gpu_device;
 
@@ -555,11 +556,11 @@ bool virtio_gpu_is_vram(struct virtio_gpu_object *bo);
 int virtio_gpu_vram_create(struct virtio_gpu_device *vgdev,
 			   struct virtio_gpu_object_params *params,
 			   struct virtio_gpu_object **bo_ptr);
-struct sg_table *virtio_gpu_vram_map_dma_buf(struct virtio_gpu_object *bo,
-					     struct device *dev,
-					     enum dma_data_direction dir);
+struct dma_buf_sgt_mapping *
+virtio_gpu_vram_map_dma_buf(struct virtio_gpu_object *bo, struct device *dev,
+			    enum dma_data_direction dir);
 void virtio_gpu_vram_unmap_dma_buf(struct device *dev,
-				   struct sg_table *sgt,
+				   struct dma_buf_sgt_mapping *mapping,
 				   enum dma_data_direction dir);
 void virtio_gpu_vram_map_deferred(struct virtio_gpu_object_vram *vram);
 

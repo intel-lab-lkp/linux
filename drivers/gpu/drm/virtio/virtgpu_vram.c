@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 #include "virtgpu_drv.h"
 
+#include <linux/dma-buf-mapping.h>
 #include <linux/dma-mapping.h>
 
 static DEFINE_MUTEX(map_lock);
@@ -77,19 +78,21 @@ static int virtio_gpu_vram_mmap(struct drm_gem_object *obj,
 	return ret;
 }
 
-struct sg_table *virtio_gpu_vram_map_dma_buf(struct virtio_gpu_object *bo,
-					     struct device *dev,
-					     enum dma_data_direction dir)
+struct dma_buf_sgt_mapping *
+virtio_gpu_vram_map_dma_buf(struct virtio_gpu_object *bo, struct device *dev,
+			    enum dma_data_direction dir)
 {
 	struct virtio_gpu_device *vgdev = bo->base.base.dev->dev_private;
 	struct virtio_gpu_object_vram *vram = to_virtio_gpu_vram(bo);
+	struct dma_buf_sgt_mapping *mapping;
 	struct sg_table *sgt;
 	dma_addr_t addr;
 	int ret;
 
-	sgt = kzalloc_obj(*sgt);
-	if (!sgt)
+	mapping = kzalloc_obj(*mapping);
+	if (!mapping)
 		return ERR_PTR(-ENOMEM);
+	sgt = &mapping->sgt;
 
 	if (!(bo->blob_flags & VIRTGPU_BLOB_FLAG_USE_MAPPABLE)) {
 		// Virtio devices can access the dma-buf via its UUID. Return a stub
@@ -98,7 +101,7 @@ struct sg_table *virtio_gpu_vram_map_dma_buf(struct virtio_gpu_object *bo,
 			ret = -EIO;
 			goto out;
 		}
-		return sgt;
+		return mapping;
 	}
 
 	ret = sg_alloc_table(sgt, 1, GFP_KERNEL);
@@ -116,24 +119,26 @@ struct sg_table *virtio_gpu_vram_map_dma_buf(struct virtio_gpu_object *bo,
 	sg_dma_address(sgt->sgl) = addr;
 	sg_dma_len(sgt->sgl) = vram->vram_node.size;
 
-	return sgt;
+	return mapping;
 out:
 	sg_free_table(sgt);
-	kfree(sgt);
+	kfree(mapping);
 	return ERR_PTR(ret);
 }
 
 void virtio_gpu_vram_unmap_dma_buf(struct device *dev,
-				   struct sg_table *sgt,
+				   struct dma_buf_sgt_mapping *mapping,
 				   enum dma_data_direction dir)
 {
+	struct sg_table *sgt = &mapping->sgt;
+
 	if (sgt->nents) {
 		dma_unmap_resource(dev, sg_dma_address(sgt->sgl),
 				   sg_dma_len(sgt->sgl), dir,
 				   DMA_ATTR_SKIP_CPU_SYNC);
 	}
 	sg_free_table(sgt);
-	kfree(sgt);
+	kfree(mapping);
 }
 
 static const struct drm_gem_object_funcs virtio_gpu_vram_funcs = {

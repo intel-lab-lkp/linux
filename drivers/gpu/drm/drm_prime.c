@@ -28,6 +28,7 @@
 
 #include <linux/export.h>
 #include <linux/dma-buf.h>
+#include <linux/dma-buf-mapping.h>
 #include <linux/rbtree.h>
 #include <linux/module.h>
 
@@ -587,6 +588,16 @@ int drm_prime_handle_to_fd_ioctl(struct drm_device *dev, void *data,
  * option for sharing lots of buffers for rendering.
  */
 
+static bool is_gem_map_dma_buf(struct dma_buf_attachment *attach)
+{
+	const struct dma_buf_mapping_sgt_exp_ops *sgt_exp_ops =
+		dma_buf_get_sgt_ops(attach);
+
+	if (sgt_exp_ops && sgt_exp_ops->map_dma_buf == drm_gem_map_dma_buf)
+		return true;
+	return false;
+}
+
 /**
  * drm_gem_map_attach - dma_buf attach implementation for GEM
  * @dma_buf: buffer to attach device to
@@ -608,7 +619,7 @@ int drm_gem_map_attach(struct dma_buf *dma_buf,
 	 * drm_gem_map_dma_buf() requires obj->get_sg_table(), but drivers
 	 * that implement their own ->map_dma_buf() do not.
 	 */
-	if (dma_buf->ops->map_dma_buf == drm_gem_map_dma_buf &&
+	if (is_gem_map_dma_buf(attach) &&
 	    !obj->funcs->get_sg_table)
 		return -ENOSYS;
 
@@ -657,16 +668,18 @@ EXPORT_SYMBOL(drm_gem_map_detach);
  * @dir: direction of DMA transfer
  *
  * Calls &drm_gem_object_funcs.get_sg_table and then maps the scatterlist. This
- * can be used as the &dma_buf_ops.map_dma_buf callback. Should be used together
- * with drm_gem_unmap_dma_buf().
+ * can be used as the &dma_buf_mapping_sgt_exp_ops.map_dma_buf callback. Should
+ * be used together with drm_gem_unmap_dma_buf().
  *
- * Returns:sg_table containing the scatterlist to be returned; returns ERR_PTR
- * on error. May return -EINTR if it is interrupted by a signal.
+ * Returns: the mapping containing the scatterlist to be returned; returns
+ * ERR_PTR on error. May return -EINTR if it is interrupted by a signal.
  */
-struct sg_table *drm_gem_map_dma_buf(struct dma_buf_attachment *attach,
-				     enum dma_data_direction dir)
+struct dma_buf_sgt_mapping *
+drm_gem_map_dma_buf(struct dma_buf_attachment *attach,
+		    enum dma_data_direction dir)
 {
 	struct drm_gem_object *obj = attach->dmabuf->priv;
+	struct dma_buf_sgt_mapping *mapping;
 	struct sg_table *sgt;
 	int ret;
 
@@ -676,40 +689,51 @@ struct sg_table *drm_gem_map_dma_buf(struct dma_buf_attachment *attach,
 	if (WARN_ON(!obj->funcs->get_sg_table))
 		return ERR_PTR(-ENOSYS);
 
-	sgt = obj->funcs->get_sg_table(obj);
-	if (IS_ERR(sgt))
-		return sgt;
+	mapping = kzalloc_obj(*mapping);
+	if (!mapping)
+		return ERR_PTR(-ENOMEM);
 
-	ret = dma_map_sgtable(attach->dev, sgt, dir,
-			      DMA_ATTR_SKIP_CPU_SYNC);
-	if (ret) {
-		sg_free_table(sgt);
-		kfree(sgt);
-		sgt = ERR_PTR(ret);
+	sgt = obj->funcs->get_sg_table(obj);
+	if (IS_ERR(sgt)) {
+		kfree(mapping);
+		return ERR_CAST(sgt);
 	}
 
-	return sgt;
+	/* Take over the table header; the copy now owns the scatterlist. */
+	mapping->sgt = *sgt;
+	kfree(sgt);
+
+	ret = dma_map_sgtable(dma_buf_sgt_dma_device(attach), &mapping->sgt,
+			      dir, DMA_ATTR_SKIP_CPU_SYNC);
+	if (ret) {
+		sg_free_table(&mapping->sgt);
+		kfree(mapping);
+		return ERR_PTR(ret);
+	}
+
+	return mapping;
 }
 EXPORT_SYMBOL(drm_gem_map_dma_buf);
 
 /**
  * drm_gem_unmap_dma_buf - unmap_dma_buf implementation for GEM
  * @attach: attachment to unmap buffer from
- * @sgt: scatterlist info of the buffer to unmap
+ * @mapping: mapping of the buffer to unmap
  * @dir: direction of DMA transfer
  *
- * This can be used as the &dma_buf_ops.unmap_dma_buf callback.
+ * This can be used as the &dma_buf_mapping_sgt_exp_ops.unmap_dma_buf callback.
  */
 void drm_gem_unmap_dma_buf(struct dma_buf_attachment *attach,
-			   struct sg_table *sgt,
+			   struct dma_buf_sgt_mapping *mapping,
 			   enum dma_data_direction dir)
 {
-	if (!sgt)
+	if (!mapping)
 		return;
 
-	dma_unmap_sgtable(attach->dev, sgt, dir, DMA_ATTR_SKIP_CPU_SYNC);
-	sg_free_table(sgt);
-	kfree(sgt);
+	dma_unmap_sgtable(dma_buf_sgt_mapping_dma_device(mapping),
+			  &mapping->sgt, dir, DMA_ATTR_SKIP_CPU_SYNC);
+	sg_free_table(&mapping->sgt);
+	kfree(mapping);
 }
 EXPORT_SYMBOL(drm_gem_unmap_dma_buf);
 
@@ -827,12 +851,12 @@ EXPORT_SYMBOL(drm_gem_dmabuf_mmap);
 static const struct dma_buf_ops drm_gem_prime_dmabuf_ops =  {
 	.attach = drm_gem_map_attach,
 	.detach = drm_gem_map_detach,
-	.map_dma_buf = drm_gem_map_dma_buf,
-	.unmap_dma_buf = drm_gem_unmap_dma_buf,
 	.release = drm_gem_dmabuf_release,
 	.mmap = drm_gem_dmabuf_mmap,
 	.vmap = drm_gem_dmabuf_vmap,
 	.vunmap = drm_gem_dmabuf_vunmap,
+	DMA_BUF_SIMPLE_SGT_EXP_MATCH(drm_gem_map_dma_buf,
+				     drm_gem_unmap_dma_buf),
 };
 
 /**

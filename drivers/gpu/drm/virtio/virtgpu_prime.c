@@ -24,6 +24,7 @@
 
 #include <drm/drm_prime.h>
 #include <drm/drm_print.h>
+#include <linux/dma-buf-mapping.h>
 #include <linux/virtio_dma_buf.h>
 
 #include "virtgpu_drv.h"
@@ -46,44 +47,49 @@ static int virtgpu_virtio_get_uuid(struct dma_buf *buf,
 	return 0;
 }
 
-static struct sg_table *
+static struct dma_buf_sgt_mapping *
 virtgpu_gem_map_dma_buf(struct dma_buf_attachment *attach,
 			enum dma_data_direction dir)
 {
 	struct drm_gem_object *obj = attach->dmabuf->priv;
 	struct virtio_gpu_object *bo = gem_to_virtio_gpu_obj(obj);
 
-	if (virtio_gpu_is_vram(bo))
-		return virtio_gpu_vram_map_dma_buf(bo, attach->dev, dir);
+	if (virtio_gpu_is_vram(bo)) {
+		struct device *dev = dma_buf_sgt_dma_device(attach);
+
+		return virtio_gpu_vram_map_dma_buf(bo, dev, dir);
+	}
 
 	return drm_gem_map_dma_buf(attach, dir);
 }
 
 static void virtgpu_gem_unmap_dma_buf(struct dma_buf_attachment *attach,
-				      struct sg_table *sgt,
+				      struct dma_buf_sgt_mapping *mapping,
 				      enum dma_data_direction dir)
 {
 	struct drm_gem_object *obj = attach->dmabuf->priv;
 	struct virtio_gpu_object *bo = gem_to_virtio_gpu_obj(obj);
 
 	if (virtio_gpu_is_vram(bo)) {
-		virtio_gpu_vram_unmap_dma_buf(attach->dev, sgt, dir);
+		struct device *dev = dma_buf_sgt_mapping_dma_device(mapping);
+
+		virtio_gpu_vram_unmap_dma_buf(dev, mapping, dir);
 		return;
 	}
 
-	drm_gem_unmap_dma_buf(attach, sgt, dir);
+	drm_gem_unmap_dma_buf(attach, mapping, dir);
 }
 
 static const struct virtio_dma_buf_ops virtgpu_dmabuf_ops =  {
 	.ops = {
 		.attach = virtio_dma_buf_attach,
 		.detach = drm_gem_map_detach,
-		.map_dma_buf = virtgpu_gem_map_dma_buf,
-		.unmap_dma_buf = virtgpu_gem_unmap_dma_buf,
 		.release = drm_gem_dmabuf_release,
 		.mmap = drm_gem_dmabuf_mmap,
 		.vmap = drm_gem_dmabuf_vmap,
 		.vunmap = drm_gem_dmabuf_vunmap,
+		DMA_BUF_SIMPLE_SGT_EXP_MATCH(virtgpu_gem_map_dma_buf,
+					     virtgpu_gem_unmap_dma_buf),
 	},
 	.device_attach = drm_gem_map_attach,
 	.get_uuid = virtgpu_virtio_get_uuid,

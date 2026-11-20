@@ -7,6 +7,7 @@
 #include <linux/cleanup.h>
 #include <linux/debugfs.h>
 #include <linux/dma-buf.h>
+#include <linux/dma-buf-mapping.h>
 #include <linux/dma-mapping.h>
 #include <linux/err.h>
 #include <linux/slab.h>
@@ -471,25 +472,25 @@ static void panthor_gem_free_object(struct drm_gem_object *obj)
 	drm_gem_object_put(vm_root_gem);
 }
 
-static struct sg_table *
+static struct dma_buf_sgt_mapping *
 panthor_gem_prime_map_dma_buf(struct dma_buf_attachment *attach,
 			      enum dma_data_direction dir)
 {
-	struct sg_table *sgt = drm_gem_map_dma_buf(attach, dir);
+	struct dma_buf_sgt_mapping *mapping = drm_gem_map_dma_buf(attach, dir);
 
-	if (!IS_ERR(sgt))
-		attach->priv = sgt;
+	if (!IS_ERR(mapping))
+		attach->priv = &mapping->sgt;
 
-	return sgt;
+	return mapping;
 }
 
 static void
 panthor_gem_prime_unmap_dma_buf(struct dma_buf_attachment *attach,
-				struct sg_table *sgt,
+				struct dma_buf_sgt_mapping *mapping,
 				enum dma_data_direction dir)
 {
 	attach->priv = NULL;
-	drm_gem_unmap_dma_buf(attach, sgt, dir);
+	drm_gem_unmap_dma_buf(attach, mapping, dir);
 }
 
 static int
@@ -512,7 +513,8 @@ panthor_gem_prime_begin_cpu_access(struct dma_buf *dma_buf,
 		struct sg_table *sgt = attach->priv;
 
 		if (sgt)
-			dma_sync_sgtable_for_cpu(attach->dev, sgt, dir);
+			dma_sync_sgtable_for_cpu(dma_buf_sgt_dma_device(attach),
+						 sgt, dir);
 	}
 	dma_resv_unlock(obj->resv);
 
@@ -533,7 +535,8 @@ panthor_gem_prime_end_cpu_access(struct dma_buf *dma_buf,
 		struct sg_table *sgt = attach->priv;
 
 		if (sgt)
-			dma_sync_sgtable_for_device(attach->dev, sgt, dir);
+			dma_sync_sgtable_for_device(dma_buf_sgt_dma_device(attach),
+						    sgt, dir);
 	}
 
 	if (bo->cmap.vaddr)
@@ -549,14 +552,14 @@ panthor_gem_prime_end_cpu_access(struct dma_buf *dma_buf,
 static const struct dma_buf_ops panthor_dma_buf_ops = {
 	.attach = drm_gem_map_attach,
 	.detach = drm_gem_map_detach,
-	.map_dma_buf = panthor_gem_prime_map_dma_buf,
-	.unmap_dma_buf = panthor_gem_prime_unmap_dma_buf,
 	.release = drm_gem_dmabuf_release,
 	.mmap = drm_gem_dmabuf_mmap,
 	.vmap = drm_gem_dmabuf_vmap,
 	.vunmap = drm_gem_dmabuf_vunmap,
 	.begin_cpu_access = panthor_gem_prime_begin_cpu_access,
 	.end_cpu_access = panthor_gem_prime_end_cpu_access,
+	DMA_BUF_SIMPLE_SGT_EXP_MATCH(panthor_gem_prime_map_dma_buf,
+				     panthor_gem_prime_unmap_dma_buf),
 };
 
 static struct dma_buf *
