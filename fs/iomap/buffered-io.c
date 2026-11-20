@@ -1191,6 +1191,8 @@ static int iomap_write_iter(struct iomap_iter *iter, struct iov_iter *i,
 {
 	int status = 0;
 	struct address_space *mapping = iter->inode->i_mapping;
+	bool update_isize = !S_ISBLK(iter->inode->i_mode) &&
+			    !(iter->iomap.flags & IOMAP_F_FSVERITY);
 	size_t chunk = mapping_max_folio_size(mapping);
 	unsigned int bdp_flags = (iter->flags & IOMAP_NOWAIT) ? BDP_ASYNC : 0;
 
@@ -1256,14 +1258,13 @@ retry:
 		 * unlock and release the folio.
 		 */
 		old_size = iter->inode->i_size;
-		if (pos + written > old_size &&
-		    !(iter->iomap.flags & IOMAP_F_FSVERITY)) {
+		if (pos + written > old_size && update_isize) {
 			i_size_write(iter->inode, pos + written);
 			iter->iomap.flags |= IOMAP_F_SIZE_CHANGED;
 		}
 		__iomap_put_folio(iter, write_ops, written, folio);
 
-		if (old_size < pos && !(iter->iomap.flags & IOMAP_F_FSVERITY))
+		if (old_size < pos && update_isize)
 			pagecache_isize_extended(iter->inode, old_size, pos);
 
 		cond_resched();
