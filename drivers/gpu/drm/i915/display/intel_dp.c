@@ -3092,7 +3092,10 @@ intel_dp_pcon_dsc_compute_passthrough_limits(struct intel_dp *intel_dp,
 					     struct link_config_limits *limits)
 {
 	struct intel_connector *connector = intel_dp->attached_connector;
+	const struct drm_display_info *info = &connector->base.display_info;
 	const struct drm_display_mode *adjusted_mode = &crtc_state->hw.adjusted_mode;
+	int bpc = limits->pipe.max_bpp / 3;
+	int min_dsc_bpp, max_dsc_bpp, hdmi_bpp_x16, slice_width;
 
 	if (!intel_dp_pcon_sink_support_frl(intel_dp) ||
 	    !intel_dp_pcon_can_passthrough_dsc(intel_dp) ||
@@ -3112,9 +3115,27 @@ intel_dp_pcon_dsc_compute_passthrough_limits(struct intel_dp *intel_dp,
 						 &limits->dfp_dsc.max_slices))
 		return false;
 
+	intel_hdmi_dsc_get_min_max_bpp(crtc_state->sink_format, bpc,
+				       info->hdmi.dsc_cap.all_bpp,
+				       &min_dsc_bpp, &max_dsc_bpp);
+
+	/*
+	 * The slice count of the stream is picked later, use the minimum one
+	 * for the highest bpp the sink supports in the range and within the
+	 * chunk bytes limit.
+	 */
+	slice_width = DIV_ROUND_UP(adjusted_mode->crtc_hdisplay, limits->dfp_dsc.min_slices);
+	hdmi_bpp_x16 = intel_hdmi_dsc_get_bpp(16, slice_width, limits->dfp_dsc.min_slices,
+					      crtc_state->sink_format, bpc,
+					      info->hdmi.dsc_cap.all_bpp,
+					      info->hdmi.dsc_cap.total_chunk_kbytes * 1024, 0);
+	if (!hdmi_bpp_x16)
+		return false;
+
+	limits->link.min_bpp_x16 = max(limits->link.min_bpp_x16, min_dsc_bpp * 16);
 	limits->link.max_bpp_x16 =
-		min(limits->link.max_bpp_x16,
-		    intel_dp_hdmi_frl_payload_bw(intel_dp, true) * 16 / adjusted_mode->crtc_clock);
+		min3(limits->link.max_bpp_x16, hdmi_bpp_x16,
+		     intel_dp_hdmi_frl_payload_bw(intel_dp, true) * 16 / adjusted_mode->crtc_clock);
 
 	return true;
 }
