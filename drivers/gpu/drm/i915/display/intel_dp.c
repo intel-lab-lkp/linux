@@ -4610,6 +4610,13 @@ intel_dp_pcon_dsc_configure(struct intel_dp *intel_dp,
 	    !hdmi_is_dsc_1_2)
 		return;
 
+	if (crtc_state->pcon_config.dsc_op != INTEL_PCON_DSC_DECODE_ENCODE) {
+		ret = drm_dp_pcon_dsc_enc_disable(&intel_dp->aux);
+		if (ret < 0)
+			drm_dbg_kms(display->drm, "Failed to disable pcon DSC encoder\n");
+		return;
+	}
+
 	slice_height = intel_dp_pcon_dsc_enc_slice_height(crtc_state);
 	if (!slice_height)
 		return;
