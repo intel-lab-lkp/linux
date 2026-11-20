@@ -42,6 +42,12 @@ accesses in the driver - the resource usage and parameter descriptions
 translated into appropriate register accesses. This interpretation makes it easy
 and efficient for the feature to be programmed onto the device when required.
 
+The device driver checks requested event fields when loading a feature. For
+example, ``extout_pulse`` is loaded only where EVENT1 is implemented, based on
+the trace unit's decoded event count. A valid feature requiring unavailable
+resources is skipped for that device. This does not check whether a PMU can
+count the output.
+
 The feature will not be active on the device until the feature is enabled, and
 the device itself is enabled. When the device is enabled then enabled features
 will be programmed into the device hardware.

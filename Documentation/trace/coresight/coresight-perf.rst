@@ -109,6 +109,21 @@ Example for triggering AUX pause and resume with PMU event::
         -e cycles/aux-action=pause,period=10000000/ \
         -e cycles/aux-action=resume,period=1050000/ -- sleep 1
 
+Using external-output pulses
+----------------------------
+
+The ``pmu_pulse`` configuration drives fixed external output 1. Separately
+select the matching PMU event, ``trcextout1``, to count it. The hardware must
+support and connect this output to that PMU; this is not checked automatically.
+
+Perf skips CPUs whose trace units do not support this configuration and fails
+setup if none remain. Use the PMU instance that counts output 1 on your system::
+
+  perf record -a -e '{cs_etm/pmu_pulse,aux-action=start-paused/u,cycles/aux-action=resume,period=10000000/u,armv8_pmuv3_0/trcextout1,aux-action=pause,period=5000/u}' -- sleep 1
+
+Tracing starts paused. The cycles event resumes it every 10000000 cycles;
+``trcextout1`` pauses it after 5000 counted pulses.
+
 Perf test - Verify kernel and userspace perf CoreSight work
 -----------------------------------------------------------
 
