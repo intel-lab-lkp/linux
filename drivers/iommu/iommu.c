@@ -4010,6 +4010,7 @@ EXPORT_SYMBOL_NS_GPL(iommu_replace_group_handle, "IOMMUFD_INTERNAL");
 /**
  * pci_dev_reset_iommu_prepare() - Block IOMMU to prepare for a PCI device reset
  * @pdev: PCI device that is going to enter a reset routine
+ * @restore: set to true if pci_dev_reset_iommu_done() needs to restore state
  *
  * The PCIe r6.0, sec 10.3.1 IMPLEMENTATION NOTE recommends to disable and block
  * ATS before initiating a reset. This means that a PCIe device during the reset
@@ -4031,7 +4032,7 @@ EXPORT_SYMBOL_NS_GPL(iommu_replace_group_handle, "IOMMUFD_INTERNAL");
  * case, callers must ensure there will be no racy iommu_release_device() call,
  * which otherwise would UAF the dev->iommu_group pointer.
  */
-int pci_dev_reset_iommu_prepare(struct pci_dev *pdev)
+int pci_dev_reset_iommu_prepare(struct pci_dev *pdev, bool *restore)
 {
 	struct iommu_group *group = pdev->dev.iommu_group;
 	struct group_device *gdev;
@@ -4039,8 +4040,12 @@ int pci_dev_reset_iommu_prepare(struct pci_dev *pdev)
 	void *entry;
 	int ret;
 
-	if (!pci_ats_supported(pdev) || !dev_has_iommu(&pdev->dev))
+	if (!pci_ats_supported(pdev) || !dev_has_iommu(&pdev->dev)) {
+		*restore = false;
 		return 0;
+	}
+
+	*restore = true;
 
 	guard(mutex)(&group->mutex);
 
@@ -4132,6 +4137,7 @@ static bool group_device_dma_alias_is_blocked(struct iommu_group *group,
 /**
  * pci_dev_reset_iommu_done() - Restore IOMMU after a PCI device reset is done
  * @pdev: PCI device that has finished a reset routine
+ * @restore: whether pci_dev_reset_iommu_prepare() blocked the IOMMU
  *
  * After a PCIe device finishes a reset routine, it wants to restore its IOMMU
  * activity, including new translation and cache invalidation, by re-attaching
@@ -4143,14 +4149,14 @@ static bool group_device_dma_alias_is_blocked(struct iommu_group *group,
  * Note that, although unlikely, there is a risk that re-attaching domains might
  * fail due to some unexpected happening like OOM.
  */
-void pci_dev_reset_iommu_done(struct pci_dev *pdev)
+void pci_dev_reset_iommu_done(struct pci_dev *pdev, bool restore)
 {
 	struct iommu_group *group = pdev->dev.iommu_group;
 	struct group_device *gdev;
 	unsigned long pasid;
 	void *entry;
 
-	if (!pci_ats_supported(pdev) || !dev_has_iommu(&pdev->dev))
+	if (!restore)
 		return;
 
 	guard(mutex)(&group->mutex);

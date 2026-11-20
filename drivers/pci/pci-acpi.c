@@ -955,6 +955,7 @@ void pci_set_acpi_fwnode(struct pci_dev *dev)
 int pci_dev_acpi_reset(struct pci_dev *dev, bool probe)
 {
 	acpi_handle handle = ACPI_HANDLE(&dev->dev);
+	bool restore;
 	int ret;
 
 	if (!handle || !acpi_has_method(handle, "_RST"))
@@ -963,7 +964,7 @@ int pci_dev_acpi_reset(struct pci_dev *dev, bool probe)
 	if (probe)
 		return 0;
 
-	ret = pci_dev_reset_iommu_prepare(dev);
+	ret = pci_dev_reset_iommu_prepare(dev, &restore);
 	if (ret) {
 		pci_err(dev, "failed to stop IOMMU for a PCI reset: %d\n", ret);
 		return ret;
@@ -974,7 +975,7 @@ int pci_dev_acpi_reset(struct pci_dev *dev, bool probe)
 		ret = -ENOTTY;
 	}
 
-	pci_dev_reset_iommu_done(dev);
+	pci_dev_reset_iommu_done(dev, restore);
 	return ret;
 }
 

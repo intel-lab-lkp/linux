@@ -4404,16 +4404,17 @@ static const struct pci_dev_reset_methods pci_dev_reset_methods[] = {
 static int __pci_dev_specific_reset(struct pci_dev *dev, bool probe,
 				    const struct pci_dev_reset_methods *i)
 {
+	bool restore;
 	int ret;
 
-	ret = pci_dev_reset_iommu_prepare(dev);
+	ret = pci_dev_reset_iommu_prepare(dev, &restore);
 	if (ret) {
 		pci_err(dev, "failed to stop IOMMU for a PCI reset: %d\n", ret);
 		return ret;
 	}
 
 	ret = i->reset(dev, probe);
-	pci_dev_reset_iommu_done(dev);
+	pci_dev_reset_iommu_done(dev, restore);
 	return ret;
 }
 

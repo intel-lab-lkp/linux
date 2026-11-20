@@ -4440,6 +4440,7 @@ EXPORT_SYMBOL(pci_wait_for_pending_transaction);
  */
 int pcie_flr(struct pci_dev *dev)
 {
+	bool restore;
 	int ret;
 
 	if (!pci_dev_config_accessible(dev, "FLR"))
@@ -4449,7 +4450,7 @@ int pcie_flr(struct pci_dev *dev)
 		pci_err(dev, "timed out waiting for pending transaction; performing function level reset anyway\n");
 
 	/* Have to call it after waiting for pending DMA transaction */
-	ret = pci_dev_reset_iommu_prepare(dev);
+	ret = pci_dev_reset_iommu_prepare(dev, &restore);
 	if (ret) {
 		pci_err(dev, "failed to stop IOMMU for a PCI reset: %d\n", ret);
 		return ret;
@@ -4469,7 +4470,7 @@ int pcie_flr(struct pci_dev *dev)
 
 	ret = pci_dev_wait(dev, "FLR", PCIE_RESET_READY_POLL_MS);
 done:
-	pci_dev_reset_iommu_done(dev);
+	pci_dev_reset_iommu_done(dev, restore);
 	return ret;
 }
 EXPORT_SYMBOL_GPL(pcie_flr);
@@ -4498,6 +4499,7 @@ EXPORT_SYMBOL_GPL(pcie_reset_flr);
 
 static int pci_af_flr(struct pci_dev *dev, bool probe)
 {
+	bool restore;
 	int ret;
 	int pos;
 	u8 cap;
@@ -4526,7 +4528,7 @@ static int pci_af_flr(struct pci_dev *dev, bool probe)
 		pci_err(dev, "timed out waiting for pending transaction; performing AF function level reset anyway\n");
 
 	/* Have to call it after waiting for pending DMA transaction */
-	ret = pci_dev_reset_iommu_prepare(dev);
+	ret = pci_dev_reset_iommu_prepare(dev, &restore);
 	if (ret) {
 		pci_err(dev, "failed to stop IOMMU for a PCI reset: %d\n", ret);
 		return ret;
@@ -4547,7 +4549,7 @@ static int pci_af_flr(struct pci_dev *dev, bool probe)
 
 	ret = pci_dev_wait(dev, "AF_FLR", PCIE_RESET_READY_POLL_MS);
 done:
-	pci_dev_reset_iommu_done(dev);
+	pci_dev_reset_iommu_done(dev, restore);
 	return ret;
 }
 
@@ -4568,6 +4570,7 @@ done:
  */
 static int pci_pm_reset(struct pci_dev *dev, bool probe)
 {
+	bool restore;
 	u16 csr;
 	int ret;
 
@@ -4584,7 +4587,7 @@ static int pci_pm_reset(struct pci_dev *dev, bool probe)
 	if (dev->current_state != PCI_D0)
 		return -EINVAL;
 
-	ret = pci_dev_reset_iommu_prepare(dev);
+	ret = pci_dev_reset_iommu_prepare(dev, &restore);
 	if (ret) {
 		pci_err(dev, "failed to stop IOMMU for a PCI reset: %d\n", ret);
 		return ret;
@@ -4601,7 +4604,7 @@ static int pci_pm_reset(struct pci_dev *dev, bool probe)
 	pci_dev_d3_sleep(dev);
 
 	ret = pci_dev_wait(dev, "PM D3hot->D0", PCIE_RESET_READY_POLL_MS);
-	pci_dev_reset_iommu_done(dev);
+	pci_dev_reset_iommu_done(dev, restore);
 	return ret;
 }
 
@@ -5061,6 +5064,7 @@ static bool cxl_sbr_masked(struct pci_dev *dev)
 static int pci_reset_bus_function(struct pci_dev *dev, bool probe)
 {
 	struct pci_dev *bridge = pci_upstream_bridge(dev);
+	bool restore;
 	int rc;
 
 	/*
@@ -5070,7 +5074,7 @@ static int pci_reset_bus_function(struct pci_dev *dev, bool probe)
 	if (bridge && pcie_is_cxl(bridge) && cxl_sbr_masked(bridge))
 		return -ENOTTY;
 
-	rc = pci_dev_reset_iommu_prepare(dev);
+	rc = pci_dev_reset_iommu_prepare(dev, &restore);
 	if (rc) {
 		pci_err(dev, "failed to stop IOMMU for a PCI reset: %d\n", rc);
 		return rc;
@@ -5082,7 +5086,7 @@ static int pci_reset_bus_function(struct pci_dev *dev, bool probe)
 
 	rc = pci_parent_bus_reset(dev, probe);
 done:
-	pci_dev_reset_iommu_done(dev);
+	pci_dev_reset_iommu_done(dev, restore);
 	return rc;
 }
 
@@ -5090,6 +5094,7 @@ static int cxl_reset_bus_function(struct pci_dev *dev, bool probe)
 {
 	struct pci_dev *bridge;
 	u16 dvsec, reg, val;
+	bool restore;
 	int rc;
 
 	bridge = pci_upstream_bridge(dev);
@@ -5107,7 +5112,7 @@ static int cxl_reset_bus_function(struct pci_dev *dev, bool probe)
 	if (rc)
 		return -ENOTTY;
 
-	rc = pci_dev_reset_iommu_prepare(dev);
+	rc = pci_dev_reset_iommu_prepare(dev, &restore);
 	if (rc) {
 		pci_err(dev, "failed to stop IOMMU for a PCI reset: %d\n", rc);
 		return rc;
@@ -5127,7 +5132,7 @@ static int cxl_reset_bus_function(struct pci_dev *dev, bool probe)
 		pci_write_config_word(bridge, dvsec + PCI_DVSEC_CXL_PORT_CTL,
 				      reg);
 
-	pci_dev_reset_iommu_done(dev);
+	pci_dev_reset_iommu_done(dev, restore);
 	return rc;
 }
 
