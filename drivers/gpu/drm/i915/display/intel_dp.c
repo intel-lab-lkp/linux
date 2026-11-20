@@ -4175,6 +4175,18 @@ intel_dp_sink_set_dsc_passthrough(const struct intel_connector *connector,
 			    str_enable_disable(enable));
 }
 
+static void
+intel_dp_pcon_set_dsc_passthrough(struct intel_connector *connector, bool enable)
+{
+	struct intel_display *display = to_intel_display(connector);
+
+	if (write_dsc_decompression_flag(connector->dp.dsc_decompression_aux,
+					 DP_DSC_PASSTHROUGH_EN, enable) < 0)
+		drm_dbg_kms(display->drm,
+			    "Failed to %s PCON DSC pass-through\n",
+			    str_enable_disable(enable));
+}
+
 static int intel_dp_dsc_aux_ref_count(struct intel_atomic_state *state,
 				      const struct intel_connector *connector,
 				      bool for_get_ref)
@@ -4245,7 +4257,8 @@ static bool intel_dp_dsc_aux_put_ref(struct intel_atomic_state *state,
  * sink device, whereas on MST based on each device's DSC capabilities it's
  * either the last branch device (enabling decompression in it) or both the
  * last branch device (enabling passthrough in it) and the sink device
- * (enabling decompression in it).
+ * (enabling decompression in it). A PCON passing a DSC stream through to
+ * the HDMI sink gets passthrough enabled instead of decompression.
  */
 void intel_dp_sink_enable_decompression(struct intel_atomic_state *state,
 					struct intel_connector *connector,
@@ -4263,6 +4276,12 @@ void intel_dp_sink_enable_decompression(struct intel_atomic_state *state,
 
 	if (!intel_dp_dsc_aux_get_ref(state, connector))
 		return;
+
+	/* A PCON passing the DSC stream through to the HDMI sink doesn't decode it */
+	if (new_crtc_state->pcon_config.dsc_op == INTEL_PCON_DSC_PASSTHROUGH) {
+		intel_dp_pcon_set_dsc_passthrough(connector, true);
+		return;
+	}
 
 	intel_dp_sink_set_dsc_passthrough(connector, true);
 	intel_dp_sink_set_dsc_decompression(connector, true);
@@ -4294,6 +4313,11 @@ void intel_dp_sink_disable_decompression(struct intel_atomic_state *state,
 
 	if (!intel_dp_dsc_aux_put_ref(state, connector))
 		return;
+
+	if (old_crtc_state->pcon_config.dsc_op == INTEL_PCON_DSC_PASSTHROUGH) {
+		intel_dp_pcon_set_dsc_passthrough(connector, false);
+		return;
+	}
 
 	intel_dp_sink_set_dsc_decompression(connector, false);
 	intel_dp_sink_set_dsc_passthrough(connector, false);
