@@ -2514,6 +2514,7 @@ void intel_dp_dsc_reset_config(struct intel_crtc_state *crtc_state)
 
 	memset(&crtc_state->dsc.slice_config, 0, sizeof(crtc_state->dsc.slice_config));
 	memset(&crtc_state->dsc.config, 0, sizeof(crtc_state->dsc.config));
+	memset(&crtc_state->pcon_config, 0, sizeof(crtc_state->pcon_config));
 }
 
 int intel_dp_dsc_compute_config(struct intel_dp *intel_dp,

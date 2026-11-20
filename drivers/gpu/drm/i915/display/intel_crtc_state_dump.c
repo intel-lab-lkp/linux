@@ -73,6 +73,13 @@ static const char * const output_type_str[] = {
 
 #undef OUTPUT_TYPE
 
+static const char * const pcon_dsc_op_str[] = {
+	[INTEL_PCON_NO_DSC] = "none",
+	[INTEL_PCON_DSC_DECODE] = "decode",
+	[INTEL_PCON_DSC_PASSTHROUGH] = "pass-through",
+	[INTEL_PCON_DSC_DECODE_ENCODE] = "decode+encode",
+};
+
 static void snprintf_output_types(char *buf, size_t len,
 				  unsigned int output_types)
 {
@@ -242,6 +249,15 @@ void intel_crtc_state_dump(const struct intel_crtc_state *pipe_config,
 		drm_printf(&p, "fec: %s, enhanced framing: %s\n",
 			   str_enabled_disabled(pipe_config->fec_enable),
 			   str_enabled_disabled(pipe_config->enhanced_framing));
+
+		drm_printf(&p, "pcon: dsc op %s\n",
+			   pcon_dsc_op_str[pipe_config->pcon_config.dsc_op]);
+		if (pipe_config->pcon_config.dsc_op == INTEL_PCON_DSC_DECODE_ENCODE)
+			drm_printf(&p,
+				   "pcon dsc encoder: slice height: %u, slice width: %u, bpp_x16: %u\n",
+				   pipe_config->pcon_config.dsc_enc.slice_height,
+				   pipe_config->pcon_config.dsc_enc.slice_width,
+				   pipe_config->pcon_config.dsc_enc.bpp_x16);
 
 		drm_printf(&p, "sdp split: %s\n",
 			   str_enabled_disabled(pipe_config->sdp_split_enable));

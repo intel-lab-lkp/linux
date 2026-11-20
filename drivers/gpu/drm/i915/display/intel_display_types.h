@@ -978,6 +978,25 @@ enum intel_output_format {
 	INTEL_OUTPUT_FORMAT_YCBCR444,
 };
 
+enum intel_pcon_dsc_op {
+	/* The PCON does not take part in DSC, also used when there is no HDMI 2.1 PCON */
+	INTEL_PCON_NO_DSC,
+	/* PCON decodes the DSC stream from the DP link, HDMI link is uncompressed */
+	INTEL_PCON_DSC_DECODE,
+	/* PCON forwards the DSC 1.2a stream to the HDMI sink as is */
+	INTEL_PCON_DSC_PASSTHROUGH,
+	/* PCON decodes a DSC 1.1 stream and encodes DSC 1.2a for the HDMI sink */
+	INTEL_PCON_DSC_DECODE_ENCODE,
+};
+
+/* PCON DSC encoder PPS override parameters */
+struct intel_pcon_dsc_enc_config {
+	u16 slice_height;
+	u16 slice_width;
+	/* Compressed Bpp in U6.4 format */
+	u16 bpp_x16;
+};
+
 /* Used by dp and fdi links */
 struct intel_link_m_n {
 	u32 tu;
@@ -1379,6 +1398,16 @@ struct intel_crtc_state {
 		u16 compressed_bpp_x16;
 		struct drm_dsc_config config;
 	} dsc;
+
+	/*
+	 * Configuration of a DP->HDMI PCON. Only used for state computation,
+	 * not read out from the HW.
+	 */
+	struct {
+		enum intel_pcon_dsc_op dsc_op;
+		/* Only valid for INTEL_PCON_DSC_DECODE_ENCODE */
+		struct intel_pcon_dsc_enc_config dsc_enc;
+	} pcon_config;
 
 	/* DP tunnel used for BW allocation. */
 	struct drm_dp_tunnel_ref dp_tunnel_ref;
