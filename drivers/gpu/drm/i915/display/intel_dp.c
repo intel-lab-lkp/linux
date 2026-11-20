@@ -128,7 +128,7 @@ bool intel_dp_is_edp(struct intel_dp *intel_dp)
 }
 
 static void intel_dp_unset_edid(struct intel_dp *intel_dp);
-static int intel_dp_hdmi_sink_max_frl(struct intel_dp *intel_dp);
+static int intel_dp_hdmi_sink_max_frl(struct intel_dp *intel_dp, bool dsc);
 static bool intel_dp_is_hdmi_2_1_sink(struct intel_dp *intel_dp);
 static int intel_dp_dsc_stream_version_minor(const struct intel_connector *connector);
 
@@ -1192,15 +1192,22 @@ static int frl_required_bw(int clock, int bpc,
 }
 
 /*
- * Both the PCON and the HDMI 2.1 sink limit the FRL rate. FRL uses 16b/18b
- * line coding, so only 16/18 of the raw rate carries payload. Returns kbps.
+ * Both the PCON and the HDMI 2.1 sink limit the FRL rate. The sink has a
+ * separate limit for @dsc, a compressed stream on the HDMI link.
  */
-static int intel_dp_hdmi_frl_payload_bw(struct intel_dp *intel_dp)
+static int intel_dp_pcon_max_frl_rate(struct intel_dp *intel_dp, bool dsc)
 {
-	int max_frl_rate = min(intel_dp->dfp.pcon_max_frl_bw,
-			       intel_dp_hdmi_sink_max_frl(intel_dp));
+	return min(intel_dp->dfp.pcon_max_frl_bw,
+		   intel_dp_hdmi_sink_max_frl(intel_dp, dsc));
+}
 
-	return max_frl_rate * 1000000 * 16 / 18;
+/*
+ * FRL uses 16b/18b line coding, so only 16/18 of the raw rate carries
+ * payload. Returns kbps.
+ */
+static int intel_dp_hdmi_frl_payload_bw(struct intel_dp *intel_dp, bool dsc)
+{
+	return intel_dp_pcon_max_frl_rate(intel_dp, dsc) * 1000000 * 16 / 18;
 }
 
 static enum drm_mode_status
@@ -1217,7 +1224,7 @@ intel_dp_frl_bw_valid(struct intel_dp *intel_dp, int target_clock,
 	target_bw = frl_required_bw(target_clock, bpc, sink_format);
 
 	/* check for MAX FRL BW for both PCON and HDMI2.1 sink */
-	max_frl_bw = intel_dp_hdmi_frl_payload_bw(intel_dp);
+	max_frl_bw = intel_dp_hdmi_frl_payload_bw(intel_dp, false);
 
 	/* #FIXME check bandwidth with DSC if both PCON and HDMI sink support DSC */
 	if (target_bw > max_frl_bw)
@@ -1230,7 +1237,7 @@ static bool
 intel_dp_pcon_sink_support_frl(struct intel_dp *intel_dp)
 {
 	return intel_dp->dfp.pcon_max_frl_bw &&
-		intel_dp_hdmi_sink_max_frl(intel_dp);
+		intel_dp_hdmi_sink_max_frl(intel_dp, false);
 }
 
 static bool intel_dp_pcon_can_encode_dsc(struct intel_dp *intel_dp)
@@ -1275,7 +1282,7 @@ intel_dp_pcon_dsc_enc_compute(struct intel_dp *intel_dp,
 	slice_width = DIV_ROUND_UP(mode->hdisplay, num_slices);
 
 	/* The compressed stream has to fit the FRL link */
-	max_link_dsc_bpp = intel_dp_hdmi_frl_payload_bw(intel_dp) / pixel_clock;
+	max_link_dsc_bpp = intel_dp_hdmi_frl_payload_bw(intel_dp, true) / pixel_clock;
 	if (!max_link_dsc_bpp)
 		return false;
 
@@ -3101,8 +3108,8 @@ intel_dp_pcon_compute_config(struct intel_dp *intel_dp,
 	if (!intel_dp_is_hdmi_2_1_sink(intel_dp))
 		return 0;
 
-	crtc_state->pcon_config.frl_rate_gbps =
-		min(intel_dp->dfp.pcon_max_frl_bw, intel_dp_hdmi_sink_max_frl(intel_dp));
+	/* The HDMI link carries an uncompressed stream, unless the PCON compresses it */
+	crtc_state->pcon_config.frl_rate_gbps = intel_dp_pcon_max_frl_rate(intel_dp, false);
 
 	if (crtc_state->dsc.compression_enable)
 		crtc_state->pcon_config.dsc_op = INTEL_PCON_DSC_DECODE;
@@ -3130,6 +3137,7 @@ intel_dp_pcon_compute_config(struct intel_dp *intel_dp,
 	}
 
 	crtc_state->pcon_config.dsc_op = INTEL_PCON_DSC_DECODE_ENCODE;
+	crtc_state->pcon_config.frl_rate_gbps = intel_dp_pcon_max_frl_rate(intel_dp, true);
 
 	return 0;
 }
@@ -4481,7 +4489,7 @@ static int intel_dp_pcon_set_frl_mask(int max_frl)
 	return 0;
 }
 
-static int intel_dp_hdmi_sink_max_frl(struct intel_dp *intel_dp)
+static int intel_dp_hdmi_sink_max_frl(struct intel_dp *intel_dp, bool dsc)
 {
 	struct intel_connector *connector = intel_dp->attached_connector;
 	struct drm_connector *drm_connector = &connector->base;
@@ -4490,12 +4498,10 @@ static int intel_dp_hdmi_sink_max_frl(struct intel_dp *intel_dp)
 
 	/*
 	 * The sink's DSC max FRL rate only applies to compressed video
-	 * transport, which requires a DSC 1.2 encoder in the PCON. Without
-	 * one the HDMI link always carries uncompressed video, for which
-	 * the regular max FRL rate is the limit.
+	 * transport. For uncompressed video the regular max FRL rate is the
+	 * limit.
 	 */
-	if (drm_dp_pcon_enc_is_dsc_1_2(intel_dp->pcon_dsc_dpcd) &&
-	    dsc_max_frl_rate)
+	if (dsc && dsc_max_frl_rate)
 		return min(max_frl_rate, dsc_max_frl_rate);
 
 	return max_frl_rate;
@@ -4581,7 +4587,7 @@ static bool intel_dp_is_hdmi_2_1_sink(struct intel_dp *intel_dp)
 {
 	if (drm_dp_is_branch(intel_dp->dpcd) &&
 	    intel_dp_has_hdmi_sink(intel_dp) &&
-	    intel_dp_hdmi_sink_max_frl(intel_dp) > 0)
+	    intel_dp_hdmi_sink_max_frl(intel_dp, false) > 0)
 		return true;
 
 	return false;
