@@ -46,7 +46,11 @@ struct dma_buf_mapping_match {
 	const struct dma_buf_mapping_type *type;
 	const struct dma_buf_mapping_exp_ops *exp_ops;
 	union {
-		/* Each mapping_type has unique match parameters here */
+		/* For dma_buf_mapping_sgt_type */
+		struct {
+			/* Filled from the attaching device, not by importers */
+			struct device *importing_dma_device;
+		} sgt_data;
 	};
 };
 
