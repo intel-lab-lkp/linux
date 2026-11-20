@@ -7,7 +7,6 @@ menuconfig ARCH_STM32
 	select ARM_GIC if ARCH_MULTI_V7
 	select ARM_PSCI if ARCH_MULTI_V7
 	select ARM_AMBA
-	select ARCH_HAS_RESET_CONTROLLER
 	select CLKSRC_STM32
 	select PINCTRL
 	select RESET_CONTROLLER

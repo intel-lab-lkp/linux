@@ -228,7 +228,7 @@ config ATH25
 
 config ATH79
 	bool "Atheros AR71XX/AR724X/AR913X based boards"
-	select ARCH_HAS_RESET_CONTROLLER
+	select RESET_CONTROLLER
 	select BOOT_RAW
 	select CEVT_R4K
 	select CSRC_R4K
@@ -250,7 +250,7 @@ config ATH79
 
 config BMIPS_GENERIC
 	bool "Broadcom Generic BMIPS kernel"
-	select ARCH_HAS_RESET_CONTROLLER
+	select RESET_CONTROLLER
 	select ARCH_HAS_SYNC_DMA_FOR_CPU_ALL
 	select BOOT_RAW
 	select NO_EXCEPT_FILL
@@ -472,7 +472,6 @@ config LANTIQ
 	select USE_OF
 	select PINCTRL
 	select PINCTRL_LANTIQ
-	select ARCH_HAS_RESET_CONTROLLER
 	select RESET_CONTROLLER
 
 config MACH_LOONGSON32
@@ -690,7 +689,6 @@ config RALINK
 	select SYS_SUPPORTS_MIPS16
 	select SYS_SUPPORTS_ZBOOT
 	select SYS_HAS_EARLY_PRINTK
-	select ARCH_HAS_RESET_CONTROLLER
 	select RESET_CONTROLLER
 
 config MACH_REALTEK_RTL

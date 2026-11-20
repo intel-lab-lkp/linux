@@ -17,7 +17,6 @@ config ARCH_AIROHA
 
 config ARCH_SUNXI
 	bool "Allwinner sunxi 64-bit SoC Family"
-	select ARCH_HAS_RESET_CONTROLLER
 	select PINCTRL
 	select RESET_CONTROLLER
 	select SUN4I_TIMER
@@ -105,7 +104,7 @@ config ARCH_BCMBCA
 
 config ARCH_BRCMSTB
 	bool "Broadcom Set-Top-Box SoCs"
-	select ARCH_HAS_RESET_CONTROLLER
+	select RESET_CONTROLLER
 	select GENERIC_IRQ_CHIP
 	select PINCTRL
 	help
@@ -359,7 +358,7 @@ config ARCH_RENESAS
 
 config ARCH_ROCKCHIP
 	bool "Rockchip Platforms"
-	select ARCH_HAS_RESET_CONTROLLER
+	select RESET_CONTROLLER
 	select PINCTRL
 	select PM
 	select ROCKCHIP_TIMER
@@ -382,7 +381,7 @@ config ARCH_INTEL_SOCFPGA
 
 config ARCH_SOPHGO
 	bool "Sophgo SoCs"
-	select ARCH_HAS_RESET_CONTROLLER
+	select RESET_CONTROLLER
 	help
 	  This enables support for Sophgo SoC platform hardware.
 
@@ -411,7 +410,6 @@ config ARCH_SYNQUACER
 
 config ARCH_TEGRA
 	bool "NVIDIA Tegra SoC Family"
-	select ARCH_HAS_RESET_CONTROLLER
 	select ARM_GIC_PM
 	select CLKSRC_MMIO
 	select TIMER_OF
@@ -448,7 +446,6 @@ config ARCH_THUNDER2
 
 config ARCH_UNIPHIER
 	bool "Socionext UniPhier SoC Family"
-	select ARCH_HAS_RESET_CONTROLLER
 	select PINCTRL
 	select RESET_CONTROLLER
 	help

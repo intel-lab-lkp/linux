@@ -473,7 +473,7 @@ source "arch/arm/mach-zynq/Kconfig"
 config ARCH_LPC18XX
 	bool "NXP LPC18xx/LPC43xx (DEPRECATED)"
 	depends on ARM_SINGLE_ARMV7M
-	select ARCH_HAS_RESET_CONTROLLER
+	select RESET_CONTROLLER
 	select ARM_AMBA
 	select CLKSRC_LPC32XX
 	select PINCTRL
