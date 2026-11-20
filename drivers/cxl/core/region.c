@@ -1830,6 +1830,14 @@ err:
 	for (iter = cxled_to_port(cxled); !is_cxl_root(iter);
 	     iter = to_cxl_port(iter->dev.parent))
 		cxl_port_detach_region(iter, cxlr, cxled);
+
+	/*
+	 * Attaching at the endpoint port moved a staged decoder to AUTO, and
+	 * the unwind above cleared its region again. It is still listed as a
+	 * target, so keep it staged for cxl_cancel_auto_attach() to find.
+	 */
+	if (cxled->state == CXL_DECODER_STATE_AUTO && !cxled->cxld.region)
+		cxled->state = CXL_DECODER_STATE_AUTO_STAGED;
 	return rc;
 }
 
