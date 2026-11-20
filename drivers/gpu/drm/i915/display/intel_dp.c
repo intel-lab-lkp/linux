@@ -4640,6 +4640,42 @@ void intel_dp_check_frl_training(struct intel_dp *intel_dp)
 	}
 }
 
+/*
+ * Restart FRL training after the HDMI link went down while the stream is
+ * active, or fall back to TMDS mode.
+ */
+int intel_dp_pcon_frl_recover(struct intel_encoder *encoder,
+			      struct drm_modeset_acquire_ctx *ctx)
+{
+	struct intel_display *display = to_intel_display(encoder);
+	struct intel_dp *intel_dp = enc_to_intel_dp(encoder);
+	u8 pipe_mask;
+	int ret;
+
+	if (!(intel_dp->downstream_ports[2] & DP_PCON_SOURCE_CTL_MODE) ||
+	    !intel_dp_is_hdmi_2_1_sink(intel_dp) ||
+	    intel_dp->frl.is_trained ||
+	    drm_dp_pcon_hdmi_link_active(&intel_dp->aux))
+		return 0;
+
+	/* The connection mutex may be held already by the link retraining */
+	ret = drm_modeset_lock(&display->drm->mode_config.connection_mutex, ctx);
+	if (ret && ret != -EALREADY)
+		return ret;
+
+	ret = intel_dp_get_active_pipes(intel_dp, ctx, &pipe_mask);
+	if (ret)
+		return ret;
+
+	/* Without an active stream the next enable trains the link */
+	if (pipe_mask == 0)
+		return 0;
+
+	intel_dp_check_frl_training(intel_dp);
+
+	return 0;
+}
+
 void
 intel_dp_pcon_dsc_configure(struct intel_dp *intel_dp,
 			    const struct intel_crtc_state *crtc_state)
@@ -6063,8 +6099,11 @@ intel_dp_handle_hdmi_link_status_change(struct intel_dp *intel_dp)
 
 		intel_dp->frl.is_trained = false;
 
-		/* Restart FRL training or fall back to TMDS mode */
-		intel_dp_check_frl_training(intel_dp);
+		/*
+		 * Restart FRL training or fall back to TMDS mode, from the link
+		 * check work, where the modeset locks can be taken.
+		 */
+		intel_encoder_link_check_queue_work(&dp_to_dig_port(intel_dp)->base, 0);
 	}
 }
 

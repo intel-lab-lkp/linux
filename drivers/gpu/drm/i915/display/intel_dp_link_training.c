@@ -2627,8 +2627,11 @@ void intel_dp_link_check(struct intel_encoder *encoder)
 	struct drm_modeset_acquire_ctx ctx;
 	int ret;
 
-	intel_modeset_lock_ctx_retry(&ctx, NULL, 0, ret)
+	intel_modeset_lock_ctx_retry(&ctx, NULL, 0, ret) {
 		ret = intel_dp_retrain_link(encoder, &ctx);
+		if (!ret)
+			ret = intel_dp_pcon_frl_recover(encoder, &ctx);
+	}
 }
 
 void intel_dp_check_link_state(struct intel_dp *intel_dp)
