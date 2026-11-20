@@ -1277,16 +1277,20 @@ void ath12k_mac_peer_cleanup_all(struct ath12k *ar)
 
 void ath12k_mac_dp_peer_cleanup(struct ath12k_hw *ah)
 {
-	struct list_head peers;
-	struct ath12k_dp_peer *dp_peer, *tmp;
 	struct ath12k_dp_hw *dp_hw = &ah->dp_hw;
+	struct ath12k_dp_peer *dp_peer;
+	struct hlist_head free_list;
+	struct hlist_node *tmp;
+	int bkt;
 
 	lockdep_assert_wiphy(ah->hw->wiphy);
 
-	INIT_LIST_HEAD(&peers);
+	INIT_HLIST_HEAD(&free_list);
 
 	spin_lock_bh(&dp_hw->peer_lock);
-	list_for_each_entry_safe(dp_peer, tmp, &dp_hw->dp_peers_list, list) {
+	hash_for_each_safe(dp_hw->peer_hash, bkt, tmp, dp_peer, hash_node) {
+		ath12k_dp_peer_hash_table_delete(dp_hw, dp_peer);
+
 		if (dp_peer->is_mlo) {
 			if (dp_peer->peer_id != ATH12K_MLO_PEER_ID_PENDING)
 				rcu_assign_pointer(dp_hw->dp_peers[dp_peer->peer_id],
@@ -1294,17 +1298,15 @@ void ath12k_mac_dp_peer_cleanup(struct ath12k_hw *ah)
 			ath12k_peer_ml_free(ah, ath12k_sta_to_ahsta(dp_peer->sta));
 		}
 
-		list_move(&dp_peer->list, &peers);
+		hlist_add_head(&dp_peer->hash_node, &free_list);
 	}
 
 	spin_unlock_bh(&dp_hw->peer_lock);
 
 	synchronize_rcu();
 
-	list_for_each_entry_safe(dp_peer, tmp, &peers, list) {
-		list_del(&dp_peer->list);
+	hlist_for_each_entry_safe(dp_peer, tmp, &free_list, hash_node)
 		kfree(dp_peer);
-	}
 }
 
 static int ath12k_mac_vdev_setup_sync(struct ath12k *ar)
@@ -15530,7 +15532,7 @@ static struct ath12k_hw *ath12k_mac_hw_allocate(struct ath12k_hw_group *ag,
 
 	spin_lock_init(&ah->survey_lock);
 	spin_lock_init(&ah->dp_hw.peer_lock);
-	INIT_LIST_HEAD(&ah->dp_hw.dp_peers_list);
+	hash_init(ah->dp_hw.peer_hash);
 
 	for (i = 0; i < num_pdev_map; i++) {
 		ab = pdev_map[i].ab;

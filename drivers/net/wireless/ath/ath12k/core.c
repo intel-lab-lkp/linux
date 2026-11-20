@@ -44,7 +44,7 @@ static const struct
 ath12k_mem_profile_based_param ath12k_mem_profile_based_param[] = {
 [ATH12K_QMI_MEMORY_MODE_DEFAULT] = {
 		.num_vdevs = 17,
-		.max_client_single = 512,
+		.max_client_single = ATH12K_MAX_CLIENTS,
 		.max_client_dbs = 128,
 		.max_client_dbs_sbs = 128,
 		.dp_params = {

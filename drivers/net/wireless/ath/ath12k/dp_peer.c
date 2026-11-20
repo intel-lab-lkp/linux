@@ -4,6 +4,7 @@
  * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
+#include <linux/jhash.h>
 #include "core.h"
 #include "dp_peer.h"
 #include "debug.h"
@@ -371,30 +372,58 @@ void ath12k_dp_link_peer_rhash_delete(struct ath12k_dp *dp,
 			    peer->addr, peer->peer_id, ret);
 }
 
+static u32 ath12k_dp_peer_addr_hash(const u8 *addr)
+{
+	return jhash(addr, ETH_ALEN, 0);
+}
+
 struct ath12k_dp_peer *ath12k_dp_peer_find_by_addr(struct ath12k_dp_hw *dp_hw, u8 *addr)
 {
-	struct ath12k_dp_peer *peer;
+	struct ath12k_dp_peer *dp_peer;
+	u32 hash;
 
 	lockdep_assert_held(&dp_hw->peer_lock);
 
-	list_for_each_entry(peer, &dp_hw->dp_peers_list, list) {
-		if (ether_addr_equal(peer->addr, addr))
-			return peer;
+	hash = ath12k_dp_peer_addr_hash(addr);
+	hash_for_each_possible(dp_hw->peer_hash, dp_peer, hash_node, hash) {
+		if (ether_addr_equal(dp_peer->addr, addr))
+			return dp_peer;
 	}
 
 	return NULL;
 }
 EXPORT_SYMBOL(ath12k_dp_peer_find_by_addr);
 
+static void ath12k_dp_peer_hash_table_add(struct ath12k_dp_hw *dp_hw,
+					  struct ath12k_dp_peer *dp_peer)
+{
+	u32 hash;
+
+	lockdep_assert_held(&dp_hw->peer_lock);
+
+	hash = ath12k_dp_peer_addr_hash(dp_peer->addr);
+	hash_add(dp_hw->peer_hash, &dp_peer->hash_node, hash);
+}
+
+void ath12k_dp_peer_hash_table_delete(struct ath12k_dp_hw *dp_hw,
+				      struct ath12k_dp_peer *dp_peer)
+{
+	lockdep_assert_held(&dp_hw->peer_lock);
+
+	hash_del(&dp_peer->hash_node);
+}
+
 struct ath12k_dp_peer *ath12k_dp_peer_find_by_addr_and_sta(struct ath12k_dp_hw *dp_hw,
 							   u8 *addr,
 							   struct ieee80211_sta *sta)
 {
 	struct ath12k_dp_peer *dp_peer;
+	u32 hash;
 
 	lockdep_assert_held(&dp_hw->peer_lock);
 
-	list_for_each_entry(dp_peer, &dp_hw->dp_peers_list, list) {
+	hash = ath12k_dp_peer_addr_hash(addr);
+	hash_for_each_possible(dp_hw->peer_hash, dp_peer, hash_node, hash) {
 		if (ether_addr_equal(dp_peer->addr, addr) && (dp_peer->sta == sta))
 			return dp_peer;
 	}
@@ -408,10 +437,12 @@ static struct ath12k_dp_peer *ath12k_dp_peer_create_find(struct ath12k_dp_hw *dp
 							 bool mlo_peer)
 {
 	struct ath12k_dp_peer *dp_peer;
+	u32 hash;
 
 	lockdep_assert_held(&dp_hw->peer_lock);
 
-	list_for_each_entry(dp_peer, &dp_hw->dp_peers_list, list) {
+	hash = ath12k_dp_peer_addr_hash(addr);
+	hash_for_each_possible(dp_hw->peer_hash, dp_peer, hash_node, hash) {
 		if (ether_addr_equal(dp_peer->addr, addr)) {
 			if (!sta || mlo_peer || dp_peer->is_mlo ||
 			    dp_peer->sta == sta)
@@ -517,7 +548,7 @@ int ath12k_dp_peer_create(struct ath12k_dp_hw *dp_hw, u8 *addr,
 
 	spin_lock_bh(&dp_hw->peer_lock);
 
-	list_add(&dp_peer->list, &dp_hw->dp_peers_list);
+	ath12k_dp_peer_hash_table_add(dp_hw, dp_peer);
 
 	/*
 	 * For an MLO client whose ML peer ID is allocated by the host, the
@@ -555,7 +586,7 @@ void ath12k_dp_peer_delete(struct ath12k_dp_hw *dp_hw, u8 *addr,
 	    dp_peer->peer_id != ATH12K_MLO_PEER_ID_PENDING)
 		rcu_assign_pointer(dp_hw->dp_peers[dp_peer->peer_id], NULL);
 
-	list_del(&dp_peer->list);
+	ath12k_dp_peer_hash_table_delete(dp_hw, dp_peer);
 
 	spin_unlock_bh(&dp_hw->peer_lock);
 

@@ -127,7 +127,6 @@ void ath12k_dp_link_peer_extended_event(struct ath12k_base *ab, u8 vdev_id,
 					u8 logical_link_id, u8 valid);
 
 struct ath12k_dp_peer {
-	struct list_head list;
 	bool is_mlo;
 	bool dp_setup_done;
 
@@ -164,6 +163,9 @@ struct ath12k_dp_peer {
 	struct ath12k_dp_rx_tid rx_tid[IEEE80211_NUM_TIDS + 1];
 
 	bool use_4addr;
+
+	/* Hash table node for MAC address lookup */
+	struct hlist_node hash_node;
 };
 
 struct ath12k_dp_link_peer *
@@ -212,4 +214,7 @@ ath12k_dp_link_peer_get_sta(const struct ath12k_dp_link_peer *link_peer)
 	return link_peer && link_peer->dp_peer ?
 		link_peer->dp_peer->sta : NULL;
 }
+
+void ath12k_dp_peer_hash_table_delete(struct ath12k_dp_hw *dp_hw,
+				      struct ath12k_dp_peer *dp_peer);
 #endif
