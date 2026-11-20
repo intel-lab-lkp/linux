@@ -477,9 +477,11 @@ static int ktd202x_add_led(struct ktd202x *chip, struct fwnode_handle *fwnode, u
 
 	if (color == LED_COLOR_ID_RGB) {
 		cdev = &led->mcdev.led_cdev;
+		cdev->max_brightness = KTD202X_MAX_BRIGHTNESS;
 		ret = ktd202x_setup_led_rgb(chip, fwnode, led, &init_data);
 	} else {
 		cdev = &led->cdev;
+		cdev->max_brightness = KTD202X_MAX_BRIGHTNESS;
 		ret = ktd202x_setup_led_single(chip, fwnode, led, &init_data);
 	}
 
@@ -487,8 +489,6 @@ static int ktd202x_add_led(struct ktd202x *chip, struct fwnode_handle *fwnode, u
 		dev_err(chip->dev, "unable to register %s\n", cdev->name);
 		return ret;
 	}
-
-	cdev->max_brightness = KTD202X_MAX_BRIGHTNESS;
 
 	return 0;
 }
