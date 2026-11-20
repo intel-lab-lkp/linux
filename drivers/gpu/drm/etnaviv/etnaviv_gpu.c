@@ -886,9 +886,12 @@ int etnaviv_gpu_init(struct etnaviv_gpu *gpu)
 	    (gpu->identity.minor_features10 & chipMinorFeatures10_SECURITY_AHB))
 		gpu->sec_mode = ETNA_SEC_KERNEL;
 
+	/* the cooling device may change the clock from here on */
+	mutex_lock(&gpu->lock);
 	gpu->state = ETNA_GPU_STATE_IDENTIFIED;
-
 	ret = etnaviv_hw_reset(gpu);
+	mutex_unlock(&gpu->lock);
+
 	if (ret) {
 		dev_err(gpu->dev, "GPU reset failed\n");
 		goto fail;
@@ -952,7 +955,9 @@ int etnaviv_gpu_init(struct etnaviv_gpu *gpu)
 
 fail:
 	/* the GPU is not used, a resume must not set it up */
+	mutex_lock(&gpu->lock);
 	gpu->state = ETNA_GPU_STATE_UNKNOWN;
+	mutex_unlock(&gpu->lock);
 	pm_runtime_mark_last_busy(gpu->dev);
 pm_put:
 	pm_runtime_put_autosuspend(gpu->dev);
@@ -1792,7 +1797,8 @@ etnaviv_gpu_cooling_set_cur_state(struct thermal_cooling_device *cdev,
 	}
 
 	gpu->freq_scale = state;
-	if (!pm_runtime_suspended(gpu->dev))
+	/* a suspended or not yet reset GPU picks up freq_scale later */
+	if (gpu->state >= ETNA_GPU_STATE_RESET)
 		etnaviv_gpu_update_clock(gpu);
 	mutex_unlock(&gpu->lock);
 
@@ -1888,7 +1894,9 @@ static void etnaviv_gpu_unbind(struct device *dev, struct device *master,
 	}
 
 	/* the GPU is not initialized any more, a resume must not set it up */
+	mutex_lock(&gpu->lock);
 	gpu->state = ETNA_GPU_STATE_UNKNOWN;
+	mutex_unlock(&gpu->lock);
 
 	if (gpu->mmu_context)
 		etnaviv_iommu_context_put(gpu->mmu_context);
@@ -2031,8 +2039,10 @@ static int etnaviv_gpu_rpm_suspend(struct device *dev)
 
 	etnaviv_gpu_hw_suspend(gpu);
 
+	mutex_lock(&gpu->lock);
 	if (gpu->state != ETNA_GPU_STATE_UNKNOWN)
 		gpu->state = ETNA_GPU_STATE_IDENTIFIED;
+	mutex_unlock(&gpu->lock);
 
 	return etnaviv_gpu_clk_disable(gpu);
 }
