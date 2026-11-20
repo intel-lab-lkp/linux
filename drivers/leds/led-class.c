@@ -102,11 +102,13 @@ static ssize_t brightness_hw_changed_show(struct device *dev, const struct devic
 					  char *buf)
 {
 	struct led_classdev *led_cdev = dev_get_drvdata(dev);
+	unsigned int brightness_hw_changed;
 
-	if (led_cdev->brightness_hw_changed == -1)
+	brightness_hw_changed = READ_ONCE(led_cdev->brightness_hw_changed);
+	if (brightness_hw_changed == -1)
 		return -ENODATA;
 
-	return sysfs_emit(buf, "%u\n", led_cdev->brightness_hw_changed);
+	return sysfs_emit(buf, "%u\n", brightness_hw_changed);
 }
 
 static const DEVICE_ATTR_RO(brightness_hw_changed);
@@ -169,7 +171,7 @@ void led_classdev_notify_brightness_hw_changed(struct led_classdev *led_cdev, un
 	if (WARN_ON(!led_cdev->brightness_hw_changed_kn))
 		return;
 
-	led_cdev->brightness_hw_changed = brightness;
+	WRITE_ONCE(led_cdev->brightness_hw_changed, brightness);
 	sysfs_notify_dirent(led_cdev->brightness_hw_changed_kn);
 }
 EXPORT_SYMBOL_GPL(led_classdev_notify_brightness_hw_changed);
