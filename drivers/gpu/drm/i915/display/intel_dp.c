@@ -1319,6 +1319,32 @@ intel_dp_pcon_dsc_enc_compute(struct intel_dp *intel_dp,
 }
 
 /*
+ * Get the limits of the DSC slice count per line of the HDMI sink: the minimum
+ * its throughput and the slice width limit require, and the maximum it
+ * supports.
+ */
+static bool
+intel_dp_pcon_dsc_hdmi_slice_limits(const struct intel_connector *connector,
+				    const struct drm_display_mode *mode,
+				    int pixel_clock,
+				    enum intel_output_format sink_format,
+				    int *min_slices, int *max_slices)
+{
+	const struct drm_display_info *info = &connector->base.display_info;
+
+	*min_slices = intel_hdmi_dsc_get_num_slices(mode, pixel_clock, sink_format,
+						    16, INT_MAX,
+						    info->hdmi.dsc_cap.max_slices,
+						    info->hdmi.dsc_cap.clk_per_slice);
+	if (!*min_slices)
+		return false;
+
+	*max_slices = info->hdmi.dsc_cap.max_slices;
+
+	return true;
+}
+
+/*
  * The PCON passes the DSC stream of the source to the HDMI sink as is, so
  * the stream has to be one the HDMI sink can decode.
  */
@@ -1333,6 +1359,7 @@ intel_dp_pcon_dsc_passthrough_ok(struct intel_dp *intel_dp,
 	int bpp_x16 = crtc_state->dsc.compressed_bpp_x16;
 	int bpc = crtc_state->pipe_bpp / 3;
 	int min_dsc_bpp, max_dsc_bpp;
+	int min_slices, max_slices;
 
 	if (!intel_dp_pcon_can_passthrough_dsc(intel_dp))
 		return false;
@@ -1341,11 +1368,11 @@ intel_dp_pcon_dsc_passthrough_ok(struct intel_dp *intel_dp,
 	if (crtc_state->output_format != crtc_state->sink_format)
 		return false;
 
-	if (num_slices > info->hdmi.dsc_cap.max_slices ||
-	    !intel_hdmi_dsc_get_num_slices(adjusted_mode, adjusted_mode->crtc_clock,
-					   crtc_state->sink_format, num_slices,
-					   INT_MAX, info->hdmi.dsc_cap.max_slices,
-					   info->hdmi.dsc_cap.clk_per_slice))
+	if (!intel_dp_pcon_dsc_hdmi_slice_limits(connector, adjusted_mode,
+						 adjusted_mode->crtc_clock,
+						 crtc_state->sink_format,
+						 &min_slices, &max_slices) ||
+	    num_slices < min_slices || num_slices > max_slices)
 		return false;
 
 	intel_hdmi_dsc_get_min_max_bpp(crtc_state->sink_format, bpc,
