@@ -253,9 +253,15 @@ static struct led_classdev *led_module_get(struct device *led_dev)
 	return led_cdev;
 }
 
+static void led_classdev_release(struct device *dev)
+{
+	kfree(dev);
+}
+
 static const struct class leds_class = {
 	.name = "leds",
 	.dev_groups = led_groups,
+	.dev_release = led_classdev_release,
 	.pm = &leds_class_dev_pm_ops,
 };
 
@@ -490,16 +496,19 @@ static int led_classdev_next_name(const char *init_name, char *name,
 }
 
 /**
- * led_classdev_register_ext - register a new object of led_classdev class
- *			       with init data.
- *
- * @parent: parent of LED device
+ * led_classdev_init - Initialize a new LED class device.
+ * @parent: parent of LED device.
  * @led_cdev: the led_classdev structure for this device.
- * @init_data: LED class device initialization data
+ * @init_data: LED class device initialization data.
+ *
+ * Initializes a new LED class device, but does not register with the
+ * subsystem yet. Useful for performing additional initialization before
+ * adding the LED class device to the subsystem using led_classdev_add().
+ *
+ * Return: Zero on success or a negative error code on failure.
  */
-int led_classdev_register_ext(struct device *parent,
-			      struct led_classdev *led_cdev,
-			      struct led_init_data *init_data)
+int led_classdev_init(struct device *parent, struct led_classdev *led_cdev,
+		      struct led_init_data *init_data)
 {
 	char composed_name[LED_MAX_NAME_SIZE];
 	char final_name[LED_MAX_NAME_SIZE];
@@ -564,12 +573,52 @@ int led_classdev_register_ext(struct device *parent,
 	if (!led_cdev->max_brightness)
 		led_cdev->max_brightness = LED_FULL;
 
+	led_cdev->dev = kzalloc_obj(*led_cdev->dev);
+	if (!led_cdev->dev)
+		return -ENOMEM;
+
+	device_initialize(led_cdev->dev);
+	led_cdev->dev->class = &leds_class;
+	led_cdev->dev->parent = parent;
+	led_cdev->dev->groups = led_cdev->groups;
+	dev_set_drvdata(led_cdev->dev, led_cdev);
+	ret = kobject_set_name(&led_cdev->dev->kobj, "%s", final_name);
+	if (ret) {
+		put_device(led_cdev->dev);
+		led_cdev->dev = NULL;
+		return ret;
+	}
+
+	led_cdev->wq = leds_wq;
+
+	led_init_core(led_cdev);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(led_classdev_init);
+
+/**
+ * led_classdev_add - Add a new LED class device to the subsystem.
+ * @led_cdev: the led_classdev structure for this device.
+ * @init_data: LED class device initialization data.
+ *
+ * Adds a new LED class device to the subsystem, allowing userspace applications
+ * and/or kernel consumers to access it.
+ *
+ * Returns: Zero on success or a negative error code on failure.
+ */
+int led_classdev_add(struct led_classdev *led_cdev, struct led_init_data *init_data)
+{
+	int ret;
+
 	mutex_lock(&led_cdev->led_access);
-	led_cdev->dev = device_create_with_groups(&leds_class, parent, 0,
-						  led_cdev, led_cdev->groups, "%s", final_name);
-	if (IS_ERR(led_cdev->dev)) {
+
+	ret = device_add(led_cdev->dev);
+	if (ret < 0) {
 		mutex_unlock(&led_cdev->led_access);
-		return PTR_ERR(led_cdev->dev);
+		put_device(led_cdev->dev);
+		led_cdev->dev = NULL;
+		return ret;
 	}
 
 	if (init_data && init_data->fwnode)
@@ -588,10 +637,6 @@ int led_classdev_register_ext(struct device *parent,
 
 	led_update_brightness(led_cdev);
 
-	led_cdev->wq = leds_wq;
-
-	led_init_core(led_cdev);
-
 	/* add to the list of leds */
 	down_write(&leds_list_lock);
 	list_add_tail(&led_cdev->node, &leds_list);
@@ -603,10 +648,31 @@ int led_classdev_register_ext(struct device *parent,
 
 	mutex_unlock(&led_cdev->led_access);
 
-	dev_dbg(parent, "Registered led device: %s\n",
-			led_cdev->name);
+	dev_dbg(led_cdev->dev->parent, "Registered led device: %s\n", led_cdev->name);
 
 	return 0;
+}
+EXPORT_SYMBOL_GPL(led_classdev_add);
+
+/**
+ * led_classdev_register_ext - register a new object of led_classdev class
+ *                             with init data.
+ *
+ * @parent: parent of LED device.
+ * @led_cdev: the led_classdev structure for this device.
+ * @init_data: LED class device initialization data.
+ */
+int led_classdev_register_ext(struct device *parent,
+                              struct led_classdev *led_cdev,
+                              struct led_init_data *init_data)
+{
+	int ret;
+
+	ret = led_classdev_init(parent, led_cdev, init_data);
+	if (ret < 0)
+		return ret;
+
+	return led_classdev_add(led_cdev, init_data);
 }
 EXPORT_SYMBOL_GPL(led_classdev_register_ext);
 

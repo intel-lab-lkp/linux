@@ -18,6 +18,9 @@ static inline int led_get_brightness(struct led_classdev *led_cdev)
 }
 
 void led_init_core(struct led_classdev *led_cdev);
+int led_classdev_init(struct device *parent, struct led_classdev *led_cdev,
+		      struct led_init_data *init_data);
+int led_classdev_add(struct led_classdev *led_cdev, struct led_init_data *init_data);
 void led_stop_software_blink(struct led_classdev *led_cdev);
 void led_set_brightness_nopm(struct led_classdev *led_cdev, unsigned int value);
 void led_set_brightness_nosleep(struct led_classdev *led_cdev, unsigned int value);
