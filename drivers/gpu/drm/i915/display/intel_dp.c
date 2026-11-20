@@ -1248,6 +1248,16 @@ static bool intel_dp_pcon_can_encode_dsc(struct intel_dp *intel_dp)
 		drm_dp_pcon_enc_is_dsc_1_2(intel_dp->pcon_dsc_dpcd);
 }
 
+static bool intel_dp_pcon_can_passthrough_dsc(struct intel_dp *intel_dp)
+{
+	struct intel_connector *connector = intel_dp->attached_connector;
+
+	return intel_dp_is_hdmi_2_1_sink(intel_dp) &&
+		connector->base.display_info.hdmi.dsc_cap.v_1p2 &&
+		(connector->dp.dsc_dpcd[DP_DSC_SUPPORT - DP_DSC_SUPPORT] &
+		 DP_DSC_PASSTHROUGH_IS_SUPPORTED);
+}
+
 /*
  * Compute the PCON DSC encoder parameters for the stream sent to the HDMI
  * sink, which is in @sink_format. @enc can be NULL to only check feasibility.
@@ -2987,6 +2997,39 @@ intel_dp_compute_m_n_ratio_limits(struct intel_dp *intel_dp,
 	return true;
 }
 
+/*
+ * The stream of a PCON passing DSC through is not recompressed, so it has to
+ * fit the HDMI FRL link as is. Limit the compressed bpp of the DP stream.
+ *
+ * This applies only if the HDMI link needs DSC and the DP stream is a DSC 1.2a
+ * stream, as passing it through is the only PCON operation possible then.
+ */
+static bool
+intel_dp_pcon_dsc_compute_passthrough_limits(struct intel_dp *intel_dp,
+					     const struct intel_crtc_state *crtc_state,
+					     struct link_config_limits *limits)
+{
+	struct intel_connector *connector = intel_dp->attached_connector;
+	const struct drm_display_mode *adjusted_mode = &crtc_state->hw.adjusted_mode;
+
+	if (!intel_dp_pcon_sink_support_frl(intel_dp) ||
+	    !intel_dp_pcon_can_passthrough_dsc(intel_dp) ||
+	    intel_dp_dsc_stream_version_minor(connector) < 2 ||
+	    crtc_state->output_format != crtc_state->sink_format)
+		return true;
+
+	if (intel_dp_frl_bw_valid(intel_dp, adjusted_mode->crtc_clock,
+				  limits->pipe.max_bpp / 3, crtc_state->sink_format,
+				  true) == MODE_OK)
+		return true;
+
+	limits->link.max_bpp_x16 =
+		min(limits->link.max_bpp_x16,
+		    intel_dp_hdmi_frl_payload_bw(intel_dp, true) * 16 / adjusted_mode->crtc_clock);
+
+	return true;
+}
+
 bool
 intel_dp_compute_config_limits(struct intel_dp *intel_dp,
 			       struct drm_connector_state *conn_state,
@@ -3110,10 +3153,14 @@ intel_dp_compute_config_limits(struct intel_dp *intel_dp,
 	if (!intel_dp_test_compute_config(connector, crtc_state, limits))
 		return false;
 
-	return intel_dp_compute_config_link_bpp_limits(connector,
-						       crtc_state,
-						       dsc,
-						       limits);
+	if (!intel_dp_compute_config_link_bpp_limits(connector, crtc_state, dsc, limits))
+		return false;
+
+	if (dsc && respect_downstream_limits &&
+	    !intel_dp_pcon_dsc_compute_passthrough_limits(intel_dp, crtc_state, limits))
+		return false;
+
+	return limits->link.min_bpp_x16 <= limits->link.max_bpp_x16;
 }
 
 int intel_dp_config_required_rate(const struct intel_crtc_state *crtc_state)
