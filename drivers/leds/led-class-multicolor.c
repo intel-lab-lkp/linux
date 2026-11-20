@@ -12,6 +12,7 @@
 #include <linux/slab.h>
 #include <linux/sysfs.h>
 #include <linux/uaccess.h>
+#include "leds.h"
 
 static unsigned int led_mc_get_max_intensity(struct led_classdev_mc *mcled_cdev, size_t index)
 {
@@ -159,11 +160,17 @@ static const struct attribute *const led_multicolor_attrs[] = {
 };
 ATTRIBUTE_GROUPS(led_multicolor);
 
+static const struct device_type led_multicolor_device_type = {
+	.name = "multicolor",
+	.groups = led_multicolor_groups,
+};
+
 int led_classdev_multicolor_register_ext(struct device *parent,
 				     struct led_classdev_mc *mcled_cdev,
 				     struct led_init_data *init_data)
 {
 	struct led_classdev *led_cdev;
+	int ret;
 
 	if (!mcled_cdev)
 		return -EINVAL;
@@ -176,9 +183,13 @@ int led_classdev_multicolor_register_ext(struct device *parent,
 
 	led_cdev = &mcled_cdev->led_cdev;
 	led_cdev->flags |= LED_MULTI_COLOR;
-	mcled_cdev->led_cdev.groups = led_multicolor_groups;
+	ret = led_classdev_init(parent, led_cdev, init_data);
+	if (ret < 0)
+		return ret;
 
-	return led_classdev_register_ext(parent, led_cdev, init_data);
+	led_cdev->dev->type = &led_multicolor_device_type;
+
+	return led_classdev_add(led_cdev, init_data);
 }
 EXPORT_SYMBOL_GPL(led_classdev_multicolor_register_ext);
 
