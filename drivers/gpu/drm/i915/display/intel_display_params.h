@@ -56,6 +56,12 @@ struct drm_printer;
 	 * in intel_display_params.c on purpose. Runtime-toggle via debugfs.
 	 */ \
 	param(bool, enable_periodic_assdp, false, 0600) \
+	/*
+	 * Debugfs-only knob (per-device), to fall back to the pixel based DP timing
+	 * generator, if a sink has issues with the symbol based one. Applies to the
+	 * next modeset or mode validation.
+	 */ \
+	param(bool, enable_dp_symbol_tg, true, 0600) \
 
 #define MEMBER(T, member, ...) T member;
 struct intel_display_params {
