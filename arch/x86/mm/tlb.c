@@ -937,6 +937,11 @@ void switch_mm_irqs_off(struct mm_struct *unused, struct mm_struct *next,
 		 *
 		 * This way switch_mm() must see the new tlb_gen or
 		 * flush_tlb_mm_range() must see the new loaded_mm, or both.
+		 *
+		 * This also protects other per-mm state read below, like the
+		 * LDT. Changes to that state are followed by an IPI to the
+		 * CPUs in mm_cpumask(). Setting the bit first means this CPU
+		 * either reads the new value or gets the IPI.
 		 */
 		if (next != &init_mm && !cpumask_test_cpu(cpu, mm_cpumask(next)))
 			cpumask_set_cpu(cpu, mm_cpumask(next));

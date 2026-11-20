@@ -1514,7 +1514,19 @@ static inline void mm_init_cpumask(struct mm_struct *mm)
 	cpumask_clear((struct cpumask *)cpu_bitmap);
 }
 
-/* Future-safe accessor for struct mm_struct's cpu_vm_mask. */
+/*
+ * mm_cpumask() - CPUs that may hold state derived from @mm (TLB entries,
+ * cached per-mm context). Code that updates per-mm state and then notifies
+ * the CPUs in the mask relies on:
+ *
+ *  - A CPU sets its bit, then a full barrier, then reads that state or
+ *    loads @mm's page tables.
+ *  - The updater has a full barrier between the update and reading the
+ *    mask. on_each_cpu_mask() and smp_call_function_many() provide it;
+ *    open-coded mask tests (e.g. "only this CPU?") must do it themselves.
+ *  - An architecture that clears bits must revalidate that state when the
+ *    CPU sets its bit again.
+ */
 static inline cpumask_t *mm_cpumask(struct mm_struct *mm)
 {
 	return (struct cpumask *)&mm->flexible_array;

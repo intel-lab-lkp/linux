@@ -950,6 +950,15 @@ static void smp_call_function_many_cond(const struct cpumask *mask,
 	 */
 	WARN_ON_ONCE(!in_task());
 
+	/*
+	 * Callers update some state and then IPI the CPUs in @mask to act on
+	 * it. A CPU that sets its bit in @mask and then reads that state
+	 * must either see the update or get the IPI, so order the caller's
+	 * prior updates before reading @mask. Pairs with a full barrier
+	 * between setting the bit and reading the state, e.g. in switch_mm().
+	 */
+	smp_mb();
+
 	/* Check if we need remote execution, i.e., any CPU excluding this one. */
 	if (cpumask_any_and_but(mask, cpu_online_mask, this_cpu) < nr_cpu_ids) {
 		cpumask_and(cpumask, mask, cpu_online_mask);
@@ -1043,6 +1052,10 @@ static void smp_call_function_many_cond(const struct cpumask *mask,
  *
  * @func is not called on the local CPU even if @mask contains it.  Consider
  * using on_each_cpu_cond_mask() instead if this is not desirable.
+ *
+ * Stores made by the caller before this call are ordered before the
+ * read of @mask, so a CPU that sets its bit in @mask and then reads
+ * that data will either see the stores or receive the IPI.
  */
 void smp_call_function_many(const struct cpumask *mask,
 			    smp_call_func_t func, void *info, bool wait)
@@ -1180,6 +1193,10 @@ void __init smp_init(void)
  * CPUs coming online concurrently; newly online CPUs are not guaranteed
  * to be seen or sent an IPI. If @wait is true, the final wait for remote
  * completion happens after that preemption-disabled section.
+ *
+ * Stores made by the caller before this call are ordered before the
+ * read of @mask, so a CPU that sets its bit in @mask and then reads
+ * that data will either see the stores or receive the IPI.
  *
  * You must not call this function with disabled interrupts or
  * from a hardware interrupt handler or from a bottom half handler.

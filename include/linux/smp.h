@@ -82,6 +82,10 @@ static inline void on_each_cpu(smp_call_func_t func, void *info, int wait)
  *
  * If @wait is true, then returns once @func has returned.
  *
+ * Stores made by the caller before this call are ordered before the
+ * read of @mask, so a CPU that sets its bit in @mask and then reads
+ * that data will either see the stores or receive the IPI.
+ *
  * You must not call this function with disabled interrupts or from a
  * hardware interrupt handler or from a bottom half handler.  The
  * exception is that it may be used during early boot while

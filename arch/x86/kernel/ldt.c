@@ -422,16 +422,12 @@ static void install_ldt(struct mm_struct *mm, struct ldt_struct *ldt)
 {
 	mutex_lock(&mm->context.lock);
 
-	/*
-	 * Ensure that new mm user CPUs either see the new LDT value
-	 * or get an IPI. Make the store visible before reading
-	 * mm_cpumask(). New mm users make their mm_cpumask() writes
-	 * visible before reading mm->context.ldt.
-	 */
 	WRITE_ONCE(mm->context.ldt, ldt);
-	smp_mb();
 
-	/* Activate the LDT for all CPUs using currents mm. */
+	/*
+	 * Activate the LDT for all mm-user CPUs. New mm users either
+	 * see the new LDT or get the IPI, see mm_cpumask().
+	 */
 	on_each_cpu_mask(mm_cpumask(mm), flush_ldt, mm, true);
 
 	mutex_unlock(&mm->context.lock);
