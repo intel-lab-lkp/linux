@@ -40,11 +40,30 @@ void pci_ats_init(struct pci_dev *dev)
  */
 bool pci_ats_supported(struct pci_dev *dev)
 {
+	struct pci_dev *bridge;
+
 	if (!dev->ats_cap || dev->untrusted)
 		return false;
 
 	if (dev->is_virtfn)
 		return pci_ats_supported(pci_physfn(dev));
+
+	/* Do not allow ATS if any upstream bridge blocks translation */
+	for (bridge = pci_upstream_bridge(dev); bridge;
+	     bridge = pci_upstream_bridge(bridge)) {
+		u16 ctrl;
+		int ret;
+
+		if (!bridge->acs_cap)
+			continue;
+		ret = pci_read_config_word(bridge,
+					   bridge->acs_cap + PCI_ACS_CTRL,
+					   &ctrl);
+		if (ret || PCI_POSSIBLE_ERROR(ctrl))
+			continue;
+		if (ctrl & PCI_ACS_TB)
+			return false;
+	}
 
 	return true;
 }
