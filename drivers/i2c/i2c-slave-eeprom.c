@@ -142,11 +142,11 @@ static int i2c_slave_init_eeprom_data(struct eeprom_data *eeprom, struct i2c_cli
 
 static int i2c_slave_eeprom_probe(struct i2c_client *client)
 {
-	const struct i2c_device_id *id = i2c_client_get_device_id(client);
+	unsigned long data = (unsigned long)i2c_get_match_data(client);
 	struct eeprom_data *eeprom;
 	int ret;
-	unsigned int size = FIELD_GET(I2C_SLAVE_BYTELEN, id->driver_data) + 1;
-	unsigned int flag_addr16 = FIELD_GET(I2C_SLAVE_FLAG_ADDR16, id->driver_data);
+	unsigned int size = FIELD_GET(I2C_SLAVE_BYTELEN, data) + 1;
+	unsigned int flag_addr16 = FIELD_GET(I2C_SLAVE_FLAG_ADDR16, data);
 
 	eeprom = devm_kzalloc(&client->dev, sizeof(struct eeprom_data) + size, GFP_KERNEL);
 	if (!eeprom)
@@ -154,7 +154,7 @@ static int i2c_slave_eeprom_probe(struct i2c_client *client)
 
 	eeprom->num_address_bytes = flag_addr16 ? 2 : 1;
 	eeprom->address_mask = size - 1;
-	eeprom->read_only = FIELD_GET(I2C_SLAVE_FLAG_RO, id->driver_data);
+	eeprom->read_only = FIELD_GET(I2C_SLAVE_FLAG_RO, data);
 	spin_lock_init(&eeprom->buffer_lock);
 	i2c_set_clientdata(client, eeprom);
 
@@ -203,9 +203,35 @@ static const struct i2c_device_id i2c_slave_eeprom_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, i2c_slave_eeprom_id);
 
+/* Same data as the I2C ids, for clients matched by a fallback compatible */
+#define I2C_SLAVE_OF_DATA(_len, _flags) \
+	((void *)(unsigned long)I2C_SLAVE_DEVICE_MAGIC(_len, _flags))
+
+static const struct of_device_id i2c_slave_eeprom_of_match[] = {
+	{ .compatible = "slave-24c02",
+	  .data = I2C_SLAVE_OF_DATA(2048 / 8, 0) },
+	{ .compatible = "slave-24c02ro",
+	  .data = I2C_SLAVE_OF_DATA(2048 / 8, I2C_SLAVE_FLAG_RO) },
+	{ .compatible = "slave-24c32",
+	  .data = I2C_SLAVE_OF_DATA(32768 / 8, I2C_SLAVE_FLAG_ADDR16) },
+	{ .compatible = "slave-24c32ro",
+	  .data = I2C_SLAVE_OF_DATA(32768 / 8, I2C_SLAVE_FLAG_ADDR16 | I2C_SLAVE_FLAG_RO) },
+	{ .compatible = "slave-24c64",
+	  .data = I2C_SLAVE_OF_DATA(65536 / 8, I2C_SLAVE_FLAG_ADDR16) },
+	{ .compatible = "slave-24c64ro",
+	  .data = I2C_SLAVE_OF_DATA(65536 / 8, I2C_SLAVE_FLAG_ADDR16 | I2C_SLAVE_FLAG_RO) },
+	{ .compatible = "slave-24c512",
+	  .data = I2C_SLAVE_OF_DATA(524288 / 8, I2C_SLAVE_FLAG_ADDR16) },
+	{ .compatible = "slave-24c512ro",
+	  .data = I2C_SLAVE_OF_DATA(524288 / 8, I2C_SLAVE_FLAG_ADDR16 | I2C_SLAVE_FLAG_RO) },
+	{ }
+};
+MODULE_DEVICE_TABLE(of, i2c_slave_eeprom_of_match);
+
 static struct i2c_driver i2c_slave_eeprom_driver = {
 	.driver = {
 		.name = "i2c-slave-eeprom",
+		.of_match_table = i2c_slave_eeprom_of_match,
 	},
 	.probe = i2c_slave_eeprom_probe,
 	.remove = i2c_slave_eeprom_remove,
