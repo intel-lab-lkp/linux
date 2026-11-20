@@ -414,6 +414,10 @@ static const struct rkvdec_decoded_fmt_desc rkvdec_h264_decoded_fmts[] = {
 		.fourcc = V4L2_PIX_FMT_NV20,
 		.image_fmt = RKVDEC_IMG_FMT_422_10BIT,
 	},
+	{
+		.fourcc = V4L2_PIX_FMT_GREY,
+		.image_fmt = RKVDEC_IMG_FMT_400_8BIT,
+	},
 };
 
 static const struct rkvdec_ctrl_desc rkvdec_vp9_ctrl_descs[] = {

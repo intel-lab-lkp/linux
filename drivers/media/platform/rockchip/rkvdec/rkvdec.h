@@ -108,6 +108,7 @@ enum rkvdec_image_fmt {
 	RKVDEC_IMG_FMT_420_10BIT,
 	RKVDEC_IMG_FMT_422_8BIT,
 	RKVDEC_IMG_FMT_422_10BIT,
+	RKVDEC_IMG_FMT_400_8BIT,
 };
 
 struct rkvdec_decoded_fmt_desc {

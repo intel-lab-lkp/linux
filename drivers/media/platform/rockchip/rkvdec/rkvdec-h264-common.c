@@ -146,7 +146,9 @@ enum rkvdec_image_fmt rkvdec_h264_get_image_fmt(struct rkvdec_ctx *ctx,
 		return RKVDEC_IMG_FMT_ANY;
 
 	if (sps->bit_depth_luma_minus8 == 0) {
-		if (sps->chroma_format_idc == 2)
+		if (sps->chroma_format_idc == 0)
+			return RKVDEC_IMG_FMT_400_8BIT;
+		else if (sps->chroma_format_idc == 2)
 			return RKVDEC_IMG_FMT_422_8BIT;
 		else
 			return RKVDEC_IMG_FMT_420_8BIT;
