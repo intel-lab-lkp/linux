@@ -1196,6 +1196,28 @@ struct intel_crtc_state {
 	int max_pipe_bpp;	/* in 1 bpp units */
 	int pipe_bpp;		/* in 1 bpp units */
 	int min_hblank;
+
+	/* DP link layer (LL) symbol based timing generator, 8b/10b MST and 128b/132b SST/MST */
+	struct intel_dp_symbol_tg {
+		bool enable;
+		/* in LL symbol cycles, as opposed to the zero based register values */
+		u16 hactive;
+		u16 htotal;
+		u16 chunk_size;
+		/* 128 bit Data M/N as {low 64 bits, high 64 bits}, the one for the active PLL */
+		u64 data_m[2];
+		u64 data_n[2];
+		/*
+		 * The Data M/N depends on if the PLL uses SSC, which is known only
+		 * once the active PLL is selected. These are the computed values,
+		 * for the SSC disabled (0) and SSC enabled (1) case.
+		 */
+		struct intel_dp_symbol_tg_mn {
+			u64 data_m[2];
+			u64 data_n[2];
+		} mn[2];
+	} dp_symbol_tg;
+
 	struct intel_link_m_n dp_m_n;
 
 	/* m2_n2 for eDP downclock */
