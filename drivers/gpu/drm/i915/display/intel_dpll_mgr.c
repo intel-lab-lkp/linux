@@ -35,6 +35,7 @@
 #include "intel_display_utils.h"
 #include "intel_dkl_phy.h"
 #include "intel_dkl_phy_regs.h"
+#include "intel_dp.h"
 #include "intel_dpio_phy.h"
 #include "intel_dpll.h"
 #include "intel_dpll_mgr.h"
@@ -120,6 +121,7 @@ struct intel_dpll_mgr {
 			      const struct intel_dpll_hw_state *dpll_hw_state);
 	bool (*compare_hw_state)(const struct intel_dpll_hw_state *a,
 				 const struct intel_dpll_hw_state *b);
+	bool (*is_ssc_enabled)(const struct intel_dpll_hw_state *dpll_hw_state);
 };
 
 static void
@@ -3312,6 +3314,9 @@ void icl_set_active_port_dpll(struct intel_crtc_state *crtc_state,
 
 	crtc_state->intel_dpll = port_dpll->pll;
 	crtc_state->dpll_hw_state = port_dpll->hw_state;
+
+	/* The DP symbol TG Data M/N depends on if the active PLL uses SSC */
+	intel_dp_symbol_tg_select_mn(crtc_state);
 }
 
 static void icl_update_active_dpll(struct intel_atomic_state *state,
@@ -4725,6 +4730,11 @@ static bool xe3plpd_compare_hw_state(const struct intel_dpll_hw_state *_a,
 	return intel_lt_phy_pll_compare_hw_state(a, b);
 }
 
+static bool xe3plpd_is_ssc_enabled(const struct intel_dpll_hw_state *dpll_hw_state)
+{
+	return dpll_hw_state->ltpll.ssc_enabled;
+}
+
 static const struct intel_dpll_mgr xe3plpd_pll_mgr = {
 	.dpll_info = xe3plpd_plls,
 	.compute_dplls = xe3plpd_compute_dplls,
@@ -4734,6 +4744,7 @@ static const struct intel_dpll_mgr xe3plpd_pll_mgr = {
 	.update_ref_clks = icl_update_dpll_ref_clks,
 	.dump_hw_state = xe3plpd_dump_hw_state,
 	.compare_hw_state = xe3plpd_compare_hw_state,
+	.is_ssc_enabled = xe3plpd_is_ssc_enabled,
 };
 
 enum intel_dpll_id dg2_port_to_pll_id(enum port port)
@@ -5104,6 +5115,26 @@ void intel_dpll_release(struct intel_atomic_state *state,
 		return;
 
 	dpll_mgr->put_dplls(state, crtc);
+}
+
+/**
+ * intel_dpll_hw_state_ssc_enabled - check if a DPLL state has SSC enabled
+ * @display: intel_display device
+ * @dpll_hw_state: the DPLL state to check
+ *
+ * Returns:
+ * True if the DPLL state is for a DPLL with spread spectrum clocking enabled,
+ * false otherwise, or if this isn't tracked for the platform's DPLLs.
+ */
+bool intel_dpll_hw_state_ssc_enabled(struct intel_display *display,
+				     const struct intel_dpll_hw_state *dpll_hw_state)
+{
+	const struct intel_dpll_mgr *dpll_mgr = display->dpll.mgr;
+
+	if (drm_WARN_ON_ONCE(display->drm, !dpll_mgr || !dpll_mgr->is_ssc_enabled))
+		return false;
+
+	return dpll_mgr->is_ssc_enabled(dpll_hw_state);
 }
 
 /**

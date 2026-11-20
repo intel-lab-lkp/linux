@@ -3792,6 +3792,22 @@ static void intel_dp_symbol_tg_set_mn(struct intel_dp_symbol_tg *tg, bool ssc_en
 	tg->data_n[1] = mn->data_n[1];
 }
 
+/*
+ * Select the Data M/N matching the SSC state of the active PLL, from the
+ * variants computed by intel_dp_compute_symbol_tg().
+ */
+void intel_dp_symbol_tg_select_mn(struct intel_crtc_state *crtc_state)
+{
+	struct intel_display *display = to_intel_display(crtc_state);
+	struct intel_dp_symbol_tg *tg = &crtc_state->dp_symbol_tg;
+
+	if (!tg->enable)
+		return;
+
+	intel_dp_symbol_tg_set_mn(tg, intel_dpll_hw_state_ssc_enabled(display,
+								      &crtc_state->dpll_hw_state));
+}
+
 /* Compute the DP link layer (LL) symbol based timing generator parameters */
 int intel_dp_compute_symbol_tg(struct intel_dp *intel_dp,
 			       struct intel_crtc_state *crtc_state,
