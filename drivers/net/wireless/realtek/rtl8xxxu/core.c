@@ -2124,6 +2124,11 @@ int rtl8xxxu_load_firmware(struct rtl8xxxu_priv *priv, const char *fw_name)
 		goto exit;
 	}
 
+	if (fw->size < sizeof(struct rtl8xxxu_firmware_header)) {
+		ret = -EINVAL;
+		goto exit;
+	}
+
 	priv->fw_data = kmemdup(fw->data, fw->size, GFP_KERNEL);
 	if (!priv->fw_data) {
 		ret = -ENOMEM;
