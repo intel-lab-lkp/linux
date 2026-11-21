@@ -1901,7 +1901,7 @@ brcmf_cfg80211_join_ibss(struct wiphy *wiphy, struct net_device *ndev,
 			join_params.params_le.chanspec_list[0] =
 				cpu_to_le16(chanspec);
 			join_params.params_le.chanspec_num = cpu_to_le32(1);
-			join_params_size += sizeof(join_params.params_le);
+			join_params_size = sizeof(join_params);
 		}
 
 		/* set channel for starter */
