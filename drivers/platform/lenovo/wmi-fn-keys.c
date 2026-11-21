@@ -108,6 +108,14 @@ static const struct key_entry lwmi_fn_keys_keymap[] = {
 	{ KE_KEY,	0x2d | LWMI_FN_KEY, { KEY_SELECTIVE_SCREENSHOT } },
 	{ KE_KEY,	0x29 | LWMI_FN_KEY, { KEY_TOUCHPAD_TOGGLE } },
 	{ KE_KEY,	0x2a | LWMI_FN_KEY, { KEY_ROOT_MENU } },
+	/*
+	 * Keyboard backlight level after Fn+Space, handled by the firmware:
+	 * 0x40 off, 0x41 low, 0x42 high
+	 */
+	{ KE_IGNORE,	0x40 | LWMI_FN_KEY },
+	{ KE_IGNORE,	0x41 | LWMI_FN_KEY },
+	{ KE_IGNORE,	0x42 | LWMI_FN_KEY },
+	{ KE_IGNORE,	0x43 | LWMI_FN_KEY },
 
 	/*
 	 * WMI switches
