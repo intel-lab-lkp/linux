@@ -273,7 +273,13 @@ static const struct wmi_device_id dell_smbios_wmi_id_table[] = {
 	{ },
 };
 
-static void parse_b1_table(const struct dmi_header *dm)
+struct b1_search {
+	bool found_b100;
+	unsigned int count;
+	u16 flags0;
+};
+
+static void parse_b1_table(const struct dmi_header *dm, struct b1_search *search)
 {
 	struct misc_bios_flags_structure *flags =
 	container_of(dm, struct misc_bios_flags_structure, header);
@@ -281,17 +287,21 @@ static void parse_b1_table(const struct dmi_header *dm)
 	/* 4 bytes header, 8 bytes flags */
 	if (dm->length < 12)
 		return;
-	if (dm->handle != 0xb100)
-		return;
-	if ((flags->flags0 & FLAG_HAS_ACPI_WMI))
-		wmi_supported = 1;
+
+	search->count++;
+	if (dm->handle == 0xb100) {
+		search->found_b100 = true;
+		search->flags0 = flags->flags0;
+	} else if (!search->found_b100) {
+		search->flags0 = flags->flags0;
+	}
 }
 
-static void find_b1(const struct dmi_header *dm, void *dummy)
+static void find_b1(const struct dmi_header *dm, void *data)
 {
 	switch (dm->type) {
 	case 0xb1: /* misc bios flags */
-		parse_b1_table(dm);
+		parse_b1_table(dm, data);
 		break;
 	}
 }
@@ -308,7 +318,18 @@ static struct wmi_driver dell_smbios_wmi_driver = {
 
 int init_dell_smbios_wmi(void)
 {
-	dmi_walk(find_b1, NULL);
+	struct b1_search search = {};
+
+	dmi_walk(find_b1, &search);
+
+	/*
+	 * Dell x86 firmware places the misc BIOS flags at handle 0xb100. However,
+	 * with RTX Spark, it is not at handle 0xb100, so fall back to the only type
+	 * 0xb1 handle present if there is only one.
+	 */
+	if ((search.found_b100 || search.count == 1) &&
+	    (search.flags0 & FLAG_HAS_ACPI_WMI))
+		wmi_supported = 1;
 
 	if (!wmi_supported)
 		return -ENODEV;
