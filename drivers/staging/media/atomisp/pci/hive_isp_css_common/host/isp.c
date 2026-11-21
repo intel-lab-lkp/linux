@@ -4,8 +4,6 @@
  * Copyright (c) 2010-2015, Intel Corporation.
  */
 
-#include <linux/delay.h>
-
 #include <system_global.h>
 #include "isp.h"
 
@@ -28,34 +26,4 @@ void cnd_isp_irq_enable(
 				  ISP_IRQ_READY_BIT);
 	}
 	return;
-}
-
-/* ISP functions to control the ISP state from the host, even in crun. */
-
-/* Inspect readiness of an ISP indexed by ID */
-unsigned int isp_is_ready(isp_ID_t ID)
-{
-	assert(ID < N_ISP_ID);
-	return isp_ctrl_getbit(ID, ISP_SC_REG, ISP_IDLE_BIT);
-}
-
-/* Inspect sleeping of an ISP indexed by ID */
-unsigned int isp_is_sleeping(isp_ID_t ID)
-{
-	assert(ID < N_ISP_ID);
-	return isp_ctrl_getbit(ID, ISP_SC_REG, ISP_SLEEPING_BIT);
-}
-
-/* To be called by the host immediately before starting ISP ID. */
-void isp_start(isp_ID_t ID)
-{
-	assert(ID < N_ISP_ID);
-}
-
-/* Wake up ISP ID. */
-void isp_wake(isp_ID_t ID)
-{
-	assert(ID < N_ISP_ID);
-	isp_ctrl_setbit(ID, ISP_SC_REG, ISP_START_BIT);
-	udelay(1);
 }
