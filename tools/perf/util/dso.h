@@ -369,7 +369,7 @@ int dso_id__cmp(const struct dso_id *a, const struct dso_id *b);
  * @n: the 'struct rb_node *' to use as a temporary storage
  */
 #define dso__for_each_symbol(dso, pos, n)	\
-	symbols__for_each_entry(dso__symbols(dso), pos, n)
+	symbols__for_each_entry(dso__named_symbols(dso), pos, n)
 
 static inline void *dso__a2l(const struct dso *dso)
 {
@@ -831,6 +831,7 @@ char *dso__filename_with_chroot(const struct dso *dso, const char *filename);
 bool dso__sorted_by_name(const struct dso *dso);
 void dso__set_sorted_by_name(struct dso *dso);
 void dso__sort_by_name(struct dso *dso);
+struct rb_root_cached *dso__named_symbols(struct dso *dso);
 
 int dso__swap_init(struct dso *dso, unsigned char eidata);
 
