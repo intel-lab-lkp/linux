@@ -21,7 +21,7 @@
 #include <linux/types.h>
 #include <linux/wait.h>
 #include <acpi/video.h>
-#include "../serdev_helpers.h"
+#include "../x86/serdev_helpers.h"
 
 /* The backlight controller must respond within 1 second */
 #define DELL_BL_TIMEOUT		msecs_to_jiffies(1000)

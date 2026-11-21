@@ -44,9 +44,6 @@ obj-$(CONFIG_AYANEO_EC)		+= ayaneo-ec.o
 # Cisco/Meraki
 obj-$(CONFIG_MERAKI_MX100)	+= meraki-mx100.o
 
-# Dell
-obj-$(CONFIG_X86_PLATFORM_DRIVERS_DELL)		+= dell/
-
 # Fujitsu
 obj-$(CONFIG_AMILO_RFKILL)	+= amilo-rfkill.o
 obj-$(CONFIG_FUJITSU_LAPTOP)	+= fujitsu-laptop.o

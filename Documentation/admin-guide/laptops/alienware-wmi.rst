@@ -40,8 +40,8 @@ parameters:
 
 If the module loads successfully with these parameters, consider submitting a
 patch adding your model to the ``awcc_dmi_table`` located in
-``drivers/platform/x86/dell/alienware-wmi-wmax.c`` or contacting the maintainer
-for further guidance.
+``drivers/platform/dell/alienware-wmi-wmax.c`` or contacting the maintainer for
+further guidance.
 
 Status
 ------

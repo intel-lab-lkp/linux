@@ -392,8 +392,6 @@ config EEEPC_WMI
 	  If you have an ACPI-WMI compatible Eee PC laptop (>= 1000), say Y or M
 	  here.
 
-source "drivers/platform/x86/dell/Kconfig"
-
 config AMILO_RFKILL
 	tristate "Fujitsu-Siemens Amilo rfkill support"
 	depends on RFKILL

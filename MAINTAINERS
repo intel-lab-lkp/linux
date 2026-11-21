@@ -868,7 +868,7 @@ F:	Documentation/ABI/testing/debugfs-alienware-wmi
 F:	Documentation/ABI/testing/sysfs-platform-alienware-wmi
 F:	Documentation/admin-guide/laptops/alienware-wmi.rst
 F:	Documentation/wmi/devices/alienware-wmi.rst
-F:	drivers/platform/x86/dell/alienware-wmi*
+F:	drivers/platform/dell/alienware-wmi*
 
 ALLEGRO DVT VIDEO IP CORE DRIVER
 M:	Michael Tretter <m.tretter@pengutronix.de>
@@ -7452,17 +7452,17 @@ M:	Matthew Garrett <mjg59@srcf.ucam.org>
 M:	Pali Rohár <pali@kernel.org>
 L:	platform-driver-x86@vger.kernel.org
 S:	Maintained
-F:	drivers/platform/x86/dell/dell-laptop.c
+F:	drivers/platform/dell/dell-laptop.c
 
 DELL LAPTOP FREEFALL DRIVER
 M:	Pali Rohár <pali@kernel.org>
 S:	Maintained
-F:	drivers/platform/x86/dell/dell-smo8800.c
+F:	drivers/platform/dell/dell-smo8800.c
 
 DELL LAPTOP RBTN DRIVER
 M:	Pali Rohár <pali@kernel.org>
 S:	Maintained
-F:	drivers/platform/x86/dell/dell-rbtn.*
+F:	drivers/platform/dell/dell-rbtn.*
 
 DELL LAPTOP SMM DRIVER
 M:	Pali Rohár <pali@kernel.org>
@@ -7475,32 +7475,32 @@ DELL PC DRIVER
 M:	Lyndon Sanche <lsanche@lyndeno.ca>
 L:	platform-driver-x86@vger.kernel.org
 S:	Maintained
-F:	drivers/platform/x86/dell/dell-pc.c
+F:	drivers/platform/dell/dell-pc.c
 
 DELL REMOTE BIOS UPDATE DRIVER
 M:	Stuart Hayes <stuart.w.hayes@gmail.com>
 L:	platform-driver-x86@vger.kernel.org
 S:	Maintained
-F:	drivers/platform/x86/dell/dell_rbu.c
+F:	drivers/platform/dell/dell_rbu.c
 
 DELL SMBIOS DRIVER
 M:	Pali Rohár <pali@kernel.org>
 L:	Dell.Client.Kernel@dell.com
 L:	platform-driver-x86@vger.kernel.org
 S:	Maintained
-F:	drivers/platform/x86/dell/dell-smbios.*
+F:	drivers/platform/dell/dell-smbios.*
 
 DELL SMBIOS SMM DRIVER
 L:	Dell.Client.Kernel@dell.com
 L:	platform-driver-x86@vger.kernel.org
 S:	Maintained
-F:	drivers/platform/x86/dell/dell-smbios-smm.c
+F:	drivers/platform/dell/dell-smbios-smm.c
 
 DELL SMBIOS WMI DRIVER
 L:	Dell.Client.Kernel@dell.com
 L:	platform-driver-x86@vger.kernel.org
 S:	Maintained
-F:	drivers/platform/x86/dell/dell-smbios-wmi.c
+F:	drivers/platform/dell/dell-smbios-wmi.c
 F:	tools/wmi/dell-smbios-example.c
 
 DELL SYSTEMS MANAGEMENT BASE DRIVER (dcdbas)
@@ -7508,7 +7508,7 @@ M:	Stuart Hayes <stuart.w.hayes@gmail.com>
 L:	platform-driver-x86@vger.kernel.org
 S:	Maintained
 F:	Documentation/userspace-api/dcdbas.rst
-F:	drivers/platform/x86/dell/dcdbas.*
+F:	drivers/platform/dell/dcdbas.*
 
 DELL WMI DDV DRIVER
 M:	Armin Wolf <W_Armin@gmx.de>
@@ -7516,24 +7516,24 @@ S:	Maintained
 F:	Documentation/ABI/testing/debugfs-dell-wmi-ddv
 F:	Documentation/ABI/testing/sysfs-platform-dell-wmi-ddv
 F:	Documentation/wmi/devices/dell-wmi-ddv.rst
-F:	drivers/platform/x86/dell/dell-wmi-ddv.c
+F:	drivers/platform/dell/dell-wmi-ddv.c
 
 DELL WMI DESCRIPTOR DRIVER
 L:	Dell.Client.Kernel@dell.com
 S:	Maintained
-F:	drivers/platform/x86/dell/dell-wmi-descriptor.c
+F:	drivers/platform/dell/dell-wmi-descriptor.c
 
 DELL WMI HARDWARE PRIVACY SUPPORT
 L:	Dell.Client.Kernel@dell.com
 L:	platform-driver-x86@vger.kernel.org
 S:	Maintained
-F:	drivers/platform/x86/dell/dell-wmi-privacy.c
+F:	drivers/platform/dell/dell-wmi-privacy.c
 
 DELL WMI NOTIFICATIONS DRIVER
 M:	Matthew Garrett <mjg59@srcf.ucam.org>
 M:	Pali Rohár <pali@kernel.org>
 S:	Maintained
-F:	drivers/platform/x86/dell/dell-wmi-base.c
+F:	drivers/platform/dell/dell-wmi-base.c
 
 DELL WMI SYSMAN DRIVER
 M:	Prasanth Ksr <prasanth.ksr@dell.com>
@@ -7541,7 +7541,7 @@ L:	Dell.Client.Kernel@dell.com
 L:	platform-driver-x86@vger.kernel.org
 S:	Maintained
 F:	Documentation/ABI/testing/sysfs-class-firmware-attributes
-F:	drivers/platform/x86/dell/dell-wmi-sysman/
+F:	drivers/platform/dell/dell-wmi-sysman/
 
 DELTA AHE-50DC FAN CONTROL MODULE DRIVER
 M:	Zev Weiss <zev@bewilderbeest.net>

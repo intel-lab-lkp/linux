@@ -1,18 +1,20 @@
 # SPDX-License-Identifier: GPL-2.0-only
 #
-# Dell X86 Platform Specific Drivers
+# Dell Platform Specific Drivers
 #
 
-menuconfig X86_PLATFORM_DRIVERS_DELL
-	bool "Dell X86 Platform Specific Device Drivers"
+menuconfig DELL_PLATFORMS
+	bool "Dell Platform Specific Device Drivers"
+	depends on X86 || ARM64 || COMPILE_TEST
+	default X86_PLATFORM_DRIVERS_DELL
 	help
 	  Say Y here to get to see options for device drivers for various
-	  Dell x86 platforms, including vendor-specific laptop extension drivers.
+	  Dell platforms, including vendor-specific laptop extension drivers.
 	  This option alone does not add any kernel code.
 
 	  If you say N, all options in this submenu will be skipped and disabled.
 
-if X86_PLATFORM_DRIVERS_DELL
+if DELL_PLATFORMS
 
 config ALIENWARE_WMI
 	tristate "Alienware Special feature control"
@@ -282,4 +284,8 @@ config DELL_DW5826E_RESET
 	depends on ACPI
 	help
 	  This adds support for the Dell DW5826e PLDR reset via ACPI
-endif # X86_PLATFORM_DRIVERS_DELL
+endif # DELL_PLATFORMS
+
+config X86_PLATFORM_DRIVERS_DELL
+	bool
+	transitional
