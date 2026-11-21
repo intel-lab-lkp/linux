@@ -77,7 +77,7 @@ config DELL_LAPTOP
 	depends on ACPI_VIDEO || ACPI_VIDEO = n
 	depends on RFKILL || RFKILL = n
 	depends on DELL_WMI || DELL_WMI = n
-	depends on SERIO_I8042
+	depends on SERIO_I8042 || SERIO_I8042 = n
 	depends on DELL_SMBIOS
 	select POWER_SUPPLY
 	select LEDS_CLASS
