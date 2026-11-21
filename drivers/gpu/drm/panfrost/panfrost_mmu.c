@@ -283,9 +283,9 @@ int panfrost_mmu_as_get(struct panfrost_device *pfdev, struct panfrost_mmu *mmu)
 			 * disabled. We need to re-enable the MMU after
 			 * clearing+unmasking the AS interrupts.
 			 */
+			pfdev->as_faulty_mask &= ~mask;
 			mmu_write(pfdev, MMU_INT_CLEAR, mask);
 			mmu_write(pfdev, MMU_INT_MASK, ~pfdev->as_faulty_mask);
-			pfdev->as_faulty_mask &= ~mask;
 			panfrost_mmu_enable(pfdev, mmu);
 		}
 
