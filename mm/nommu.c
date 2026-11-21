@@ -1575,6 +1575,7 @@ static unsigned long do_mremap(unsigned long addr,
 			unsigned long flags, unsigned long new_addr)
 {
 	struct vm_area_struct *vma;
+	unsigned long new_end;
 
 	/* insanity checks first */
 	old_len = PAGE_ALIGN(old_len);
@@ -1601,8 +1602,37 @@ static unsigned long do_mremap(unsigned long addr,
 	if (new_len > vma->vm_region->vm_end - vma->vm_region->vm_start)
 		return (unsigned long) -ENOMEM;
 
-	/* all checks complete - do it */
-	vma->vm_end = vma->vm_start + new_len;
+	/*
+	 * All checks complete - do it.  The maple tree must cover exactly the
+	 * new extent: a range given up but left in the tree still maps to this
+	 * VMA, and once the VMA is unmapped and freed, to freed memory.
+	 */
+	new_end = vma->vm_start + new_len;
+	if (new_len < old_len) {
+		VMA_ITERATOR(vmi, vma->vm_mm, new_end);
+
+		if (vma_iter_clear_gfp(&vmi, new_end, vma->vm_end, GFP_KERNEL))
+			return (unsigned long) -ENOMEM;
+		vma->vm_end = new_end;
+	} else if (new_len > old_len) {
+		VMA_ITERATOR(vmi, vma->vm_mm, vma->vm_start);
+
+		/*
+		 * Shared and overlay mappings were refused above, so the
+		 * region is this VMA's alone and still holds its pages: the
+		 * grow, bounded by the region's size, stays inside it. The
+		 * range a shrink gave up may since have been mapped again,
+		 * though: a direct mapping of device memory can take any
+		 * address.
+		 */
+		if (find_vma_intersection(vma->vm_mm, vma->vm_end, new_end))
+			return (unsigned long) -ENOMEM;
+		vma_iter_config(&vmi, vma->vm_start, new_end);
+		if (vma_iter_prealloc(&vmi, vma))
+			return (unsigned long) -ENOMEM;
+		vma->vm_end = new_end;
+		vma_iter_store_overwrite(&vmi, vma);
+	}
 	return vma->vm_start;
 }
 
