@@ -64,6 +64,10 @@ check "invalid monitor class" \
 	"$RVGEN monitor -c invalid -s tests/specs/test_da.dot -t per_cpu" 1 \
 	"Unknown monitor class" "Traceback (most recent call last)"
 
+check "invalid monitor type" \
+	"$RVGEN monitor -c da -s tests/specs/test_da.dot -t invalid" 2 \
+	"invalid choice: 'invalid'" "Traceback (most recent call last)"
+
 check "missing dot file" \
 	"$RVGEN monitor -c da -s tests/specs/nonexistent.dot -t per_cpu" 1 \
 	"No such file or directory" "Traceback (most recent call last)"
