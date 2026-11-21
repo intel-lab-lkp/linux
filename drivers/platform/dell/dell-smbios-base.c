@@ -390,6 +390,28 @@ bool dell_smbios_class_is_supported(u16 class)
 }
 EXPORT_SYMBOL_GPL(dell_smbios_class_is_supported);
 
+/*
+ * Some Dell firmware completes its proprietary SMBIOS calls with all zeroes,
+ * so any value read through it (tokens, battery and thermal modes)
+ * is invalid.
+ */
+static const struct dmi_system_id dell_smbios_calls_broken_list[] = {
+	{
+		.ident = "Dell XPS 16 DX16263",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "Dell Inc."),
+			DMI_MATCH(DMI_PRODUCT_NAME, "XPS 16 DX16263"),
+		},
+	},
+	{ }
+};
+
+bool dell_smbios_calls_functional(void)
+{
+	return !dmi_check_system(dell_smbios_calls_broken_list);
+}
+EXPORT_SYMBOL_GPL(dell_smbios_calls_functional);
+
 static void __init parse_da_table(const struct dmi_header *dm)
 {
 	/* Final token is a terminator, so we don't want to copy it */
