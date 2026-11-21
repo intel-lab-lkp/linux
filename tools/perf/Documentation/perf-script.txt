@@ -343,6 +343,17 @@ include::itrace.txt[]
 
         Default: 127
 
+--lazy-load-symbols::
+	Read and demangle userspace ELF symbol names only when perf needs
+	them. By default, perf reads every symbol name from each binary
+	referenced by a sample. This option reduces memory use when samples
+	reference only a small fraction of a large binary's symbols. The
+	names are read while perf script runs. If a binary cannot be opened
+	then, or no longer matches the one perf loaded, perf warns and shows
+	the symbols whose names it cannot read as unknown. A binary matches
+	if it has the same build ID and string table layout or, without a
+	build ID, if it is the same unchanged file.
+
 --ns::
 	Use 9 decimal places when displaying time (i.e. show the nanoseconds)
 
