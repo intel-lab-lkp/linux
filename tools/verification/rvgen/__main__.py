@@ -38,6 +38,7 @@ if __name__ == '__main__':
     monitor_parser.add_argument('-s', "--spec", dest="spec", required=True,
                                 help="Monitor specification file")
     monitor_parser.add_argument('-t', "--monitor_type", dest="monitor_type", required=True,
+                                choices=list(Monitor.monitor_types.keys()),
                                 help=f"Available options: {', '.join(Monitor.monitor_types.keys())}")
 
     container_parser = subparsers.add_parser("container", parents=[parent_parser])
