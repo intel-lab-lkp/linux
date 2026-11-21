@@ -41,7 +41,7 @@ struct qcom_usb_vbus_reg_data {
 	const struct regulator_ops *ops;
 };
 
-static const unsigned int curr_table[] = {
+static const unsigned int pm8150b_curr_table[] = {
 	500000, 1000000, 1500000, 2000000, 2500000, 3000000,
 };
 
@@ -63,8 +63,23 @@ static const struct qcom_usb_vbus_reg_data pm8150b_data = {
 	.otg_en_src_cfg = OTG_EN_SRC_CFG,
 	.csel_reg = OTG_CURRENT_LIMIT_CFG,
 	.csel_mask = OTG_CURRENT_LIMIT_MASK,
-	.curr_table = curr_table,
-	.n_current_limits = ARRAY_SIZE(curr_table),
+	.curr_table = pm8150b_curr_table,
+	.n_current_limits = ARRAY_SIZE(pm8150b_curr_table),
+	.ops = &qcom_usb_vbus_reg_ops,
+};
+
+static const unsigned int pmi8998_curr_table[] = {
+	250000, 500000, 750000, 1000000, 1250000, 1500000, 1750000, 2000000,
+};
+
+static const struct qcom_usb_vbus_reg_data pmi8998_data = {
+	.cmd_otg = CMD_OTG,
+	.otg_cfg = OTG_CFG,
+	.otg_en_src_cfg = OTG_EN_SRC_CFG,
+	.csel_reg = OTG_CURRENT_LIMIT_CFG,
+	.csel_mask = OTG_CURRENT_LIMIT_MASK,
+	.curr_table = pmi8998_curr_table,
+	.n_current_limits = ARRAY_SIZE(pmi8998_curr_table),
 	.ops = &qcom_usb_vbus_reg_ops,
 };
 
@@ -166,6 +181,7 @@ static int qcom_usb_vbus_regulator_probe(struct platform_device *pdev)
 static const struct of_device_id qcom_usb_vbus_regulator_match[] = {
 	{ .compatible = "qcom,pm8150b-vbus-reg", .data = &pm8150b_data },
 	{ .compatible = "qcom,pm4125-vbus-reg",  .data = &pm4125_data },
+	{ .compatible = "qcom,pmi8998-vbus-reg", .data = &pmi8998_data },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, qcom_usb_vbus_regulator_match);
