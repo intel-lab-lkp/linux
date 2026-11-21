@@ -109,6 +109,29 @@ static void tb_queue_hotplug(struct tb *tb, u64 route, u8 port, bool unplug)
 
 /* enumeration & hot plug handling */
 
+/*
+ * Insert a host router DP IN adapter so that host DP IN adapters stay
+ * in adapter number order. A DP IN that is re-added after it was
+ * dropped (for example because DPRX negotiation failed) then gets
+ * paired with the same DP OUT as before, instead of swapping DP OUT
+ * adapters (and therefore monitors) with the other host DP IN.
+ */
+static void tb_add_host_dp_in(struct tb_cm *tcm, struct tb_port *port)
+{
+	struct tb_port *p;
+
+	list_for_each_entry(p, &tcm->dp_resources, list) {
+		if (tb_port_is_dpin(p) && !tb_route(p->sw) &&
+		    p->port > port->port) {
+			/* Insert before the first higher numbered one */
+			list_add_tail(&port->list, &p->list);
+			return;
+		}
+	}
+
+	list_add_tail(&port->list, &tcm->dp_resources);
+}
+
 static void tb_add_dp_resources(struct tb_switch *sw)
 {
 	struct tb_cm *tcm = tb_priv(sw->tb);
@@ -116,6 +139,9 @@ static void tb_add_dp_resources(struct tb_switch *sw)
 
 	tb_switch_for_each_port(sw, port) {
 		if (!tb_port_is_dpin(port))
+			continue;
+
+		if (!list_empty(&port->list))
 			continue;
 
 		if (!tb_switch_query_dp_resource(sw, port))
@@ -130,7 +156,7 @@ static void tb_add_dp_resources(struct tb_switch *sw)
 		if (tb_route(sw))
 			list_add(&port->list, &tcm->dp_resources);
 		else
-			list_add_tail(&port->list, &tcm->dp_resources);
+			tb_add_host_dp_in(tcm, port);
 
 		tb_port_dbg(port, "DP IN resource available\n");
 	}
@@ -1421,6 +1447,16 @@ static void tb_scan_port(struct tb_port *port)
 		tb_sw_warn(sw, "USB3 tunnel creation failed\n");
 
 	tb_add_dp_resources(sw);
+
+	/*
+	 * Host router DP IN adapters may have been dropped earlier
+	 * (for example because DPRX negotiation failed) and they do
+	 * not get hotplug events of their own, so re-check them now
+	 * that there is potentially a new DP OUT to pair with.
+	 */
+	if (tcm->hotplug_active)
+		tb_add_dp_resources(sw->tb->root_switch);
+
 	tb_scan_switch(sw);
 
 out_rpm_put:
@@ -1971,8 +2007,10 @@ static void tb_dp_tunnel_active(struct tb_tunnel *tunnel)
 		 * also tear down the tunnel and try to re-use the
 		 * released DP OUT.
 		 *
-		 * It will be added back only if there is hotplug for
-		 * the DP IN again.
+		 * It will be added back if there is hotplug for the
+		 * DP IN again. Host router DP IN adapters do not get
+		 * such events, so they are re-checked whenever a new
+		 * DP OUT or device router appears instead.
 		 */
 		tb_tunnel_warn(tunnel, "not active, tearing down\n");
 		tb_dp_resource_unavailable(tb, in, "DPRX negotiation failed");
@@ -2233,6 +2271,14 @@ static void tb_dp_resource_available(struct tb *tb, struct tb_port *port)
 		    tb_port_is_dpin(port) ? "IN" : "OUT");
 	list_add_tail(&port->list, &tcm->dp_resources);
 	tb_exit_redrive(port);
+
+	/*
+	 * Host router DP IN adapters removed because DPRX negotiation
+	 * failed never get a hotplug event of their own. Give them
+	 * another chance now that a DP OUT became available.
+	 */
+	if (tb_port_is_dpout(port))
+		tb_add_dp_resources(tb->root_switch);
 
 	/* Look for suitable DP IN <-> DP OUT pairs now */
 	tb_tunnel_dp(tb);
