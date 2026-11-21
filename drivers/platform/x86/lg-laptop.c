@@ -641,10 +641,10 @@ static enum led_brightness get_kbd_backlight_level(struct device *dev)
 
 	ret = lg_wmab_get(dev, WM_KEY_LIGHT, &value);
 	if (ret < 0)
-		return LED_OFF;
+		return ret;
 
 	if (FIELD_GET(KBD_LED_MAGIC_MASK, value) != KBD_LED_MAGIC)
-		return LED_OFF;
+		return -EIO;
 
 	if (FIELD_GET(KBD_LED_MODE_MASK, value) == KBD_LED_MODE_OFF)
 		return LED_OFF;
@@ -821,6 +821,21 @@ static int lg_laptop_input_init(struct device *dev, acpi_handle handle)
 	}
 
 	return 0;
+}
+
+static int lg_laptop_kbd_backlight_init(struct device *dev)
+{
+	int ret;
+
+	/*
+	 * Devices that do not support the keyboard backlight feature
+	 * usually return a error when trying to read the backlight level.
+	 */
+	ret = get_kbd_backlight_level(dev);
+	if (ret < 0)
+		return ret;
+
+	return devm_led_classdev_register(dev, &kbd_backlight);
 }
 
 static acpi_status lg_laptop_address_space_write(struct device *dev, acpi_physical_address address,
@@ -1035,7 +1050,7 @@ static int acpi_probe(struct platform_device *pdev)
 		battery_limit_use_wmbb = 1;
 
 	/* LEDs are optional */
-	ret = devm_led_classdev_register(&pdev->dev, &kbd_backlight);
+	ret = lg_laptop_kbd_backlight_init(&pdev->dev);
 	if (ret < 0)
 		kbd_backlight_available = false;
 	else
