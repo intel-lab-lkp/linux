@@ -2583,6 +2583,12 @@ static bool vop2_is_mirror_win(struct vop2_win *win)
 	}
 }
 
+/* RK3588 primary per video port; Cluster0/1 on AXI0, Cluster2/3 on AXI1. */
+static const u8 rk3588_vp_primary[] = {
+	ROCKCHIP_VOP2_CLUSTER0, ROCKCHIP_VOP2_CLUSTER1,
+	ROCKCHIP_VOP2_CLUSTER2, ROCKCHIP_VOP2_CLUSTER3,
+};
+
 static int vop2_create_crtcs(struct vop2 *vop2)
 {
 	const struct vop2_data *vop2_data = vop2->data;
@@ -2653,6 +2659,10 @@ static int vop2_create_crtcs(struct vop2 *vop2)
 
 			/* If this win can not attached to this VP */
 			if (!(win->data->possible_vp_mask & BIT(vp->id)))
+				continue;
+
+			if (vop2->version == VOP_VERSION_RK3588 &&
+			    win->data->phys_id != rk3588_vp_primary[vp->id])
 				continue;
 
 			if (vop2_is_mirror_win(win))
