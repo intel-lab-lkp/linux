@@ -389,6 +389,11 @@ static int ext4_alloc_branch(handle_t *handle,
 	return 0;
 failed:
 	if (i == indirect_blks) {
+		/*
+		 * The data blocks may come from the inode PA, which already
+		 * counts them as used; drop the PA so they are not handed out twice.
+		 */
+		ext4_discard_preallocations(ar->inode);
 		/* Free data blocks */
 		ext4_free_blocks(handle, ar->inode, NULL, new_blocks[i],
 				 ar->len, 0);
@@ -493,6 +498,8 @@ err_out:
 		ext4_free_blocks(handle, ar->inode, where[i].bh, 0, 1,
 				 EXT4_FREE_BLOCKS_FORGET);
 	}
+	/* See ext4_alloc_branch(): the data blocks may belong to the inode PA. */
+	ext4_discard_preallocations(ar->inode);
 	ext4_free_blocks(handle, ar->inode, NULL, le32_to_cpu(where[num].key),
 			 ar->len, 0);
 
