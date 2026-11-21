@@ -139,6 +139,9 @@ struct hdpvr_buffer {
 
 	uint			pos;
 
+	/* bumped every time a new transfer is started on the buffer */
+	unsigned int		generation;
+
 	__u8			status;
 };
 
