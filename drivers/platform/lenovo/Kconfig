@@ -1,0 +1,87 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# Lenovo Platform-Specific Drivers
+#
+
+menuconfig LENOVO_PLATFORMS
+	bool "Lenovo Platform-Specific Device Drivers"
+	depends on ARM64 || X86 || COMPILE_TEST
+	default y if ARM64 || X86
+	help
+	  Say Y here to get to see options for platform-specific device drivers
+	  for Lenovo devices that do not depend on the CPU architecture, such
+	  as the ACPI-WMI based drivers used on both x86 and arm64 laptops.
+	  This option alone does not add any kernel code.
+
+	  If you say N, all options in this submenu will be skipped and disabled.
+
+if LENOVO_PLATFORMS
+
+config LENOVO_WMI_HELPERS
+	tristate
+	depends on ACPI_WMI
+
+config LENOVO_WMI_EVENTS
+	tristate
+	depends on ACPI_WMI
+
+config LENOVO_WMI_CAPDATA
+	tristate
+	depends on ACPI_WMI
+	depends on LENOVO_WMI_HELPERS
+
+config LENOVO_WMI_HOTKEY_UTILITIES
+	tristate "Lenovo Hotkey Utility WMI extras driver"
+	depends on ACPI_WMI
+	select NEW_LEDS
+	select LEDS_CLASS
+	imply IDEAPAD_LAPTOP
+	help
+	  This driver provides WMI support for Lenovo customized hotkeys function,
+	  such as LED control for audio/mic mute event for Ideapad, YOGA, XiaoXin,
+	  Gaming, ThinkBook and so on.
+
+config LENOVO_WMI_CAMERA
+	tristate "Lenovo WMI Camera Button driver"
+	depends on ACPI_WMI
+	depends on INPUT
+	help
+	  This driver provides support for Lenovo camera button. The Camera
+	  button is a GPIO device. This driver receives ACPI notifications when
+	  the camera button is switched on/off.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called lenovo-wmi-camera.
+
+config LENOVO_WMI_GAMEZONE
+	tristate "Lenovo GameZone WMI Driver"
+	depends on ACPI_WMI
+	depends on DMI
+	select ACPI_PLATFORM_PROFILE
+	select LENOVO_WMI_EVENTS
+	select LENOVO_WMI_HELPERS
+	help
+	  Say Y here if you have a WMI aware Lenovo Legion device and would like to use the
+	  platform-profile firmware interface to manage power usage.
+
+	  To compile this driver as a module, choose M here: the module will
+	  be called lenovo-wmi-gamezone.
+
+config LENOVO_WMI_TUNING
+	tristate "Lenovo Other Mode WMI Driver"
+	depends on ACPI_WMI
+	depends on ACPI_BATTERY
+	select HWMON
+	select FW_ATTR_CLASS
+	select LENOVO_WMI_CAPDATA
+	select LENOVO_WMI_EVENTS
+	select LENOVO_WMI_HELPERS
+	help
+	  Say Y here if you have a WMI aware Lenovo Legion device and would like to use the
+	  firmware_attributes API to control various tunable settings typically exposed by
+	  Lenovo software in Windows.
+
+	  To compile this driver as a module, choose M here: the module will
+	  be called lenovo-wmi-other.
+
+endif # LENOVO_PLATFORMS
