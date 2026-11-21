@@ -11,7 +11,7 @@ config IDEAPAD_LAPTOP
 	depends on SERIO_I8042
 	depends on BACKLIGHT_CLASS_DEVICE
 	depends on ACPI_VIDEO || ACPI_VIDEO = n
-	depends on ACPI_WMI || ACPI_WMI = n
+	imply LENOVO_WMI_FN_KEYS
 	select ACPI_PLATFORM_PROFILE
 	select INPUT_SPARSEKMAP
 	select NEW_LEDS

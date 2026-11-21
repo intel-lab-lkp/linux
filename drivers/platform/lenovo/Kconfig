@@ -41,6 +41,21 @@ config LENOVO_WMI_HOTKEY_UTILITIES
 	  such as LED control for audio/mic mute event for Ideapad, YOGA, XiaoXin,
 	  Gaming, ThinkBook and so on.
 
+config LENOVO_WMI_FN_KEYS
+	tristate "Lenovo WMI Fn keys driver"
+	depends on ACPI_WMI
+	depends on INPUT
+	select INPUT_SPARSEKMAP
+	help
+	  Say Y or M here to enable the vendor specific Fn keys (microphone
+	  mute, airplane mode, performance mode, star key, Fn+Esc, etc.) on
+	  Lenovo laptops that deliver them as WMI events. ideapad-laptop
+	  subscribes to this driver for its Fn lock LED and performance mode
+	  handling.
+
+	  To compile this driver as a module, choose M here: the module will
+	  be called lenovo-wmi-fn-keys.
+
 config LENOVO_WMI_CAMERA
 	tristate "Lenovo WMI Camera Button driver"
 	depends on ACPI_WMI
