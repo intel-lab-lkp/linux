@@ -125,7 +125,7 @@ static inline bool rxe_check_pagefault(struct ib_umem_odp *umem_odp, u64 iova,
 	bool need_fault = false;
 	u64 access = HMM_PFN_VALID;
 	u64 addr;
-	int idx;
+	unsigned long idx;
 
 	if (write)
 		access |= HMM_PFN_WRITE;
@@ -167,9 +167,13 @@ static int rxe_odp_map_range_and_lock(struct rxe_mr *mr, u64 iova, int length, u
 	bool write = !(flags & RXE_PAGEFAULT_RDONLY);
 	bool need_fault;
 	int err;
+	u64 end;
 
 	if (unlikely(length < 1))
 		return -EINVAL;
+
+	if (check_add_overflow(iova, (u64)length, &end))
+		return -EFAULT;
 
 	mutex_lock(&umem_odp->umem_mutex);
 
