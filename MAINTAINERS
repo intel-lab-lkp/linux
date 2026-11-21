@@ -7477,6 +7477,12 @@ L:	platform-driver-x86@vger.kernel.org
 S:	Maintained
 F:	drivers/platform/dell/dell-pc.c
 
+DELL PLATFORM DRIVERS
+L:	Dell.Client.Kernel@dell.com
+L:	platform-driver-x86@vger.kernel.org
+S:	Maintained
+F:	drivers/platform/dell/
+
 DELL REMOTE BIOS UPDATE DRIVER
 M:	Stuart Hayes <stuart.w.hayes@gmail.com>
 L:	platform-driver-x86@vger.kernel.org
