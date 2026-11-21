@@ -2512,6 +2512,19 @@ prio_changed_rt(struct rq *rq, struct task_struct *p, u64 oldprio)
 		 */
 		if (p->prio < rq->donor->prio)
 			resched_curr(rq);
+
+		/*
+		 * A (PI) boost can make @p the highest priority
+		 * pushable task on this rq while it still cannot run
+		 * here, because the running task is of equal or higher
+		 * priority. If @p's affinity excludes the CPUs that
+		 * become idle, the pull side cannot pick it and it may
+		 * stay queued until the current task schedules out.
+		 * Trigger a push for the new priority.
+		 */
+		if (oldprio > p->prio && p->nr_cpus_allowed > 1 &&
+		    p->prio >= rq->donor->prio)
+			rt_queue_push_tasks(rq);
 	}
 }
 
