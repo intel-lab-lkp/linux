@@ -17,6 +17,7 @@
 #include <linux/cpufreq.h>
 #include <linux/slab.h>
 #include <linux/acpi.h>
+#include <linux/platform_data/x86/apple.h>
 #include <acpi/processor.h>
 #ifdef CONFIG_X86
 #include <asm/cpufeature.h>
@@ -313,6 +314,23 @@ static void amd_fixup_frequency(struct acpi_processor_px *px, int i)
 	}
 }
 
+static bool acpi_evaluate_apple_apss(acpi_handle handle, struct acpi_buffer *buffer)
+{
+	acpi_status status;
+
+	if (!x86_apple_machine)
+		return false;
+
+	status = acpi_evaluate_object(handle, "APSS", NULL, buffer);
+	if (ACPI_FAILURE(status)) {
+		buffer->length = ACPI_ALLOCATE_BUFFER;
+		buffer->pointer = NULL;
+		return false;
+	}
+
+	return true;
+}
+
 static int acpi_processor_get_performance_states(struct acpi_processor *pr)
 {
 	int result = 0;
@@ -323,16 +341,21 @@ static int acpi_processor_get_performance_states(struct acpi_processor *pr)
 	union acpi_object *pss = NULL;
 	int i;
 	int last_invalid = -1;
+	const char *method = "_PSS";
 
-	status = acpi_evaluate_object(pr->handle, "_PSS", NULL, &buffer);
-	if (ACPI_FAILURE(status)) {
-		acpi_evaluation_failure_warn(pr->handle, "_PSS", status);
-		return -ENODEV;
+	if (acpi_evaluate_apple_apss(pr->handle, &buffer))
+		method = "APSS";
+	else {
+		status = acpi_evaluate_object(pr->handle, "_PSS", NULL, &buffer);
+		if (ACPI_FAILURE(status)) {
+			acpi_evaluation_failure_warn(pr->handle, "_PSS", status);
+			return -ENODEV;
+		}
 	}
 
 	pss = buffer.pointer;
 	if (!pss || pss->type != ACPI_TYPE_PACKAGE) {
-		pr_err("Invalid _PSS data\n");
+		pr_err("Invalid %s data\n", method);
 		result = -EFAULT;
 		goto end;
 	}
@@ -360,7 +383,8 @@ static int acpi_processor_get_performance_states(struct acpi_processor *pr)
 		status = acpi_extract_package(&(pss->package.elements[i]),
 					      &format, &state);
 		if (ACPI_FAILURE(status)) {
-			acpi_handle_warn(pr->handle, "Invalid _PSS data: %s\n",
+			acpi_handle_warn(pr->handle, "Invalid %s data: %s\n",
+					 method,
 					 acpi_format_exception(status));
 			result = -EFAULT;
 			kfree(pr->performance->states);
@@ -384,8 +408,8 @@ static int acpi_processor_get_performance_states(struct acpi_processor *pr)
 		if (!px->core_frequency ||
 		    (u32)(px->core_frequency * 1000) != px->core_frequency * 1000) {
 			pr_err(FW_BUG
-			       "Invalid BIOS _PSS frequency found for processor %d: 0x%llx MHz\n",
-			       pr->id, px->core_frequency);
+			       "Invalid BIOS %s frequency found for processor %d: 0x%llx MHz\n",
+			       method, pr->id, px->core_frequency);
 			if (last_invalid == -1)
 				last_invalid = i;
 		} else {
@@ -402,7 +426,8 @@ static int acpi_processor_get_performance_states(struct acpi_processor *pr)
 
 	if (last_invalid == 0) {
 		pr_err(FW_BUG
-			   "No valid BIOS _PSS frequency found for processor %d\n", pr->id);
+			   "No valid BIOS %s frequency found for processor %d\n",
+			   method, pr->id);
 		result = -EFAULT;
 		kfree(pr->performance->states);
 		pr->performance->states = NULL;

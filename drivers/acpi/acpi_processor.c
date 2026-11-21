@@ -18,6 +18,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/pci.h>
+#include <linux/platform_data/x86/apple.h>
 #include <linux/platform_device.h>
 
 #include <acpi/processor.h>
@@ -815,6 +816,22 @@ bool acpi_processor_claim_cst_control(void)
 }
 EXPORT_SYMBOL_NS_GPL(acpi_processor_claim_cst_control, "ACPI_PROCESSOR_IDLE");
 
+static bool acpi_processor_apple_acst(acpi_handle handle, struct acpi_buffer *buffer)
+{
+	acpi_status status;
+
+	if (!x86_apple_machine)
+		return false;
+
+	status = acpi_evaluate_object(handle, "ACST", NULL, buffer);
+	if (ACPI_FAILURE(status)) {
+		buffer->length = ACPI_ALLOCATE_BUFFER;
+		buffer->pointer = NULL;
+		return false;
+	}
+
+	return true;
+}
 /**
  * acpi_processor_evaluate_cst - Evaluate the processor _CST control method.
  * @handle: ACPI handle of the processor object containing the _CST.
@@ -837,28 +854,34 @@ int acpi_processor_evaluate_cst(acpi_handle handle, u32 cpu,
 	acpi_status status;
 	u64 count;
 	int last_index = 0;
-	int i, ret = 0;
+	int i, ret = 0, base = 0;
+	const char *method = "_CST";
 
-	status = acpi_evaluate_object(handle, "_CST", NULL, &buffer);
-	if (ACPI_FAILURE(status)) {
-		acpi_handle_debug(handle, "No _CST\n");
-		return -ENODEV;
+	if (acpi_processor_apple_acst(handle, &buffer)) {
+		base = 1; /* ACST is a 4 field package we need to skip the first field */
+		method = "ACST";
+	} else {
+		status = acpi_evaluate_object(handle, "_CST", NULL, &buffer);
+		if (ACPI_FAILURE(status)) {
+			acpi_handle_debug(handle, "No _CST\n");
+			return -ENODEV;
+		}
 	}
 
 	cst = buffer.pointer;
 
-	/* There must be at least 2 elements. */
-	if (!cst || cst->type != ACPI_TYPE_PACKAGE || cst->package.count < 2) {
-		acpi_handle_warn(handle, "Invalid _CST output\n");
+	/* There must be at least 2 elements for _CST and at least 3 elements for ACST. */
+	if (!cst || cst->type != ACPI_TYPE_PACKAGE || cst->package.count < base + 2) {
+		acpi_handle_warn(handle, "Invalid %s output\n", method);
 		ret = -EFAULT;
 		goto end;
 	}
 
-	count = cst->package.elements[0].integer.value;
+	count = cst->package.elements[base].integer.value;
 
 	/* Validate the number of C-states. */
-	if (count < 1 || count != cst->package.count - 1) {
-		acpi_handle_warn(handle, "Inconsistent _CST data\n");
+	if (count < 1 || count != cst->package.count - 1 - base) {
+		acpi_handle_warn(handle, "Inconsistent %s data\n", method);
 		ret = -EFAULT;
 		goto end;
 	}
@@ -882,24 +905,24 @@ int acpi_processor_evaluate_cst(acpi_handle handle, u32 cpu,
 
 		memset(&cx, 0, sizeof(cx));
 
-		element = &cst->package.elements[i];
+		element = &cst->package.elements[base + i];
 		if (element->type != ACPI_TYPE_PACKAGE) {
-			acpi_handle_info(handle, "_CST C%d type(%x) is not package, skip...\n",
-					 i, element->type);
+			acpi_handle_info(handle, "%s C%d type(%x) is not package, skip...\n",
+					 method, i, element->type);
 			continue;
 		}
 
 		if (element->package.count != 4) {
-			acpi_handle_info(handle, "_CST C%d package count(%d) is not 4, skip...\n",
-					 i, element->package.count);
+			acpi_handle_info(handle, "%s C%d package count(%d) is not 4, skip...\n",
+					 method, i, element->package.count);
 			continue;
 		}
 
 		obj = &element->package.elements[0];
 
 		if (obj->type != ACPI_TYPE_BUFFER) {
-			acpi_handle_info(handle, "_CST C%d package element[0] type(%x) is not buffer, skip...\n",
-					 i, obj->type);
+			acpi_handle_info(handle, "%s C%d package element[0] type(%x) is not buffer, skip...\n",
+					 method, i, obj->type);
 			continue;
 		}
 
@@ -914,8 +937,8 @@ int acpi_processor_evaluate_cst(acpi_handle handle, u32 cpu,
 
 		obj = &element->package.elements[1];
 		if (obj->type != ACPI_TYPE_INTEGER) {
-			acpi_handle_info(handle, "_CST C[%d] package element[1] type(%x) is not integer, skip...\n",
-					 i, obj->type);
+			acpi_handle_info(handle, "%s C[%d] package element[1] type(%x) is not integer, skip...\n",
+					 method, i, obj->type);
 			continue;
 		}
 
@@ -954,8 +977,8 @@ int acpi_processor_evaluate_cst(acpi_handle handle, u32 cpu,
 				cx.entry_method = ACPI_CSTATE_HALT;
 				snprintf(cx.desc, ACPI_CX_DESC_LEN, "ACPI HLT");
 			} else {
-				acpi_handle_info(handle, "_CST C%d declares FIXED_HARDWARE C-state but not supported in hardware, skip...\n",
-						 i);
+				acpi_handle_info(handle, "%s C%d declares FIXED_HARDWARE C-state but not supported in hardware, skip...\n",
+						 method, i);
 				continue;
 			}
 		} else if (reg->space_id == ACPI_ADR_SPACE_SYSTEM_IO) {
@@ -963,8 +986,8 @@ int acpi_processor_evaluate_cst(acpi_handle handle, u32 cpu,
 			snprintf(cx.desc, ACPI_CX_DESC_LEN, "ACPI IOPORT 0x%x",
 				 cx.address);
 		} else {
-			acpi_handle_info(handle, "_CST C%d space_id(%x) neither FIXED_HARDWARE nor SYSTEM_IO, skip...\n",
-					 i, reg->space_id);
+			acpi_handle_info(handle, "%s C%d space_id(%x) neither FIXED_HARDWARE nor SYSTEM_IO, skip...\n",
+					 method, i, reg->space_id);
 			continue;
 		}
 
@@ -973,8 +996,8 @@ int acpi_processor_evaluate_cst(acpi_handle handle, u32 cpu,
 
 		obj = &element->package.elements[2];
 		if (obj->type != ACPI_TYPE_INTEGER) {
-			acpi_handle_info(handle, "_CST C%d package element[2] type(%x) not integer, skip...\n",
-					 i, obj->type);
+			acpi_handle_info(handle, "%s C%d package element[2] type(%x) not integer, skip...\n",
+					 method, i, obj->type);
 			continue;
 		}
 
@@ -982,8 +1005,8 @@ int acpi_processor_evaluate_cst(acpi_handle handle, u32 cpu,
 
 		obj = &element->package.elements[3];
 		if (obj->type != ACPI_TYPE_INTEGER) {
-			acpi_handle_info(handle, "_CST C%d package element[3] type(%x) not integer, skip...\n",
-					 i, obj->type);
+			acpi_handle_info(handle, "%s C%d package element[3] type(%x) not integer, skip...\n",
+					 method, i, obj->type);
 			continue;
 		}
 
