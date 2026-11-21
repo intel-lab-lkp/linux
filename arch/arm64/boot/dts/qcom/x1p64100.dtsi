@@ -1,0 +1,20 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Copyright (c) 2026 Dale Whinham <daleyo@gmail.com>
+ */
+
+/* X1P64100 is a binned hamoa with the last core of clusters 1 and 2 fused off */
+#include "hamoa.dtsi"
+
+/delete-node/ &cpu7;
+/delete-node/ &cpu11;
+/delete-node/ &cpu_pd7;
+/delete-node/ &cpu_pd11;
+
+&{/cpus/cpu-map/cluster1} {
+	/delete-node/ core3;
+};
+
+&{/cpus/cpu-map/cluster2} {
+	/delete-node/ core3;
+};

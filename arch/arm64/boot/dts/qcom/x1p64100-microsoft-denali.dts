@@ -5,7 +5,7 @@
 
 /dts-v1/;
 
-#include "hamoa.dtsi"
+#include "x1p64100.dtsi"
 #include "x1-microsoft-denali.dtsi"
 
 / {
