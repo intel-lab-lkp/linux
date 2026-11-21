@@ -1917,9 +1917,11 @@ static int mira016_init_controls(struct mira016 *mira016)
 					      MIRA016_MAX_EXPOSURE, 1,
 					      def_exposure);
 
+	/* The gain range matches the default 8-bit format set in init_state. */
 	mira016->gain = v4l2_ctrl_new_std(ctrl_hdlr, &mira016_ctrl_ops,
-					  V4L2_CID_ANALOGUE_GAIN,
-					  1, 1, 1, 1);
+					  V4L2_CID_ANALOGUE_GAIN, 1,
+					  ARRAY_SIZE(mira016_gain_lut_8bit),
+					  1, 1);
 
 	/*
 	 * Changing VFLIP requires re-programming the top point, hence we
