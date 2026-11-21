@@ -271,6 +271,9 @@ int dso__load_sym(struct dso *dso, struct map *map, struct symsrc *syms_ss,
 		  struct symsrc *runtime_ss, int kmodule);
 int dso__synthesize_plt_symbols(struct dso *dso, struct symsrc *ss);
 void dso__load_symbol_names(struct dso *dso, struct symbol **syms, size_t nr);
+struct dso_lazy_strtab;
+int dso__set_lazy_file(struct dso *dso, int fd, int dynsym,
+		       const struct dso_lazy_strtab *strtab);
 
 char *dso__demangle_sym(struct dso *dso, int kmodule, const char *elf_name);
 

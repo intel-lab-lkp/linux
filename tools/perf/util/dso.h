@@ -282,6 +282,33 @@ struct dso_bpf_prog {
 	struct perf_env	*env;
 };
 
+/* A string table that lazy symbol names point into. */
+struct dso_lazy_strtab {
+	u64		shndx;
+	u64		off;
+	u64		size;
+};
+
+/* The file that lazy symbol names are read from, as it was at load time. */
+struct dso_lazy_file {
+	u64		dev;
+	u64		ino;
+	u64		size;
+	u64		mtime_sec;
+	u64		mtime_nsec;
+	/* Copying over the file in place, keeping its size and mtime, changes it. */
+	u64		ctime_sec;
+	u64		ctime_nsec;
+	/* The string tables of .symtab and .dynsym. */
+	struct dso_lazy_strtab strtab[2];
+	/* symsrc__init() matched the file with the build ID of the DSO. */
+	bool		check_build_id;
+	/* The file changed after the names were loaded. */
+	bool		rejected;
+	/* perf warned that the file could not be opened or checked again. */
+	bool		retry_warned;
+};
+
 struct auxtrace_cache;
 
 DECLARE_RC_STRUCT(dso) {
@@ -321,6 +348,7 @@ DECLARE_RC_STRUCT(dso) {
 	struct dso_bpf_prog bpf_prog;
 	/* dso data file */
 	struct dso_data	 data;
+	struct dso_lazy_file lazy_file;
 	struct dso_id	 id;
 	unsigned int	 a2l_fails;
 	int		 comp;
@@ -501,6 +529,11 @@ static inline void dso__set_comp(struct dso *dso, int comp)
 static inline struct dso_data *dso__data(struct dso *dso)
 {
 	return &RC_CHK_ACCESS(dso)->data;
+}
+
+static inline struct dso_lazy_file *dso__lazy_file(struct dso *dso)
+{
+	return &RC_CHK_ACCESS(dso)->lazy_file;
 }
 
 static inline u64 dso__db_id(const struct dso *dso)

@@ -6,6 +6,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <inttypes.h>
+#include <sys/stat.h>
 
 #include "compress.h"
 #include "dso.h"
@@ -1678,6 +1679,148 @@ static int read_symbol_names(struct dso *dso, int fd, struct symbol **syms, size
 	return err;
 }
 
+static int lazy_file__stat(struct dso_lazy_file *lf, int fd)
+{
+	struct stat st;
+
+	if (fstat(fd, &st))
+		return -1;
+	lf->dev = st.st_dev;
+	lf->ino = st.st_ino;
+	lf->size = st.st_size;
+	lf->mtime_sec = st.st_mtim.tv_sec;
+	lf->mtime_nsec = st.st_mtim.tv_nsec;
+	lf->ctime_sec = st.st_ctim.tv_sec;
+	lf->ctime_nsec = st.st_ctim.tv_nsec;
+	return 0;
+}
+
+/*
+ * Record that lazy names of @dso point into @strtab of the file of @fd, the
+ * string table of .dynsym if @dynsym, else of .symtab. The caller holds the
+ * DSO lock, as dso__load() does.
+ */
+int dso__set_lazy_file(struct dso *dso, int fd, int dynsym,
+		       const struct dso_lazy_strtab *strtab)
+{
+	struct dso_lazy_file *lf = dso__lazy_file(dso);
+
+	if (lazy_file__stat(lf, fd))
+		return -1;
+	lf->strtab[dynsym] = *strtab;
+	lf->check_build_id = dso__has_build_id(dso) && !symbol_conf.ignore_vmlinux_buildid;
+	lf->rejected = false;
+	lf->retry_warned = false;
+	return 0;
+}
+
+enum lazy_file_check {
+	LAZY_FILE_MATCH,
+	LAZY_FILE_MISMATCH,
+	/* The file cannot be read, which can be temporary. */
+	LAZY_FILE_ERROR,
+};
+
+/* Check that the file of @fd has the identity in @lf. */
+static enum lazy_file_check lazy_file__check_stat(const struct dso_lazy_file *lf, int fd)
+{
+	struct dso_lazy_file now;
+
+	if (lazy_file__stat(&now, fd))
+		return LAZY_FILE_ERROR;
+	if (now.dev == lf->dev && now.ino == lf->ino && now.size == lf->size &&
+	    now.mtime_sec == lf->mtime_sec && now.mtime_nsec == lf->mtime_nsec &&
+	    now.ctime_sec == lf->ctime_sec && now.ctime_nsec == lf->ctime_nsec)
+		return LAZY_FILE_MATCH;
+	return LAZY_FILE_MISMATCH;
+}
+
+/*
+ * Check that the file of @fd has the build ID of @dso and the string tables
+ * where @lf has them. A copy with an added section, such as a
+ * .gnu_debuglink, keeps the build ID but can move the tables.
+ */
+static enum lazy_file_check lazy_file__check_build(const struct dso_lazy_file *lf,
+						   struct dso *dso, int fd)
+{
+	enum lazy_file_check ret = LAZY_FILE_ERROR;
+	u8 build_id[BUILD_ID_SIZE];
+	struct build_id bid;
+	GElf_Shdr shdr;
+	size_t shnum;
+	Elf *elf;
+	int size;
+
+	elf = elf_begin(fd, PERF_ELF_C_READ_MMAP, NULL);
+	if (!elf)
+		return LAZY_FILE_ERROR;
+	/* A failed read cannot be told from a missing build ID note. */
+	size = elf_read_build_id(elf, build_id, sizeof(build_id));
+	if (size <= 0)
+		goto out;
+	build_id__init(&bid, build_id, size);
+	if (!dso__build_id_equal(dso, &bid)) {
+		ret = LAZY_FILE_MISMATCH;
+		goto out;
+	}
+	if (elf_getshdrnum(elf, &shnum))
+		goto out;
+	ret = LAZY_FILE_MATCH;
+	for (size_t i = 0; ret == LAZY_FILE_MATCH && i < ARRAY_SIZE(lf->strtab); i++) {
+		const struct dso_lazy_strtab *st = &lf->strtab[i];
+
+		if (!st->size)
+			continue;
+		/* A stripped copy can have fewer sections. */
+		if (st->shndx >= shnum)
+			ret = LAZY_FILE_MISMATCH;
+		else if (!gelf_getshdr(elf_getscn(elf, st->shndx), &shdr))
+			ret = LAZY_FILE_ERROR;
+		else if (shdr.sh_type != SHT_STRTAB || (shdr.sh_flags & SHF_COMPRESSED) ||
+			 shdr.sh_offset != st->off || shdr.sh_size != st->size)
+			ret = LAZY_FILE_MISMATCH;
+	}
+out:
+	elf_end(elf);
+	return ret;
+}
+
+/*
+ * The name offsets are only valid in the file that dso__load() read. Accept
+ * @fd if it is that file, or another file with the build ID of @dso and the
+ * same string tables, such as a copy, and keep its identity for later reads.
+ * If it is not, for example after the binary was replaced, reject it and
+ * every later read for @dso. If it cannot be checked, do not read from it,
+ * but let later reads try again.
+ */
+static bool dso__lazy_file_ok(struct dso *dso, int fd, const char *name)
+{
+	struct dso_lazy_file *lf = dso__lazy_file(dso);
+	/* Reading the build ID at every lookup that loads a name is slow. */
+	enum lazy_file_check status = lazy_file__check_stat(lf, fd);
+
+	if (status == LAZY_FILE_MATCH)
+		return true;
+	if (lf->check_build_id) {
+		status = lazy_file__check_build(lf, dso, fd);
+		if (status == LAZY_FILE_MATCH) {
+			lazy_file__stat(lf, fd);
+			return true;
+		}
+	}
+	if (status == LAZY_FILE_ERROR) {
+		if (!lf->retry_warned)
+			pr_warning("%s cannot be checked after its symbols were loaded, some of its symbol names are not shown\n",
+				   name);
+		lf->retry_warned = true;
+		return false;
+	}
+	pr_warning("%s changed after its symbols were loaded, its symbol names are not shown\n",
+		   name);
+	lf->rejected = true;
+	return false;
+}
+
 /*
  * A name that cannot be read becomes "[unknown]". The caller holds the
  * DSO lock.
@@ -1699,6 +1842,8 @@ void dso__load_symbol_names(struct dso *dso, struct symbol **syms, size_t nr)
 		;
 	if (i == nr)
 		return;
+	if (dso__lazy_file(dso)->rejected)
+		goto out_unknown;
 	if (!own_ns)
 		nsinfo__mountns_enter(dso__nsinfo(dso), &nsc);
 	name = dso__get_filename(dso, "", &decomp, type);
@@ -1708,13 +1853,18 @@ void dso__load_symbol_names(struct dso *dso, struct symbol **syms, size_t nr)
 		nsinfo__mountns_exit(&nsc);
 
 	if (fd >= 0) {
-		read_symbol_names(dso, fd, syms, nr);
+		if (dso__lazy_file_ok(dso, fd, name))
+			read_symbol_names(dso, fd, syms, nr);
 		close(fd);
-	} else {
-		pr_debug("%s: cannot open the symbol table file\n", dso__long_name(dso));
+	} else if (!dso__lazy_file(dso)->retry_warned) {
+		/* The failure can be temporary, so later reads try again. */
+		pr_warning("%s cannot be opened after its symbols were loaded, some of its symbol names are not shown\n",
+			   name ?: dso__long_name(dso));
+		dso__lazy_file(dso)->retry_warned = true;
 	}
 	if (name)
 		dso__put_filename(dso, name, decomp);
+out_unknown:
 	for (i = 0; i < nr; i++) {
 		if (symbol__needs_lazy_name(syms[i]))
 			symbol__set_unknown_name(syms[i]);
