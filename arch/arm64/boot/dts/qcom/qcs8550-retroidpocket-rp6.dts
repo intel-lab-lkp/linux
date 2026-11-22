@@ -13,18 +13,6 @@
 	model = "Retroid Pocket 6";
 	compatible = "retroidpocket,rp6", "qcom,qcs8550", "qcom,sm8550";
 
-	backlight: backlight {
-		compatible = "pwm-backlight";
-		pwms = <&pmk8550_pwm 0 860000>;
-		brightness-levels = <1023 0>;
-		num-interpolated-steps = <1023>;
-		default-brightness-level = <600>;
-		power-supply = <&vph_pwr>;
-		enable-gpios = <&pmk8550_gpios 5 GPIO_ACTIVE_HIGH>;
-		pinctrl-0 = <&pwm_backlight_default>;
-		pinctrl-names = "default";
-	};
-
 	vdd_disp_1v8: regulator-vdd-disp-1v8 {
 		compatible = "regulator-fixed";
 		regulator-name = "vdd_disp_1v8";
