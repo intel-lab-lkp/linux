@@ -528,8 +528,13 @@ static int sx9360_write_thresh(struct sx_common_data *data, int _val)
 
 static int sx9360_write_hysteresis(struct sx_common_data *data, int _val)
 {
-	unsigned int hyst, val = _val;
+	unsigned int hyst, val;
 	int ret, pthresh;
+
+	if (_val < 0)
+		return -EINVAL;
+
+	val = _val;
 
 	ret = sx9360_read_thresh(data, &pthresh);
 	if (ret < 0)
