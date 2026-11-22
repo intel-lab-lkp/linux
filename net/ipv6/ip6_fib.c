@@ -148,6 +148,25 @@ void fib6_update_sernum(struct net *net, struct fib6_info *f6i)
 		WRITE_ONCE(fn->fn_sernum, fib6_new_sernum(net));
 }
 
+/* Tell route dumps that an exception was added under @f6i without
+ * invalidating cached dsts: those follow the netns generation, which this
+ * leaves alone. A dump notices a changed tree through the root node, so
+ * only an exception on the root needs to be visible. Fresh fn_sernum values
+ * can only come from the netns counter, so use a table sequence rather than
+ * a made-up fn_sernum that the counter could later issue again.
+ * Caller holds tb6_lock.
+ */
+void fib6_update_excp_seq(struct fib6_info *f6i)
+{
+	struct fib6_table *table = f6i->fib6_table;
+	struct fib6_node *fn;
+
+	fn = rcu_dereference_protected(f6i->fib6_node,
+				       lockdep_is_held(&table->tb6_lock));
+	if (fn == &table->tb6_root)
+		WRITE_ONCE(table->tb6_excp_seq, table->tb6_excp_seq + 1);
+}
+
 /*
  *	Auxiliary address test functions for the radix tree.
  *
@@ -637,12 +656,16 @@ static int fib6_dump_table(struct fib6_table *table, struct sk_buff *skb,
 		if (res > 0) {
 			cb->args[4] = 1;
 			cb->args[5] = READ_ONCE(w->root->fn_sernum);
+			w->excp_seq = READ_ONCE(table->tb6_excp_seq);
 		}
 	} else {
 		int sernum = READ_ONCE(w->root->fn_sernum);
-		if (cb->args[5] != sernum) {
+		unsigned int excp_seq = READ_ONCE(table->tb6_excp_seq);
+
+		if (cb->args[5] != sernum || w->excp_seq != excp_seq) {
 			/* Begin at the root if the tree changed */
 			cb->args[5] = sernum;
+			w->excp_seq = excp_seq;
 			w->state = FWS_INIT;
 			w->node = w->root;
 			w->skip = w->count;
