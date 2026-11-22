@@ -77,7 +77,6 @@ pub(crate) fn new_object(ddev: &TyrDrmDevice, size: usize, flags: u32) -> Result
 }
 
 /// Look up a GEM object by handle for a DRM file.
-#[expect(dead_code)]
 pub(crate) fn lookup_handle(file: &TyrDrmFile, handle: u32) -> Result<ARef<Bo>> {
     Bo::lookup_handle(file, handle)
 }

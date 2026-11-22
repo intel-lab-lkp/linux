@@ -55,6 +55,11 @@ use kernel::{
     },
     sync::{
         aref::ARef,
+        atomic::{
+            Acquire,
+            Atomic,
+            Release, //
+        },
         Arc,
         ArcBorrow,
         Mutex, //
@@ -174,11 +179,42 @@ pub(crate) enum UserVaRequest {
 
 impl UserVaRequest {
     /// UAPI boundary normalization: `0` -> [`Auto`](Self::Auto).
-    #[expect(dead_code)]
     pub(crate) fn from_uapi(v: u64) -> Self {
         match NonZeroU64::new(v) {
             Some(size) => Self::Fixed(size),
             None => Self::Auto,
+        }
+    }
+}
+
+/// Operation type, packed into the top nibble of
+/// `drm_panthor_vm_bind_op::flags`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum VmBindOpType {
+    /// Map a BO range into the VM.
+    Map,
+    /// Unmap a VA range.
+    Unmap,
+}
+
+impl VmBindOpType {
+    /// Bits occupied by the op type in `drm_panthor_vm_bind_op::flags`.
+    pub(crate) const MASK: u32 =
+        uapi::drm_panthor_vm_bind_op_flags_DRM_PANTHOR_VM_BIND_OP_TYPE_MASK as u32;
+}
+
+impl TryFrom<u32> for VmBindOpType {
+    type Error = Error;
+
+    fn try_from(flags: u32) -> Result<Self, Self::Error> {
+        const MAP: u32 = uapi::drm_panthor_vm_bind_op_flags_DRM_PANTHOR_VM_BIND_OP_TYPE_MAP as u32;
+        const UNMAP: u32 =
+            uapi::drm_panthor_vm_bind_op_flags_DRM_PANTHOR_VM_BIND_OP_TYPE_UNMAP as u32;
+
+        match flags & Self::MASK {
+            MAP => Ok(Self::Map),
+            UNMAP => Ok(Self::Unmap),
+            _ => Err(EINVAL),
         }
     }
 }
@@ -425,6 +461,8 @@ pub(crate) struct Vm<'drm> {
     gpuvm: ARef<GpuVm<GpuVmData<'drm>>>,
     /// VA layout for this VM.
     pub(crate) layout: VmLayout,
+    /// Whether the VM is unusable.
+    unusable: Atomic<bool>,
 }
 
 impl<'drm> Vm<'drm> {
@@ -446,7 +484,6 @@ impl<'drm> Vm<'drm> {
     }
 
     /// Creates a user VM, splitting the GPU VA range per `user_va`.
-    #[expect(dead_code)]
     pub(crate) fn new_for_user(
         dev: &'drm Device<Bound>,
         ddev: &TyrDrmDevice,
@@ -513,6 +550,7 @@ impl<'drm> Vm<'drm> {
                 gpuvm,
                 gpuvm_unique <- new_mutex!(gpuvm_unique),
                 layout,
+                unusable: Atomic::new(false),
             }),
             GFP_KERNEL,
         )?;
@@ -543,6 +581,7 @@ impl<'drm> Vm<'drm> {
 
     /// Kills the VM by deactivating it and unmapping all regions.
     pub(crate) fn kill(&self) {
+        self.mark_unusable();
         let _ = self.deactivate();
         let _ = self
             .unmap_range(
@@ -552,6 +591,15 @@ impl<'drm> Vm<'drm> {
             .inspect_err(|e| {
                 dev_err!(self.dev, "Failed to unmap range during deactivate: {:?}", e);
             });
+    }
+
+    /// Marks the VM unusable.
+    fn mark_unusable(&self) {
+        self.unusable.store(true, Release);
+    }
+
+    pub(crate) fn is_unusable(&self) -> bool {
+        self.unusable.load(Acquire)
     }
 
     /// Executes a virtual memory operation.
@@ -648,6 +696,14 @@ impl<'drm> Vm<'drm> {
 
         let va_end: u64 = va.checked_add(map_size).ok_or(EINVAL)?;
 
+        let mut resources = VmOpResources {
+            preallocated_gpuvas: [
+                Some(GpuVaAlloc::<GpuVmData<'drm>>::new(GFP_KERNEL)?),
+                Some(GpuVaAlloc::<GpuVmData<'drm>>::new(GFP_KERNEL)?),
+                Some(GpuVaAlloc::<GpuVmData<'drm>>::new(GFP_KERNEL)?),
+            ],
+        };
+
         let req = VmOpRequest {
             op_type: VmOpType::Map(VmMapArgs {
                 vm_bo: self.gpuvm.obtain(bo, ())?,
@@ -656,16 +712,24 @@ impl<'drm> Vm<'drm> {
             }),
             region: va..va_end,
         };
-        let mut resources = VmOpResources {
-            preallocated_gpuvas: [
-                Some(GpuVaAlloc::<GpuVmData<'drm>>::new(GFP_KERNEL)?),
-                Some(GpuVaAlloc::<GpuVmData<'drm>>::new(GFP_KERNEL)?),
-                Some(GpuVaAlloc::<GpuVmData<'drm>>::new(GFP_KERNEL)?),
-            ],
-        };
         let result = {
             let mut gpuvm_unique = self.gpuvm_unique.lock();
-            self.exec_op(gpuvm_unique.as_mut().get_mut(), req, &mut resources)
+            // Check under the GPUVM lock, which the kill path also takes to
+            // unmap, so this serializes against a concurrent teardown.
+            if self.is_unusable() {
+                dev_err!(
+                    self.dev,
+                    "Failed to map VA {:#x}..{:#x}: VM is unusable\n",
+                    req.region.start,
+                    req.region.end
+                );
+                // Drop the vm_bo reference before the deferred cleanup
+                // below runs; otherwise the vm_bo would leak.
+                drop(req);
+                Err(EINVAL)
+            } else {
+                self.exec_op(gpuvm_unique.as_mut().get_mut(), req, &mut resources)
+            }
         };
         // We flush the defer cleanup list now. Things will be different in
         // the asynchronous VM_BIND path, where we want the cleanup to
@@ -1100,9 +1164,7 @@ pub(crate) struct VmPool<'drm> {
 /// Error returned when a VM cannot be added to the pool. The caller
 /// owns the teardown of the VM in [`AddError::vm`].
 pub(crate) struct AddError<'drm> {
-    #[expect(dead_code)]
     pub(crate) error: Error,
-    #[expect(dead_code)]
     pub(crate) vm: Arc<Vm<'drm>>,
 }
 
@@ -1112,7 +1174,6 @@ impl<'drm> VmPool<'drm> {
     /// The pool is sized for [`MAX_VMS_PER_FILE`] IDs on all architectures,
     /// including 32-bit builds where `IdPool::new()` would only hold 31 IDs
     /// because `find_unused_id(1)` skips bit 0 of an inline bitmap.
-    #[expect(dead_code)]
     pub(crate) fn new(dev: &'drm Device<Bound>) -> Result<impl PinInit<Self>, AllocError> {
         let ids = IdPool::with_capacity(MAX_VMS_PER_FILE + 1, GFP_KERNEL)?;
         Ok(pin_init!(Self {
@@ -1128,7 +1189,6 @@ impl<'drm> VmPool<'drm> {
     /// returned in an [`AddError`] so the caller owns the teardown.
     // TODO: allocate IDs with the XArray directly (once it grows range
     // allocation, the equivalent of C's `XA_LIMIT`) and drop the IdPool.
-    #[expect(dead_code)]
     pub(crate) fn add(&self, vm: Arc<Vm<'drm>>) -> Result<u32, AddError<'drm>> {
         let id = (|| {
             let mut ids = self.ids.lock();
@@ -1178,7 +1238,6 @@ impl<'drm> VmPool<'drm> {
     }
 
     /// Removes and kills the VM with the given ID.
-    #[expect(dead_code)]
     pub(crate) fn remove(&self, id: u32) -> Result<()> {
         let mut vms = self.vms.lock();
         let vm = match vms.remove(usize::from_safe_cast(id)) {
@@ -1195,7 +1254,6 @@ impl<'drm> VmPool<'drm> {
     }
 
     /// Gets a shared reference to the VM with the given ID.
-    #[expect(dead_code)]
     pub(crate) fn get(&self, id: u32) -> Option<Arc<Vm<'drm>>> {
         let vms = self.vms.lock();
         let borrow = vms.get(usize::from_safe_cast(id))?;
