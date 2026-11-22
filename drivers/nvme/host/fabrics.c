@@ -955,7 +955,8 @@ static int nvmf_parse_options(struct nvmf_ctrl_options *opts,
 				ret = -EINVAL;
 				goto out;
 			}
-			opts->nr_write_queues = token;
+			opts->nr_write_queues = min_t(unsigned int, token,
+						      num_possible_cpus());
 			break;
 		case NVMF_OPT_NR_POLL_QUEUES:
 			if (match_int(args, &token)) {
@@ -967,7 +968,8 @@ static int nvmf_parse_options(struct nvmf_ctrl_options *opts,
 				ret = -EINVAL;
 				goto out;
 			}
-			opts->nr_poll_queues = token;
+			opts->nr_poll_queues = min_t(unsigned int, token,
+						     num_possible_cpus());
 			break;
 		case NVMF_OPT_TOS:
 			if (match_int(args, &token)) {
