@@ -124,6 +124,7 @@ static int rpmsg_ept_cb(struct rpmsg_device *rpdev, void *buf, int len,
 
 	/* wake up any blocking processes, waiting for new data */
 	wake_up_interruptible(&eptdev->readq);
+	pm_wakeup_hard_event(&eptdev->dev);
 
 	return 0;
 }
@@ -451,6 +452,7 @@ static struct rpmsg_eptdev *rpmsg_chrdev_eptdev_alloc(struct rpmsg_device *rpdev
 	dev->parent = parent;
 	dev->groups = rpmsg_eptdev_groups;
 	dev_set_drvdata(dev, eptdev);
+	device_set_wakeup_capable(dev, true);
 
 	cdev_init(&eptdev->cdev, &rpmsg_eptdev_fops);
 	eptdev->cdev.owner = THIS_MODULE;
