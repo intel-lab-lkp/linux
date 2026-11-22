@@ -16,8 +16,8 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/platform_device.h>
+#include <linux/property.h>
 #include <linux/leds.h>
-#include <linux/of.h>
 #include <linux/mfd/mc13xxx.h>
 
 struct mc13xxx_led_devtype {
@@ -114,7 +114,7 @@ static struct mc13xxx_leds_platform_data __init *mc13xxx_led_probe_dt(
 {
 	struct mc13xxx_leds *leds = platform_get_drvdata(pdev);
 	struct mc13xxx_leds_platform_data *pdata;
-	struct device_node *child;
+	struct fwnode_handle *child;
 	struct device *dev = &pdev->dev;
 	int i = 0, ret = -ENODATA;
 
@@ -122,34 +122,34 @@ static struct mc13xxx_leds_platform_data __init *mc13xxx_led_probe_dt(
 	if (!pdata)
 		return ERR_PTR(-ENOMEM);
 
-	struct device_node *parent __free(device_node) =
-		of_get_child_by_name(dev_of_node(dev->parent), "leds");
+	struct fwnode_handle *parent __free(fwnode_handle) =
+		device_get_named_child_node(dev->parent, "leds");
 	if (!parent)
 		return ERR_PTR(-ENODATA);
 
-	ret = of_property_read_u32_array(parent, "led-control",
+	ret = fwnode_property_read_u32_array(parent, "led-control",
 					 pdata->led_control,
 					 leds->devtype->num_regs);
 	if (ret)
 		return ERR_PTR(ret);
 
-	pdata->num_leds = of_get_available_child_count(parent);
+	pdata->num_leds = fwnode_get_child_node_count(parent);
 
 	pdata->led = devm_kzalloc_objs(dev, *pdata->led, pdata->num_leds);
 	if (!pdata->led)
 		return ERR_PTR(-ENOMEM);
 
-	for_each_available_child_of_node(parent, child) {
+	fwnode_for_each_child_node(parent, child) {
 		const char *str;
 		u32 tmp;
 
-		if (of_property_read_u32(child, "reg", &tmp))
+		if (fwnode_property_read_u32(child, "reg", &tmp))
 			continue;
 		pdata->led[i].id = leds->devtype->led_min + tmp;
 
-		if (!of_property_read_string(child, "label", &str))
+		if (!fwnode_property_read_string(child, "label", &str))
 			pdata->led[i].name = str;
-		if (!of_property_read_string(child, "linux,default-trigger",
+		if (!fwnode_property_read_string(child, "linux,default-trigger",
 					     &str))
 			pdata->led[i].default_trigger = str;
 
