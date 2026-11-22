@@ -812,6 +812,23 @@ static int metapage_write_one(struct folio *folio)
 
 	BUG_ON(!folio_test_locked(folio));
 
+	if (unlikely(!mapping)) {
+		struct metapage *mp;
+		unsigned int offset;
+
+		for (offset = 0; offset < PAGE_SIZE; offset += PSIZE) {
+			mp = folio_to_mp(folio, offset);
+			if (!mp)
+				continue;
+			clear_bit(META_dirty, &mp->flag);
+			if (mp->lsn)
+				remove_from_logsync(mp);
+		}
+		folio_clear_dirty_for_io(folio);
+		folio_unlock(folio);
+		return 0;
+	}
+
 	folio_wait_writeback(folio);
 
 	if (folio_clear_dirty_for_io(folio)) {
@@ -879,12 +896,19 @@ void release_metapage(struct metapage * mp)
 	}
 
 	if (test_bit(META_dirty, &mp->flag)) {
-		folio_mark_dirty(folio);
-		if (test_bit(META_sync, &mp->flag)) {
+		if (unlikely(!folio->mapping)) {
+			clear_bit(META_dirty, &mp->flag);
 			clear_bit(META_sync, &mp->flag);
-			if (metapage_write_one(folio))
-				jfs_error(mp->sb, "metapage_write_one() failed\n");
-			folio_lock(folio);
+			if (mp->lsn)
+				remove_from_logsync(mp);
+		} else {
+			folio_mark_dirty(folio);
+			if (test_bit(META_sync, &mp->flag)) {
+				clear_bit(META_sync, &mp->flag);
+				if (metapage_write_one(folio))
+					jfs_error(mp->sb, "metapage_write_one() failed\n");
+				folio_lock(folio);
+			}
 		}
 	} else if (mp->lsn)	/* discard_metapage doesn't remove it */
 		remove_from_logsync(mp);
