@@ -367,6 +367,7 @@ struct rt6_info *ip6_dst_alloc(struct net *net, struct net_device *dev,
 
 	if (rt) {
 		rt6_info_init(rt);
+		rt->sernum = rt_genid_ipv6(net);
 		atomic_inc(&net->ipv6.rt6_stats->fib_rt_alloc);
 	}
 
@@ -1458,15 +1459,24 @@ static struct rt6_info *ip6_rt_pcpu_alloc(const struct fib6_result *res)
 	ip6_rt_copy_init(pcpu_rt, res);
 	pcpu_rt->rt6i_flags |= RTF_PCPU;
 
-	if (f6i->nh)
-		pcpu_rt->sernum = rt_genid_ipv6(dev_net(dev));
-
 	return pcpu_rt;
 }
 
 static bool rt6_is_valid(const struct rt6_info *rt6)
 {
-	return rt6->sernum == rt_genid_ipv6(dev_net(rt6->dst.dev));
+	return READ_ONCE(rt6->sernum) == rt_genid_ipv6(dev_net(rt6->dst.dev));
+}
+
+/* @rt was just found by a lookup against the current FIB, so it is as
+ * valid as a freshly allocated dst. Call with rcu_read_lock() held.
+ */
+static void rt6_refresh_sernum(struct rt6_info *rt,
+			       const struct fib6_result *res)
+{
+	int genid = rt_genid_ipv6(dev_net(ip6_rt_get_dev_rcu(res)));
+
+	if (READ_ONCE(rt->sernum) != genid)
+		WRITE_ONCE(rt->sernum, genid);
 }
 
 /* It should be called with rcu_read_lock() acquired */
@@ -1476,7 +1486,14 @@ static struct rt6_info *rt6_get_pcpu_route(const struct fib6_result *res)
 
 	pcpu_rt = this_cpu_read(*res->nh->rt6i_pcpu);
 
-	if (pcpu_rt && pcpu_rt->sernum && !rt6_is_valid(pcpu_rt)) {
+	/* Routes with an embedded fib6_nh keep their pcpu dsts across FIB
+	 * changes; nexthop objects can change under them, so those are
+	 * dropped and rebuilt.
+	 */
+	if (pcpu_rt && !rt6_is_valid(pcpu_rt) && !res->f6i->nh)
+		rt6_refresh_sernum(pcpu_rt, res);
+
+	if (pcpu_rt && !rt6_is_valid(pcpu_rt)) {
 		struct rt6_info *prev, **p;
 
 		p = this_cpu_ptr(res->nh->rt6i_pcpu);
@@ -1878,8 +1895,10 @@ find_ex:
 	bucket = fib6_nh_get_excptn_bucket(res->nh, NULL);
 	rt6_ex = __rt6_find_exception_rcu(&bucket, daddr, src_key);
 
-	if (rt6_ex && !rt6_check_expired(rt6_ex->rt6i))
+	if (rt6_ex && !rt6_check_expired(rt6_ex->rt6i)) {
 		ret = rt6_ex->rt6i;
+		rt6_refresh_sernum(ret, res);
+	}
 
 #ifdef CONFIG_IPV6_SUBTREES
 	/* Use fib6_src as src_key and redo lookup */
@@ -2767,27 +2786,18 @@ struct dst_entry *ip6_blackhole_route(struct net *net, struct dst_entry *dst_ori
  *	Destination cache support functions
  */
 
-static bool fib6_check(struct fib6_info *f6i, u32 cookie)
+static bool fib6_check(struct fib6_info *f6i)
 {
-	u32 rt_cookie = 0;
-
-	if (!fib6_get_cookie_safe(f6i, &rt_cookie) || rt_cookie != cookie)
+	if (!rcu_access_pointer(f6i->fib6_node))
 		return false;
 
-	if (fib6_check_expired(f6i))
-		return false;
-
-	return true;
+	return !fib6_check_expired(f6i);
 }
 
 static struct dst_entry *rt6_check(struct rt6_info *rt,
-				   struct fib6_info *from,
-				   u32 cookie)
+				   struct fib6_info *from)
 {
-	u32 rt_cookie = 0;
-
-	if (!from || !fib6_get_cookie_safe(from, &rt_cookie) ||
-	    rt_cookie != cookie)
+	if (!from || !rcu_access_pointer(from->fib6_node))
 		return NULL;
 
 	if (rt6_check_expired(rt))
@@ -2797,12 +2807,11 @@ static struct dst_entry *rt6_check(struct rt6_info *rt,
 }
 
 static struct dst_entry *rt6_dst_from_check(struct rt6_info *rt,
-					    struct fib6_info *from,
-					    u32 cookie)
+					    struct fib6_info *from)
 {
 	if (!__rt6_check_expired(rt) &&
 	    READ_ONCE(rt->dst.obsolete) == DST_OBSOLETE_FORCE_CHK &&
-	    fib6_check(from, cookie))
+	    fib6_check(from))
 		return &rt->dst;
 	return NULL;
 }
@@ -2816,8 +2825,11 @@ INDIRECT_CALLABLE_SCOPE struct dst_entry *ip6_dst_check(struct dst_entry *dst,
 
 	rt = dst_rt6_info(dst);
 
-	if (rt->sernum)
-		return rt6_is_valid(rt) ? dst : NULL;
+	/* Any FIB change bumps the netns generation, which invalidates
+	 * every dst created under an older one.
+	 */
+	if (!rt6_is_valid(rt))
+		return NULL;
 
 	rcu_read_lock();
 
@@ -2830,9 +2842,9 @@ INDIRECT_CALLABLE_SCOPE struct dst_entry *ip6_dst_check(struct dst_entry *dst,
 
 	if (from && (rt->rt6i_flags & RTF_PCPU ||
 	    unlikely(rt->dst.rt_uncached_list)))
-		dst_ret = rt6_dst_from_check(rt, from, cookie);
+		dst_ret = rt6_dst_from_check(rt, from);
 	else
-		dst_ret = rt6_check(rt, from, cookie);
+		dst_ret = rt6_check(rt, from);
 
 	rcu_read_unlock();
 

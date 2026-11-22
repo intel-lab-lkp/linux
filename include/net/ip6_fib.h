@@ -273,46 +273,12 @@ static inline bool fib6_check_expired(const struct fib6_info *f6i)
 	return false;
 }
 
-/* Function to safely get fn->fn_sernum for passed in rt
- * and store result in passed in cookie.
- * Return true if we can get cookie safely
- * Return false if not
- */
-static inline bool fib6_get_cookie_safe(const struct fib6_info *f6i,
-					u32 *cookie)
-{
-	struct fib6_node *fn;
-	bool status = false;
-
-	fn = rcu_dereference(f6i->fib6_node);
-
-	if (fn) {
-		*cookie = READ_ONCE(fn->fn_sernum);
-		/* pairs with smp_wmb() in __fib6_update_sernum_upto_root() */
-		smp_rmb();
-		status = true;
-	}
-
-	return status;
-}
-
 static inline u32 rt6_get_cookie(const struct rt6_info *rt)
 {
-	struct fib6_info *from;
-	u32 cookie = 0;
-
-	if (rt->sernum)
-		return rt->sernum;
-
-	rcu_read_lock();
-
-	from = rcu_dereference(rt->from);
-	if (from)
-		fib6_get_cookie_safe(from, &cookie);
-
-	rcu_read_unlock();
-
-	return cookie;
+	/* sernum is the netns route generation the dst was created or last
+	 * revalidated under; ip6_dst_check() compares it to the current one.
+	 */
+	return READ_ONCE(rt->sernum);
 }
 
 static inline void ip6_rt_put(struct rt6_info *rt)
