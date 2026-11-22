@@ -5,7 +5,8 @@
  *  Copyright (C) 1997-2002 Russell King
  *
  *  ARM architecture version 4 TLB handling functions.
- *  These assume a split I/D TLBs w/o I TLB entry, with a write buffer.
+ *  These assume split I/D TLBs without single-entry I-TLB
+ *  invalidation, with a write buffer.
  *
  *  Processors: SA110 SA1100 SA1110
  */
