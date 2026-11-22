@@ -636,8 +636,13 @@ static int sx9324_write_thresh(struct sx_common_data *data,
 static int sx9324_write_hysteresis(struct sx_common_data *data,
 				   const struct iio_chan_spec *chan, int _val)
 {
-	unsigned int hyst, val = _val;
+	unsigned int hyst, val;
 	int ret, pthresh;
+
+	if (_val < 0)
+		return -EINVAL;
+
+	val = _val;
 
 	ret = sx9324_read_thresh(data, chan, &pthresh);
 	if (ret < 0)
