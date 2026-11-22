@@ -1505,8 +1505,15 @@ int siw_map_mr_sg(struct ib_mr *base_mr, struct scatterlist *sl, int num_sle,
 			return -EINVAL;
 		}
 		if (i == 0) {
-			pble->addr = sg_dma_address(slp);
-			pble->size = sg_dma_len(slp);
+			unsigned int off = sg_off ? *sg_off : 0;
+
+			/* The MR starts *sg_off bytes into the first entry */
+			if (off > sg_dma_len(slp)) {
+				siw_dbg_mem(mem, "sg_off %u beyond first SGE\n", off);
+				return -EINVAL;
+			}
+			pble->addr = sg_dma_address(slp) + off;
+			pble->size = sg_dma_len(slp) - off;
 			pble->pbl_off = 0;
 			pbl_size = pble->size;
 			pbl->num_buf = 1;
