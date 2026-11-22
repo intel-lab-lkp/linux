@@ -146,7 +146,6 @@ atomisp-objs += \
 	pci/hive_isp_css_common/host/mmu.o \
 	pci/hive_isp_css_common/host/sp.o \
 	pci/hive_isp_css_common/host/timed_ctrl.o \
-	pci/hive_isp_css_common/host/vmem.o \
 	pci/hive_isp_css_shared/host/tag.o \
 	pci/system_local.o \
 	pci/runtime/isys/src/ibuf_ctrl_rmgr.o \
