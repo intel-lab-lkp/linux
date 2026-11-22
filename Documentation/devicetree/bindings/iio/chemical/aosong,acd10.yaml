@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/iio/chemical/aosong,acd10.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: aosong acd10 carbon dioxide sensor
+
+maintainers:
+  - Akhilesh Patil <akhilesh.patil@linux.dev>
+
+description:
+  aosong acd10 is NDIR CO2 sensor with measurement range of 400 to 5000 ppm.
+  It provides serial interface over UART communication with fixed baud rate of 1200.
+
+properties:
+  compatible:
+    const: aosong,acd10
+
+  vcc-supply: true
+
+required:
+  - compatible
+
+additionalProperties: false
+
+examples:
+  - |
+    serial {
+        co2-sensor {
+            compatible = "aosong,acd10";
+        };
+    };
+...
