@@ -69,10 +69,21 @@ static inline void local_lock_debug_init(local_lock_t *l)
 #else /* CONFIG_DEBUG_LOCK_ALLOC */
 # define LOCAL_LOCK_DEBUG_INIT(lockname)
 # define LOCAL_TRYLOCK_DEBUG_INIT(lockname)
-static inline void local_lock_acquire(local_lock_t *l) { }
-static inline void local_trylock_acquire(local_lock_t *l) { }
-static inline void local_lock_release(local_lock_t *l) { }
 static inline void local_lock_debug_init(local_lock_t *l) { }
+
+/*
+ * The argument passed to these is usually a this_cpu_ptr() expression, which
+ * is implemented using inline asm when the compiler lacks support for named
+ * address spaces (e.g., Clang). Clang may fail to discard such inline asm
+ * even if its result is never used, so only reference the argument in dead
+ * code, which type checks it without evaluating it. (Referencing it only in an
+ * unevaluated context such as sizeof() would make Clang complain about per-CPU
+ * locks that are only used via these helpers being unneeded.)
+ */
+static inline void __local_lock_typecheck(local_lock_t *l) { }
+# define local_lock_acquire(l)		({ if (0) __local_lock_typecheck(l); })
+# define local_trylock_acquire(l)	({ if (0) __local_lock_typecheck(l); })
+# define local_lock_release(l)		({ if (0) __local_lock_typecheck(l); })
 #endif /* !CONFIG_DEBUG_LOCK_ALLOC */
 
 #define INIT_LOCAL_LOCK(lockname)	{ LOCAL_LOCK_DEBUG_INIT(lockname) }
@@ -105,20 +116,23 @@ do {								\
 	local_lock_debug_init(lock);				\
 } while (0)
 
+/*
+ * Only evaluate @lock if it is actually used, i.e., for local_trylock_t, or
+ * when lock debugging is enabled (see local_lock_acquire() above).
+ */
 #define __local_lock_acquire(lock)					\
 	do {								\
-		local_trylock_t *__tl;					\
-		local_lock_t *__l;					\
-									\
-		__l = (local_lock_t *)(lock);				\
-		__tl = (local_trylock_t *)__l;				\
 		_Generic((lock),					\
 			local_trylock_t *: ({				\
+				local_trylock_t *__tl = (local_trylock_t *)(lock); \
+									\
 				lockdep_assert(__tl->acquired == 0);	\
 				WRITE_ONCE(__tl->acquired, 1);		\
+				local_lock_acquire((local_lock_t *)__tl); \
 			}),						\
-			local_lock_t *: (void)0);			\
-		local_lock_acquire(__l);				\
+			local_lock_t *: ({				\
+				local_lock_acquire((local_lock_t *)(lock)); \
+			}));						\
 	} while (0)
 
 #define __local_lock(lock)					\
@@ -181,18 +195,17 @@ do {								\
 
 #define __local_lock_release(lock)					\
 	do {								\
-		local_trylock_t *__tl;					\
-		local_lock_t *__l;					\
-									\
-		__l = (local_lock_t *)(lock);				\
-		__tl = (local_trylock_t *)__l;				\
-		local_lock_release(__l);				\
 		_Generic((lock),					\
 			local_trylock_t *: ({				\
+				local_trylock_t *__tl = (local_trylock_t *)(lock); \
+									\
+				local_lock_release((local_lock_t *)__tl); \
 				lockdep_assert(__tl->acquired == 1);	\
 				WRITE_ONCE(__tl->acquired, 0);		\
 			}),						\
-			local_lock_t *: (void)0);			\
+			local_lock_t *: ({				\
+				local_lock_release((local_lock_t *)(lock)); \
+			}));						\
 	} while (0)
 
 #define __local_unlock(lock)					\
