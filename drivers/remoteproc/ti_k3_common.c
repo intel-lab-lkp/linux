@@ -61,10 +61,16 @@ void k3_rproc_mbox_callback(struct mbox_client *client, void *data)
 	switch (msg) {
 	case RP_MBOX_CRASH:
 		/*
-		 * remoteproc detected an exception, but error recovery is not
-		 * supported. So, just log this for now
+		 * Report only a crash of a core that Linux booted. Once the
+		 * remoteproc core marks an IPC-only core crashed, it can no
+		 * longer detach from it. The state is never RPROC_RUNNING
+		 * before devm_rproc_add(), so a failed probe cannot leave
+		 * crash work queued.
 		 */
-		dev_err(dev, "K3 rproc %s crashed\n", rproc->name);
+		if (rproc->state == RPROC_RUNNING)
+			rproc_report_crash(rproc, RPROC_FATAL_ERROR);
+		else
+			dev_err(dev, "K3 rproc %s crashed\n", rproc->name);
 		break;
 	case RP_MBOX_ECHO_REPLY:
 		dev_info(dev, "received echo reply from %s\n", rproc->name);
