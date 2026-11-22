@@ -530,7 +530,8 @@ int arch__dwarf_regnum(const struct arch *arch, const char *str);
  * struct annotated_op_loc - Location info of instruction operand
  * @reg1: First register in the operand
  * @reg2: Second register in the operand
- * @offset: Memory access offset in the operand
+ * @imm_value: Immediate value of an x86 operand
+ * @offset: Memory access offset, or an ARM64 or x86 %gs: immediate
  * @segment: Segment selector register
  * @addr_mode: Addressing mode, only valid if @mem_ref is true
  * @extend_type: Operand extension type (enum annotated_ext_type)
@@ -538,11 +539,12 @@ int arch__dwarf_regnum(const struct arch *arch, const char *str);
  * @amount: Number of bits to shift
  * @mem_ref: Whether the operand accesses memory
  * @multi_regs: Whether the second register is used
- * @imm: Whether the operand is an immediate value (in offset)
+ * @imm: Whether the operand is an immediate value
  */
 struct annotated_op_loc {
 	int reg1;
 	int reg2;
+	s64 imm_value;
 	int offset;
 	u8 segment;
 	u8 addr_mode;

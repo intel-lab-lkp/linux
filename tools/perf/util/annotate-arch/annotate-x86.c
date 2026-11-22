@@ -341,7 +341,7 @@ static void update_insn_state_x86(struct type_state *state,
 		tsr->lifetime_end = 0;
 
 		if (src->imm)
-			imm_value = src->offset;
+			imm_value = src->imm_value;
 		else if (has_reg_type(state, src->reg1) &&
 			 state->regs[src->reg1].kind == TSR_KIND_CONST)
 			imm_value = state->regs[src->reg1].imm_value;
@@ -408,7 +408,7 @@ static void update_insn_state_x86(struct type_state *state,
 		tsr->lifetime_end = 0;
 
 		if (src->imm)
-			imm_value = src->offset;
+			imm_value = src->imm_value;
 		else if (has_reg_type(state, src->reg1) &&
 			 state->regs[src->reg1].kind == TSR_KIND_CONST)
 			imm_value = state->regs[src->reg1].imm_value;
@@ -589,7 +589,7 @@ static void update_insn_state_x86(struct type_state *state,
 
 		if (src->imm) {
 			tsr->kind = TSR_KIND_CONST;
-			tsr->imm_value = (s64)src->offset;
+			tsr->imm_value = src->imm_value;
 			tsr->offset = 0;
 			tsr->ok = true;
 
@@ -967,8 +967,11 @@ static void extract_op_location_x86(const struct arch *arch,
 		if (*s == arch->objdump.register_char) {
 			op_loc->reg1 = arch__dwarf_regnum(arch, s);
 		} else if (*s == arch->objdump.imm_char) {
-			op_loc->offset = strtol(s + 1, &p, 0);
-			if (p && p != s + 1)
+			const char *start = s + 1;
+			u64 imm = strtoull(start, &p, 0);
+
+			op_loc->imm_value = imm;
+			if (p && p != start)
 				op_loc->imm = true;
 		} else if (*s == '-' || strstarts(s, "0x")) {
 			u64 offset = strtoull(s, NULL, 0);
