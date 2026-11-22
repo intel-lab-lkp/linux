@@ -2120,6 +2120,21 @@ static bool nh_has_f6i(struct nexthop *nh)
 	return have_f6i;
 }
 
+/* true if IPv6 routes use @nh directly or through a group containing it */
+static bool nh_used_by_f6i(struct nexthop *nh)
+{
+	struct nh_grp_entry *nhge;
+
+	if (nh_has_f6i(nh))
+		return true;
+
+	list_for_each_entry(nhge, &nh->grp_list, nh_list)
+		if (nh_has_f6i(nhge->nh_parent))
+			return true;
+
+	return false;
+}
+
 static bool __must_check
 remove_nexthop_from_groups(struct net *net, struct nexthop *nh,
 			   struct nl_info *nlinfo)
@@ -2127,6 +2142,7 @@ remove_nexthop_from_groups(struct net *net, struct nexthop *nh,
 	struct nh_grp_entry *nhge, *tmp;
 	LIST_HEAD(deferred_free);
 	bool need_flush = false;
+	bool have_f6i = false;
 
 	/* If there is nothing to do, let's avoid the costly call to
 	 * synchronize_net()
@@ -2134,12 +2150,18 @@ remove_nexthop_from_groups(struct net *net, struct nexthop *nh,
 	if (list_empty(&nh->grp_list))
 		return false;
 
-	list_for_each_entry_safe(nhge, tmp, &nh->grp_list, nh_list)
+	list_for_each_entry_safe(nhge, tmp, &nh->grp_list, nh_list) {
+		have_f6i |= nh_has_f6i(nhge->nh_parent);
 		need_flush |= remove_nh_grp_entry(net, nhge, nlinfo,
 						  &deferred_free);
+	}
 
 	/* make sure all see the newly published array before releasing rtnl */
 	synchronize_net();
+
+	/* a group lost a member: dsts built from the old group are stale */
+	if (have_f6i)
+		rt_genid_bump_ipv6(net);
 
 	/* Now safe to free percpu stats — all RCU readers have finished */
 	list_for_each_entry_safe(nhge, tmp, &deferred_free, nh_list) {
@@ -2264,7 +2286,8 @@ static void nh_rt_cache_flush(struct net *net, struct nexthop *nh,
 	if (!list_empty(&nh->fi_list))
 		rt_cache_flush(net);
 
-	if (nh_has_f6i(nh))
+	/* dsts are validated against the netns route generation */
+	if (nh_used_by_f6i(nh))
 		rt_genid_bump_ipv6(net);
 
 	/* if an IPv6 group was replaced, we have to release all old
