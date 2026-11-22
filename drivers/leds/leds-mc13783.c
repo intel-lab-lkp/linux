@@ -108,7 +108,7 @@ static int mc13xxx_led_set(struct led_classdev *led_cdev,
 			value << shift);
 }
 
-static struct mc13xxx_leds_platform_data __init *mc13xxx_led_probe_dt(
+static struct mc13xxx_leds_platform_data *mc13xxx_led_probe_dt(
 	struct platform_device *pdev)
 {
 	struct mc13xxx_leds *leds = platform_get_drvdata(pdev);
@@ -162,7 +162,7 @@ static struct mc13xxx_leds_platform_data __init *mc13xxx_led_probe_dt(
 	return pdata;
 }
 
-static int __init mc13xxx_led_probe(struct platform_device *pdev)
+static int mc13xxx_led_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct mc13xxx_leds_platform_data *pdata = dev_get_platdata(dev);
@@ -288,13 +288,14 @@ static const struct platform_device_id mc13xxx_led_id_table[] = {
 MODULE_DEVICE_TABLE(platform, mc13xxx_led_id_table);
 
 static struct platform_driver mc13xxx_led_driver = {
+	.probe = mc13xxx_led_probe,
 	.driver	= {
 		.name	= "mc13xxx-led",
 	},
 	.remove		= mc13xxx_led_remove,
 	.id_table	= mc13xxx_led_id_table,
 };
-module_platform_driver_probe(mc13xxx_led_driver, mc13xxx_led_probe);
+module_platform_driver(mc13xxx_led_driver);
 
 MODULE_DESCRIPTION("LEDs driver for Freescale MC13XXX PMIC");
 MODULE_AUTHOR("Philippe Retornaz <philippe.retornaz@epfl.ch>");
