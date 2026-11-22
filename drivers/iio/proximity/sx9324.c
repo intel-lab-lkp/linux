@@ -613,12 +613,17 @@ static int sx9324_read_event_val(struct iio_dev *indio_dev,
 static int sx9324_write_thresh(struct sx_common_data *data,
 			       const struct iio_chan_spec *chan, int _val)
 {
-	unsigned int reg, val = _val;
+	unsigned int reg, val;
+
+	if (_val < 0)
+		return -EINVAL;
 
 	reg = SX9324_REG_PROX_CTRL6 + chan->channel / 2;
+	val = _val;
 
-	if (val >= 1)
-		val = int_sqrt(2 * val);
+	/* Inverse of read_thresh(), so that writing back a read value is a no-op */
+	if (val > 1)
+		val = int_sqrt(2 * val + 1);
 
 	if (val > 0xff)
 		return -EINVAL;
