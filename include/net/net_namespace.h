@@ -556,18 +556,30 @@ static inline int rt_genid_ipv6(const struct net *net)
 {
 	return atomic_read(&net->ipv6.fib6_sernum);
 }
+
+/* Invalidate every cached IPv6 dst in @net. Returns the new generation,
+ * which is never 0.
+ */
+static inline int rt_genid_bump_ipv6(struct net *net)
+{
+	int new, old = atomic_read(&net->ipv6.fib6_sernum);
+
+	do {
+		new = old < INT_MAX ? old + 1 : 1;
+	} while (!atomic_try_cmpxchg(&net->ipv6.fib6_sernum, &old, new));
+
+	return new;
+}
+#else
+static inline int rt_genid_bump_ipv6(struct net *net)
+{
+	return 0;
+}
 #endif
 
 static inline void rt_genid_bump_ipv4(struct net *net)
 {
 	atomic_inc(&net->ipv4.rt_genid);
-}
-
-extern void (*__fib6_flush_trees)(struct net *net);
-static inline void rt_genid_bump_ipv6(struct net *net)
-{
-	if (__fib6_flush_trees)
-		__fib6_flush_trees(net);
 }
 
 #if IS_ENABLED(CONFIG_IEEE802154_6LOWPAN)
