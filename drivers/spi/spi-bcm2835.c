@@ -1313,13 +1313,16 @@ static int bcm2835_spi_setup(struct spi_device *spi)
 		return 0;
 
 	/*
-	 * TODO: The code below is a slightly better alternative to the utter
-	 * abuse of the GPIO API that I found here before. It creates a
-	 * temporary lookup table, assigns it to the SPI device, gets the GPIO
-	 * descriptor and then releases the lookup table.
+	 * The hardware-controlled native chip-select can produce short
+	 * glitches during transfers, so use GPIO-controlled chip-select
+	 * instead.
 	 *
-	 * More on the problem that it addresses:
-	 *   https://www.spinics.net/lists/linux-gpio/msg36218.html
+	 * If the device tree doesn't provide a CS GPIO descriptor, create a
+	 * temporary lookup table to obtain the GPIO through the consumer API.
+	 * This fallback assumes GPIOs 8/7 and doesn't detect whether the
+	 * alternate GPIOs 36/35 are configured.
+	 *
+	 * See https://www.spinics.net/lists/linux-gpio/msg36218.html
 	 */
 	lookup = kzalloc_flex(*lookup, table, 2);
 	if (!lookup) {
