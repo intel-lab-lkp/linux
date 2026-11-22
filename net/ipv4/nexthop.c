@@ -2109,6 +2109,17 @@ remove_nh_grp_entry(struct net *net, struct nh_grp_entry *nhge,
 	return false;
 }
 
+static bool nh_has_f6i(struct nexthop *nh)
+{
+	bool have_f6i;
+
+	spin_lock_bh(&nh->lock);
+	have_f6i = !list_empty(&nh->f6i_list);
+	spin_unlock_bh(&nh->lock);
+
+	return have_f6i;
+}
+
 static bool __must_check
 remove_nexthop_from_groups(struct net *net, struct nexthop *nh,
 			   struct nl_info *nlinfo)
@@ -2248,16 +2259,12 @@ static void nh_rt_cache_flush(struct net *net, struct nexthop *nh,
 			      struct nexthop *replaced_nh)
 {
 	struct nh_group *nhg;
-	bool have_f6i;
 	int i;
 
 	if (!list_empty(&nh->fi_list))
 		rt_cache_flush(net);
 
-	spin_lock_bh(&nh->lock);
-	have_f6i = !list_empty(&nh->f6i_list);
-	spin_unlock_bh(&nh->lock);
-	if (have_f6i)
+	if (nh_has_f6i(nh))
 		rt_genid_bump_ipv6(net);
 
 	/* if an IPv6 group was replaced, we have to release all old
