@@ -45,7 +45,6 @@ pub(crate) struct BoData {
 
 impl BoData {
     /// Returns the flags the BO was created with.
-    #[expect(dead_code)]
     pub(crate) fn flags(&self) -> u32 {
         self.flags
     }
@@ -83,7 +82,6 @@ pub(crate) fn should_map_wc(coherent: bool, flags: u32) -> bool {
 }
 
 /// Create a new GEM buffer object.
-#[expect(dead_code)]
 pub(crate) fn new_object(
     ddev: &TyrDrmDevice,
     pdev: &Device<Bound>,
