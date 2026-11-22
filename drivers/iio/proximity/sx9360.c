@@ -508,10 +508,16 @@ static int sx9360_read_event_val(struct iio_dev *indio_dev,
 
 static int sx9360_write_thresh(struct sx_common_data *data, int _val)
 {
-	unsigned int val = _val;
+	unsigned int val;
 
-	if (val >= 1)
-		val = int_sqrt(2 * val);
+	if (_val < 0)
+		return -EINVAL;
+
+	val = _val;
+
+	/* Inverse of read_thresh(), so that writing back a read value is a no-op */
+	if (val > 1)
+		val = int_sqrt(2 * val + 1);
 
 	if (val > 0xff)
 		return -EINVAL;
