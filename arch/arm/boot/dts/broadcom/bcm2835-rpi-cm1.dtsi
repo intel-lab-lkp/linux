@@ -6,12 +6,6 @@
 #include "bcm283x-rpi-led-deprecated.dtsi"
 
 / {
-	leds {
-		led-act {
-			gpios = <&gpio 47 GPIO_ACTIVE_LOW>;
-		};
-	};
-
 	memory@0 {
 		device_type = "memory";
 		reg = <0 0x20000000>;
