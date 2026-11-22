@@ -1818,8 +1818,11 @@ int dm_calculate_queue_limits(struct dm_table *t,
 combine_limits:
 		/*
 		 * Merge this target's queue limits into the overall limits
-		 * for the table.
+		 * for the table. In blk_stack_limits() the upper device's
+		 * max_hw_discard_sectors is based on the lower device's
+		 * max_discard_sectors, so copy this value over first.
 		 */
+		ti_limits.max_discard_sectors = ti_limits.max_hw_discard_sectors;
 		if (blk_stack_limits(limits, &ti_limits, 0) < 0)
 			DMWARN("%s: adding target device (start sect %llu len %llu) "
 			       "caused an alignment inconsistency",
