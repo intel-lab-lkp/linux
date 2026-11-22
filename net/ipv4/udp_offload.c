@@ -723,6 +723,17 @@ static struct sk_buff *udp_gro_receive_segment(struct list_head *head,
 		if (!NAPI_GRO_CB(p)->same_flow)
 			continue;
 
+		/* encap_mark is set once a packet has been through a tunnel
+		 * GRO handler (vxlan, geneve, ...). For such a packet
+		 * udp_hdr() points at the inner L4 header and its network
+		 * offsets describe the inner packet, so it must not be
+		 * compared with a packet that has not been through one.
+		 */
+		if (NAPI_GRO_CB(p)->encap_mark != NAPI_GRO_CB(skb)->encap_mark) {
+			NAPI_GRO_CB(p)->same_flow = 0;
+			continue;
+		}
+
 		uh2 = udp_hdr(p);
 
 		/* Match ports only, as csum is always non zero */
