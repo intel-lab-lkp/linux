@@ -5,6 +5,16 @@
 
 menu "Chemical Sensors"
 
+config ACD10
+	tristate "Aosong ACD10 CO2 gas sensor"
+	depends on SERIAL_DEV_BUS
+	help
+	  Say Y here to build Aosong ASAIR ACD10 CO2 (carbon dioxide)
+	  sensor driver.
+
+	  To compile this ACD10 driver as a loadable kernel module,
+	  choose M here: the module will be called acd10
+
 config AOSONG_AGS02MA
 	tristate "Aosong AGS02MA TVOC sensor driver"
 	depends on I2C
