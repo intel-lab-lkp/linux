@@ -2333,7 +2333,6 @@ static void em28xx_free_v4l2(struct v4l2_device *v4l2_dev)
 
 	v4l2_ctrl_handler_free(&v4l2->ctrl_handler);
 	v4l2_device_unregister(v4l2_dev);
-	dev->v4l2 = NULL;
 	kfree(v4l2);
 	kref_put(&dev->ref, em28xx_free_device);
 }
@@ -2414,7 +2413,7 @@ static int em28xx_v4l2_open(struct file *filp)
  */
 static int em28xx_v4l2_fini(struct em28xx *dev)
 {
-	struct em28xx_v4l2 *v4l2 = dev->v4l2;
+	struct em28xx_v4l2 *v4l2;
 
 	if (dev->is_audio_only) {
 		/* Shouldn't initialize IR for this interface */
@@ -2426,12 +2425,15 @@ static int em28xx_v4l2_fini(struct em28xx *dev)
 		return 0;
 	}
 
-	if (!v4l2)
+	mutex_lock(&dev->lock);
+
+	v4l2 = dev->v4l2;
+	if (!v4l2) {
+		mutex_unlock(&dev->lock);
 		return 0;
+	}
 
 	dev_info(&dev->intf->dev, "Closing video extension\n");
-
-	mutex_lock(&dev->lock);
 
 	v4l2_device_disconnect(&v4l2->v4l2_dev);
 
@@ -2454,6 +2456,8 @@ static int em28xx_v4l2_fini(struct em28xx *dev)
 			 video_device_node_name(&v4l2->vdev));
 		vb2_video_unregister_device(&v4l2->vdev);
 	}
+
+	dev->v4l2 = NULL;
 
 	mutex_unlock(&dev->lock);
 
@@ -2502,18 +2506,19 @@ static int em28xx_v4l2_close(struct file *filp)
 {
 	struct video_device   *vdev = video_devdata(filp);
 	struct em28xx         *dev  = video_drvdata(filp);
-	struct em28xx_v4l2    *v4l2 = dev->v4l2;
+	struct em28xx_v4l2    *v4l2;
 	struct usb_device *udev = interface_to_usbdev(dev->intf);
 	int              err;
 	bool last_user;
 
 	mutex_lock(&dev->lock);
+	v4l2 = dev->v4l2;
 	last_user = v4l2_fh_is_singular_file(filp);
 	_vb2_fop_release(filp, vdev->queue->lock);
 
 	if (last_user) {
 		/* No sense to try to write to the device */
-		if (dev->disconnected)
+		if (dev->disconnected || !v4l2)
 			goto exit;
 
 		/* Save some power by putting tuner to sleep */
@@ -3110,6 +3115,8 @@ static int em28xx_v4l2_init(struct em28xx *dev)
 	return 0;
 
 unregister_dev:
+	v4l2_device_disconnect(&v4l2->v4l2_dev);
+
 	if (video_is_registered(&v4l2->radio_dev)) {
 		dev_info(&dev->intf->dev,
 			 "V4L2 device %s deregistered\n",
@@ -3128,6 +3135,8 @@ unregister_dev:
 			 video_device_node_name(&v4l2->vdev));
 		vb2_video_unregister_device(&v4l2->vdev);
 	}
+
+	dev->v4l2 = NULL;
 
 	mutex_unlock(&dev->lock);
 
