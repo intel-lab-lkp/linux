@@ -854,6 +854,7 @@ static int rockchip_pm_add_one_domain(struct rockchip_pmu *pmu,
 			dev_err(pmu->dev,
 				"%pOFn: failed to get clk at index %d: %d\n",
 				node, i, error);
+			pd->num_clks = i;
 			goto err_put_clocks;
 		}
 	}
