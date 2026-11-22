@@ -972,14 +972,15 @@ int siw_activate_tx(struct siw_qp *qp)
 	/* start READ RESPONSE */
 	wqe->sqe.opcode = SIW_OP_READ_RESPONSE;
 	wqe->sqe.flags = 0;
-	if (irqe->num_sge) {
-		wqe->sqe.num_sge = 1;
-		wqe->sqe.sge[0].length = irqe->sge[0].length;
-		wqe->sqe.sge[0].laddr = irqe->sge[0].laddr;
-		wqe->sqe.sge[0].lkey = irqe->sge[0].lkey;
-	} else {
-		wqe->sqe.num_sge = 0;
-	}
+	/*
+	 * Copy sge[0] also for a zero length Read Request. The TX path
+	 * sends sge[0] of every Read Response, and the previous work
+	 * request's sge[0] must not be sent in its place.
+	 */
+	wqe->sqe.num_sge = irqe->num_sge;
+	wqe->sqe.sge[0].length = irqe->sge[0].length;
+	wqe->sqe.sge[0].laddr = irqe->sge[0].laddr;
+	wqe->sqe.sge[0].lkey = irqe->sge[0].lkey;
 
 	/* Retain original RREQ's message sequence number for
 	 * potential error reporting cases.
