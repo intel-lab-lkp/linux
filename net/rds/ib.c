@@ -392,6 +392,30 @@ static void rds6_ib_ic_info(struct socket *sock, unsigned int len,
 #endif
 
 /*
+ * Maximum number of probe cm_ids whose destruction is still pending on
+ * rds_wq.  Each of them pins a cma_dev reference and an RDMA_PS_TCP port,
+ * so the number of in-flight probes has to be bounded.
+ */
+#define RDS_IB_MAX_PENDING_PROBES	64
+
+static atomic_t rds_ib_pending_probes = ATOMIC_INIT(0);
+
+struct rds_ib_destroy_work {
+	struct work_struct work;
+	struct rdma_cm_id *cm_id;
+};
+
+static void rds_ib_destroy_id_work(struct work_struct *work)
+{
+	struct rds_ib_destroy_work *w =
+		container_of(work, struct rds_ib_destroy_work, work);
+
+	rdma_destroy_id(w->cm_id);
+	kfree(w);
+	atomic_dec(&rds_ib_pending_probes);
+}
+
+/*
  * Early RDS/IB was built to only bind to an address if there is an IPoIB
  * device with that address set.
  *
@@ -411,14 +435,39 @@ static int rds_ib_laddr_check_cm(struct net *net, const struct in6_addr *addr,
 #endif
 	struct sockaddr_in sin;
 	struct sockaddr *sa;
+	struct rds_ib_destroy_work *w;
 	bool isv4;
 
 	isv4 = ipv6_addr_v4mapped(addr);
+
+	/*
+	 * The id is destroyed from rds_wq: rds_trans_get_preferred() calls this
+	 * function with rds_trans_sem held for reading, and rdma_destroy_id()
+	 * takes handler_mutex, which the CM callback path acquires before
+	 * taking rds_trans_sem.  Reserve a pending-probe slot first, so that a
+	 * loop of bind() calls cannot pile up ids that pin a cma_dev reference
+	 * and an RDMA_PS_TCP port.
+	 */
+	if (atomic_inc_return(&rds_ib_pending_probes) >
+	    RDS_IB_MAX_PENDING_PROBES) {
+		atomic_dec(&rds_ib_pending_probes);
+		return -EAGAIN;
+	}
+
+	w = kzalloc_obj(*w, GFP_KERNEL);
+	if (!w) {
+		atomic_dec(&rds_ib_pending_probes);
+		return -ENOMEM;
+	}
+
 	/* Create a CMA ID restricted to IB devices and try to bind it. */
 	cm_id = rdma_create_id(&init_net, rds_rdma_cm_event_handler,
 			       NULL, RDMA_PS_TCP, IB_QPT_RC);
-	if (IS_ERR(cm_id))
+	if (IS_ERR(cm_id)) {
+		atomic_dec(&rds_ib_pending_probes);
+		kfree(w);
 		return PTR_ERR(cm_id);
+	}
 	ret = rdma_restrict_node_type(cm_id, RDMA_NODE_IB_CA);
 	if (ret)
 		goto out;
@@ -484,7 +533,9 @@ static int rds_ib_laddr_check_cm(struct net *net, const struct in6_addr *addr,
 		 cm_id->device ? cm_id->device->node_type : -1);
 
 out:
-	rdma_destroy_id(cm_id);
+	INIT_WORK(&w->work, rds_ib_destroy_id_work);
+	w->cm_id = cm_id;
+	queue_work(rds_wq, &w->work);
 
 	return ret;
 }
@@ -542,6 +593,11 @@ void rds_ib_exit(void)
 	rds_ib_sysctl_exit();
 	rds_ib_recv_exit();
 	rds_trans_unregister(&rds_ib_transport);
+	/*
+	 * rds_ib_laddr_check_cm() may have queued rdma_destroy_id() on rds_wq;
+	 * wait for it before the module text goes away.
+	 */
+	flush_workqueue(rds_wq);
 	rds_ib_mr_exit();
 }
 
