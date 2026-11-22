@@ -89,20 +89,25 @@ static void ext2_msg_fc(struct fs_context *fc, const char *prefix,
 
 	if (fc->purpose == FS_CONTEXT_FOR_RECONFIGURE) {
 		s_id = fc->root->d_sb->s_id;
-	} else {
+	} else if (fc->source) {
 		/* get last path component of source */
 		s_id = strrchr(fc->source, '/');
 		if (s_id)
 			s_id++;
 		else
 			s_id = fc->source;
+	} else {
+		s_id = NULL;
 	}
 	va_start(args, fmt);
 
 	vaf.fmt = fmt;
 	vaf.va = &args;
 
-	printk("%sEXT2-fs (%s): %pV\n", prefix, s_id, &vaf);
+	if (s_id && *s_id)
+		printk("%sEXT2-fs (%s): %pV\n", prefix, s_id, &vaf);
+	else
+		printk("%sEXT2-fs: %pV\n", prefix, &vaf);
 
 	va_end(args);
 }
