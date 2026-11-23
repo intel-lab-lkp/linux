@@ -1329,6 +1329,7 @@ static struct folio *shmem_get_partial_folio(struct inode *inode, pgoff_t index)
 {
 	const gfp_t gfp = mapping_gfp_mask(inode->i_mapping);
 	struct folio *folio;
+	int error;
 
 retry:
 	folio = filemap_get_entry(inode->i_mapping, index);
@@ -1347,17 +1348,22 @@ retry:
 	 * Truncation can look up a large swap entry at or beyond i_size.
 	 * Swap it in directly to bypass the size check in shmem_get_folio().
 	 */
-	if (shmem_swapin_folio(inode, index, &folio, SGP_READ, gfp, NULL, NULL) == -EEXIST)
+	error = shmem_swapin_folio(inode, index, &folio, SGP_READ, gfp, NULL, NULL);
+	if (error == -EEXIST)
 		goto retry;
+	if (error)
+		return ERR_PTR(error);
 	return folio;
 }
 
 /*
  * Remove range of pages and swap entries from page cache, and free them.
  * If !unfalloc, truncate or punch hole; if unfalloc, undo failed fallocate.
+ * Boundary folios are locked and referenced. Zero them, split large ones,
+ * then unlock and put them. NULL means there is no boundary folio.
  */
 static void shmem_undo_range(struct inode *inode, loff_t lstart, uoff_t lend,
-								 bool unfalloc)
+		struct folio *start_folio, struct folio *end_folio, bool unfalloc)
 {
 	struct address_space *mapping = inode->i_mapping;
 	struct shmem_inode_info *info = SHMEM_I(inode);
@@ -1415,25 +1421,19 @@ static void shmem_undo_range(struct inode *inode, loff_t lstart, uoff_t lend,
 	if (unfalloc)
 		goto whole_folios;
 
-	same_folio = (lstart >> PAGE_SHIFT) == (lend >> PAGE_SHIFT);
-	folio = shmem_get_partial_folio(inode, lstart >> PAGE_SHIFT);
-	if (folio) {
-		same_folio = lend < folio_next_pos(folio);
-		folio_mark_dirty(folio);
-		truncate_inode_partial_folio(folio, lstart, lend, &start,
+	if (start_folio) {
+		same_folio = lend < folio_next_pos(start_folio);
+		folio_mark_dirty(start_folio);
+		truncate_inode_partial_folio(start_folio, lstart, lend, &start,
 					     same_folio ? &end : NULL);
-		folio_unlock(folio);
-		folio_put(folio);
-		folio = NULL;
+		folio_unlock(start_folio);
+		folio_put(start_folio);
 	}
-
-	if (!same_folio)
-		folio = shmem_get_partial_folio(inode, lend >> PAGE_SHIFT);
-	if (folio) {
-		folio_mark_dirty(folio);
-		truncate_inode_partial_folio(folio, lstart, lend, NULL, &end);
-		folio_unlock(folio);
-		folio_put(folio);
+	if (end_folio && end_folio != start_folio) {
+		folio_mark_dirty(end_folio);
+		truncate_inode_partial_folio(end_folio, lstart, lend, NULL, &end);
+		folio_unlock(end_folio);
+		folio_put(end_folio);
 	}
 
 whole_folios:
@@ -1536,11 +1536,38 @@ whole_folios:
 	shmem_recalc_inode(inode, 0, -nr_swaps_freed);
 }
 
-void shmem_truncate_range(struct inode *inode, loff_t lstart, uoff_t lend)
+/* Check whether the end page of [lstart, lend] lies in the start folio. */
+static bool is_same_boundary_folio(struct folio *start_folio,
+		loff_t lstart, uoff_t lend)
 {
-	shmem_undo_range(inode, lstart, lend, false);
+	if (start_folio)
+		return folio_next_index(start_folio) > lend >> PAGE_SHIFT;
+	return (lstart >> PAGE_SHIFT) == (lend >> PAGE_SHIFT);
+}
+
+static void shmem_truncate_range_partial(struct inode *inode, loff_t lstart, loff_t lend,
+		struct folio *start_folio, struct folio *end_folio)
+{
+	shmem_undo_range(inode, lstart, lend, start_folio, end_folio, false);
 	inode_set_mtime_to_ts(inode, inode_set_ctime_current(inode));
 	inode_inc_iversion(inode);
+}
+
+void shmem_truncate_range(struct inode *inode, loff_t lstart, uoff_t lend)
+{
+	struct folio *start_folio = NULL, *end_folio = NULL;
+
+	/* This void interface retains best-effort handling of boundary errors. */
+	start_folio = shmem_get_partial_folio(inode, lstart >> PAGE_SHIFT);
+	if (IS_ERR(start_folio))
+		start_folio = NULL;
+
+	if (lend != -1 && !is_same_boundary_folio(start_folio, lstart, lend)) {
+		end_folio = shmem_get_partial_folio(inode, lend >> PAGE_SHIFT);
+		if (IS_ERR(end_folio))
+			end_folio = NULL;
+	}
+	shmem_truncate_range_partial(inode, lstart, lend, start_folio, end_folio);
 }
 EXPORT_SYMBOL_GPL(shmem_truncate_range);
 
@@ -1601,19 +1628,30 @@ static int shmem_setattr(const struct mnt_idmap *idmap,
 	if (S_ISREG(inode->i_mode) && (attr->ia_valid & ATTR_SIZE)) {
 		loff_t oldsize = inode->i_size;
 		loff_t newsize = attr->ia_size;
+		struct folio *folio = NULL;
 
 		/* protected by i_rwsem */
 		if ((newsize < oldsize && (info->seals & F_SEAL_SHRINK)) ||
 		    (newsize > oldsize && (info->seals & F_SEAL_GROW)))
 			return -EPERM;
 
+		if (newsize != oldsize && (info->flags & SHMEM_F_MAPPING_FROZEN))
+			return -EPERM;
+		if (newsize <= oldsize) {
+			folio = shmem_get_partial_folio(inode, newsize >> PAGE_SHIFT);
+			if (IS_ERR(folio))
+				return PTR_ERR(folio);
+		}
 		if (newsize != oldsize) {
-			if (info->flags & SHMEM_F_MAPPING_FROZEN)
-				return -EPERM;
 			error = shmem_reacct_size(SHMEM_I(inode)->flags,
 					oldsize, newsize);
-			if (error)
+			if (error) {
+				if (folio) {
+					folio_unlock(folio);
+					folio_put(folio);
+				}
 				return error;
+			}
 			i_size_write(inode, newsize);
 			update_mtime = true;
 		} else {
@@ -1626,8 +1664,8 @@ static int shmem_setattr(const struct mnt_idmap *idmap,
 							holebegin, 0, 1);
 			/* Swapin-error markers are not counted in alloced. */
 			if (info->alloced || !mapping_empty(inode->i_mapping))
-				shmem_truncate_range(inode,
-							newsize, (loff_t)-1);
+				shmem_truncate_range_partial(inode, newsize, (loff_t)-1,
+							     folio, NULL);
 			/* unmap again to remove racily COWed private pages */
 			if (oldsize > holebegin)
 				unmap_mapping_range(inode->i_mapping,
@@ -3933,12 +3971,31 @@ static long shmem_fallocate(struct file *file, int mode, loff_t offset,
 		struct address_space *mapping = file->f_mapping;
 		loff_t unmap_start = round_up(offset, PAGE_SIZE);
 		loff_t unmap_end = round_down(offset + len, PAGE_SIZE);
+		loff_t lend = offset + len - 1;
 		DECLARE_WAIT_QUEUE_HEAD_ONSTACK(shmem_falloc_waitq);
+		struct folio *start_folio = NULL, *end_folio = NULL;
 
 		/* protected by i_rwsem */
 		if (info->seals & (F_SEAL_WRITE | F_SEAL_FUTURE_WRITE)) {
 			error = -EPERM;
 			goto out;
+		}
+
+		start_folio = shmem_get_partial_folio(inode, offset >> PAGE_SHIFT);
+		if (IS_ERR(start_folio)) {
+			error = PTR_ERR(start_folio);
+			goto out;
+		}
+		if (!is_same_boundary_folio(start_folio, offset, lend)) {
+			end_folio = shmem_get_partial_folio(inode, lend >> PAGE_SHIFT);
+			if (IS_ERR(end_folio)) {
+				error = PTR_ERR(end_folio);
+				if (start_folio) {
+					folio_unlock(start_folio);
+					folio_put(start_folio);
+				}
+				goto out;
+			}
 		}
 
 		shmem_falloc.waitq = &shmem_falloc_waitq;
@@ -3951,7 +4008,8 @@ static long shmem_fallocate(struct file *file, int mode, loff_t offset,
 		if ((u64)unmap_end > (u64)unmap_start)
 			unmap_mapping_range(mapping, unmap_start,
 					    unmap_end - unmap_start, 0);
-		shmem_truncate_range(inode, offset, offset + len - 1);
+		shmem_truncate_range_partial(inode, offset, lend,
+					     start_folio, end_folio);
 		/* No need to unmap again: hole-punching leaves COWed pages */
 
 		spin_lock(&inode->i_lock);
@@ -4029,7 +4087,7 @@ static long shmem_fallocate(struct file *file, int mode, loff_t offset,
 			if (index > start) {
 				shmem_undo_range(inode,
 				    (loff_t)start << PAGE_SHIFT,
-				    ((loff_t)index << PAGE_SHIFT) - 1, true);
+				    ((loff_t)index << PAGE_SHIFT) - 1, NULL, NULL, true);
 			}
 			goto undone;
 		}
