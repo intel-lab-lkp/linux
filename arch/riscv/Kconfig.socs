@@ -26,6 +26,12 @@ config ARCH_MICROCHIP
 	help
 	  This enables support for Microchip SoC platforms.
 
+config ARCH_MIPS
+	bool "MIPS SoCs"
+	help
+	  This enables support for MIPS SoC platform hardware,
+	  including the P8700.
+
 config ARCH_RENESAS
 	bool "Renesas RISC-V SoCs"
 	help
