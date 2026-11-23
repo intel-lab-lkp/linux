@@ -1107,6 +1107,14 @@ static int nhi_suspend(struct device *dev)
 {
 	struct tb *tb = dev_get_drvdata(dev);
 
+	/*
+	 * Unlike the PCI bus, the platform bus does not automatically
+	 * runtime-resume the device before invoking system suspend callbacks.
+	 * Ensure the device is runtime-active before suspending the domain.
+	 */
+	if (pm_runtime_suspended(dev))
+		pm_runtime_resume(dev);
+
 	return tb_domain_suspend(tb);
 }
 

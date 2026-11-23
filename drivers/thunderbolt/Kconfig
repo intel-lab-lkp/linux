@@ -28,6 +28,16 @@ config USB4_PCI
 	  To compile this driver a module, choose M here. The module will be
 	  called thunderbolt_pci.
 
+config USB4_PLATFORM
+	tristate "Support for platform USB4 and Thunderbolt controllers"
+	depends on ACPI
+	help
+	  Say Y here to add support the USB4 and Thunderbolt host routers
+	  enumerated via ACPI (such as devices matching ACPI0015).
+
+	  To compile this driver a module, choose M here. The module will be
+	  called thunderbolt_platform.
+
 config USB4_CONFIGFS
 	def_tristate USB4
 	depends on CONFIGFS_FS && !(USB4=y && CONFIGFS_FS=m)
