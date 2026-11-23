@@ -681,6 +681,9 @@ static int hx9023s_get_samp_freq(struct hx9023s_data *data, int *val, int *val2)
 	if (ret)
 		return ret;
 
+	if (index >= ARRAY_SIZE(hx9023s_samp_freq_table))
+		return -EINVAL;
+
 	odr = hx9023s_samp_freq_table[index];
 	*val = KILO / odr;
 	*val2 = div_u64((KILO % odr) * MICRO, odr);
