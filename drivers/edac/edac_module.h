@@ -48,12 +48,12 @@ extern void edac_device_remove_sysfs(struct edac_device_ctl_info *edac_dev);
 /* edac core workqueue: single CPU mode */
 int edac_workqueue_setup(void);
 void edac_workqueue_teardown(void);
-bool edac_queue_work(struct delayed_work *work, unsigned long delay);
+bool edac_queue_work(struct delayed_work *work, unsigned long jiffies);
 bool edac_stop_work(struct delayed_work *work);
-bool edac_mod_work(struct delayed_work *work, unsigned long delay);
+bool edac_mod_work(struct delayed_work *work, unsigned long jiffies);
 
 extern void edac_device_reset_delay_period(struct edac_device_ctl_info *edac_dev, unsigned int msec);
-extern void edac_mc_reset_delay_period(unsigned long value);
+extern void edac_mc_reset_delay_period(unsigned long msec);
 
 /*
  * EDAC debugfs functions

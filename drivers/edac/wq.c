@@ -3,15 +3,15 @@
 
 static struct workqueue_struct *wq;
 
-bool edac_queue_work(struct delayed_work *work, unsigned long delay)
+bool edac_queue_work(struct delayed_work *work, unsigned long jiffies)
 {
-	return queue_delayed_work(wq, work, delay);
+	return queue_delayed_work(wq, work, jiffies);
 }
 EXPORT_SYMBOL_GPL(edac_queue_work);
 
-bool edac_mod_work(struct delayed_work *work, unsigned long delay)
+bool edac_mod_work(struct delayed_work *work, unsigned long jiffies)
 {
-	return mod_delayed_work(wq, work, delay);
+	return mod_delayed_work(wq, work, jiffies);
 }
 EXPORT_SYMBOL_GPL(edac_mod_work);
 
