@@ -282,6 +282,9 @@ static int __init dell_init(void)
 	if (!dmi_check_system(dell_device_table))
 		return -ENODEV;
 
+	if (!dell_smbios_calls_functional())
+		return -ENODEV;
+
 	dell_pc_fdev = faux_device_create("dell-pc", NULL, &dell_pc_faux_ops);
 	if (!dell_pc_fdev)
 		return -ENODEV;
