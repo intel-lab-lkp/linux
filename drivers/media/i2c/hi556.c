@@ -1424,6 +1424,10 @@ static void hi556_remove(struct i2c_client *client)
 	media_entity_cleanup(&sd->entity);
 	v4l2_ctrl_handler_free(sd->ctrl_handler);
 	pm_runtime_disable(hi556->dev);
+	if (!pm_runtime_status_suspended(hi556->dev)) {
+		hi556_suspend(hi556->dev);
+		pm_runtime_set_suspended(hi556->dev);
+	}
 	mutex_destroy(&hi556->mutex);
 }
 
