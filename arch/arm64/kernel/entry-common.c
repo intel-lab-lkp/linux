@@ -1068,6 +1068,16 @@ __sdei_handler(struct pt_regs *regs, struct sdei_registered_event *arg)
 		set_pstate_pan(0);
 
 	/*
+	 * Regular kernel entry saves and resets the PMR to align with DAIF,
+	 * but __sdei_asm_handler() does not ; do it now.
+	 */
+	if (system_uses_irq_prio_masking()) {
+		regs->pmr = read_sysreg_s(SYS_ICC_PMR_EL1);
+		write_sysreg_s(GIC_PRIO_IRQON | GIC_PRIO_PSR_I_SET,
+				SYS_ICC_PMR_EL1);
+	}
+
+	/*
 	 * Nothing saved the interrupted context's exception registers on the
 	 * way in, and it may be in the middle of exception entry or return
 	 * (SDEI ignores DAIF). Save them before anything can take an exception
@@ -1109,6 +1119,9 @@ __sdei_handler(struct pt_regs *regs, struct sdei_registered_event *arg)
 	write_sysreg(esr, esr_el1);
 	write_sysreg(far, far_el1);
 	write_sysreg(vbar, vbar_el1);
+
+	if (system_uses_irq_prio_masking())
+		write_sysreg_s(regs->pmr, SYS_ICC_PMR_EL1);
 
 	return ret;
 }
