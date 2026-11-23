@@ -212,7 +212,7 @@ static int nhi_pci_init_msi(struct tb_nhi *nhi)
 		if (irq < 0)
 			return irq;
 
-		res = devm_request_irq(&pdev->dev, irq, nhi_msi,
+		res = devm_request_irq(&pdev->dev, irq, tb_nhi_isr,
 				       IRQF_NO_SUSPEND, "thunderbolt", nhi);
 		if (res)
 			return res;
@@ -281,7 +281,7 @@ static int nhi_pci_ring_request_msix(struct tb_ring *ring, bool no_suspend)
 	ring->irq = ret;
 
 	irqflags = no_suspend ? IRQF_NO_SUSPEND : 0;
-	ret = request_irq(ring->irq, ring_msix, irqflags, "thunderbolt", ring);
+	ret = request_irq(ring->irq, tb_ring_msix, irqflags, "thunderbolt", ring);
 	if (ret)
 		goto err_ida_remove;
 
@@ -588,7 +588,7 @@ static int nhi_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 
 	pci_set_master(pdev);
 
-	return nhi_probe(&nhi_pci->nhi);
+	return tb_nhi_probe(&nhi_pci->nhi);
 }
 
 static void nhi_pci_do_remove(struct pci_dev *pdev, bool reset)
@@ -610,7 +610,7 @@ static void nhi_pci_do_remove(struct pci_dev *pdev, bool reset)
 
 	tb_domain_remove(tb);
 	wait_for_completion(&nhi->domain_released);
-	nhi_shutdown(nhi);
+	tb_nhi_shutdown(nhi);
 }
 
 static void nhi_pci_remove(struct pci_dev *pdev)
@@ -724,7 +724,7 @@ static struct pci_driver nhi_driver = {
 	.probe = nhi_pci_probe,
 	.remove = nhi_pci_remove,
 	.shutdown = nhi_pci_shutdown,
-	.driver.pm = &nhi_pm_ops,
+	.driver.pm = &tb_nhi_pm_ops,
 };
 
 static int __init nhi_init(void)

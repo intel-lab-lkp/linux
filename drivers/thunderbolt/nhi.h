@@ -32,11 +32,11 @@ enum nhi_fw_mode nhi_mailbox_mode(struct tb_nhi *nhi);
 void nhi_enable_int_throttling(struct tb_nhi *nhi);
 void nhi_disable_interrupts(struct tb_nhi *nhi);
 void nhi_interrupt_work(struct work_struct *work);
-irqreturn_t nhi_msi(int irq, void *data);
-irqreturn_t ring_msix(int irq, void *data);
-int nhi_probe(struct tb_nhi *nhi);
-void nhi_shutdown(struct tb_nhi *nhi);
-extern const struct dev_pm_ops nhi_pm_ops;
+irqreturn_t tb_nhi_isr(int irq, void *data);
+irqreturn_t tb_ring_msix(int irq, void *data);
+int tb_nhi_probe(struct tb_nhi *nhi);
+void tb_nhi_shutdown(struct tb_nhi *nhi);
+extern const struct dev_pm_ops tb_nhi_pm_ops;
 
 /**
  * struct tb_nhi_ops - NHI specific optional operations
