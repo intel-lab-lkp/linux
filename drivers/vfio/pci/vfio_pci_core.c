@@ -22,6 +22,7 @@
 #include <linux/notifier.h>
 #include <linux/pagemap.h>
 #include <linux/pci.h>
+#include <linux/pci-tph.h>
 #include <linux/pm_runtime.h>
 #include <linux/slab.h>
 #include <linux/types.h>
@@ -595,6 +596,9 @@ int vfio_pci_core_enable(struct vfio_pci_core_device *vdev)
 	if (ret)
 		goto out_power;
 
+	/* Reset TPH state for new user session */
+	pcie_disable_tph(vdev->pdev);
+
 	/* If reset fails because of the device lock, fail this path entirely */
 	ret = pci_try_reset_function(pdev);
 	if (ret == -EAGAIN)
@@ -703,6 +707,9 @@ void vfio_pci_core_disable(struct vfio_pci_core_device *vdev)
 
 	/* Stop the device from further DMA */
 	pci_clear_master(pdev);
+
+	/* Reset TPH state on user session exit */
+	pcie_disable_tph(vdev->pdev);
 
 	vfio_pci_set_irqs_ioctl(vdev, VFIO_IRQ_SET_DATA_NONE |
 				VFIO_IRQ_SET_ACTION_TRIGGER,
