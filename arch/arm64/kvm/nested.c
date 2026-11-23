@@ -610,6 +610,19 @@ static u8 pgshift_level_to_ttl(u16 shift, s8 level)
 	return ttl;
 }
 
+static u8 vtcr_tg0_to_ttl_gran(struct kvm_s2_mmu *mmu)
+{
+	switch (vtcr_to_tg0_pgsize(kvm_s2_mmu_to_kvm(mmu), mmu->tlb_vtcr)) {
+	case SZ_4K:
+		return TLBI_TTL_TG_4K << 2;
+	case SZ_16K:
+		return TLBI_TTL_TG_16K << 2;
+	case SZ_64K:
+	default:	/* IMPDEF: treat any other value as 64k */
+		return TLBI_TTL_TG_64K << 2;
+	}
+}
+
 /*
  * Compute the equivalent of the TTL field by parsing the shadow PT.  The
  * granule size is extracted from the cached VTCR_EL2.TG0 while the level is
@@ -624,18 +637,7 @@ static u8 get_guest_mapping_ttl(struct kvm_s2_mmu *mmu, u64 addr)
 
 	lockdep_assert_held_write(&kvm_s2_mmu_to_kvm(mmu)->mmu_lock);
 
-	switch (tg0_size) {
-	case SZ_4K:
-		ttl = (TLBI_TTL_TG_4K << 2);
-		break;
-	case SZ_16K:
-		ttl = (TLBI_TTL_TG_16K << 2);
-		break;
-	case SZ_64K:
-	default:	    /* IMPDEF: treat any other value as 64k */
-		ttl = (TLBI_TTL_TG_64K << 2);
-		break;
-	}
+	ttl = vtcr_tg0_to_ttl_gran(mmu);
 
 	tmp = addr;
 
@@ -686,19 +688,50 @@ again:
 	return 0;
 }
 
+static bool tlbi_ttl_too_small(struct kvm_s2_mmu *mmu, u64 addr,
+			       unsigned long max_size)
+{
+	u8 guest_level;
+	kvm_pte_t pte;
+	s8 level;
+
+	lockdep_assert_held_write(&kvm_s2_mmu_to_kvm(mmu)->mmu_lock);
+
+	if (max_size < PAGE_SIZE)
+		return true;
+
+	if (kvm_pgtable_get_leaf(mmu->pgt, addr, &pte, &level, 0))
+		return false;
+
+	if (!kvm_pte_valid(pte))
+		return false;
+
+	if (kvm_granule_size(level) > max_size)
+		return true;
+
+	guest_level = FIELD_GET(KVM_NV_GUEST_MAP_SZ, pte);
+	if (guest_level &&
+	    __ttl_to_size(vtcr_tg0_to_ttl_gran(mmu) | guest_level) > max_size)
+		return true;
+
+	return false;
+}
+
 unsigned long compute_tlb_inval_range(struct kvm_s2_mmu *mmu, u64 val)
 {
+	u64 addr = (val & GENMASK_ULL(35, 0)) << 12;
 	struct kvm *kvm = kvm_s2_mmu_to_kvm(mmu);
+	u8 ttl = FIELD_GET(TLBI_TTL_MASK, val);
 	unsigned long max_size;
-	u8 ttl;
 
-	ttl = FIELD_GET(TLBI_TTL_MASK, val);
-
-	if (!ttl || !kvm_has_feat(kvm, ID_AA64MMFR2_EL1, TTL, IMP)) {
-		/* No TTL, check the shadow S2 for a hint */
-		u64 addr = (val & GENMASK_ULL(35, 0)) << 12;
-		ttl = get_guest_mapping_ttl(mmu, addr);
+	if (ttl && kvm_has_feat(kvm, ID_AA64MMFR2_EL1, TTL, IMP)) {
+		max_size = __ttl_to_size(ttl);
+		if (max_size && !tlbi_ttl_too_small(mmu, addr, max_size))
+			return max_size;
 	}
+
+	/* No usable TTL hint, check the shadow S2 for a hint */
+	ttl = get_guest_mapping_ttl(mmu, addr);
 
 	/*
 	 * Don't use the default 1GB fallback, as we can adapt to the
@@ -706,9 +739,10 @@ unsigned long compute_tlb_inval_range(struct kvm_s2_mmu *mmu, u64 val)
 	 */
 	max_size = __ttl_to_size(ttl);
 
-	if (!max_size) {
+	if (max_size < PAGE_SIZE) {
 		/* Compute the maximum extent of the invalidation */
-		switch (vtcr_to_tg0_pgsize(kvm, mmu->tlb_vtcr)) {
+		switch (mmu->nested_stage2_enabled ?
+			vtcr_to_tg0_pgsize(kvm, mmu->tlb_vtcr) : PAGE_SIZE) {
 		case SZ_4K:
 			max_size = SZ_1G;
 			break;
