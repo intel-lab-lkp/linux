@@ -27,6 +27,7 @@ stats-*.csv
 cscope*
 config.mak
 config.mak.autogen
+/cov/
 *-bison.*
 *-flex.*
 *.pyc
