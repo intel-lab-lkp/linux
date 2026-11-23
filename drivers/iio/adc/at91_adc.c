@@ -1074,8 +1074,7 @@ static int at91_adc_probe(struct platform_device *pdev)
 				       at91_adc_rl_interrupt, 0,
 				       pdev->dev.driver->name, idev);
 	if (ret)
-		return dev_err_probe(&pdev->dev, ret,
-				     "Failed to allocate IRQ.\n");
+		return ret;
 
 	st->clk = devm_clk_get_enabled(&pdev->dev, "adc_clk");
 	if (IS_ERR(st->clk))
