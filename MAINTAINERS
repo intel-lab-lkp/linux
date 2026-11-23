@@ -15738,6 +15738,7 @@ F:	include/dt-bindings/clock/loongson,ls2k-clk.h
 
 LOONGSON SPI DRIVER
 M:	Yinbo Zhu <zhuyinbo@loongson.cn>
+M:	Binbin Zhou <zhoubinbin@loongson.cn>
 L:	linux-spi@vger.kernel.org
 S:	Maintained
 F:	Documentation/devicetree/bindings/spi/loongson,ls2k-spi.yaml
