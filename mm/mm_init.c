@@ -2359,6 +2359,7 @@ void __init page_alloc_init_late(void)
  * - it is assumed that the hash table must contain an exact power-of-2
  *   quantity of entries
  * - limit is the number of hash buckets, not the total allocation size
+ * - the table has at least low_limit entries, callers may rely on that
  */
 void *__init alloc_large_system_hash(const char *tablename,
 				     unsigned long bucketsize,
@@ -2371,7 +2372,7 @@ void *__init alloc_large_system_hash(const char *tablename,
 				     unsigned long high_limit)
 {
 	unsigned long long max = high_limit;
-	unsigned long log2qty, size;
+	unsigned long log2qty, min_log2qty, size;
 	void *table;
 	gfp_t gfp_flags;
 	bool virt;
@@ -2420,6 +2421,7 @@ void *__init alloc_large_system_hash(const char *tablename,
 		numentries = max;
 
 	log2qty = ilog2(numentries);
+	min_log2qty = max(order_base_2(low_limit), 1);
 
 	gfp_flags = (flags & HASH_ZERO) ? GFP_ATOMIC | __GFP_ZERO : GFP_ATOMIC;
 	do {
@@ -2445,7 +2447,19 @@ void *__init alloc_large_system_hash(const char *tablename,
 			table = alloc_pages_exact(size, gfp_flags);
 			kmemleak_alloc(table, size, 1, gfp_flags);
 		}
-	} while (!table && size > PAGE_SIZE && --log2qty);
+	} while (!table && size > PAGE_SIZE && log2qty > min_log2qty &&
+		 --log2qty);
+
+	/*
+	 * Shrinking below low_limit would break callers that size other data
+	 * from it, so fall back to vmalloc, which needs no contiguous memory.
+	 */
+	if (!table && !virt && !(flags & HASH_EARLY)) {
+		table = vmalloc_huge(size, gfp_flags);
+		virt = true;
+		if (table)
+			huge = is_vm_area_hugepages(table);
+	}
 
 	if (!table)
 		panic("Failed to allocate %s hash table\n", tablename);
