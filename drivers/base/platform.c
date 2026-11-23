@@ -1483,6 +1483,7 @@ static int platform_probe(struct device *_dev)
 {
 	struct platform_driver *drv = to_platform_driver(_dev->driver);
 	struct platform_device *dev = to_platform_device(_dev);
+	u32 pd_flags = PD_FLAG_DETACH_POWER_OFF;
 	int ret;
 
 	/*
@@ -1499,8 +1500,10 @@ static int platform_probe(struct device *_dev)
 	if (ret < 0)
 		return ret;
 
-	ret = dev_pm_domain_attach(_dev, PD_FLAG_ATTACH_POWER_ON |
-					 PD_FLAG_DETACH_POWER_OFF);
+	if (!drv->pm_domain_no_power_on)
+		pd_flags |= PD_FLAG_ATTACH_POWER_ON;
+
+	ret = dev_pm_domain_attach(_dev, pd_flags);
 	if (ret)
 		goto out;
 
