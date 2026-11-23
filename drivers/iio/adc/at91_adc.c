@@ -925,8 +925,7 @@ static int at91_ts_hw_init(struct iio_dev *idev, u32 adc_clk_khz)
 	return 0;
 }
 
-static int at91_ts_register(struct iio_dev *idev,
-		struct platform_device *pdev)
+static int at91_ts_register(struct iio_dev *idev, struct device *dev)
 {
 	struct at91_adc_state *st = iio_priv(idev);
 	struct input_dev *input;
@@ -940,7 +939,7 @@ static int at91_ts_register(struct iio_dev *idev,
 
 	input->name = DRIVER_NAME;
 	input->id.bustype = BUS_HOST;
-	input->dev.parent = &pdev->dev;
+	input->dev.parent = dev;
 	input->open = atmel_ts_open;
 	input->close = atmel_ts_close;
 
@@ -955,7 +954,7 @@ static int at91_ts_register(struct iio_dev *idev,
 		input_set_abs_params(input, ABS_PRESSURE, 0, 0xffffff, 0, 0);
 	} else {
 		if (st->touchscreen_type != ATMEL_ADC_TOUCHSCREEN_4WIRE) {
-			dev_err(&pdev->dev,
+			dev_err(dev,
 				"This touchscreen controller only support 4 wires\n");
 			ret = -EINVAL;
 			goto err;
@@ -1154,7 +1153,7 @@ static int at91_adc_probe(struct platform_device *pdev)
 			return ret;
 		}
 	} else {
-		ret = at91_ts_register(idev, pdev);
+		ret = at91_ts_register(idev, dev);
 		if (ret)
 			return ret;
 
