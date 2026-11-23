@@ -357,6 +357,14 @@ static int jfs_rmdir(struct inode *dip, struct dentry *dentry)
 		goto out;
 	}
 
+	if (dip->i_nlink < 3) {
+		jfs_error(dip->i_sb,
+			  "corrupt parent directory link count (%u)\n",
+			  dip->i_nlink);
+		rc = -EIO;
+		goto out;
+	}
+
 	if ((rc = get_UCSname(&dname, dentry))) {
 		goto out;
 	}
@@ -482,6 +490,12 @@ static int jfs_unlink(struct inode *dip, struct dentry *dentry)
 	rc = dquot_initialize(ip);
 	if (rc)
 		goto out;
+
+	if (!ip->i_nlink) {
+		jfs_error(ip->i_sb, "corrupt inode link count (0)\n");
+		rc = -EIO;
+		goto out;
+	}
 
 	if ((rc = get_UCSname(&dname, dentry)))
 		goto out;
@@ -1135,13 +1149,33 @@ static int jfs_rename(struct mnt_idmap *idmap, struct inode *old_dir,
 	}
 
 	if (S_ISDIR(old_ip->i_mode)) {
+		if ((new_ip || old_dir != new_dir) && old_dir->i_nlink < 3) {
+			jfs_error(old_dir->i_sb,
+				  "corrupt parent directory link count (%u)\n",
+				  old_dir->i_nlink);
+			rc = -EIO;
+			goto out3;
+		}
 		if (new_ip) {
 			if (!dtEmpty(new_ip)) {
 				rc = -ENOTEMPTY;
 				goto out3;
 			}
+			if (new_ip->i_nlink != 2) {
+				jfs_error(new_ip->i_sb,
+					  "corrupt target directory link count (%u)\n",
+					  new_ip->i_nlink);
+				rc = -EIO;
+				goto out3;
+			}
 		}
 	} else if (new_ip) {
+		if (!new_ip->i_nlink) {
+			jfs_error(new_ip->i_sb,
+				  "corrupt target inode link count (0)\n");
+			rc = -EIO;
+			goto out3;
+		}
 		IWRITE_LOCK(new_ip, RDWRLOCK_NORMAL);
 		/* Init inode for quota operations. */
 		rc = dquot_initialize(new_ip);
