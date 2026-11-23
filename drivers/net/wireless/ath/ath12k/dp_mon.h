@@ -67,11 +67,14 @@ struct dp_mon_frame_min_one {
 	u8 addr1[ETH_ALEN];
 } __packed;
 
-struct dp_mon_packet_info {
-	u64 cookie;
-	u16 dma_length;
-	bool msdu_continuation;
-	bool truncated;
+#define DP_MON_PACKET_INFO_INFO0_DMA_LENGTH		GENMASK(11, 0)
+#define DP_MON_PACKET_INFO_INFO0_MSDU_CONTINUATION	BIT(16)
+#define DP_MON_PACKET_INFO_INFO0_TRUNCATED		BIT(17)
+
+struct dp_mon_packet_info_params {
+	__le32 cookie_lo;
+	__le32 cookie_hi;
+	__le32 info0;
 };
 
 struct dp_mon_tx_ppdu_info {
@@ -104,7 +107,7 @@ bool ath12k_dp_mon_comp_ppduid(u32 msdu_ppdu_id, u32 *ppdu_id);
 int
 ath12k_dp_mon_parse_status_buf(struct ath12k_pdev_dp *dp_pdev,
 			       struct ath12k_mon_data *pmon,
-			       const struct dp_mon_packet_info *packet_info);
+			       const struct dp_mon_packet_info_params *packet_info);
 void ath12k_dp_mon_update_radiotap(struct ath12k_pdev_dp *dp_pdev,
 				   struct hal_rx_mon_ppdu_info *ppduinfo,
 				   struct sk_buff *mon_skb,

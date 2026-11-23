@@ -538,7 +538,7 @@ EXPORT_SYMBOL(ath12k_dp_pkt_set_pktlen);
 int
 ath12k_dp_mon_parse_status_buf(struct ath12k_pdev_dp *dp_pdev,
 			       struct ath12k_mon_data *pmon,
-			       const struct dp_mon_packet_info *packet_info)
+			       const struct dp_mon_packet_info_params *packet_info)
 {
 	struct ath12k_dp *dp = dp_pdev->dp;
 	struct ath12k_base *ab = dp->ab;
@@ -547,7 +547,7 @@ ath12k_dp_mon_parse_status_buf(struct ath12k_pdev_dp *dp_pdev,
 	int buf_id;
 	u32 offset;
 
-	buf_id = u32_get_bits(packet_info->cookie, DP_RXDMA_BUF_COOKIE_BUF_ID);
+	buf_id = le32_get_bits(packet_info->cookie_lo, DP_RXDMA_BUF_COOKIE_BUF_ID);
 
 	spin_lock_bh(&buf_ring->idr_lock);
 	msdu = idr_remove(&buf_ring->bufs_idr, buf_id);
@@ -562,7 +562,9 @@ ath12k_dp_mon_parse_status_buf(struct ath12k_pdev_dp *dp_pdev,
 			 msdu->len + skb_tailroom(msdu),
 			 DMA_FROM_DEVICE);
 
-	offset = packet_info->dma_length + ATH12K_MON_RX_DOT11_OFFSET;
+	offset = le32_get_bits(packet_info->info0,
+			       DP_MON_PACKET_INFO_INFO0_DMA_LENGTH) +
+		 ATH12K_MON_RX_DOT11_OFFSET;
 	if (ath12k_dp_pkt_set_pktlen(msdu, offset)) {
 		dev_kfree_skb_any(msdu);
 		goto dest_replenish;
