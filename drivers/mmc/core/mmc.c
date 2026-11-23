@@ -1181,6 +1181,7 @@ static int mmc_select_hs_ddr(struct mmc_card *card)
 static int mmc_select_hs400(struct mmc_card *card)
 {
 	struct mmc_host *host = card->host;
+	bool retune_crc_disable;
 	unsigned int max_dtr;
 	int err = 0;
 	u8 val;
@@ -1192,13 +1193,22 @@ static int mmc_select_hs400(struct mmc_card *card)
 	      host->ios.bus_width == MMC_BUS_WIDTH_8))
 		return 0;
 
-	/* Switch card to HS mode */
+	/*
+	 * Switch card to HS mode.
+	 * Temporarily suppress CRC-triggered re-tuning because non-compliant
+	 * cards may switch to 52 MHz HS immediately on CMD6, causing an
+	 * expected -EILSEQ at 200 MHz (or on a retried CMD13 while polling)
+	 * that would otherwise set host->need_retune.
+	 */
 	val = EXT_CSD_TIMING_HS;
+	retune_crc_disable = host->retune_crc_disable;
+	host->retune_crc_disable = true;
 	err = __mmc_switch(card, EXT_CSD_CMD_SET_NORMAL,
 			   EXT_CSD_HS_TIMING, val,
 			   card->ext_csd.generic_cmd6_time, 0,
-			   false, true, MMC_CMD_RETRIES);
-	if (err) {
+			   false, true, 0);
+	if (err && err != -EILSEQ && err != -ETIMEDOUT) {
+		host->retune_crc_disable = retune_crc_disable;
 		pr_err("%s: switch to high-speed from hs200 failed, err:%d\n",
 			mmc_hostname(host), err);
 		return err;
@@ -1214,6 +1224,16 @@ static int mmc_select_hs400(struct mmc_card *card)
 	/* Reduce frequency to HS frequency */
 	max_dtr = card->ext_csd.hs_max_dtr;
 	mmc_set_clock(host, max_dtr);
+
+	if (err)
+		err = mmc_poll_for_busy(card, card->ext_csd.generic_cmd6_time,
+					true, MMC_BUSY_CMD6);
+	host->retune_crc_disable = retune_crc_disable;
+	if (err) {
+		pr_err("%s: switch to high-speed from hs200 failed, err:%d\n",
+		       mmc_hostname(host), err);
+		return err;
+	}
 
 	err = mmc_switch_status(card, true);
 	if (err)
