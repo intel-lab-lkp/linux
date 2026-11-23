@@ -824,6 +824,11 @@ int rxe_requester(struct rxe_qp *qp)
 	mtu = get_mtu(qp);
 	payload = (mask & (RXE_WRITE_OR_SEND_MASK | RXE_ATOMIC_WRITE_MASK)) ?
 			wqe->dma.resid : 0;
+	/* use the local copies: a user QP's WQE can change under us */
+	if ((mask & RXE_ATOMIC_WRITE_MASK) && payload != sizeof(u64)) {
+		wqe->status = IB_WC_LOC_QP_OP_ERR;
+		goto err;
+	}
 	if (payload > mtu) {
 		if (qp_type(qp) == IB_QPT_UD) {
 			/* C10-93.1.1: If the total sum of all the buffer lengths specified for a
