@@ -80,6 +80,7 @@ exec_queue_to_guc(struct xe_exec_queue *q)
 #define EXEC_QUEUE_STATE_WEDGED			(1 << 8)
 #define EXEC_QUEUE_STATE_BANNED			(1 << 9)
 #define EXEC_QUEUE_STATE_PENDING_RESUME		(1 << 10)
+#define EXEC_QUEUE_STATE_CAT_ERROR		(1 << 11)
 
 static bool exec_queue_registered(struct xe_exec_queue *q)
 {
@@ -229,6 +230,31 @@ static void set_exec_queue_pending_resume(struct xe_exec_queue *q)
 static void clear_exec_queue_pending_resume(struct xe_exec_queue *q)
 {
 	atomic_and(~EXEC_QUEUE_STATE_PENDING_RESUME, &q->guc->state);
+}
+
+static bool exec_queue_cat_error(struct xe_exec_queue *q)
+{
+	return atomic_read(&q->guc->state) & EXEC_QUEUE_STATE_CAT_ERROR;
+}
+
+static void set_exec_queue_cat_error(struct xe_exec_queue *q)
+{
+	atomic_or(EXEC_QUEUE_STATE_CAT_ERROR, &q->guc->state);
+}
+
+static void clear_exec_queue_cat_error(struct xe_exec_queue *q)
+{
+	atomic_and(~EXEC_QUEUE_STATE_CAT_ERROR, &q->guc->state);
+}
+
+/*
+ * Track one GuC ID so the CAT and reset refer to the same context.
+ * VF recovery can replay a queue with stale CAT state.
+ */
+static bool exec_queue_tracks_cat_error(struct xe_exec_queue *q)
+{
+	return !xe_exec_queue_is_parallel(q) && !xe_exec_queue_is_multi_queue(q) &&
+	       !IS_SRIOV_VF(gt_to_xe(q->gt));
 }
 
 static bool exec_queue_killed_or_banned_or_wedged(struct xe_exec_queue *q)
@@ -1608,6 +1634,7 @@ guc_exec_queue_timedout_job(struct drm_sched_job *drm_job)
 	int err = -ETIME;
 	pid_t pid = -1;
 	bool wedged = false, wedge_device = false, skip_timeout_check;
+	u32 state;
 	int idx;
 
 	xe_gt_assert(guc_to_gt(guc), !exec_queue_destroyed(q));
@@ -1708,7 +1735,9 @@ guc_exec_queue_timedout_job(struct drm_sched_job *drm_job)
 			if (!ret || xe_guc_read_stopped(guc))
 				goto trigger_reset;
 
-			disable_scheduling(primary, skip_timeout_check);
+			/* Suspend may have already disabled the faulting queue. */
+			if (exec_queue_enabled(primary) || !exec_queue_cat_error(primary))
+				disable_scheduling(primary, skip_timeout_check);
 		}
 
 		/*
@@ -1736,6 +1765,32 @@ trigger_reset:
 			xe_devcoredump(primary, job,
 				       "Schedule disable failed to respond, guc_id=%d, ret=%d, guc_read=%d",
 				       primary->guc->id, ret, xe_guc_read_stopped(guc));
+			xe_gt_reset_async(primary->gt);
+			xe_sched_tdr_queue_imm(sched);
+			goto rearm;
+		}
+	}
+
+	if (exec_queue_tracks_cat_error(primary) &&
+	    !xe_device_is_in_reset(xe) && !wedged &&
+	    xe_uc_fw_is_running(&guc->fw) && !xe_guc_read_stopped(guc)) {
+		/*
+		 * Check even if suspend disabled the queue before TDR ran.
+		 * Let pending G2H work finish before reading the CAT state.
+		 */
+		flush_work(&guc->ct.g2h_worker);
+
+		/* Leave CAT_ERROR set since the reset request can be skipped. */
+		state = atomic_read(&primary->guc->state);
+		if ((state & EXEC_QUEUE_STATE_CAT_ERROR) &&
+		    !(state & (EXEC_QUEUE_STATE_ENABLED | EXEC_QUEUE_STATE_PENDING_DISABLE))) {
+			xe_gt_warn(guc_to_gt(guc),
+				   "Memory CAT still pending on disabled queue, guc_id=%d",
+				   primary->guc->id);
+			if (!exec_queue_killed(q))
+				xe_devcoredump(primary, job,
+					       "Memory CAT still pending on disabled queue, guc_id=%d",
+					       primary->guc->id);
 			xe_gt_reset_async(primary->gt);
 			xe_sched_tdr_queue_imm(sched);
 			goto rearm;
@@ -3546,6 +3601,8 @@ int xe_guc_exec_queue_reset_handler(struct xe_guc *guc, u32 *msg, u32 len)
 
 	trace_xe_exec_queue_reset(q);
 
+	clear_exec_queue_cat_error(q);
+
 	/*
 	 * A banned engine is a NOP at this point (came from
 	 * guc_exec_queue_timedout_job). Otherwise, kick drm scheduler to cancel
@@ -3629,6 +3686,9 @@ int xe_guc_exec_queue_memory_cat_error_handler(struct xe_guc *guc, u32 *msg,
 			   xe_hw_engine_class_to_str(q->class), q->logical_mask, guc_id);
 
 	trace_xe_exec_queue_memory_cat_error(q);
+
+	if (exec_queue_tracks_cat_error(q))
+		set_exec_queue_cat_error(q);
 
 	/* Treat the same as engine reset */
 	xe_guc_exec_queue_reset_trigger_cleanup(q);
