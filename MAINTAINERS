@@ -23434,7 +23434,6 @@ F:	include/linux/if_rmnet.h
 
 QUALCOMM SPMI CONTROLLER (PMIC ARBITER) DRIVER
 M:	Abel Vesa <abelvesa@kernel.org>
-M:	David Collins <david.collins@oss.qualcomm.com>
 L:	linux-arm-msm@vger.kernel.org
 S:	Maintained
 F:	Documentation/devicetree/bindings/spmi/qcom,*spmi-pmic-arb*.yaml
