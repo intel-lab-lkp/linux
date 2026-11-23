@@ -281,8 +281,6 @@ static void parse_b1_table(const struct dmi_header *dm)
 	/* 4 bytes header, 8 bytes flags */
 	if (dm->length < 12)
 		return;
-	if (dm->handle != 0xb100)
-		return;
 	if ((flags->flags0 & FLAG_HAS_ACPI_WMI))
 		wmi_supported = 1;
 }
