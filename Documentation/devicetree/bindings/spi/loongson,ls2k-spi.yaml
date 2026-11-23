@@ -16,6 +16,7 @@ properties:
   compatible:
     oneOf:
       - enum:
+          - loongson,ls2k0300-spi-io
           - loongson,ls2k1000-spi
       - items:
           - enum:
@@ -32,12 +33,37 @@ properties:
   interrupts:
     maxItems: 1
 
+  dmas:
+    maxItems: 2
+
+  dma-names:
+    items:
+      - const: tx
+      - const: rx
+
 required:
   - compatible
   - reg
   - clocks
 
 unevaluatedProperties: false
+
+if:
+  properties:
+    compatible:
+      contains:
+        const: loongson,ls2k0300-spi-io
+
+then:
+  required:
+    - dmas
+    - dma-names
+    - interrupts
+
+else:
+  properties:
+    dmas: false
+    dma-names: false
 
 examples:
   - |
@@ -47,4 +73,19 @@ examples:
         clocks = <&clk 17>;
         #address-cells = <1>;
         #size-cells = <0>;
+    };
+
+  - |
+    #include <dt-bindings/interrupt-controller/irq.h>
+    #include <dt-bindings/clock/loongson,ls2k-clk.h>
+
+    spi@1610c000 {
+        compatible = "loongson,ls2k0300-spi-io";
+        reg = <0x1610c000 0x2000>;
+        clocks = <&clk LS2K0300_CLK_DEV_GATE>;
+        interrupt-parent = <&liointc0>;
+        interrupts = <6 IRQ_TYPE_LEVEL_HIGH>;
+        dmas = <&dma_router 14 1 0x8e>,
+               <&dma_router 14 0 0x8e>;
+        dma-names = "tx", "rx";
     };
