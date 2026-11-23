@@ -1256,6 +1256,10 @@ int tb_nhi_probe(struct tb_nhi *nhi)
 	if (!nhi->ops->init_interrupts)
 		return dev_err_probe(dev, -EINVAL, "missing required NHI ops\n");
 
+	res = dma_set_mask_and_coherent(dev, DMA_BIT_MASK(64));
+	if (res)
+		return dev_err_probe(dev, res, "failed to set DMA mask\n");
+
 	nhi->hop_count = ioread32(nhi->iobase + REG_CAPS) & 0x3ff;
 	dev_dbg(dev, "total paths: %d\n", nhi->hop_count);
 
@@ -1265,6 +1269,8 @@ int tb_nhi_probe(struct tb_nhi *nhi)
 						RING_INTERRUPT_REG_COUNT(nhi));
 	if (!nhi->tx_rings || !nhi->rx_rings || !nhi->interrupt_mask)
 		return -ENOMEM;
+
+	spin_lock_init(&nhi->lock);
 
 	INIT_WORK(&nhi->interrupt_work, nhi_interrupt_work);
 
@@ -1277,24 +1283,22 @@ int tb_nhi_probe(struct tb_nhi *nhi)
 	if (res)
 		return dev_err_probe(dev, res, "cannot enable interrupts, aborting\n");
 
-	spin_lock_init(&nhi->lock);
-
-	res = dma_set_mask_and_coherent(dev, DMA_BIT_MASK(64));
-	if (res)
-		return dev_err_probe(dev, res, "failed to set DMA mask\n");
-
 	if (nhi->ops->init) {
 		res = nhi->ops->init(nhi);
-		if (res)
-			return dev_err_probe(dev, res, "NHI specific init failed\n");
+		if (res) {
+			dev_err_probe(dev, res, "NHI specific init failed\n");
+			goto err;
+		}
 	}
 
 	init_completion(&nhi->domain_released);
 
 	tb = nhi_select_cm(nhi);
-	if (!tb)
-		return dev_err_probe(dev, -ENODEV,
-			"failed to determine connection manager, aborting\n");
+	if (!tb) {
+		res = dev_err_probe(dev, -ENODEV,
+				    "failed to determine connection manager, aborting\n");
+		goto err;
+	}
 
 	dev_dbg(dev, "NHI initialized, starting thunderbolt\n");
 
@@ -1308,8 +1312,8 @@ int tb_nhi_probe(struct tb_nhi *nhi)
 		 */
 		tb_domain_put(tb);
 		wait_for_completion(&nhi->domain_released);
-		tb_nhi_shutdown(nhi);
-		return dev_err_probe(dev, res, "failed to add domain\n");
+		dev_err_probe(dev, res, "failed to add domain\n");
+		goto err;
 	}
 	dev_set_drvdata(dev, tb);
 
@@ -1321,6 +1325,10 @@ int tb_nhi_probe(struct tb_nhi *nhi)
 	pm_runtime_put_autosuspend(dev);
 
 	return 0;
+
+err:
+	tb_nhi_shutdown(nhi);
+	return res;
 }
 EXPORT_SYMBOL_GPL(tb_nhi_probe);
 
