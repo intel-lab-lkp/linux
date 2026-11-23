@@ -21,6 +21,7 @@ properties:
           - enum:
               - anlogic,dr1v90-aclint-mswi
           - const: nuclei,ux900-aclint-mswi
+      - const: mips,p8700-aclint-mswi
 
   reg:
     maxItems: 1
@@ -45,5 +46,15 @@ examples:
                             <&cpu3intc 3>,
                             <&cpu4intc 3>;
       reg = <0x94000000 0x00010000>;
+    };
+
+  - |
+    mswi@16150000 {
+        compatible = "mips,p8700-aclint-mswi";
+        reg = <0x16150000 0x4000>;
+        interrupts-extended = <&cpu1intc 3>,
+                              <&cpu2intc 3>,
+                              <&cpu3intc 3>,
+                              <&cpu4intc 3>;
     };
 ...
