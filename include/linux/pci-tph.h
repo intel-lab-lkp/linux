@@ -43,6 +43,8 @@ static inline bool pcie_ext_tph_supported(struct pci_dev *pdev)
 
 int pcie_tph_set_st_entry(struct pci_dev *pdev,
 			  unsigned int index, u16 tag);
+int pcie_tph_set_st_entries(struct pci_dev *pdev, unsigned int start,
+			    unsigned int count, const u16 *tags);
 int pcie_tph_get_cpu_st_ext(struct pci_dev *dev, enum tph_mem_type mem_type,
 			    u8 req_type, unsigned int cpu, u16 *tag);
 int pcie_tph_get_cpu_st(struct pci_dev *dev, enum tph_mem_type mem_type,
@@ -59,6 +61,10 @@ static inline bool pcie_ext_tph_supported(struct pci_dev *pdev)
 { return false; }
 static inline int pcie_tph_set_st_entry(struct pci_dev *pdev,
 					unsigned int index, u16 tag)
+{ return -EINVAL; }
+static inline int pcie_tph_set_st_entries(struct pci_dev *pdev,
+					  unsigned int start,
+					  unsigned int count, const u16 *tags)
 { return -EINVAL; }
 static inline int pcie_tph_get_cpu_st_ext(struct pci_dev *dev,
 					  enum tph_mem_type mem_type,
