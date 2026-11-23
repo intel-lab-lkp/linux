@@ -489,8 +489,9 @@ int tb_port_state(struct tb_port *port)
  * Wait up to 2 seconds for a port to reach state TB_PORT_UP. If
  * wait_if_unplugged is set then we also wait if the port is in state
  * TB_PORT_UNPLUGGED (it takes a while for the device to be registered after
- * switch resume). Otherwise we only wait if a device is registered but the link
- * has not yet been established.
+ * router resume, Wait at most 400 ms for link to start connecting,
+ * if timeout, means the device is disconnected). Otherwise we only wait
+ * if a device is registered but the link has not yet been established.
  *
  * Return:
  * * %0 - If the port is not connected or failed to reach
@@ -500,6 +501,7 @@ int tb_port_state(struct tb_port *port)
  */
 int tb_wait_for_port(struct tb_port *port, bool wait_if_unplugged)
 {
+	int unplugged_retries = 4;
 	int retries = 20;
 	int state;
 	if (!port->cap_phy) {
@@ -519,7 +521,7 @@ int tb_wait_for_port(struct tb_port *port, bool wait_if_unplugged)
 			return 0;
 
 		case TB_PORT_UNPLUGGED:
-			if (wait_if_unplugged) {
+			if (wait_if_unplugged && unplugged_retries--) {
 				/* used during resume */
 				tb_port_dbg(port,
 					    "is unplugged (state: 7), retrying...\n");
