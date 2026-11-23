@@ -481,7 +481,7 @@ int of_genpd_add_child_ids(struct device_node *np,
 int of_genpd_remove_child_ids(struct device_node *np,
 			      struct genpd_onecell_data *data);
 
-int genpd_dev_pm_attach(struct device *dev);
+int genpd_dev_pm_attach(struct device *dev, bool power_on);
 struct device *genpd_dev_pm_attach_by_id(struct device *dev,
 					 unsigned int index);
 struct device *genpd_dev_pm_attach_by_name(struct device *dev,
@@ -527,7 +527,7 @@ static inline int of_genpd_parse_idle_states(struct device_node *dn,
 
 static inline void of_genpd_sync_state(struct device_node *np) {}
 
-static inline int genpd_dev_pm_attach(struct device *dev)
+static inline int genpd_dev_pm_attach(struct device *dev, bool power_on)
 {
 	return 0;
 }
