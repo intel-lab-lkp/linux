@@ -13,8 +13,8 @@ With the DELL0501 indicating that we are dealing with an UART with
 the backlight controller board attached.
 
 This small emulator allows testing
-the drivers/platform/x86/dell/dell-uart-backlight.c driver without access
-to an actual Dell All In One.
+the drivers/platform/dell/dell-uart-backlight.c driver without access to
+an actual Dell All In One.
 
 This requires:
 1. A (desktop) PC with a 16550 UART on the motherboard and a standard DB9

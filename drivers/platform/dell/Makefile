@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0
 #
-# Makefile for linux/drivers/platform/x86/dell
-# Dell x86 Platform-Specific Drivers
+# Makefile for linux/drivers/platform/dell
+# Dell Platform-Specific Drivers
 #
 
 obj-$(CONFIG_ALIENWARE_WMI)			+= alienware-wmi.o
