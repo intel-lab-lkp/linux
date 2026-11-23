@@ -27,13 +27,16 @@
  */
 
 #include <linux/acpi.h>
+#include <linux/atomic.h>
 #include <linux/bitfield.h>
 #include <linux/cleanup.h>
 #include <linux/component.h>
 #include <linux/container_of.h>
+#include <linux/debugfs.h>
 #include <linux/device.h>
 #include <linux/export.h>
 #include <linux/firmware_attributes.h>
+#include <linux/fs.h>
 #include <linux/gfp_types.h>
 #include <linux/hwmon.h>
 #include <linux/idr.h>
@@ -41,9 +44,12 @@
 #include <linux/kobject.h>
 #include <linux/limits.h>
 #include <linux/module.h>
+#include <linux/mutex.h>
 #include <linux/platform_profile.h>
 #include <linux/power_supply.h>
+#include <linux/slab.h>
 #include <linux/types.h>
+#include <linux/uaccess.h>
 #include <linux/wmi.h>
 
 #include <acpi/battery.h>
@@ -90,6 +96,8 @@ enum lwmi_feature_id_psu {
 
 #define LWMI_FEATURE_VALUE_GET 17
 #define LWMI_FEATURE_VALUE_SET 18
+#define LWMI_DATA_PACKAGE_GET 99
+#define LWMI_DATA_PACKAGE_INPUT_MAX 100
 
 #define LWMI_FAN_ID_BASE 1
 #define LWMI_FAN_NR 4
@@ -141,6 +149,8 @@ struct lwmi_om_priv {
 	struct device *fw_attr_dev;
 	struct kset *fw_attr_kset;
 	struct wmi_device *wdev;
+	struct dentry *debugfs_dir;
+	atomic_t package_opened;
 	int ida_id;
 
 	struct lwmi_fan_info fan_info[LWMI_FAN_NR];
@@ -155,6 +165,23 @@ struct lwmi_om_priv {
 	struct acpi_battery_hook battery_hook;
 	bool bh_registered;
 };
+
+struct lwmi_package_response {
+	__le32 data_size;
+	u8 data[];
+};
+
+struct lwmi_package_file {
+	struct lwmi_om_priv *priv;
+	/* Protects the pending response on shared descriptors. */
+	struct mutex lock;
+	struct lwmi_package_response *response;
+	size_t response_len;
+};
+
+static bool enable_get_data_by_package;
+module_param(enable_get_data_by_package, bool, 0400);
+MODULE_PARM_DESC(enable_get_data_by_package, "Enable the GetDataByPackage debugfs interface");
 
 /*
  * Visibility of fan channels:
@@ -1611,6 +1638,174 @@ static void lwmi_om_fw_attr_remove(struct lwmi_om_priv *priv)
 
 /* ======== Self (master: lenovo-wmi-other) ======== */
 
+static int lwmi_package_open(struct inode *inode, struct file *file)
+{
+	struct lwmi_om_priv *priv = inode->i_private;
+	struct lwmi_package_file *state __free(kfree) = NULL;
+
+	if ((file->f_mode & (FMODE_READ | FMODE_WRITE)) != (FMODE_READ | FMODE_WRITE))
+		return -EINVAL;
+
+	state = kzalloc_obj(*state);
+	if (!state)
+		return -ENOMEM;
+
+	if (atomic_cmpxchg(&priv->package_opened, 0, 1))
+		return -EBUSY;
+
+	mutex_init(&state->lock);
+	state->priv = priv;
+	file->private_data = no_free_ptr(state);
+
+	return stream_open(inode, file);
+}
+
+static int lwmi_package_release(struct inode *inode, struct file *file)
+{
+	struct lwmi_package_file *state = file->private_data;
+	struct dentry *dentry = file->f_path.dentry;
+
+	kfree_sensitive(state->response);
+	mutex_destroy(&state->lock);
+
+	/* Unlike read and write, release can run after debugfs removal. */
+	if (!debugfs_file_get(dentry)) {
+		atomic_set(&state->priv->package_opened, 0);
+		debugfs_file_put(dentry);
+	}
+
+	kfree(state);
+	return 0;
+}
+
+static int lwmi_package_invoke(struct lwmi_package_file *state, u8 *data)
+{
+	struct lwmi_om_priv *priv = state->priv;
+	struct wmi_buffer input = { .length = LWMI_DATA_PACKAGE_INPUT_MAX, .data = data };
+	struct wmi_buffer output;
+	u32 data_size;
+	int ret;
+
+	lockdep_assert_held(&state->lock);
+
+	/* The tested firmware needs two calls before its response is usable. */
+	ret = wmidev_invoke_method(priv->wdev, 0, LWMI_DATA_PACKAGE_GET,
+				   &input, &output, 0);
+	if (ret)
+		return ret;
+
+	kfree_sensitive(output.data);
+
+	ret = wmidev_invoke_method(priv->wdev, 0, LWMI_DATA_PACKAGE_GET,
+				   &input, &output, sizeof(struct lwmi_package_response));
+	if (ret)
+		return ret;
+
+	struct lwmi_package_response *response __free(kfree_sensitive) = output.data;
+
+	data_size = le32_to_cpu(response->data_size);
+	if (data_size > output.length - sizeof(*response))
+		return -EPROTO;
+
+	state->response_len = struct_size(response, data, data_size);
+	state->response = no_free_ptr(response);
+	return 0;
+}
+
+static ssize_t lwmi_package_write(struct file *file, const char __user *buffer,
+				  size_t count, loff_t *ppos)
+{
+	struct lwmi_package_file *state = file->private_data;
+	u8 input[LWMI_DATA_PACKAGE_INPUT_MAX] = {};
+	int ret;
+
+	if (!count || count > sizeof(input))
+		return -EINVAL;
+
+	ACQUIRE(mutex_try, state_guard)(&state->lock);
+	if (ACQUIRE_ERR(mutex_try, &state_guard) || state->response)
+		return -EBUSY;
+
+	if (copy_from_user(input, buffer, count))
+		return -EFAULT;
+
+	ret = lwmi_package_invoke(state, input);
+	if (ret)
+		return ret;
+
+	return count;
+}
+
+static ssize_t lwmi_package_read(struct file *file, char __user *buffer,
+				 size_t count, loff_t *ppos)
+{
+	struct lwmi_package_file *state = file->private_data;
+	size_t len;
+
+	if (!count)
+		return 0;
+
+	ACQUIRE(mutex_try, state_guard)(&state->lock);
+	if (ACQUIRE_ERR(mutex_try, &state_guard))
+		return -EBUSY;
+
+	if (!state->response)
+		return 0;
+
+	len = state->response_len;
+	if (len > count)
+		return -ENOSPC;
+
+	if (copy_to_user(buffer, state->response, len))
+		return -EFAULT;
+
+	kfree_sensitive(state->response);
+	state->response = NULL;
+	return len;
+}
+
+static const struct file_operations lwmi_package_fops = {
+	.owner = THIS_MODULE,
+	.open = lwmi_package_open,
+	.release = lwmi_package_release,
+	.read = lwmi_package_read,
+	.write = lwmi_package_write,
+};
+
+static void lwmi_package_debugfs_remove(void *data)
+{
+	debugfs_remove_recursive(data);
+}
+
+static int devm_lwmi_package_debugfs_add(struct lwmi_om_priv *priv)
+{
+	struct device *dev = &priv->wdev->dev;
+	struct dentry *dir, *entry;
+	int ret;
+
+	if (!wmidev_instance_count(priv->wdev))
+		return 0;
+
+	dir = lwmi_debugfs_create_dir(priv->wdev);
+	if (IS_ERR(dir))
+		return PTR_ERR(dir);
+
+	atomic_set(&priv->package_opened, 0);
+
+	ret = devm_add_action_or_reset(dev, lwmi_package_debugfs_remove, dir);
+	if (ret)
+		return ret;
+
+	entry = debugfs_create_file("get_data_by_package", 0600, dir, priv, &lwmi_package_fops);
+	if (IS_ERR(entry)) {
+		devm_release_action(dev, lwmi_package_debugfs_remove, dir);
+		return PTR_ERR(entry);
+	}
+
+	priv->debugfs_dir = dir;
+	return 0;
+}
+
 /**
  * lwmi_om_master_bind() - Bind all components of the other mode driver
  * @dev: The lenovo-wmi-other driver basic device.
@@ -1693,6 +1888,7 @@ static int lwmi_other_probe(struct wmi_device *wdev, const void *context)
 {
 	struct component_match *master_match = NULL;
 	struct lwmi_om_priv *priv;
+	int ret;
 
 	priv = devm_kzalloc_obj(&wdev->dev, *priv);
 	if (!priv)
@@ -1708,12 +1904,24 @@ static int lwmi_other_probe(struct wmi_device *wdev, const void *context)
 	if (IS_ERR(master_match))
 		return PTR_ERR(master_match);
 
+	if (enable_get_data_by_package) {
+		ret = devm_lwmi_package_debugfs_add(priv);
+		if (ret)
+			dev_warn(&wdev->dev, "failed to create GetDataByPackage debugfs files: %d\n",
+				 ret);
+	}
+
 	return component_master_add_with_match(&wdev->dev, &lwmi_om_master_ops,
 					       master_match);
 }
 
 static void lwmi_other_remove(struct wmi_device *wdev)
 {
+	struct lwmi_om_priv *priv = dev_get_drvdata(&wdev->dev);
+
+	if (priv->debugfs_dir)
+		devm_release_action(&wdev->dev, lwmi_package_debugfs_remove, priv->debugfs_dir);
+
 	component_master_del(&wdev->dev, &lwmi_om_master_ops);
 }
 

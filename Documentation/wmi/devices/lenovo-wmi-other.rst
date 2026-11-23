@@ -33,6 +33,15 @@ under the following path:
 
 Additionally, this driver also exports attributes to HWMON.
 
+GetDataByPackage diagnostics
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The driver does not create the diagnostic file by default. To enable it,
+pass ``enable_get_data_by_package=1`` when loading ``lenovo-wmi-other``.
+The file is at ``lenovo_wmi/<WMI device>/get_data_by_package``.
+Not all devices support the method. Use only commands whose behavior and
+side effects are understood.
+
 LENOVO_CAPABILITY_DATA_00
 -------------------------
 
@@ -107,7 +116,8 @@ WMI interface description
 =========================
 
 The WMI interface description can be decoded from the embedded binary MOF (bmof)
-data using the `bmfdec <https://github.com/pali/bmfdec>`_ utility:
+data using the `bmfdec <https://github.com/pali/bmfdec>`_ utility. This older
+example lists ``Max(40)`` for GetDataByPackage; newer firmware uses 100 bytes.
 
 ::
 
