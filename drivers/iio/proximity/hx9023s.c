@@ -441,10 +441,14 @@ static int hx9023s_get_thres_far(struct hx9023s_data *data, u8 ch, int *val)
 
 static int hx9023s_set_thres_near(struct hx9023s_data *data, u8 ch, int val)
 {
-	__le16 val_le16 = cpu_to_le16((val / 32) & GENMASK(9, 0));
+	__le16 val_le16;
 	unsigned int reg;
 
-	data->ch_data[ch].thres.near = ((val / 32) & GENMASK(9, 0)) * 32;
+	if (val < 0 || val / 32 > GENMASK(9, 0))
+		return -EINVAL;
+
+	val_le16 = cpu_to_le16(val / 32);
+	data->ch_data[ch].thres.near = val / 32 * 32;
 	reg = (ch == 4) ? HX9023S_PROX_HIGH_DIFF_CFG_CH4_0 :
 		HX9023S_PROX_HIGH_DIFF_CFG_CH0_0 + (ch * 2);
 
@@ -453,10 +457,14 @@ static int hx9023s_set_thres_near(struct hx9023s_data *data, u8 ch, int val)
 
 static int hx9023s_set_thres_far(struct hx9023s_data *data, u8 ch, int val)
 {
-	__le16 val_le16 = cpu_to_le16((val / 32) & GENMASK(9, 0));
+	__le16 val_le16;
 	unsigned int reg;
 
-	data->ch_data[ch].thres.far = ((val / 32) & GENMASK(9, 0)) * 32;
+	if (val < 0 || val / 32 > GENMASK(9, 0))
+		return -EINVAL;
+
+	val_le16 = cpu_to_le16(val / 32);
+	data->ch_data[ch].thres.far = val / 32 * 32;
 	reg = (ch == 4) ? HX9023S_PROX_LOW_DIFF_CFG_CH4_0 :
 		HX9023S_PROX_LOW_DIFF_CFG_CH0_0 + (ch * 2);
 
