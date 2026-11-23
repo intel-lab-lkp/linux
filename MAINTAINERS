@@ -20627,6 +20627,13 @@ S:	Maintained
 F:	Documentation/devicetree/bindings/media/i2c/ovti,os05b10.yaml
 F:	drivers/media/i2c/os05b10.c
 
+OMNIVISION OS05E10 SENSOR DRIVER
+M:	Bhavin Sharma <bhavin.sharma@siliconsignals.io>
+M:	Elgin Perumbilly <elgin.perumbilly@siliconsignals.io>
+L:	linux-media@vger.kernel.org
+S:	Maintained
+F:	Documentation/devicetree/bindings/media/i2c/ovti,os05e10.yaml
+
 OMNIVISION OV01A10 SENSOR DRIVER
 M:	Bingbu Cao <bingbu.cao@amd.com>
 M:	Sakari Ailus <sakari.ailus@linux.intel.com>
