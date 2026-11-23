@@ -863,6 +863,12 @@ int io_recvmsg_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 #define CQE_F_MASK	(IORING_CQE_F_SOCK_NONEMPTY|IORING_CQE_F_MORE|\
 			 IORING_CQE_F_BUF_MORE)
 
+static size_t io_recvmsg_hdr_len(struct io_async_msghdr *kmsg)
+{
+	return sizeof(struct io_uring_recvmsg_out) + kmsg->namelen +
+	       kmsg->controllen;
+}
+
 /*
  * Finishes io_recv and io_recvmsg.
  *
@@ -962,8 +968,7 @@ static int io_recvmsg_prep_multishot(struct io_async_msghdr *kmsg,
 	unsigned long ubuf = (unsigned long) *buf;
 	unsigned long hdr;
 
-	hdr = sizeof(struct io_uring_recvmsg_out) + kmsg->namelen +
-		kmsg->controllen;
+	hdr = io_recvmsg_hdr_len(kmsg);
 	if (*len < hdr)
 		return -EFAULT;
 
@@ -1035,8 +1040,69 @@ static int io_recvmsg_multishot(struct socket *sock, struct io_sr_msg *io,
 		return -EFAULT;
 	}
 
-	return sizeof(struct io_uring_recvmsg_out) + kmsg->namelen +
-			kmsg->controllen + err;
+	return io_recvmsg_hdr_len(kmsg) + err;
+}
+
+static int io_recv_bundle_peek(struct io_kiocb *req,
+			       struct io_async_msghdr *kmsg,
+			       struct io_br_sel *sel, struct buf_sel_arg *arg,
+			       size_t max_len)
+{
+	struct io_sr_msg *sr = io_kiocb_to_cmd(req, struct io_sr_msg);
+	int nr_iovs;
+
+	*arg = (struct buf_sel_arg) {
+		.iovs = &kmsg->fast_iov,
+		.nr_iovs = 1,
+		.mode = KBUF_MODE_EXPAND,
+		.buf_group = sr->buf_group,
+		.max_len = max_len,
+	};
+
+	if (kmsg->vec.iovec) {
+		arg->nr_iovs = kmsg->vec.nr;
+		arg->iovs = kmsg->vec.iovec;
+		arg->mode |= KBUF_MODE_FREE;
+	}
+
+	nr_iovs = io_buffers_peek(req, arg, sel);
+	if (unlikely(nr_iovs < 0))
+		return nr_iovs;
+
+	if (arg->iovs != &kmsg->fast_iov && arg->iovs != kmsg->vec.iovec) {
+		kmsg->vec.nr = nr_iovs;
+		kmsg->vec.iovec = arg->iovs;
+		req->flags |= REQ_F_NEED_CLEANUP;
+	}
+	if (arg->partial_map)
+		sr->flags |= IORING_RECV_PARTIAL_MAP;
+	return nr_iovs;
+}
+
+static int io_recvmsg_buf_select(struct io_kiocb *req,
+				 struct io_async_msghdr *kmsg,
+				 struct io_br_sel *sel,
+				 unsigned int issue_flags)
+{
+	struct io_sr_msg *sr = io_kiocb_to_cmd(req, struct io_sr_msg);
+	size_t len = sr->len;
+	int ret;
+
+	*sel = io_buffer_select(req, &len, sr->buf_group, issue_flags);
+	if (!sel->addr)
+		return -ENOBUFS;
+	len = min_t(size_t, len, MAX_RW_COUNT);
+
+	if (req->flags & REQ_F_APOLL_MULTISHOT) {
+		ret = io_recvmsg_prep_multishot(kmsg, sr, &sel->addr, &len);
+		if (ret) {
+			io_kbuf_recycle(req, sel->buf_list, issue_flags);
+			return ret;
+		}
+	}
+
+	iov_iter_ubuf(&kmsg->msg.msg_iter, ITER_DEST, sel->addr, len);
+	return 0;
 }
 
 int io_recvmsg(struct io_kiocb *req, unsigned int issue_flags)
@@ -1068,20 +1134,10 @@ retry_multishot:
 	sel.buf_list = NULL;
 	len = sr->len;
 	if (io_do_buffer_select(req)) {
-		sel = io_buffer_select(req, &len, sr->buf_group, issue_flags);
-		if (!sel.addr)
-			return -ENOBUFS;
-		len = min_t(size_t, len, MAX_RW_COUNT);
-
-		if (req->flags & REQ_F_APOLL_MULTISHOT) {
-			ret = io_recvmsg_prep_multishot(kmsg, sr, &sel.addr, &len);
-			if (ret) {
-				io_kbuf_recycle(req, sel.buf_list, issue_flags);
-				return ret;
-			}
-		}
-
-		iov_iter_ubuf(&kmsg->msg.msg_iter, ITER_DEST, sel.addr, len);
+		ret = io_recvmsg_buf_select(req, kmsg, &sel, issue_flags);
+		if (unlikely(ret < 0))
+			return ret;
+		len = iov_iter_count(&kmsg->msg.msg_iter);
 	}
 
 	kmsg->msg.msg_get_inq = 1;
@@ -1153,38 +1209,20 @@ static int io_recv_buf_select(struct io_kiocb *req, struct io_async_msghdr *kmsg
 	 */
 	if (!(issue_flags & IO_URING_F_UNLOCKED) &&
 	    sr->flags & IORING_RECVSEND_BUNDLE) {
-		struct buf_sel_arg arg = {
-			.iovs = &kmsg->fast_iov,
-			.nr_iovs = 1,
-			.mode = KBUF_MODE_EXPAND,
-			.buf_group = sr->buf_group,
-		};
-
-		if (kmsg->vec.iovec) {
-			arg.nr_iovs = kmsg->vec.nr;
-			arg.iovs = kmsg->vec.iovec;
-			arg.mode |= KBUF_MODE_FREE;
-		}
+		struct buf_sel_arg arg;
+		size_t max_len = 0;
 
 		if (sel->val)
-			arg.max_len = sel->val;
+			max_len = sel->val;
 		else if (kmsg->msg.msg_inq > 1)
-			arg.max_len = kmsg->msg.msg_inq;
+			max_len = kmsg->msg.msg_inq;
 
 		/* if mshot limited, ensure we don't go over */
 		if (sr->flags & IORING_RECV_MSHOT_LIM)
-			arg.max_len = min_not_zero(arg.max_len, sr->mshot_total_len);
-		ret = io_buffers_peek(req, &arg, sel);
+			max_len = min_not_zero(max_len, sr->mshot_total_len);
+		ret = io_recv_bundle_peek(req, kmsg, sel, &arg, max_len);
 		if (unlikely(ret < 0))
 			return ret;
-
-		if (arg.iovs != &kmsg->fast_iov && arg.iovs != kmsg->vec.iovec) {
-			kmsg->vec.nr = ret;
-			kmsg->vec.iovec = arg.iovs;
-			req->flags |= REQ_F_NEED_CLEANUP;
-		}
-		if (arg.partial_map)
-			sr->flags |= IORING_RECV_PARTIAL_MAP;
 
 		/* special case 1 vec, can be a fast path */
 		if (ret == 1) {
