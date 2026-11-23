@@ -1,0 +1,57 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/clock/rockchip,rk3572-cru.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Rockchip RK3572 Family Clock and Reset Control Module
+
+maintainers:
+  - Elaine Zhang <zhangqing@rock-chips.com>
+  - Heiko Stuebner <heiko@sntech.de>
+
+description:
+  The RK3572 CRU supplies peripheral clocks and resets.
+
+properties:
+  compatible:
+    const: rockchip,rk3572-cru
+
+  reg:
+    maxItems: 1
+
+  "#clock-cells":
+    const: 1
+
+  "#reset-cells":
+    const: 1
+
+  clocks:
+    maxItems: 1
+
+  clock-names:
+    items:
+      - const: xin24m
+
+  rockchip,grf:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description: PMU0 GRF register block.
+
+required:
+  - compatible
+  - reg
+  - "#clock-cells"
+  - "#reset-cells"
+  - rockchip,grf
+
+additionalProperties: false
+
+examples:
+  - |
+    clock-controller@26090000 {
+        compatible = "rockchip,rk3572-cru";
+        reg = <0x26090000 0x60000>;
+        #clock-cells = <1>;
+        #reset-cells = <1>;
+        rockchip,grf = <&pmu0_grf>;
+    };
