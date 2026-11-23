@@ -69,7 +69,17 @@ void cfg80211_ibss_joined(struct net_device *dev, const u8 *bssid,
 
 	bss = cfg80211_get_bss(wdev->wiphy, channel, bssid, NULL, 0,
 			       IEEE80211_BSS_TYPE_IBSS, IEEE80211_PRIVACY_ANY);
-	if (WARN_ON(!bss))
+	/*
+	 * The driver informed us about this BSS, but a frame received since
+	 * then may have changed the capability of the entry, so that it no
+	 * longer looks like an IBSS, or may even have removed the entry.
+	 * Neither is a driver bug, so do not warn about it.
+	 */
+	if (!bss)
+		bss = cfg80211_get_bss(wdev->wiphy, channel, bssid, NULL, 0,
+				       IEEE80211_BSS_TYPE_ANY,
+				       IEEE80211_PRIVACY_ANY);
+	if (!bss)
 		return;
 
 	ev = kzalloc_obj(*ev, gfp);
