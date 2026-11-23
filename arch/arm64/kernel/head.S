@@ -209,6 +209,9 @@ SYM_CODE_END(preserve_boot_args)
 	ldr	w\tmp2, [\tsk, #TSK_TI_CPU]
 	ldr	\tmp1, [\tmp1, \tmp2, lsl #3]
 	set_this_cpu_offset \tmp1
+
+	adr_l	\tmp2, __entry_task
+	str	\tsk, [\tmp2, \tmp1]
 	.endm
 
 /*
