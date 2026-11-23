@@ -557,6 +557,16 @@ static inline int rt_genid_ipv6(const struct net *net)
 	return atomic_read(&net->ipv6.fib6_sernum);
 }
 
+/* Sample the generation before walking the FIB. Writers bump it after the
+ * route change is visible, so a lookup that sees the old tree cannot sample
+ * the new generation: whatever dst it builds carries a generation that
+ * fails ip6_dst_check() once the change lands.
+ */
+static inline int rt_genid_ipv6_sample(const struct net *net)
+{
+	return atomic_read_acquire(&net->ipv6.fib6_sernum);
+}
+
 /* Invalidate every cached IPv6 dst in @net. Returns the new generation,
  * which is never 0.
  */

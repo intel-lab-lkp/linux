@@ -1210,6 +1210,12 @@ static void ip6_rt_copy_init(struct rt6_info *rt, const struct fib6_result *res)
 	rt->rt6i_idev = dev ? in6_dev_get(dev) : NULL;
 	ip6_rt_init_dst(rt, res);
 
+	/* Pair the dst with the generation the FIB was read under, so a
+	 * change between the lookup and this allocation is not folded in.
+	 */
+	if (res->sernum)
+		rt->sernum = res->sernum;
+
 	rt->rt6i_dst = f6i->fib6_dst;
 	rt->rt6i_flags = res->fib6_flags;
 	if (nh->fib_nh_gw_family) {
@@ -1294,6 +1300,7 @@ INDIRECT_CALLABLE_SCOPE struct rt6_info *ip6_pol_route_lookup(struct net *net,
 	struct rt6_info *rt;
 
 	rcu_read_lock();
+	res.sernum = rt_genid_ipv6_sample(net);
 	fn = fib6_node_lookup(&table->tb6_root, &fl6->daddr, &fl6->saddr);
 restart:
 	res.f6i = rcu_dereference(fn->leaf);
@@ -2277,6 +2284,7 @@ int fib6_table_lookup(struct net *net, struct fib6_table *table, int oif,
 {
 	struct fib6_node *fn, *saved_fn;
 
+	res->sernum = rt_genid_ipv6_sample(net);
 	fn = fib6_node_lookup(&table->tb6_root, &fl6->daddr, &fl6->saddr);
 	saved_fn = fn;
 
@@ -2987,6 +2995,8 @@ static void __ip6_rt_update_pmtu(struct dst_entry *dst, const struct sock *sk,
 
 		res.fib6_flags = res.f6i->fib6_flags;
 		res.fib6_type = res.f6i->fib6_type;
+		/* derived from @rt6: it is only as current as that dst */
+		res.sernum = READ_ONCE(rt6->sernum);
 
 		if (res.f6i->nh) {
 			struct fib6_nh_match_arg arg = {
@@ -3166,6 +3176,7 @@ INDIRECT_CALLABLE_SCOPE struct rt6_info *__ip6_route_redirect(struct net *net,
 	 */
 
 	rcu_read_lock();
+	res.sernum = rt_genid_ipv6_sample(net);
 	fn = fib6_node_lookup(&table->tb6_root, &fl6->daddr, &fl6->saddr);
 restart:
 	for_each_fib6_node_rt_rcu(fn) {
@@ -4383,6 +4394,7 @@ static void rt6_do_redirect(struct dst_entry *dst, struct sock *sk, struct sk_bu
 
 	res.fib6_flags = res.f6i->fib6_flags;
 	res.fib6_type = res.f6i->fib6_type;
+	res.sernum = READ_ONCE(rt->sernum);
 	nrt = ip6_rt_cache_alloc(&res, &msg->dest, NULL);
 	if (!nrt)
 		goto out;

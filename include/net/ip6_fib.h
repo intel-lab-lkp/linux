@@ -225,6 +225,11 @@ struct fib6_result {
 	u32			fib6_flags;
 	u8			fib6_type;
 	struct rt6_info		*rt6;
+	/* Route generation sampled before the FIB was read. Dsts built
+	 * from this result are stamped with it, not with the generation
+	 * at allocation time. 0 means not sampled.
+	 */
+	int			sernum;
 };
 
 #define for_each_fib6_node_rt_rcu(fn)					\
