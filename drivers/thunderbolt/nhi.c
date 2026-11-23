@@ -35,8 +35,6 @@
  */
 #define RING_E2E_RESERVED_HOPID	RING_FIRST_USABLE_HOPID
 
-#define NHI_MAILBOX_TIMEOUT	500 /* ms */
-
 static bool host_reset = true;
 module_param(host_reset, bool, 0444);
 MODULE_PARM_DESC(host_reset, "reset USB4 host router (default: true)");
@@ -964,65 +962,7 @@ int tb_ring_throttling(struct tb_ring *ring, unsigned int interval_nsec)
 }
 EXPORT_SYMBOL_GPL(tb_ring_throttling);
 
-/**
- * nhi_mailbox_cmd() - Send a command through NHI mailbox
- * @nhi: Pointer to the NHI structure
- * @cmd: Command to send
- * @data: Data to be send with the command
- *
- * Sends mailbox command to the firmware running on NHI.
- *
- * Return: %0 on success, negative errno otherwise.
- */
-int nhi_mailbox_cmd(struct tb_nhi *nhi, enum nhi_mailbox_cmd cmd, u32 data)
-{
-	ktime_t timeout;
-	u32 val;
-
-	iowrite32(data, nhi->iobase + REG_INMAIL_DATA);
-
-	val = ioread32(nhi->iobase + REG_INMAIL_CMD);
-	val &= ~(REG_INMAIL_CMD_MASK | REG_INMAIL_ERROR);
-	val |= REG_INMAIL_OP_REQUEST | cmd;
-	iowrite32(val, nhi->iobase + REG_INMAIL_CMD);
-
-	timeout = ktime_add_ms(ktime_get(), NHI_MAILBOX_TIMEOUT);
-	do {
-		val = ioread32(nhi->iobase + REG_INMAIL_CMD);
-		if (!(val & REG_INMAIL_OP_REQUEST))
-			break;
-		usleep_range(10, 20);
-	} while (ktime_before(ktime_get(), timeout));
-
-	if (val & REG_INMAIL_OP_REQUEST)
-		return -ETIMEDOUT;
-	if (val & REG_INMAIL_ERROR)
-		return -EIO;
-
-	return 0;
-}
-
-/**
- * nhi_mailbox_mode() - Return current firmware operation mode
- * @nhi: Pointer to the NHI structure
- *
- * The function reads current firmware operation mode using NHI mailbox
- * registers and returns it to the caller.
- *
- * Return: &enum nhi_fw_mode.
- */
-enum nhi_fw_mode nhi_mailbox_mode(struct tb_nhi *nhi)
-{
-	u32 val;
-
-	val = ioread32(nhi->iobase + REG_OUTMAIL_CMD);
-	val &= REG_OUTMAIL_CMD_OPMODE_MASK;
-	val >>= REG_OUTMAIL_CMD_OPMODE_SHIFT;
-
-	return (enum nhi_fw_mode)val;
-}
-
-void nhi_interrupt_work(struct work_struct *work)
+static void nhi_interrupt_work(struct work_struct *work)
 {
 	struct tb_nhi *nhi = container_of(work, typeof(*nhi), interrupt_work);
 	int value = 0; /* Suppress uninitialized usage warning. */
@@ -1327,6 +1267,8 @@ int tb_nhi_probe(struct tb_nhi *nhi)
 						RING_INTERRUPT_REG_COUNT(nhi));
 	if (!nhi->tx_rings || !nhi->rx_rings || !nhi->interrupt_mask)
 		return -ENOMEM;
+
+	INIT_WORK(&nhi->interrupt_work, nhi_interrupt_work);
 
 	nhi_reset(nhi);
 
