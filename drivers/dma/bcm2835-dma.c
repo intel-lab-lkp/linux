@@ -17,6 +17,7 @@
  *	MARVELL MMP Peripheral DMA Driver
  *	Copyright 2012 Marvell International Ltd.
  */
+#include <linux/bitfield.h>
 #include <linux/dmaengine.h>
 #include <linux/dma-mapping.h>
 #include <linux/dmapool.h>
@@ -72,6 +73,17 @@ struct bcm2835_dma_cb {
 	u32 pad[2];
 };
 
+struct bcm2711_dma40_scb {
+	u32 ti;
+	u32 src;
+	u32 srci;
+	u32 dst;
+	u32 dsti;
+	u32 len;
+	u32 next_cb;
+	u32 rsvd;
+};
+
 struct bcm2835_cb_entry {
 	struct bcm_dma_cb *cb;
 	dma_addr_t paddr;
@@ -114,6 +126,7 @@ struct bcm2835_chan {
  * @cb_reg: offset of the control block address register
  * @int_mask: interrupt status bit in the CS register
  * @active_mask: channel active bit in the CS register
+ * @dma_mask: addressing capability of the channels
  * @cb_get_length: get the transfer length of a control block
  * @cb_get_addr: get the memory side address of a control block
  * @cb_init: initialize a control block
@@ -128,7 +141,8 @@ struct bcm2835_chan {
  * @cs_flags: per-channel flags for the CS register
  * @abort: stop and reset a channel
  * @legacy_bus_addr: translate a slave address for device trees which do not
- *	describe the peripheral window in dma-ranges
+ *	describe the peripheral window in dma-ranges, NULL if they cannot be
+ *	supported
  * @chan_mask: channels of the DMA block using this programming model
  */
 struct bcm2835_dma_cfg {
@@ -137,6 +151,8 @@ struct bcm2835_dma_cfg {
 
 	u32 int_mask;
 	u32 active_mask;
+
+	u64 dma_mask;
 
 	u32 (*cb_get_length)(void *data);
 	dma_addr_t (*cb_get_addr)(void *data, enum dma_transfer_direction);
@@ -282,6 +298,67 @@ struct bcm2835_desc {
 /* the max dma length for different channels */
 #define MAX_DMA_LEN SZ_1G
 #define MAX_LITE_DMA_LEN (SZ_64K - 4)
+
+/* 40-bit DMA channel registers */
+#define BCM2711_DMA40_CS		0x00
+#define BCM2711_DMA40_CB		0x04
+#define BCM2711_DMA40_DEBUG		0x0c
+#define BCM2711_DMA40_TI		0x10
+#define BCM2711_DMA40_SRC		0x14
+#define BCM2711_DMA40_SRCI		0x18
+#define BCM2711_DMA40_DEST		0x1c
+#define BCM2711_DMA40_DESTI		0x20
+#define BCM2711_DMA40_LEN		0x24
+#define BCM2711_DMA40_NEXT_CB		0x28
+#define BCM2711_DMA40_DEBUG2		0x2c
+
+/* 40-bit DMA CS Control and Status bits */
+#define BCM2711_DMA40_ACTIVE		BIT(0)
+#define BCM2711_DMA40_END		BIT(1)
+#define BCM2711_DMA40_INT		BIT(2)
+#define BCM2711_DMA40_DREQ		BIT(3)  /* DREQ state */
+#define BCM2711_DMA40_RD_PAUSED		BIT(4)  /* Reading is paused */
+#define BCM2711_DMA40_WR_PAUSED		BIT(5)  /* Writing is paused */
+#define BCM2711_DMA40_DREQ_PAUSED	BIT(6)  /* Is paused by DREQ flow control */
+#define BCM2711_DMA40_WAITING_FOR_WRITES BIT(7) /* Waiting for last write */
+#define BCM2711_DMA40_PROT		GENMASK(9, 8) /* AXI protection, supervisor mode */
+#define BCM2711_DMA40_ERR		BIT(10)
+#define BCM2711_DMA40_QOS(x)		FIELD_PREP(GENMASK(19, 16), x)
+#define BCM2711_DMA40_PANIC_QOS(x)	FIELD_PREP(GENMASK(23, 20), x)
+#define BCM2711_DMA40_TRANSACTIONS	BIT(25) /* AXI transactions outstanding */
+#define BCM2711_DMA40_WAIT_FOR_WRITES	BIT(28)
+#define BCM2711_DMA40_DISDEBUG		BIT(29)
+#define BCM2711_DMA40_ABORT		BIT(30)
+#define BCM2711_DMA40_HALT		BIT(31)
+#define BCM2711_DMA40_CS_FLAGS(x) ((x) & (BCM2711_DMA40_QOS(15) | \
+					  BCM2711_DMA40_PANIC_QOS(15) | \
+					  BCM2711_DMA40_WAIT_FOR_WRITES | \
+					  BCM2711_DMA40_DISDEBUG))
+
+/* 40-bit DMA transfer information bits */
+#define BCM2711_DMA40_INTEN		BIT(0)
+#define BCM2711_DMA40_TDMODE		BIT(1) /* 2D-Mode */
+#define BCM2711_DMA40_WAIT_RESP		BIT(2) /* wait for AXI write to be acked */
+#define BCM2711_DMA40_WAIT_RD_RESP	BIT(3) /* wait for AXI read to complete */
+#define BCM2711_DMA40_PER_MAP(x)	FIELD_PREP(GENMASK(13, 9), x) /* REQ source */
+#define BCM2711_DMA40_S_DREQ		BIT(14) /* enable SREQ for source */
+#define BCM2711_DMA40_D_DREQ		BIT(15) /* enable DREQ for destination */
+#define BCM2711_DMA40_S_WAIT(x)		FIELD_PREP(GENMASK(23, 16), x) /* read-wait cycles */
+#define BCM2711_DMA40_D_WAIT(x)		FIELD_PREP(GENMASK(31, 24), x) /* write-wait cycles */
+
+/* 40-bit DMA source and destination information bits */
+#define BCM2711_DMA40_ADDR_HI		GENMASK(7, 0) /* bits 39:32 of the address */
+#define BCM2711_DMA40_BURST_LEN(x)	FIELD_PREP(GENMASK(11, 8), x)
+#define BCM2711_DMA40_INC		BIT(12)
+#define BCM2711_DMA40_SIZE_32		FIELD_PREP(GENMASK(14, 13), 0)
+#define BCM2711_DMA40_SIZE_64		FIELD_PREP(GENMASK(14, 13), 1)
+#define BCM2711_DMA40_SIZE_128		FIELD_PREP(GENMASK(14, 13), 2)
+#define BCM2711_DMA40_SIZE_256		FIELD_PREP(GENMASK(14, 13), 3)
+#define BCM2711_DMA40_IGNORE		BIT(15)
+#define BCM2711_DMA40_STRIDE(x)		FIELD_PREP(GENMASK(31, 16), x) /* For 2D mode */
+
+/* 40-bit DMA debug register bits */
+#define BCM2711_DMA40_DEBUG_RESET	BIT(23)
 
 static inline size_t bcm2835_dma_max_frame_length(struct bcm2835_chan *c)
 {
@@ -485,6 +562,199 @@ static dma_addr_t bcm2835_dma_read_addr(struct bcm2835_chan *c,
 static u32 bcm2835_dma_cs_flags(struct bcm2835_chan *c)
 {
 	return BCM2835_DMA_CS_FLAGS(c->dreq);
+}
+
+static inline u32 to_bcm2711_ti(u32 info)
+{
+	return ((info & BCM2835_DMA_INT_EN) ? BCM2711_DMA40_INTEN : 0) |
+		((info & BCM2835_DMA_WAIT_RESP) ? BCM2711_DMA40_WAIT_RESP : 0) |
+		((info & BCM2835_DMA_S_DREQ) ?
+		 (BCM2711_DMA40_S_DREQ | BCM2711_DMA40_WAIT_RD_RESP) : 0) |
+		((info & BCM2835_DMA_D_DREQ) ? BCM2711_DMA40_D_DREQ : 0) |
+		BCM2711_DMA40_PER_MAP((info >> 16) & 0x1f);
+}
+
+static inline u32 to_bcm2711_srci(u32 info)
+{
+	return ((info & BCM2835_DMA_S_INC) ? BCM2711_DMA40_INC : 0) |
+	       ((info & BCM2835_DMA_S_WIDTH) ? BCM2711_DMA40_SIZE_128 : 0) |
+	       BCM2711_DMA40_BURST_LEN(BCM2835_DMA_GET_BURST_LENGTH(info));
+}
+
+static inline u32 to_bcm2711_dsti(u32 info)
+{
+	return ((info & BCM2835_DMA_D_INC) ? BCM2711_DMA40_INC : 0) |
+	       ((info & BCM2835_DMA_D_WIDTH) ? BCM2711_DMA40_SIZE_128 : 0) |
+	       BCM2711_DMA40_BURST_LEN(BCM2835_DMA_GET_BURST_LENGTH(info));
+}
+
+static inline dma_addr_t bcm2711_dma40_addr(u32 lo, u32 info)
+{
+	return (dma_addr_t)(((u64)FIELD_GET(BCM2711_DMA40_ADDR_HI, info) << 32) | lo);
+}
+
+static inline u32 bcm2711_dma40_info_addr(u32 info, dma_addr_t addr)
+{
+	return (info & ~BCM2711_DMA40_ADDR_HI) |
+	       FIELD_PREP(BCM2711_DMA40_ADDR_HI, upper_32_bits(addr));
+}
+
+static u32 bcm2711_dma_prepare_cb_extra(struct bcm2835_chan *c,
+					enum dma_transfer_direction direction,
+					bool cyclic, bool final,
+					unsigned long flags)
+{
+	u32 result = 0;
+
+	if (cyclic) {
+		if (flags & DMA_PREP_INTERRUPT)
+			result |= BCM2711_DMA40_INTEN;
+	} else {
+		if (!final)
+			return 0;
+
+		result |= BCM2711_DMA40_INTEN;
+
+		if (direction == DMA_MEM_TO_MEM)
+			result |= BCM2711_DMA40_WAIT_RESP;
+	}
+
+	return result;
+}
+
+static inline u32 bcm2711_dma_cb_get_length(void *data)
+{
+	struct bcm2711_dma40_scb *scb = data;
+
+	return scb->len;
+}
+
+static inline dma_addr_t
+bcm2711_dma_cb_get_addr(void *data, enum dma_transfer_direction direction)
+{
+	struct bcm2711_dma40_scb *scb = data;
+
+	if (direction == DMA_DEV_TO_MEM)
+		return bcm2711_dma40_addr(scb->dst, scb->dsti);
+
+	return bcm2711_dma40_addr(scb->src, scb->srci);
+}
+
+static inline void
+bcm2711_dma_cb_init(void *data, struct bcm2835_chan *c,
+		    enum dma_transfer_direction direction, dma_addr_t src,
+		    dma_addr_t dst, bool zero_page)
+{
+	struct bcm2711_dma40_scb *scb = data;
+	u32 info = bcm2835_dma_prepare_cb_info(c, direction, zero_page);
+
+	scb->ti = to_bcm2711_ti(info);
+	scb->src = lower_32_bits(src);
+	scb->srci = bcm2711_dma40_info_addr(to_bcm2711_srci(info), src);
+	scb->dst = lower_32_bits(dst);
+	scb->dsti = bcm2711_dma40_info_addr(to_bcm2711_dsti(info), dst);
+	scb->len = 0;
+	scb->next_cb = 0;
+	scb->rsvd = 0;
+}
+
+static inline void
+bcm2711_dma_cb_set_src(void *data, enum dma_transfer_direction direction,
+		       dma_addr_t src)
+{
+	struct bcm2711_dma40_scb *scb = data;
+
+	scb->src = lower_32_bits(src);
+	scb->srci = bcm2711_dma40_info_addr(scb->srci, src);
+}
+
+static inline void
+bcm2711_dma_cb_set_dst(void *data, enum dma_transfer_direction direction,
+		       dma_addr_t dst)
+{
+	struct bcm2711_dma40_scb *scb = data;
+
+	scb->dst = lower_32_bits(dst);
+	scb->dsti = bcm2711_dma40_info_addr(scb->dsti, dst);
+}
+
+static inline void bcm2711_dma_cb_set_next(void *data, u32 next)
+{
+	struct bcm2711_dma40_scb *scb = data;
+
+	scb->next_cb = next;
+}
+
+static inline void bcm2711_dma_cb_set_length(void *data, u32 length)
+{
+	struct bcm2711_dma40_scb *scb = data;
+
+	scb->len = length;
+}
+
+static inline void
+bcm2711_dma_cb_append_extra(void *data, struct bcm2835_chan *c,
+			    enum dma_transfer_direction direction,
+			    bool cyclic, bool final, unsigned long flags)
+{
+	struct bcm2711_dma40_scb *scb = data;
+
+	scb->ti |= bcm2711_dma_prepare_cb_extra(c, direction, cyclic, final,
+						flags);
+}
+
+/* control blocks are 32 byte aligned, the register holds bits 36:5 */
+static inline u32 bcm2711_dma_to_cb_addr(dma_addr_t addr)
+{
+	WARN_ON_ONCE(addr & 0x1f);
+
+	return (u64)addr >> 5;
+}
+
+static dma_addr_t bcm2711_dma_read_addr(struct bcm2835_chan *c,
+					enum dma_transfer_direction direction)
+{
+	if (direction == DMA_MEM_TO_DEV)
+		return bcm2711_dma40_addr(readl(c->chan_base + BCM2711_DMA40_SRC),
+					  readl(c->chan_base + BCM2711_DMA40_SRCI));
+	else if (direction == DMA_DEV_TO_MEM)
+		return bcm2711_dma40_addr(readl(c->chan_base + BCM2711_DMA40_DEST),
+					  readl(c->chan_base + BCM2711_DMA40_DESTI));
+
+	return 0;
+}
+
+static u32 bcm2711_dma_cs_flags(struct bcm2835_chan *c)
+{
+	return BCM2711_DMA40_CS_FLAGS(c->dreq) | BCM2711_DMA40_PROT;
+}
+
+static void bcm2711_dma_abort_chan(struct bcm2835_chan *c)
+{
+	void __iomem *chan_base = c->chan_base;
+	long timeout = 100;
+
+	/* Pause the current DMA */
+	writel(readl(chan_base + BCM2711_DMA40_CS) & ~BCM2711_DMA40_ACTIVE,
+	       chan_base + BCM2711_DMA40_CS);
+
+	/* wait for outstanding transactions to complete */
+	while ((readl(chan_base + BCM2711_DMA40_CS) & BCM2711_DMA40_TRANSACTIONS) &&
+	       --timeout)
+		cpu_relax();
+
+	/* Peripheral might be stuck and fail to complete */
+	if (!timeout)
+		dev_err(c->vc.chan.device->dev,
+			"failed to complete pause on dma %d (CS:%08x)\n", c->ch,
+			readl(chan_base + BCM2711_DMA40_CS));
+
+	/* Set CS back to default state */
+	writel(BCM2711_DMA40_PROT, chan_base + BCM2711_DMA40_CS);
+
+	/* Reset the DMA */
+	writel(readl(chan_base + BCM2711_DMA40_DEBUG) | BCM2711_DMA40_DEBUG_RESET,
+	       chan_base + BCM2711_DMA40_DEBUG);
 }
 
 static void bcm2835_dma_free_cb_chain(struct bcm2835_desc *desc)
@@ -1199,7 +1469,8 @@ static int bcm2835_dma_chan_init(struct bcm2835_dmadev *d, int chan_id,
 	c->irq_number = irq;
 	c->irq_flags = irq_flags;
 
-	d->cfg->chan_plat_init(c);
+	if (d->cfg->chan_plat_init)
+		d->cfg->chan_plat_init(c);
 
 	return 0;
 }
@@ -1225,6 +1496,8 @@ static const struct bcm2835_dma_cfg bcm2835_data = {
 	.int_mask = BCM2835_DMA_INT,
 	.active_mask = BCM2835_DMA_ACTIVE,
 
+	.dma_mask = DMA_BIT_MASK(32),
+
 	.cb_get_length = bcm2835_dma_cb_get_length,
 	.cb_get_addr = bcm2835_dma_cb_get_addr,
 	.cb_init = bcm2835_dma_cb_init,
@@ -1245,7 +1518,35 @@ static const struct bcm2835_dma_cfg bcm2835_data = {
 	.chan_mask = GENMASK(BCM2835_DMA_MAX_DMA_CHAN_SUPPORTED, 0),
 };
 
+static const struct bcm2835_dma_cfg bcm2711_data = {
+	.cs_reg = BCM2711_DMA40_CS,
+	.cb_reg = BCM2711_DMA40_CB,
+
+	.int_mask = BCM2711_DMA40_INT,
+	.active_mask = BCM2711_DMA40_ACTIVE,
+
+	.dma_mask = DMA_BIT_MASK(40),
+
+	.cb_get_length = bcm2711_dma_cb_get_length,
+	.cb_get_addr = bcm2711_dma_cb_get_addr,
+	.cb_init = bcm2711_dma_cb_init,
+	.cb_set_src = bcm2711_dma_cb_set_src,
+	.cb_set_dst = bcm2711_dma_cb_set_dst,
+	.cb_set_next = bcm2711_dma_cb_set_next,
+	.cb_set_length = bcm2711_dma_cb_set_length,
+	.cb_append_extra = bcm2711_dma_cb_append_extra,
+
+	.to_cb_addr = bcm2711_dma_to_cb_addr,
+
+	.read_addr = bcm2711_dma_read_addr,
+	.cs_flags = bcm2711_dma_cs_flags,
+	.abort = bcm2711_dma_abort_chan,
+
+	.chan_mask = GENMASK(14, 11),
+};
+
 static const struct of_device_id bcm2835_dma_of_match[] = {
+	{ .compatible = "brcm,bcm2711-dma", .data = &bcm2711_data },
 	{ .compatible = "brcm,bcm2835-dma", .data = &bcm2835_data },
 	{},
 };
@@ -1343,15 +1644,6 @@ static int bcm2835_dma_probe(struct platform_device *pdev)
 	char chan_name[BCM2835_DMA_CHAN_NAME_SIZE];
 	int chan_count, chan_start, chan_end;
 
-	if (!pdev->dev.dma_mask)
-		pdev->dev.dma_mask = &pdev->dev.coherent_dma_mask;
-
-	rc = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(32));
-	if (rc) {
-		dev_err(&pdev->dev, "Unable to set DMA mask\n");
-		return rc;
-	}
-
 	od = devm_kzalloc(&pdev->dev, sizeof(*od), GFP_KERNEL);
 	if (!od)
 		return -ENOMEM;
@@ -1360,6 +1652,28 @@ static int bcm2835_dma_probe(struct platform_device *pdev)
 	if (!od->cfg)
 		return dev_err_probe(&pdev->dev, -EINVAL,
 				     "Failed to match compatible string\n");
+
+	/* the peripherals are only reachable above 4 GiB by 40-bit channels */
+	if (!IS_ENABLED(CONFIG_ARCH_DMA_ADDR_T_64BIT) &&
+	    od->cfg->dma_mask > DMA_BIT_MASK(32))
+		return dev_err_probe(&pdev->dev, -ENODEV,
+				     "40-bit DMA channels need a 64-bit dma_addr_t\n");
+
+	if (!pdev->dev.dma_mask)
+		pdev->dev.dma_mask = &pdev->dev.coherent_dma_mask;
+
+	/*
+	 * The control blocks are addressed through 32-bit registers holding
+	 * at most bits 36:5 of their address.
+	 */
+	rc = dma_set_mask(&pdev->dev, od->cfg->dma_mask);
+	if (!rc)
+		rc = dma_set_coherent_mask(&pdev->dev,
+					   min(od->cfg->dma_mask, DMA_BIT_MASK(37)));
+	if (rc) {
+		dev_err(&pdev->dev, "Unable to set DMA mask\n");
+		return rc;
+	}
 
 	dma_set_max_seg_size(&pdev->dev, 0x3FFFFFFF);
 
@@ -1383,9 +1697,14 @@ static int bcm2835_dma_probe(struct platform_device *pdev)
 
 	od->map_resource = bcm2835_dma_mmio_in_dma_ranges(&pdev->dev,
 							  res->start);
-	if (!od->map_resource)
+	if (!od->map_resource) {
+		if (!od->cfg->legacy_bus_addr)
+			return dev_err_probe(&pdev->dev, -EINVAL,
+					     "peripheral window missing in dma-ranges\n");
+
 		dev_info(&pdev->dev,
 			 "peripheral window missing in dma-ranges, please update DT blob\n");
+	}
 
 	dma_cap_set(DMA_SLAVE, od->ddev.cap_mask);
 	dma_cap_set(DMA_PRIVATE, od->ddev.cap_mask);
