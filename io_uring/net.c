@@ -746,12 +746,18 @@ static int io_recvmsg_mshot_prep(struct io_kiocb *req,
 static int io_recvmsg_copy_hdr(struct io_kiocb *req,
 			       struct io_async_msghdr *iomsg)
 {
+	struct io_sr_msg *sr = io_kiocb_to_cmd(req, struct io_sr_msg);
 	struct user_msghdr msg;
 	int ret;
 
 	ret = io_msg_copy_hdr(req, iomsg, &msg, &iomsg->uaddr);
 	if (unlikely(ret))
 		return ret;
+
+	iomsg->msg.msg_inq = 0;
+
+	if (sr->flags & IORING_RECVSEND_BUNDLE)
+		sr->mshot_len = sr->len;
 
 	if (!(req->flags & REQ_F_BUFFER_SELECT)) {
 		ret = io_net_import_vec(req, iomsg, msg.msg_iov, msg.msg_iovlen,
@@ -847,12 +853,6 @@ int io_recvmsg_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 		return -EINVAL;
 	}
 
-	if (sr->flags & IORING_RECVSEND_BUNDLE) {
-		if (req->opcode == IORING_OP_RECVMSG &&
-		    sr->flags & IORING_RECV_MULTISHOT)
-			return -EINVAL;
-	}
-
 	if (io_is_compat(req->ctx))
 		sr->msg_flags |= MSG_CMSG_COMPAT;
 
@@ -868,6 +868,29 @@ static size_t io_recvmsg_hdr_len(struct io_async_msghdr *kmsg)
 {
 	return sizeof(struct io_uring_recvmsg_out) + kmsg->namelen +
 	       kmsg->controllen;
+}
+
+static int io_recv_payload_len(struct io_kiocb *req,
+			       struct io_async_msghdr *kmsg, int consumed)
+{
+	if (req->opcode != IORING_OP_RECVMSG ||
+	    !(req->flags & REQ_F_APOLL_MULTISHOT) || consumed <= 0)
+		return consumed;
+
+	return consumed - (int)io_recvmsg_hdr_len(kmsg);
+}
+
+static bool io_recvmsg_bundle_bufs_left(struct io_async_msghdr *kmsg,
+					int nbufs)
+{
+	struct iov_iter *iter = &kmsg->msg.msg_iter;
+	const struct iovec *iov;
+
+	if (!iter_is_iovec(iter))
+		return false;
+
+	iov = kmsg->vec.iovec ?: &kmsg->fast_iov;
+	return iter_iov(iter) - iov + iter->nr_segs > nbufs;
 }
 
 /*
@@ -905,12 +928,23 @@ static inline bool io_recv_finish(struct io_kiocb *req,
 
 	if (sr->flags & IORING_RECVSEND_BUNDLE) {
 		size_t this_ret = sel->val - sr->done_io;
+		int nbufs;
+		int payload = io_recv_payload_len(req, kmsg, consumed);
 
-		cflags |= io_put_kbufs(req, consumed, sel->buf_list, io_bundle_nbufs(kmsg, consumed));
+		if (req->opcode == IORING_OP_RECVMSG && consumed > 0 && !payload)
+			nbufs = 1;
+		else
+			nbufs = io_bundle_nbufs(kmsg, payload);
+
+		cflags |= io_put_kbufs(req, consumed, sel->buf_list, nbufs);
 		if (sr->flags & IORING_RECV_RETRY)
 			cflags = req->cqe.flags | (cflags & CQE_F_MASK);
 		if (sr->mshot_len && sel->val >= sr->mshot_len)
 			sr->flags |= IORING_RECV_MSHOT_CAP;
+		if (req->opcode == IORING_OP_RECVMSG &&
+		    (io_recvmsg_bundle_bufs_left(kmsg, nbufs) ||
+		     cflags & IORING_CQE_F_BUF_MORE))
+			req->flags &= ~REQ_F_BL_EMPTY;
 		/* bundle with no more immediate buffers, we're done */
 		if (req->flags & REQ_F_BL_EMPTY)
 			goto finish;
@@ -1087,14 +1121,34 @@ static int io_recvmsg_bundle_select(struct io_kiocb *req,
 {
 	struct io_sr_msg *sr = io_kiocb_to_cmd(req, struct io_sr_msg);
 	struct buf_sel_arg arg;
+	size_t iov0_len, max_len;
 	int nr_iovs;
+	int ret;
 
-	nr_iovs = io_recv_bundle_peek(req, kmsg, sel, &arg, sr->len);
+	if (sr->len)
+		max_len = sr->len;
+	else if (kmsg->msg.msg_inq > 1)
+		max_len = kmsg->msg.msg_inq + io_recvmsg_hdr_len(kmsg);
+	else
+		max_len = 0;
+
+	nr_iovs = io_recv_bundle_peek(req, kmsg, sel, &arg, max_len);
 	if (unlikely(nr_iovs <= 0))
 		return !nr_iovs ? -ENOBUFS : nr_iovs;
 
 	if (!sel->buf_list)
 		arg.out_len = arg.iovs[0].iov_len;
+
+	if (req->flags & REQ_F_APOLL_MULTISHOT) {
+		iov0_len = arg.iovs[0].iov_len;
+		ret = io_recvmsg_prep_multishot(kmsg, sr, &arg.iovs[0].iov_base,
+						&iov0_len);
+		if (unlikely(ret))
+			return ret;
+		arg.iovs[0].iov_len = iov0_len;
+		arg.out_len -= io_recvmsg_hdr_len(kmsg);
+		kmsg->payloadlen = arg.out_len;
+	}
 
 	if (nr_iovs == 1)
 		iov_iter_ubuf(&kmsg->msg.msg_iter, ITER_DEST,
