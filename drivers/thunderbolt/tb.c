@@ -2267,11 +2267,11 @@ static int tb_disconnect_pci(struct tb *tb, struct tb_switch *sw)
 	struct tb_port *up;
 
 	up = tb_switch_find_port(sw, TB_TYPE_PCIE_UP);
-	if (WARN_ON(!up))
+	if (!up)
 		return -ENODEV;
 
 	tunnel = tb_find_tunnel(tb, TB_TUNNEL_PCI, NULL, up);
-	if (WARN_ON(!tunnel))
+	if (!tunnel)
 		return -ENODEV;
 
 	tb_switch_xhci_disconnect(sw);
