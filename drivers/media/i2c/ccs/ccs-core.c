@@ -2109,7 +2109,7 @@ static int ccs_enum_mbus_code(struct v4l2_subdev *subdev,
 	unsigned int i;
 	int idx = -1;
 
-	dev_err(&client->dev, "subdev %s, pad %u, index %u\n",
+	dev_dbg(&client->dev, "subdev %s, pad %u, index %u\n",
 		subdev->name, code->pad, code->index);
 
 	if (subdev != &sensor->src->sd || code->pad != CCS_PAD_SRC) {
@@ -2127,7 +2127,7 @@ static int ccs_enum_mbus_code(struct v4l2_subdev *subdev,
 
 		if (idx == code->index) {
 			code->code = ccs_csi_data_formats[i].code;
-			dev_err(&client->dev, "found index %u, i %u, code %x\n",
+			dev_dbg(&client->dev, "found index %u, i %u, code %x\n",
 				code->index, i, code->code);
 			return 0;
 		}
