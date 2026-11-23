@@ -511,9 +511,9 @@ TRACE_EVENT(mm_mglru_aging,
 TRACE_EVENT(mm_vmscan_lru_gen_walk,
 
 	TP_PROTO(int nid, unsigned long seq, int leaf_total,
-		 int leaf_young, bool empty),
+		 int leaf_young, bool empty, int pud_skipped),
 
-	TP_ARGS(nid, seq, leaf_total, leaf_young, empty),
+	TP_ARGS(nid, seq, leaf_total, leaf_young, empty, pud_skipped),
 
 	TP_STRUCT__entry(
 		__field(int, nid)
@@ -521,6 +521,7 @@ TRACE_EVENT(mm_vmscan_lru_gen_walk,
 		__field(int, leaf_total)
 		__field(int, leaf_young)
 		__field(bool, empty)
+		__field(int, pud_skipped)
 	),
 
 	TP_fast_assign(
@@ -529,11 +530,12 @@ TRACE_EVENT(mm_vmscan_lru_gen_walk,
 		__entry->leaf_total = leaf_total;
 		__entry->leaf_young = leaf_young;
 		__entry->empty = empty;
+		__entry->pud_skipped = pud_skipped;
 	),
 
-	TP_printk("nid=%d seq=%lu leaf_total=%d leaf_young=%d empty=%d",
+	TP_printk("nid=%d seq=%lu leaf_total=%d leaf_young=%d empty=%d pud_skipped=%d",
 		__entry->nid, __entry->seq, __entry->leaf_total,
-		__entry->leaf_young, __entry->empty)
+		__entry->leaf_young, __entry->empty, __entry->pud_skipped)
 );
 
 #endif /* CONFIG_LRU_GEN */
