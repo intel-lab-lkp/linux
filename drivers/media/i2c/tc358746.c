@@ -1688,7 +1688,10 @@ static void tc358746_remove(struct i2c_client *client)
 	media_entity_cleanup(&sd->entity);
 
 	pm_runtime_disable(sd->dev);
-	pm_runtime_set_suspended(sd->dev);
+	if (!pm_runtime_status_suspended(sd->dev)) {
+		tc358746_suspend(sd->dev);
+		pm_runtime_set_suspended(sd->dev);
+	}
 	pm_runtime_dont_use_autosuspend(sd->dev);
 }
 
