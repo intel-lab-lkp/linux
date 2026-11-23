@@ -2578,6 +2578,10 @@ static int ccs_set_crop(struct v4l2_subdev *subdev,
 	if (ssd != sensor->pixel_array && sel->pad == CCS_PAD_SINK)
 		ccs_propagate(subdev, sd_state, V4L2_SEL_TGT_CROP);
 
+	if (ssd == sensor->pixel_array &&
+	    sel->which == V4L2_SUBDEV_FORMAT_ACTIVE)
+		return ccs_pll_blanking_update(sensor);
+
 	return 0;
 }
 
