@@ -7,7 +7,6 @@
 #include <linux/stringify.h>
 #include <linux/types.h>
 #include <linux/unaligned.h>
-#include <linux/gpio.h>
 #include "hif.h"
 #include "mac.h"
 #include "bus.h"

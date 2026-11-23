@@ -2,7 +2,6 @@
 /*
  * Copyright (c) 2017-2026 Morse Micro
  */
-#include <linux/gpio.h>
 #include <linux/random.h>
 #include <linux/timer.h>
 #include <linux/bitops.h>
