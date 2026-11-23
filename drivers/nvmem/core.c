@@ -384,7 +384,8 @@ static ssize_t nvmem_cell_attr_read(struct file *filp, struct kobject *kobj,
 		goto destroy_cell;
 	}
 
-	read_len = min_t(unsigned int, cell_sz - pos, count);
+	/* Post-processing may have left less data than the attribute size */
+	read_len = pos < cell_sz ? min_t(size_t, cell_sz - pos, count) : 0;
 	memcpy(buf, content + pos, read_len);
 	kfree(content);
 
@@ -1647,6 +1648,7 @@ static int __nvmem_cell_read(struct nvmem_device *nvmem,
 			     struct nvmem_cell_entry *cell,
 			     void *buf, size_t *len, const char *id, int index)
 {
+	size_t out_len = cell->bytes;
 	int rc;
 
 	rc = nvmem_reg_read(nvmem, cell->offset, buf, cell->raw_len);
@@ -1661,12 +1663,21 @@ static int __nvmem_cell_read(struct nvmem_device *nvmem,
 	if (cell->read_post_process) {
 		rc = cell->read_post_process(cell->priv, id, index,
 					     cell->offset, buf, cell->raw_len);
-		if (rc)
+		if (rc < 0)
 			return rc;
+
+		/* The post-processor may have shrunk the data: drop the rest */
+		if (rc > 0) {
+			if (WARN_ON_ONCE(rc > cell->bytes))
+				return -EINVAL;
+
+			out_len = rc;
+			memset(buf + out_len, 0, cell->bytes - out_len);
+		}
 	}
 
 	if (len)
-		*len = cell->bytes;
+		*len = out_len;
 
 	return 0;
 }

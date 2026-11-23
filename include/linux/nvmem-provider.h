@@ -20,7 +20,13 @@ typedef int (*nvmem_reg_read_t)(void *priv, unsigned int offset,
 				void *val, size_t bytes);
 typedef int (*nvmem_reg_write_t)(void *priv, unsigned int offset,
 				 void *val, size_t bytes);
-/* used for vendor specific post processing of cell data */
+/*
+ * Used for vendor specific post processing of cell data. Returns 0 if the
+ * data keeps the cell size (the cell's bytes, not the raw length passed in),
+ * the length of the processed data if it ends up shorter (1 up to the cell
+ * size), or a negative error code. The core zeroes the buffer beyond a
+ * shortened length. An empty result cannot be reported.
+ */
 typedef int (*nvmem_cell_post_process_t)(void *priv, const char *id, int index,
 					 unsigned int offset, void *buf,
 					 size_t bytes);
