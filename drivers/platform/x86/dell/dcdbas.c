@@ -99,6 +99,7 @@ static void smi_data_buf_free(void)
 
 /**
  * smi_data_buf_realloc: grow SMI data buffer if needed
+ * @size: minimum required buffer size in bytes
  */
 static int smi_data_buf_realloc(unsigned long size)
 {
@@ -278,6 +279,7 @@ static int raise_smi(void *par)
 }
 /**
  * dcdbas_smi_request: generate SMI request
+ * @smi_cmd: SMI command to issue
  *
  * Called with smi_data_lock.
  */
@@ -301,7 +303,11 @@ int dcdbas_smi_request(struct smi_cmd *smi_cmd)
 EXPORT_SYMBOL(dcdbas_smi_request);
 
 /**
- * smi_request_store:
+ * smi_request_store: handle a write to the smi_request sysfs attribute
+ * @dev: device the attribute belongs to
+ * @attr: device attribute being written
+ * @buf: value written by userspace
+ * @count: number of bytes in @buf
  *
  * The valid values are:
  * 0: zero SMI data buffer
@@ -610,6 +616,9 @@ remap:
 
 /**
  * dcdbas_reboot_notify: handle reboot notification for host control
+ * @nb: notifier block
+ * @code: reboot event (SYS_DOWN, SYS_HALT or SYS_POWER_OFF)
+ * @unused: unused
  */
 static int dcdbas_reboot_notify(struct notifier_block *nb, unsigned long code,
 				void *unused)
