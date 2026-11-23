@@ -693,6 +693,9 @@ static int max77759_probe(struct i2c_client *client)
 				     "failed to add IRQ chip '%s'\n",
 				     max77759_pmic_irq_chip.name);
 
+	client->dev.coherent_dma_mask = 0;
+	client->dev.dma_mask = &client->dev.coherent_dma_mask;
+
 	ret = max77759_add_chained_maxq(client, max77759, irq_chip_data_pmic);
 	if (ret)
 		return ret;
