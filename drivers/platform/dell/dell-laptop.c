@@ -892,13 +892,17 @@ static int __init dell_setup_rfkill(void)
 	} else if (ret != -ENODEV) {
 		pr_warn("Unable to register dell rbtn notifier\n");
 		goto err_filter;
-	} else {
+	} else if (IS_ENABLED(CONFIG_SERIO_I8042)) {
 		ret = i8042_install_filter(dell_laptop_i8042_filter, NULL);
 		if (ret) {
 			pr_warn("Unable to install key filter\n");
 			goto err_filter;
 		}
 		pr_info("Using i8042 filter function for receiving events\n");
+	} else {
+		pr_info("No source for receiving events, rfkill disabled\n");
+		ret = 0;
+		goto err_filter;
 	}
 
 	return 0;
@@ -915,6 +919,9 @@ err_bluetooth:
 		rfkill_unregister(wifi_rfkill);
 err_wifi:
 	rfkill_destroy(wifi_rfkill);
+	wifi_rfkill = NULL;
+	bluetooth_rfkill = NULL;
+	wwan_rfkill = NULL;
 
 	return ret;
 }
@@ -1012,6 +1019,11 @@ static int __init touchpad_led_init(struct device *dev)
 static void touchpad_led_exit(void)
 {
 	led_classdev_unregister(&touchpad_led);
+}
+
+static bool dell_has_touchpad_led(void)
+{
+	return IS_ENABLED(CONFIG_SERIO_I8042) && quirks && quirks->touchpad_led;
 }
 
 /*
@@ -2487,7 +2499,7 @@ static int __init dell_init(void)
 		goto fail_rfkill;
 	}
 
-	if (quirks && quirks->touchpad_led)
+	if (dell_has_touchpad_led())
 		touchpad_led_init(&platform_device->dev);
 
 	kbd_led_init(&platform_device->dev);
@@ -2564,7 +2576,7 @@ fail_led:
 	debugfs_remove_recursive(dell_laptop_dir);
 	dell_battery_exit();
 	kbd_led_exit();
-	if (quirks && quirks->touchpad_led)
+	if (dell_has_touchpad_led())
 		touchpad_led_exit();
 	dell_cleanup_rfkill();
 fail_rfkill:
@@ -2581,7 +2593,7 @@ static void __exit dell_exit(void)
 {
 	dell_laptop_unregister_notifier(&dell_laptop_notifier);
 	debugfs_remove_recursive(dell_laptop_dir);
-	if (quirks && quirks->touchpad_led)
+	if (dell_has_touchpad_led())
 		touchpad_led_exit();
 	kbd_led_exit();
 	dell_battery_exit();
