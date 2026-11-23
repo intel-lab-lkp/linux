@@ -15742,6 +15742,7 @@ L:	linux-spi@vger.kernel.org
 S:	Maintained
 F:	Documentation/devicetree/bindings/spi/loongson,ls2k-spi.yaml
 F:	drivers/spi/spi-loongson-core.c
+F:	drivers/spi/spi-loongson-io.c
 F:	drivers/spi/spi-loongson-pci.c
 F:	drivers/spi/spi-loongson-plat.c
 F:	drivers/spi/spi-loongson.h

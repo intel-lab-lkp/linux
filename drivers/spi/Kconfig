@@ -635,6 +635,22 @@ config SPI_LOONGSON_CORE
 	tristate
 	depends on LOONGARCH || COMPILE_TEST
 
+config SPI_LOONGSON_IO
+	tristate "Loongson SPI-IO Controller Driver"
+	depends on LOONGARCH || COMPILE_TEST
+	depends on OF
+	help
+	  This enables support for the Loongson SPI-IO controller, which is
+	  a separate SPI IP block found on Loongson-2K0300 SPI2/SPI3.
+
+	  It is a generic SPI master for externally connected SPI
+	  peripherals. It does not provide memory-mapped SPI flash
+	  access (no spi-mem support). Transfers can be interrupt-driven
+	  or DMA-driven, with runtime-selectable 8/16/32-bit frame widths
+
+	  This driver can also be built as a module. If so, the module
+	  will be called spi-loongson-io.
+
 config SPI_LOONGSON_PCI
 	tristate "Loongson SPI Controller PCI Driver Support"
 	select SPI_LOONGSON_CORE
