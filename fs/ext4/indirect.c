@@ -471,18 +471,21 @@ static int ext4_splice_branch(handle_t *handle,
 		BUFFER_TRACE(where->bh, "call ext4_handle_dirty_metadata");
 		err = ext4_handle_dirty_metadata(handle, ar->inode, where->bh);
 		if (err)
-			goto err_out;
+			goto err_unsplice;
 	} else {
 		/*
 		 * OK, we spliced it into the inode itself on a direct block.
 		 */
 		err = ext4_mark_inode_dirty(handle, ar->inode);
 		if (unlikely(err))
-			goto err_out;
+			goto err_unsplice;
 		ext4_debug("splicing direct\n");
 	}
 	return err;
 
+err_unsplice:
+	/* Do not leave the tree pointing at the blocks freed below. */
+	memset(where->p, 0, sizeof(*where->p) * (num == 0 ? ar->len : 1));
 err_out:
 	for (i = 1; i <= num; i++) {
 		/*
