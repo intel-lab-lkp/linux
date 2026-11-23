@@ -1717,6 +1717,28 @@ struct rt6_exception_bucket *fib6_nh_get_excptn_bucket(const struct fib6_nh *nh,
 	return bucket;
 }
 
+/* A new exception may apply to dsts already cached on @nh. Make them fail
+ * ip6_dst_check() once so their users look the route up again and find it;
+ * dsts of other routes are left alone.
+ */
+static void fib6_nh_invalidate_pcpu(const struct fib6_nh *nh)
+{
+	int cpu;
+
+	if (!nh->rt6i_pcpu)
+		return;
+
+	rcu_read_lock();
+	for_each_possible_cpu(cpu) {
+		struct rt6_info *pcpu_rt;
+
+		pcpu_rt = READ_ONCE(*per_cpu_ptr(nh->rt6i_pcpu, cpu));
+		if (pcpu_rt)
+			WRITE_ONCE(pcpu_rt->sernum, 0);
+	}
+	rcu_read_unlock();
+}
+
 static int rt6_insert_exception(struct rt6_info *nrt,
 				const struct fib6_result *res)
 {
@@ -1791,10 +1813,11 @@ static int rt6_insert_exception(struct rt6_info *nrt,
 out:
 	spin_unlock_bh(&rt6_exception_lock);
 
-	/* Update fn->fn_sernum to invalidate all cached dst */
 	if (!err) {
+		fib6_nh_invalidate_pcpu(nh);
+
 		spin_lock_bh(&f6i->fib6_table->tb6_lock);
-		fib6_update_sernum(net, f6i);
+		fib6_update_excp_seq(f6i);
 		fib6_add_gc_list(f6i);
 		spin_unlock_bh(&f6i->fib6_table->tb6_lock);
 		fib6_force_start_gc(net);

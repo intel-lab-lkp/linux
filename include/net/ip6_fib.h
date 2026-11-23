@@ -329,6 +329,7 @@ struct fib6_walker {
 	unsigned int skip;
 	unsigned int count;
 	unsigned int skip_in_node;
+	unsigned int excp_seq;	/* tb6_excp_seq seen by a partial dump */
 	int (*func)(struct fib6_walker *);
 	void *args;
 };
@@ -362,6 +363,7 @@ struct fib6_table {
 	struct inet_peer_base	tb6_peers;
 	unsigned int		flags;
 	unsigned int		fib_seq; /* writes protected by rtnl_mutex */
+	unsigned int		tb6_excp_seq;	/* writes under tb6_lock */
 	struct hlist_head       tb6_gc_hlist;	/* GC candidates */
 #define RT6_TABLE_HAS_DFLT_ROUTER	BIT(0)
 };
@@ -583,6 +585,7 @@ int fib6_tables_dump(struct net *net, struct notifier_block *nb,
 		     struct netlink_ext_ack *extack);
 
 void fib6_update_sernum(struct net *net, struct fib6_info *rt);
+void fib6_update_excp_seq(struct fib6_info *rt);
 #if IS_ENABLED(CONFIG_IPV6)
 void fib6_update_sernum_upto_root(struct net *net, struct fib6_info *rt);
 #else
