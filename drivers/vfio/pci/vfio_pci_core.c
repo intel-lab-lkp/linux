@@ -11,6 +11,7 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/aperture.h>
+#include <linux/cpuhotplug.h>
 #include <linux/debugfs.h>
 #include <linux/device.h>
 #include <linux/eventfd.h>
@@ -576,6 +577,9 @@ static void vfio_pci_core_map_bars(struct vfio_pci_core_device *vdev)
 	}
 }
 
+static int vfio_pci_tph_dev_init(struct vfio_pci_core_device *vdev);
+static void vfio_pci_tph_dev_deinit(struct vfio_pci_core_device *vdev);
+
 int vfio_pci_core_enable(struct vfio_pci_core_device *vdev)
 {
 	struct pci_dev *pdev = vdev->pdev;
@@ -633,7 +637,10 @@ int vfio_pci_core_enable(struct vfio_pci_core_device *vdev)
 	if (ret)
 		goto out_free_zdev;
 
-	vdev->tph_opt_in = 0;
+	/* After identifying the capability, initialize TPH. */
+	ret = vfio_pci_tph_dev_init(vdev);
+	if (ret != 0)
+		goto out_free_config;
 
 	msix_pos = pdev->msix_cap;
 	if (msix_pos) {
@@ -659,6 +666,8 @@ int vfio_pci_core_enable(struct vfio_pci_core_device *vdev)
 
 	return 0;
 
+out_free_config:
+	vfio_config_free(vdev);
 out_free_zdev:
 	vfio_pci_zdev_close_device(vdev);
 out_free_state:
@@ -710,6 +719,7 @@ void vfio_pci_core_disable(struct vfio_pci_core_device *vdev)
 	/* Stop the device from further DMA */
 	pci_clear_master(pdev);
 
+	vfio_pci_tph_dev_deinit(vdev);
 	/* Reset TPH state on user session exit */
 	pcie_disable_tph(vdev->pdev);
 
@@ -1603,10 +1613,133 @@ static int vfio_pci_core_feature_token(struct vfio_pci_core_device *vdev,
 	return 0;
 }
 
+static enum cpuhp_state vfio_tph_cpuhp_state;
+
+static int vfio_pci_tph_cpuhp_offline(unsigned int cpu, struct hlist_node *node)
+{
+	struct vfio_pci_core_device *vdev =
+		hlist_entry(node, struct vfio_pci_core_device, tph_cpuhp_node);
+	u16 cmd;
+	int i;
+
+	if (vdev->tph_st_cpu == NULL)
+		return 0;
+
+	mutex_lock(&vdev->tph_lock);
+	cmd = vfio_pci_memory_lock_and_enable(vdev);
+	for (i = 0; i < vdev->tph_st_size; i++) {
+		if (vdev->tph_st_cpu[i] != (s64)cpu)
+			continue;
+		pcie_tph_set_st_entry(vdev->pdev, i, 0);
+		vdev->tph_st_cpu[i] = (s64)-1;
+	}
+	vfio_pci_memory_unlock_and_restore(vdev, cmd);
+	mutex_unlock(&vdev->tph_lock);
+
+	return 0;
+}
+
+static int vfio_pci_tph_cpuhp_init(void)
+{
+	int ret;
+
+	ret = cpuhp_setup_state_multi(CPUHP_AP_ONLINE_DYN,
+				      "vfio/pci/tph:online",
+				      NULL,
+				      vfio_pci_tph_cpuhp_offline);
+	if (ret < 0)
+		return ret;
+
+	vfio_tph_cpuhp_state = ret;
+	return 0;
+}
+
+static void vfio_pci_tph_cpuhp_deinit(void)
+{
+	cpuhp_remove_multi_state(vfio_tph_cpuhp_state);
+}
+
+static u32 vfio_pci_tph_get_st_table_size(struct vfio_pci_core_device *vdev)
+{
+	struct pci_dev *pdev = vdev->pdev;
+	u32 loc = pcie_tph_get_st_table_loc(pdev);
+	int ret;
+
+	if (loc == PCI_TPH_LOC_CAP) {
+		return pcie_tph_get_st_table_size(pdev);
+	} else if (loc == PCI_TPH_LOC_MSIX) {
+		ret = pci_msix_vec_count(pdev);
+		if (ret < 0)
+			return 0;
+		return ret;
+	} else {
+		return 0;
+	}
+}
+
+static bool vfio_pci_tph_has_architected_st(struct vfio_pci_core_device *vdev)
+{
+	u32 loc = vdev->tph_vcap & PCI_TPH_CAP_LOC_MASK;
+
+	return (loc == PCI_TPH_LOC_CAP || loc == PCI_TPH_LOC_MSIX) &&
+		vdev->tph_st_size > 0;
+}
+
+static int vfio_pci_tph_dev_init(struct vfio_pci_core_device *vdev)
+{
+	bool has_arch_st;
+	u32 st_size;
+	int i, ret;
+
+	vdev->tph_opt_in = 0;
+	vdev->tph_st_cpu = NULL;
+	vdev->tph_st_size = vfio_pci_tph_get_st_table_size(vdev);
+
+	has_arch_st = vfio_pci_tph_has_architected_st(vdev);
+	if (!has_arch_st)
+		return 0;
+
+	st_size = vdev->tph_st_size;
+	vdev->tph_st_cpu = kcalloc(st_size, sizeof(*vdev->tph_st_cpu),
+				   GFP_KERNEL);
+	if (vdev->tph_st_cpu == NULL)
+		return -ENOMEM;
+
+	for (i = 0; i < st_size; i++)
+		vdev->tph_st_cpu[i] = (s64)-1;
+
+	ret = cpuhp_state_add_instance_nocalls(vfio_tph_cpuhp_state,
+					       &vdev->tph_cpuhp_node);
+	if (ret != 0) {
+		kfree(vdev->tph_st_cpu);
+		vdev->tph_st_cpu = NULL;
+		return ret;
+	}
+
+	return 0;
+}
+
+static void vfio_pci_tph_dev_deinit(struct vfio_pci_core_device *vdev)
+{
+	if (vdev->tph_st_cpu != NULL) {
+		cpuhp_state_remove_instance_nocalls(vfio_tph_cpuhp_state,
+						    &vdev->tph_cpuhp_node);
+		kfree(vdev->tph_st_cpu);
+		vdev->tph_st_cpu = NULL;
+	}
+	vdev->tph_opt_in = 0;
+	vdev->tph_vcap = 0;
+}
+
 static u32 vfio_pci_tph_get_capability(struct vfio_pci_core_device *vdev)
 {
-	/* NO-ST only, no capability bits exposed now */
-	return 0;
+	bool has_arch_st;
+
+	has_arch_st = vfio_pci_tph_has_architected_st(vdev);
+	if (!has_arch_st)
+		return 0;
+
+	return VFIO_DEVICE_TPH_CAP_PROG_ST_NONE | VFIO_DEVICE_TPH_CAP_PROG_ST_CPU;
 }
 
 static int vfio_pci_core_feature_tph(struct vfio_pci_core_device *vdev,
@@ -1644,6 +1777,144 @@ static int vfio_pci_core_feature_tph(struct vfio_pci_core_device *vdev,
 	return copy_to_user(arg, &tph, sizeof(tph)) ? -EFAULT : 0;
 }
 
+static u32 vfio_pci_tph_get_src_mask(struct vfio_pci_core_device *vdev)
+{
+	u32 flags = vfio_pci_tph_get_capability(vdev);
+	u32 src_mask = 0;
+
+	if (flags & VFIO_DEVICE_TPH_CAP_PROG_ST_NONE)
+		src_mask |= VFIO_DEVICE_TPH_SRC_NONE;
+	if (flags & VFIO_DEVICE_TPH_CAP_PROG_ST_CPU)
+		src_mask |= VFIO_DEVICE_TPH_SRC_CPU_VOLATILE |
+			    VFIO_DEVICE_TPH_SRC_CPU_PERSISTENT;
+
+	return src_mask;
+}
+
+static int vfio_pci_tph_resolve_st_tag(struct pci_dev *pdev, u32 src_bits,
+				       u32 src_handle, bool extended, u16 *st)
+{
+	u8 req_type = extended ? PCI_TPH_REQ_EXT_TPH : PCI_TPH_REQ_TPH_ONLY;
+	u32 cpu_srcs = VFIO_DEVICE_TPH_SRC_CPU_VOLATILE |
+		       VFIO_DEVICE_TPH_SRC_CPU_PERSISTENT;
+	int ret = 0;
+
+	if ((src_bits & cpu_srcs) && !cpu_online(src_handle)) {
+		*st = 0;
+		return -EINVAL;
+	}
+
+	if (src_bits & VFIO_DEVICE_TPH_SRC_NONE)
+		*st = 0;
+	else if (src_bits & VFIO_DEVICE_TPH_SRC_CPU_VOLATILE)
+		ret = pcie_tph_get_cpu_st_ext(pdev, TPH_MEM_TYPE_VM,
+					      req_type, src_handle, st);
+	else if (src_bits & VFIO_DEVICE_TPH_SRC_CPU_PERSISTENT)
+		ret = pcie_tph_get_cpu_st_ext(pdev, TPH_MEM_TYPE_PM,
+					      req_type, src_handle, st);
+	else
+		ret = -EINVAL;
+
+	if (ret != 0)
+		*st = 0;
+
+	return ret;
+}
+
+static int vfio_pci_core_feature_tph_program(struct vfio_pci_core_device *vdev,
+			u32 flags,
+			struct vfio_device_feature_tph_program __user *arg,
+			size_t argsz)
+{
+	struct vfio_device_feature_tph_program program;
+	u32 user_flags, src_mask, st_size;
+	struct pci_dev *pdev = vdev->pdev;
+	bool extended, stop_on_zero;
+	u32 *src_handle = NULL;
+	int ret, i, k, written;
+	u16 *tags = NULL;
+	u16 cmd;
+
+	if (!vdev->tph_opt_in ||
+		!vfio_pci_tph_has_architected_st(vdev))
+		return -EOPNOTSUPP;
+
+	ret = vfio_check_feature(flags, argsz, VFIO_DEVICE_FEATURE_SET,
+				 sizeof(program));
+	if (ret != 1)
+		return ret;
+
+	if (copy_from_user(&program, arg, sizeof(program)))
+		return -EFAULT;
+
+	user_flags = program.flags;
+	extended = !!(user_flags & VFIO_DEVICE_TPH_EXTENDED);
+	if (extended && !pcie_ext_tph_supported(vdev->pdev))
+		return -EOPNOTSUPP;
+	user_flags &= ~VFIO_DEVICE_TPH_EXTENDED;
+
+	stop_on_zero = !!(user_flags & VFIO_DEVICE_TPH_REQUIRE_ST);
+	if (stop_on_zero && (user_flags & VFIO_DEVICE_TPH_SRC_NONE))
+		return -EINVAL;
+	user_flags &= ~VFIO_DEVICE_TPH_REQUIRE_ST;
+
+	src_mask = vfio_pci_tph_get_src_mask(vdev);
+	if (user_flags & ~src_mask || !is_power_of_2(user_flags))
+		return -EINVAL;
+
+	st_size = vdev->tph_st_size;
+	if (program.start >= st_size || program.count == 0 ||
+		program.count > st_size - program.start)
+		return -EINVAL;
+
+	if (!(user_flags & VFIO_DEVICE_TPH_SRC_NONE)) {
+		src_handle = memdup_array_user(u64_to_user_ptr(program.srcs),
+					       program.count, sizeof(u32));
+		if (IS_ERR(src_handle))
+			return PTR_ERR(src_handle);
+	}
+	tags = kcalloc(program.count, sizeof(u16), GFP_KERNEL_ACCOUNT);
+	if (!tags) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	cpus_read_lock();
+
+	for (i = 0; i < program.count; i++) {
+		ret = vfio_pci_tph_resolve_st_tag(pdev, user_flags,
+						src_handle ? src_handle[i] : 0,
+						extended, &tags[i]);
+		if (ret || (stop_on_zero && tags[i] == 0))
+			break;
+	}
+
+	if (i > 0) {
+		mutex_lock(&vdev->tph_lock);
+
+		cmd = vfio_pci_memory_lock_and_enable(vdev);
+		ret = written = pcie_tph_set_st_entries(pdev, program.start, i,
+							tags);
+		vfio_pci_memory_unlock_and_restore(vdev, cmd);
+
+		if (written > 0) {
+			for (k = 0; k < written; k++)
+				vdev->tph_st_cpu[program.start + k] =
+					(tags[k] == 0) ?
+					(s64)-1 : (s64)src_handle[k];
+		}
+
+		mutex_unlock(&vdev->tph_lock);
+	}
+
+	cpus_read_unlock();
+
+out:
+	kfree(tags);
+	kfree(src_handle);
+	return ret;
+}
+
 int vfio_pci_core_ioctl_feature(struct vfio_device *device, u32 flags,
 				void __user *arg, size_t argsz)
 {
@@ -1670,6 +1941,9 @@ int vfio_pci_core_ioctl_feature(struct vfio_device *device, u32 flags,
 		return vfio_pci_zdev_feature_fmb_read(vdev, flags, arg, argsz);
 	case VFIO_DEVICE_FEATURE_TPH:
 		return vfio_pci_core_feature_tph(vdev, flags, arg, argsz);
+	case VFIO_DEVICE_FEATURE_TPH_PROGRAM:
+		return vfio_pci_core_feature_tph_program(vdev, flags,
+							 arg, argsz);
 	default:
 		return -ENOTTY;
 	}
@@ -2232,6 +2506,7 @@ int vfio_pci_core_init_dev(struct vfio_device *core_vdev)
 	mutex_init(&vdev->igate);
 	spin_lock_init(&vdev->irqlock);
 	mutex_init(&vdev->ioeventfds_lock);
+	mutex_init(&vdev->tph_lock);
 	INIT_LIST_HEAD(&vdev->dummy_resources_list);
 	INIT_LIST_HEAD(&vdev->ioeventfds_list);
 	INIT_LIST_HEAD(&vdev->sriov_pfs_item);
@@ -2252,6 +2527,7 @@ void vfio_pci_core_release_dev(struct vfio_device *core_vdev)
 		container_of(core_vdev, struct vfio_pci_core_device, vdev);
 
 	mutex_destroy(&vdev->igate);
+	mutex_destroy(&vdev->tph_lock);
 	mutex_destroy(&vdev->ioeventfds_lock);
 	kfree(vdev->region);
 	kfree(vdev->pm_save);
@@ -2707,12 +2983,23 @@ static void vfio_pci_core_cleanup(void)
 {
 	vfio_pci_uninit_perm_bits();
 	rcu_barrier();
+	vfio_pci_tph_cpuhp_deinit();
 }
 
 static int __init vfio_pci_core_init(void)
 {
+	int ret;
+
+	ret = vfio_pci_tph_cpuhp_init();
+	if (ret != 0)
+		return ret;
+
 	/* Allocate shared config space permission data used by all devices */
-	return vfio_pci_init_perm_bits();
+	ret = vfio_pci_init_perm_bits();
+	if (ret != 0)
+		vfio_pci_tph_cpuhp_deinit();
+
+	return ret;
 }
 
 module_init(vfio_pci_core_init);

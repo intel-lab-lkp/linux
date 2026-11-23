@@ -1135,6 +1135,16 @@ static void vfio_tph_vcap_rewrite(struct vfio_pci_core_device *vdev, int pos)
 		val &= ~PCI_TPH_CAP_EXT_TPH;
 	}
 
+	if (!pcie_tph_dsm_supported(pdev)) {
+		/*
+		 * Mask IV/DS mode, ST location and ST size fields if
+		 * DSM is not supported. So userspace only sees NO-ST
+		 * capability.
+		 */
+		val &= ~(PCI_TPH_CAP_ST_IV | PCI_TPH_CAP_ST_DS |
+			 PCI_TPH_CAP_LOC_MASK | PCI_TPH_CAP_ST_MASK);
+	}
+
 	if (vdev->tph_policy == VFIO_PCI_TPH_POLICY_NO_ST) {
 		/*
 		 * NO-ST policy: mask IV/DS mode, ST location and ST size fields.
@@ -1142,6 +1152,14 @@ static void vfio_tph_vcap_rewrite(struct vfio_pci_core_device *vdev, int pos)
 		 */
 		val &= ~(PCI_TPH_CAP_ST_IV | PCI_TPH_CAP_ST_DS |
 			 PCI_TPH_CAP_LOC_MASK | PCI_TPH_CAP_ST_MASK);
+	} else if (vdev->tph_policy == VFIO_PCI_TPH_POLICY_IV_ST) {
+		/*
+		 * Add IV policy: mask DS mode, drop ST location and size
+		 * if device does not support IV mode.
+		 */
+		val &= ~PCI_TPH_CAP_ST_DS;
+		if (!(val & PCI_TPH_CAP_ST_IV))
+			val &= ~(PCI_TPH_CAP_LOC_MASK | PCI_TPH_CAP_ST_MASK);
 	}
 
 	*vptr = cpu_to_le32(val);
@@ -1210,7 +1228,7 @@ static int vfio_tph_config_write(struct vfio_pci_core_device *vdev, int pos,
 	cap = vdev->tph_vcap;
 	mode = FIELD_GET(PCI_TPH_CTRL_MODE_SEL_MASK, new_ctrl);
 	req = FIELD_GET(PCI_TPH_CTRL_REQ_EN_MASK, new_ctrl);
-	if (mode != PCI_TPH_ST_NS_MODE || !(cap & (1u << mode)) ||
+	if (mode > PCI_TPH_ST_IV_MODE || !(cap & (1u << mode)) ||
 		req == 0x2 /* reserved */ ||
 		(req == PCI_TPH_REQ_EXT_TPH && !(cap & PCI_TPH_CAP_EXT_TPH)))
 		goto out; /* Drop invalid or unsupported write value. */

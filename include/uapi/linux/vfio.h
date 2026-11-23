@@ -1590,8 +1590,9 @@ struct vfio_device_feature_zpci_fmb_read {
  *
  * SET: Opt-in to enable the VFIO TPH feature for the device; flags must be
  *      zero.
- * GET: Return VFIO-usable TPH capability bits in flags (currently zero).
- *      Returns an error if SET opt-in has not been performed.
+ * GET: Return VFIO-usable TPH capability bits in flags (see
+ *      VFIO_DEVICE_TPH_CAP_*). Returns an error if SET opt-in has not been
+ *      performed.
  *
  * Typical userspace sequence:
  * 1. Read virtualized PCI TPH capability via VFIO config space access to
@@ -1600,12 +1601,81 @@ struct vfio_device_feature_zpci_fmb_read {
  * 3. Invoke GET to retrieve the set of TPH capabilities accessible via VFIO.
  * 4. Write the TPH control register through VFIO config space to activate
  *    device TPH hardware.
+ * 5. Program steering tag (ST) table entries by VFIO_DEVICE_FEATURE_TPH_PROGRAM
+ *    if the device has an architected ST table.
  */
 #define VFIO_DEVICE_FEATURE_TPH			16
 
 struct vfio_device_feature_tph {
 	__u32 flags;
 };
+
+/*
+ * Capability bits returned by VFIO_DEVICE_FEATURE_TPH GET
+ */
+
+/*
+ * Supports programming steering tag (ST) entries using the NONE source.
+ * This source resolves to a zero ST value.
+ */
+#define VFIO_DEVICE_TPH_CAP_PROG_ST_NONE	(1u << 0)
+/*
+ * Supports programming steering tag (ST) entries using a CPU source handle,
+ * for either volatile or persistent memory type.
+ */
+#define VFIO_DEVICE_TPH_CAP_PROG_ST_CPU		(1u << 1)
+
+/*
+ * VFIO_DEVICE_FEATURE_TPH_PROGRAM - Batch program architected steering tag
+ * (ST) table entries. This interface only operates on the architected ST
+ * table described by the PCIe TPH ST Table Location field; it does not
+ * manage device-specific (DS) ST storage or any vendor-private ST array.
+ *
+ * SET only
+ *
+ * Prerequisites before invoking this feature:
+ * 1. Call VFIO_DEVICE_FEATURE_TPH with SET to enable vfio TPH permission;
+ * 2. Write the TPH control register to activate device hardware TPH logic.
+ *
+ * @flags: IN - source type selector (see VFIO_DEVICE_TPH_SRC_*) and
+ *         steering tag namespace selector (see VFIO_DEVICE_TPH_EXTENDED) and
+ *         failure policy (see VFIO_DEVICE_TPH_REQUIRE_ST)
+ *         Note: only one source type is permitted; combining source type bits
+ *               is rejected.
+ * @start: IN - first architected ST table index
+ * @count: IN - number of contiguous entries to program
+ * @srcs:  IN - user pointer to array of source u32 handles (CPU ID for CPU
+ *         sources, ignored for SRC_NONE)
+ *
+ * Return value: >=0 = number of entries successfully programmed;
+ *               <0  = negative errno
+ *
+ * CPU offline note: When a CPU goes offline, the kernel automatically clears
+ * all ST table entries mapped to that CPU, setting those ST values to zero.
+ */
+#define VFIO_DEVICE_FEATURE_TPH_PROGRAM		17
+
+struct vfio_device_feature_tph_program {
+	__u32 flags;
+	__u16 start;
+	__u16 count;
+	__aligned_u64 srcs;
+};
+
+/* Use extended 16-bit steering tag namespace */
+#define VFIO_DEVICE_TPH_EXTENDED		(1u << 0)
+/*
+ * Stop the batch when an entry resolves to a zero steering tag.
+ * Programming halts at that entry; the returned count
+ * is the number of entries successfully programmed before the stop.
+ */
+#define VFIO_DEVICE_TPH_REQUIRE_ST		(1u << 1)
+/* Source resolves to a zero steering tag (ST) */
+#define VFIO_DEVICE_TPH_SRC_NONE		(1u << 2)
+/* Source holds a volatile memory CPU ID */
+#define VFIO_DEVICE_TPH_SRC_CPU_VOLATILE	(1u << 3)
+/* Source holds a persistent memory CPU ID */
+#define VFIO_DEVICE_TPH_SRC_CPU_PERSISTENT	(1u << 4)
 
 /* -------- API for Type1 VFIO IOMMU -------- */
 
