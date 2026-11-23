@@ -10,6 +10,7 @@
 #include <linux/cpu.h>
 #include <linux/stacktrace.h>
 #include <linux/static_call.h>
+#include <linux/slab.h>
 #include "core.h"
 #include "patch.h"
 #include "transition.h"
@@ -74,6 +75,70 @@ static void klp_synchronize_transition(void)
 	schedule_on_each_cpu(klp_sync);
 }
 
+static bool klp_try_switch_task(struct task_struct *task);
+
+/*
+ * Tasks past exit_notify() are off the task list but still run do_exit() and its
+ * callees, possibly from this patch's or a replaced patch's code, so the
+ * transition must cover them too. The try step inspects stacks, which needs a
+ * reference on each task, so it works on a snapshot of the exit lists.
+ */
+static bool klp_visit_exiting_tasks(rcu_tasks_exiting_fn_t fn, void *arg)
+{
+	struct task_struct **xt;
+	int i, n, max;
+
+	/*
+	 * Size the array from a count taken now, plus slack for tasks that
+	 * start exiting before the copy is made. If even more arrive, report
+	 * an incomplete walk: klp_try_complete_transition() runs again later.
+	 */
+	max = rcu_tasks_snapshot_exiting(NULL, 0) + 64;
+	xt = kvmalloc_array(max, sizeof(*xt), GFP_KERNEL);
+	if (!xt)
+		return false;
+	n = rcu_tasks_snapshot_exiting(xt, max);
+	for (i = 0; i < min(n, max); i++) {
+		fn(xt[i], arg);
+		put_task_struct(xt[i]);
+	}
+	kvfree(xt);
+	return n <= max;
+}
+
+static void klp_exiting_init(struct task_struct *t, void *arg)
+{
+	t->patch_state = *(int *)arg;
+}
+
+static void klp_exiting_start(struct task_struct *t, void *arg)
+{
+	if (t->patch_state != klp_target_state)
+		set_tsk_thread_flag(t, TIF_PATCH_PENDING);
+}
+
+static void klp_exiting_try(struct task_struct *t, void *arg)
+{
+	if (!klp_try_switch_task(t))
+		*(bool *)arg = false;
+}
+
+static void klp_exiting_complete(struct task_struct *t, void *arg)
+{
+	clear_tsk_thread_flag(t, TIF_PATCH_PENDING);
+	t->patch_state = KLP_TRANSITION_IDLE;
+}
+
+static void klp_exiting_clear_pending(struct task_struct *t, void *arg)
+{
+	clear_tsk_thread_flag(t, TIF_PATCH_PENDING);
+}
+
+static void klp_exiting_force(struct task_struct *t, void *arg)
+{
+	klp_update_patch_state(t);
+}
+
 /*
  * The transition to the target patch state is complete.  Clean up the data
  * structures.
@@ -124,6 +189,7 @@ static void klp_complete_transition(void)
 		task->patch_state = KLP_TRANSITION_IDLE;
 	}
 	read_unlock(&tasklist_lock);
+	rcu_tasks_visit_exiting(klp_exiting_complete, NULL);
 
 	for_each_possible_cpu(cpu) {
 		task = idle_task(cpu);
@@ -450,6 +516,8 @@ void klp_try_complete_transition(void)
 		if (!klp_try_switch_task(task))
 			complete = false;
 	read_unlock(&tasklist_lock);
+	if (!klp_visit_exiting_tasks(klp_exiting_try, &complete))
+		complete = false;
 
 	/*
 	 * Ditto for the idle "swapper" tasks.
@@ -527,6 +595,7 @@ void klp_start_transition(void)
 		if (task->patch_state != klp_target_state)
 			set_tsk_thread_flag(task, TIF_PATCH_PENDING);
 	read_unlock(&tasklist_lock);
+	rcu_tasks_visit_exiting(klp_exiting_start, NULL);
 
 	/*
 	 * Mark all idle tasks as needing a patch state update.  They'll switch
@@ -580,6 +649,7 @@ void klp_init_transition(struct klp_patch *patch, int state)
 		task->patch_state = initial_state;
 	}
 	read_unlock(&tasklist_lock);
+	rcu_tasks_visit_exiting(klp_exiting_init, &initial_state);
 
 	/*
 	 * Ditto for the idle "swapper" tasks.
@@ -643,6 +713,7 @@ void klp_reverse_transition(void)
 	for_each_process_thread(g, task)
 		clear_tsk_thread_flag(task, TIF_PATCH_PENDING);
 	read_unlock(&tasklist_lock);
+	rcu_tasks_visit_exiting(klp_exiting_clear_pending, NULL);
 
 	for_each_possible_cpu(cpu)
 		clear_tsk_thread_flag(idle_task(cpu), TIF_PATCH_PENDING);
@@ -715,6 +786,7 @@ void klp_force_transition(void)
 	for_each_process_thread(g, task)
 		klp_update_patch_state(task);
 	read_unlock(&tasklist_lock);
+	rcu_tasks_visit_exiting(klp_exiting_force, NULL);
 
 	for_each_possible_cpu(cpu)
 		klp_update_patch_state(idle_task(cpu));
