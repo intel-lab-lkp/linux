@@ -4286,7 +4286,8 @@ static const struct opcode opcode_table[256] = {
 	/* 0x60 - 0x67 */
 	I(ImplicitOps | Stack | No64, em_pusha),
 	I(ImplicitOps | Stack | No64, em_popa),
-	N, MD(ModRM, &mode_dual_63),
+	N, /* This effectively represents EVEX-prefixed instructions are not implemented */
+	MD(ModRM, &mode_dual_63),
 	N, N, N, N,
 	/* 0x68 - 0x6F */
 	I(SrcImm | Mov | Stack, em_push),
