@@ -403,11 +403,6 @@ static void hists__find_annotations(struct hists *hists,
 	struct rb_node *nd = rb_first_cached(&hists->entries), *next;
 	int key = K_RIGHT;
 
-	if (ann->type_stat)
-		print_annotate_data_stat(&ann_data_stat);
-	if (ann->insn_stat)
-		print_annotate_item_stat(&ann_insn_stat, "Instruction");
-
 	while (nd) {
 		struct hist_entry *he = rb_entry(nd, struct hist_entry, rb_node);
 		struct annotation *notes;
@@ -651,6 +646,21 @@ static int __cmd_annotate(struct perf_annotate *ann)
 
 		hists__find_annotations(hists, pos, ann);
 	}
+
+	if (use_browser == 1 && (ann->insn_stat || ann->type_stat)) {
+		/* Leave the alternate screen before printing to the terminal. */
+		ui__exit(false);
+		use_browser = 0;
+	}
+
+	/* Here use_browser is 0 in stdio and TUI mode, so pr_warning reaches the terminal */
+	if (ann->type_stat && !ann->data_type)
+		pr_warning("Warning: --type-stat needs --data-type\n");
+
+	if (ann->data_type && ann->type_stat)
+		print_annotate_data_stat(&ann_data_stat);
+	if (ann->insn_stat)
+		print_annotate_item_stat(&ann_insn_stat, "Instruction");
 
 	if (use_browser == 2) {
 		void (*show_annotations)(void);
