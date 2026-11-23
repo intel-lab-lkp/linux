@@ -1079,19 +1079,22 @@ __sdei_handler(struct pt_regs *regs, struct sdei_registered_event *arg)
 	far = read_sysreg(far_el1);
 
 	/*
-	 * With KPTI, VBAR_EL1 holds the trampoline vectors from the return to
-	 * EL0 until the next exception from EL0 maps the kernel. They only
-	 * handle exceptions from EL0: an exception taken here would run their
-	 * empty current-EL half and never come back. Switch to the kernel
-	 * vectors. The IRQ-like resume keeps using the interrupted VBAR, so it
-	 * still goes through the trampoline.
+	 * As an SDEI event can take over at any point, VBAR_EL1 might not allow
+	 * us to take an exception safely :
+	 * - With KPTI, VBAR_EL1 holds the trampoline vectors from the return to
+	 *   EL0 until the next exception from EL0 maps the kernel. They only
+	 *   handle exceptions from EL0: an exception taken here would run their
+	 *   empty current-EL half and never come back ;
+	 * - With VHE, the kernel runs at EL2 and VBAR_EL1 accesses VBAR_EL2.
+	 *   KVM might be running a guest and switched VBAR_EL2 to the
+	 *   hypervisor vectors.
+	 *
+	 * Switch to the kernel vectors unconditionally and restore
+	 * the interrupted VBAR_EL1 before returning.
 	 */
 	vbar = read_sysreg(vbar_el1);
-	if (arm64_kernel_unmapped_at_el0() &&
-	    vbar == (unsigned long)raw_cpu_read(this_cpu_vector)) {
-		write_sysreg((unsigned long)vectors, vbar_el1);
-		isb();
-	}
+	write_sysreg((unsigned long)vectors, vbar_el1);
+	isb();
 
 	state = irqentry_nmi_enter(regs);
 	ret = do_sdei_event(regs, arg, vbar);

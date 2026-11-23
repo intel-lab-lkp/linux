@@ -255,9 +255,6 @@ unsigned long __kprobes do_sdei_event(struct pt_regs *regs,
 	 * exception registers; __sdei_handler() puts them back. Only the last
 	 * one's syndrome survives; report it if it is not one known to be
 	 * harmless.
-	 *
-	 * If the event interrupted a KVM world switch, VBAR points at the KVM
-	 * hyp vectors and any such exception is a hyp panic instead.
 	 */
 	nested_elr = read_sysreg(elr_el1);
 	nested_esr = read_sysreg(esr_el1);
