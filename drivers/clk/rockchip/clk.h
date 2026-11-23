@@ -426,6 +426,41 @@ struct clk;
 #define RK3568_PMU_CLKGATE_CON(x)	((x) * 0x4 + 0x180)
 #define RK3568_PMU_SOFTRST_CON(x)	((x) * 0x4 + 0x200)
 
+#define RK3572_PHP_CRU_BASE		0x8000
+#define RK3572_SECURE_NS_CRU_BASE	0x10000
+#define RK3572_PMU_CRU_BASE		0x20000
+#define RK3572_BIGCORE_CRU_BASE		0x40000
+#define RK3572_LITCORE0_CRU_BASE	0x48000
+#define RK3572_LITCORE1_CRU_BASE	0x50000
+#define RK3572_CCI_CRU_BASE		0x58000
+
+#define RK3572_PLL_CON(x)		(RK2928_PLL_CON(x) + 0x4000)
+#define RK3572_MODE_CON0		0x4280
+#define RK3572_MODE_CON1		0x4284
+#define RK3572_CLKSEL_CON(x)		((x) * 0x4 + 0x300)
+#define RK3572_CLKGATE_CON(x)		((x) * 0x4 + 0x800)
+#define RK3572_SOFTRST_CON(x)		((x) * 0x4 + 0xa00)
+#define RK3572_GLB_SRST_FST		0xc08
+#define RK3572_NON_SECURE_GATING_CON00	0xc48
+
+#define RK3572_PPLL_CON(x)		((x) * 0x4 + RK3572_PHP_CRU_BASE)
+#define RK3572_PHP_CLKSEL_CON(x)	((x) * 0x4 + RK3572_PHP_CRU_BASE + 0x300)
+#define RK3572_PHP_CLKGATE_CON(x)	((x) * 0x4 + RK3572_PHP_CRU_BASE + 0x800)
+
+#define RK3572_PMU_CLKSEL_CON(x)	((x) * 0x4 + RK3572_PMU_CRU_BASE + 0x300)
+#define RK3572_PMU_CLKGATE_CON(x)	((x) * 0x4 + RK3572_PMU_CRU_BASE + 0x800)
+
+#define RK3572_SECURE_NS_CLKSEL_CON(x)	((x) * 0x4 + RK3572_SECURE_NS_CRU_BASE + 0x300)
+#define RK3572_SECURE_NS_CLKGATE_CON(x)	((x) * 0x4 + RK3572_SECURE_NS_CRU_BASE + 0x800)
+
+#define RK3572_LPLL_CON(x)		((x) * 0x4 + RK3572_CCI_CRU_BASE)
+#define RK3572_LPLL_MODE_CON0		(0x280 + RK3572_CCI_CRU_BASE)
+#define RK3572_CCI_CLKSEL_CON(x)	((x) * 0x4 + RK3572_CCI_CRU_BASE + 0x300)
+
+#define RK3572_BIGCORE_CLKSEL_CON(x)	((x) * 0x4 + RK3572_BIGCORE_CRU_BASE + 0x300)
+#define RK3572_LITCORE0_CLKSEL_CON(x)	((x) * 0x4 + RK3572_LITCORE0_CRU_BASE + 0x300)
+#define RK3572_LITCORE1_CLKSEL_CON(x)	((x) * 0x4 + RK3572_LITCORE1_CRU_BASE + 0x300)
+
 #define RK3576_PHP_CRU_BASE		0x8000
 #define RK3576_SECURE_NS_CRU_BASE	0x10000
 #define RK3576_PMU_CRU_BASE		0x20000
@@ -1441,6 +1476,7 @@ void rv1126b_rst_init(struct device_node *np, void __iomem *reg_base);
 void rk3506_rst_init(struct device_node *np, void __iomem *reg_base);
 void rk3528_rst_init(struct device_node *np, void __iomem *reg_base);
 void rk3562_rst_init(struct device_node *np, void __iomem *reg_base);
+void rk3572_rst_init(struct device_node *np, void __iomem *reg_base);
 void rk3576_rst_init(struct device_node *np, void __iomem *reg_base);
 void rk3588_rst_init(struct device_node *np, void __iomem *reg_base);
 

@@ -142,6 +142,13 @@ config CLK_RK3568
 	help
 	  Build the driver for RK3568 Clock Driver.
 
+config CLK_RK3572
+	bool "Rockchip RK3572 clock controller support"
+	depends on ARM64 || COMPILE_TEST
+	default y
+	help
+	  Build the driver for RK3572 Clock Driver.
+
 config CLK_RK3576
 	bool "Rockchip RK3576 clock controller support"
 	depends on ARM64 || COMPILE_TEST
