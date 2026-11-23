@@ -508,6 +508,34 @@ TRACE_EVENT(mm_mglru_aging,
 		__print_array(__entry->nr_anon, MAX_NR_GENS, sizeof(unsigned long)),
 		__print_array(__entry->nr_file, MAX_NR_GENS, sizeof(unsigned long)))
 );
+TRACE_EVENT(mm_vmscan_lru_gen_walk,
+
+	TP_PROTO(int nid, unsigned long seq, int leaf_total,
+		 int leaf_young, bool empty),
+
+	TP_ARGS(nid, seq, leaf_total, leaf_young, empty),
+
+	TP_STRUCT__entry(
+		__field(int, nid)
+		__field(unsigned long, seq)
+		__field(int, leaf_total)
+		__field(int, leaf_young)
+		__field(bool, empty)
+	),
+
+	TP_fast_assign(
+		__entry->nid = nid;
+		__entry->seq = seq;
+		__entry->leaf_total = leaf_total;
+		__entry->leaf_young = leaf_young;
+		__entry->empty = empty;
+	),
+
+	TP_printk("nid=%d seq=%lu leaf_total=%d leaf_young=%d empty=%d",
+		__entry->nid, __entry->seq, __entry->leaf_total,
+		__entry->leaf_young, __entry->empty)
+);
+
 #endif /* CONFIG_LRU_GEN */
 
 TRACE_EVENT(mm_vmscan_write_folio,
