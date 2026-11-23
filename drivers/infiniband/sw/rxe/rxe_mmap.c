@@ -102,7 +102,7 @@ struct rxe_mmap_info *rxe_create_mmap_info(struct rxe_dev *rxe, u32 size,
 	if (!udata)
 		return ERR_PTR(-EINVAL);
 
-	ip = kmalloc_obj(*ip);
+	ip = kzalloc_obj(*ip);
 	if (!ip)
 		return ERR_PTR(-ENOMEM);
 
