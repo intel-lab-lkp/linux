@@ -12,6 +12,7 @@
 #include <linux/acpi.h>
 #include <linux/pci.h>
 #include <linux/usb/hcd.h>
+#include <linux/platform_data/x86/apple.h>
 
 #include "hub.h"
 
@@ -268,6 +269,34 @@ static int usb_acpi_add_usb4_devlink(struct usb_device *udev)
 #define USB_ACPI_LOCATION_VALID (1 << 31)
 
 static void
+usb_acpi_apple_get_location(struct usb_port *port_dev, acpi_handle handle)
+{
+	struct usb_device *hdev = to_usb_device(port_dev->dev.parent->parent);
+	struct acpi_buffer buffer = { ACPI_ALLOCATE_BUFFER, NULL } ;
+	acpi_status status;
+
+	/* The function only applies to CPU's internal XHCI controller. */
+	if (strncmp(acpi_device_bid(ACPI_COMPANION(to_usb_device(
+					port_dev->dev.parent->parent)->bus->sysdev)),
+					"XHC1", ACPI_NAMESEG_SIZE))
+		return;
+
+	if (hdev->speed >= USB_SPEED_SUPER) {
+		port_dev->location = USB_ACPI_LOCATION_VALID |
+				acpi_fetch_acpi_dev(handle)->pnp.bus_address;
+		return;
+	}
+
+	status = acpi_evaluate_object_typed(handle, "SSP", NULL, &buffer, ACPI_TYPE_PACKAGE);
+	if (ACPI_FAILURE(status))
+		return;
+
+	port_dev->location = USB_ACPI_LOCATION_VALID |
+		((union acpi_object *)buffer.pointer)->package.elements[1].integer.value;
+	kfree(buffer.pointer);
+}
+
+static void
 usb_acpi_get_connect_type(struct usb_port *port_dev, acpi_handle *handle)
 {
 	enum usb_port_connect_type connect_type = USB_PORT_CONNECT_TYPE_UNKNOWN;
@@ -289,6 +318,11 @@ usb_acpi_get_connect_type(struct usb_port *port_dev, acpi_handle *handle)
 		port_dev->location = USB_ACPI_LOCATION_VALID |
 			pld->group_token << 8 | pld->group_position;
 
+	/* On x86 apple macs, Apple exposes location via SSD method
+	 * instead of _PLD On USB 2.0, and on USB 3.0 it uses _ADR
+	 */
+	if (x86_apple_machine)
+		usb_acpi_apple_get_location(port_dev, handle);
 	status = acpi_evaluate_object(handle, "_UPC", NULL, &buffer);
 	if (ACPI_FAILURE(status))
 		goto out;
