@@ -1205,7 +1205,11 @@ static bool detect_link_and_local_sink(struct dc_link *link,
 				if (!link->dpcd_caps.set_power_state_capable_edp)
 					link->wa_flags.dp_keep_receiver_powered = true;
 			}
+			if (dc->config.imac5K_support) {
+				const uint8_t val = 1;
 
+				core_link_write_dpcd(link, DP_APPLE_5K_TILE_MODE, &val, 1);
+			}
 			sink_caps.transaction_type = DDC_TRANSACTION_TYPE_I2C_OVER_AUX;
 			sink_caps.signal = SIGNAL_TYPE_EDP;
 			break;
@@ -1633,6 +1637,15 @@ bool link_detect(struct dc_link *link, enum dc_detect_reason reason)
 	bool is_local_sink_detect_success;
 	bool is_delegated_to_mst_top_mgr = false;
 	enum dc_connection_type pre_link_type = link->type;
+
+	if (link->local_sink &&
+			link->dc->config.imac5K_support &&
+			link->local_sink->link->link_index == 1)
+		return false;
+
+	if (reason == DETECT_REASON_BOOT && link->dc->config.imac5K_support &&
+	    link->link_index == 1)
+		msleep(100);
 
 	is_local_sink_detect_success = detect_link_and_local_sink(link, reason);
 

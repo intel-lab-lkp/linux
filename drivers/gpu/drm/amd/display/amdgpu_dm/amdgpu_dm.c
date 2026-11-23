@@ -639,6 +639,8 @@ static int amdgpu_dm_init(struct amdgpu_device *adev)
 	retrieve_dmi_info(&adev->dm);
 	if (adev->dm.edp0_on_dp1_quirk)
 		init_data.flags.support_edp0_on_dp1 = true;
+	if (adev->dm.imac5K_support)
+		init_data.flags.imac5K_support = true;
 
 	if (adev->dm.bb_from_dmub)
 		init_data.bb_from_dmub = adev->dm.bb_from_dmub;
@@ -1967,6 +1969,11 @@ static int dm_resume(struct amdgpu_ip_block *ip_block)
 		dc_exit_ips_for_hw_access(dm->dc);
 		WARN_ON(!dc_commit_streams(dm->dc, &commit_params));
 
+		if (dm->dc->config.imac5K_using_5K) {
+			const u8 value = 1;
+
+			core_link_write_dpcd(dm->dc->links[0], DP_APPLE_5K_TILE_MODE, &value, 1);
+		}
 		dm_gpureset_commit_state(dm->cached_dc_state, dm);
 
 		dm_gpureset_toggle_interrupts(adev, dm->cached_dc_state, true);
@@ -4733,6 +4740,27 @@ static void amdgpu_dm_commit_streams(struct drm_atomic_commit *state,
 	dc_exit_ips_for_hw_access(dm->dc);
 	WARN_ON(!dc_commit_streams(dm->dc, &params));
 
+	if (dm->imac5K_support) {
+		for_each_new_crtc_in_state(state, crtc, new_crtc_state, i) {
+			dm_new_crtc_state = to_dm_crtc_state(new_crtc_state);
+
+			if (!dm_new_crtc_state->stream)
+				continue;
+
+			if (dm_new_crtc_state->stream->signal != SIGNAL_TYPE_EDP)
+				continue;
+
+			if (new_crtc_state->mode.vdisplay == 2880 &&
+			    new_crtc_state->mode.hdisplay == 2560) {
+				u8 value = 1;
+
+				core_link_write_dpcd(dm->dc->links[0],
+						     DP_APPLE_5K_TILE_MODE, &value, 1);
+				dm->dc->config.imac5K_using_5K = true;
+			} else
+				dm->dc->config.imac5K_using_5K = false;
+		}
+	}
 	bool frl_stream_found = false;
 
 	for (i = 0; i < params.stream_count; i++) {

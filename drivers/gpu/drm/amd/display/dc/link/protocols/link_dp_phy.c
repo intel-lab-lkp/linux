@@ -53,6 +53,11 @@ void dpcd_write_rx_power_ctrl(struct dc_link *link, bool on)
 	core_link_write_dpcd(link, DP_SET_POWER, &state,
 						 sizeof(state));
 
+	if (on && link->dc->config.imac5K_support &&
+	    link->connector_signal == SIGNAL_TYPE_EDP) {
+		state = 1;
+		core_link_write_dpcd(link, DP_APPLE_5K_TILE_MODE, &state, sizeof(state));
+	}
 }
 
 void dp_enable_link_phy(

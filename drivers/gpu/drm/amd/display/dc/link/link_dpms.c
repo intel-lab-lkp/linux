@@ -2086,6 +2086,9 @@ static enum dc_status enable_link_dp(struct dc_state *state,
 			!link->dc->config.enable_dpia_pre_training)
 		do_fallback = true;
 
+	if (link->dc->config.imac5K_support && link->link_index == 1)
+		msleep(100);
+
 	/*
 	 * Temporary w/a to get DP2.0 link rates to work with SST.
 	 * TODO DP2.0 - Workaround: Remove w/a if and when the issue is resolved.
