@@ -1544,16 +1544,6 @@ err_entity_cleanup:
 	return ret;
 }
 
-static void isl7998x_remove(struct i2c_client *client)
-{
-	struct isl7998x *isl7998x = i2c_to_isl7998x(client);
-
-	pm_runtime_disable(&client->dev);
-	v4l2_async_unregister_subdev(&isl7998x->subdev);
-	isl7998x_remove_controls(isl7998x);
-	media_entity_cleanup(&isl7998x->subdev.entity);
-}
-
 static const struct of_device_id isl7998x_of_match[] = {
 	{ .compatible = "isil,isl79987", },
 	{ /* sentinel */ },
@@ -1600,6 +1590,16 @@ static int __maybe_unused isl7998x_runtime_suspend(struct device *dev)
 	gpiod_set_value(isl7998x->pd_gpio, 1);
 
 	return 0;
+}
+
+static void isl7998x_remove(struct i2c_client *client)
+{
+	struct isl7998x *isl7998x = i2c_to_isl7998x(client);
+
+	pm_runtime_disable(&client->dev);
+	v4l2_async_unregister_subdev(&isl7998x->subdev);
+	isl7998x_remove_controls(isl7998x);
+	media_entity_cleanup(&isl7998x->subdev.entity);
 }
 
 static const struct dev_pm_ops isl7998x_pm_ops = {
