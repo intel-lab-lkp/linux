@@ -18,6 +18,7 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
+#include <linux/property.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/wait.h>
@@ -1002,7 +1003,9 @@ static int at91_adc_probe(struct platform_device *pdev)
 
 	st = iio_priv(idev);
 
-	st->caps = of_device_get_match_data(&pdev->dev);
+	st->caps = device_get_match_data(&pdev->dev);
+	if (!st->caps)
+		return -ENODEV;
 
 	st->use_external = of_property_read_bool(node, "atmel,adc-use-external-triggers");
 
