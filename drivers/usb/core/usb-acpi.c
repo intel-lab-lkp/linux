@@ -12,6 +12,7 @@
 #include <linux/acpi.h>
 #include <linux/pci.h>
 #include <linux/usb/hcd.h>
+#include <linux/platform_data/x86/apple.h>
 
 #include "hub.h"
 
@@ -267,6 +268,69 @@ static int usb_acpi_add_usb4_devlink(struct usb_device *udev)
  */
 #define USB_ACPI_LOCATION_VALID (1 << 31)
 
+/*
+ * Set at registration time on x86 Apple Macs whose internal XHC1 controller
+ * has ports exposing an SSP object. Apple reports the port location through
+ * SSP (USB 2.0) and _ADR (USB 3.x) instead of _PLD.
+ */
+static bool is_apple_location;
+
+static acpi_status
+usb_acpi_apple_ssp_cb(acpi_handle handle, u32 level, void *ctx, void **ret)
+{
+	if (!acpi_has_method(handle, "SSP"))
+		return AE_OK;
+
+	*(bool *)ctx = true;
+	return AE_CTRL_TERMINATE;
+}
+
+static void usb_acpi_apple_detect_ssp(acpi_handle xhc1)
+{
+	bool found = false;
+
+	acpi_walk_namespace(ACPI_TYPE_DEVICE, xhc1, ACPI_UINT32_MAX,
+			    usb_acpi_apple_ssp_cb, NULL, &found, NULL);
+	is_apple_location = found;
+}
+
+static void
+usb_acpi_apple_get_location(struct usb_port *port_dev, struct acpi_device *adev)
+{
+	struct usb_device *hdev = to_usb_device(port_dev->dev.parent->parent);
+	struct acpi_device *hc = ACPI_COMPANION(hdev->bus->sysdev);
+	struct acpi_buffer buffer = { ACPI_ALLOCATE_BUFFER, NULL };
+	union acpi_object *ssp;
+	acpi_status status;
+
+	/* Only applies to the CPU's internal XHCI controller. */
+	if (!hc || strncmp(acpi_device_bid(hc), "XHC1", ACPI_NAMESEG_SIZE))
+		return;
+
+	/* Location provided by _PLD is garbage. */
+	port_dev->location = 0;
+
+	/* USB 3.x ports use _ADR as the location. */
+	if (hdev->speed >= USB_SPEED_SUPER) {
+		port_dev->location = USB_ACPI_LOCATION_VALID |
+				     adev->pnp.bus_address;
+		return;
+	}
+
+	/* USB 2.0 ports: SSP = { "XHCn", <companion SuperSpeed port> } */
+	status = acpi_evaluate_object_typed(adev->handle, "SSP", NULL, &buffer,
+					    ACPI_TYPE_PACKAGE);
+	if (ACPI_FAILURE(status))
+		return;
+
+	ssp = buffer.pointer;
+	if (ssp->package.count >= 2 &&
+	    ssp->package.elements[1].type == ACPI_TYPE_INTEGER)
+		port_dev->location = USB_ACPI_LOCATION_VALID |
+				     ssp->package.elements[1].integer.value;
+	kfree(buffer.pointer);
+}
+
 static void
 usb_acpi_get_connect_type(struct usb_port *port_dev, acpi_handle *handle)
 {
@@ -357,6 +421,10 @@ usb_acpi_find_companion_for_port(struct usb_port *port_dev)
 
 	usb_acpi_get_connect_type(port_dev, adev->handle);
 
+	/* Apple's location overrides the _PLD derived one */
+	if (is_apple_location)
+		usb_acpi_apple_get_location(port_dev, adev);
+
 	return adev;
 }
 
@@ -445,6 +513,12 @@ static struct acpi_bus_type usb_acpi_bus = {
 
 int usb_acpi_register(void)
 {
+	acpi_handle xhc1;
+
+	if (x86_apple_machine &&
+	    ACPI_SUCCESS(acpi_get_handle(NULL, "\\_SB.PCI0.XHC1", &xhc1)))
+		usb_acpi_apple_detect_ssp(xhc1);
+
 	return register_acpi_bus_type(&usb_acpi_bus);
 }
 
