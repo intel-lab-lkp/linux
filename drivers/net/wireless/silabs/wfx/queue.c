@@ -250,21 +250,18 @@ static struct sk_buff *wfx_tx_queues_get_skb(struct wfx_dev *wdev)
 		}
 	}
 
-	wvif = NULL;
-	while ((wvif = wvif_iterate(wdev, wvif)) != NULL) {
-		for (i = 0; i < num_queues; i++) {
-			skb = skb_dequeue(&queues[i]->offchan);
-			if (!skb)
-				continue;
-			hif = (struct wfx_hif_msg *)skb->data;
-			/* Offchan frames are assigned to a special interface.
-			 * The only interface allowed to send data during scan.
-			 */
-			WARN_ON(hif->interface != 2);
-			atomic_inc(&queues[i]->pending_frames);
-			trace_queues_stats(wdev, queues[i]);
-			return skb;
-		}
+	for (i = 0; i < num_queues; i++) {
+		skb = skb_dequeue(&queues[i]->offchan);
+		if (!skb)
+			continue;
+		hif = (struct wfx_hif_msg *)skb->data;
+		/* Offchan frames are assigned to a special interface.
+		 * The only interface allowed to send data during scan.
+		 */
+		WARN_ON(hif->interface != 2);
+		atomic_inc(&queues[i]->pending_frames);
+		trace_queues_stats(wdev, queues[i]);
+		return skb;
 	}
 
 	if (mutex_is_locked(&wdev->scan_lock))
