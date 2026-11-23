@@ -1119,7 +1119,9 @@ static void ath12k_wifi7_mac_op_tx(struct ieee80211_hw *hw,
 			return;
 		}
 	} else {
-		if (vif->type == NL80211_IFTYPE_P2P_DEVICE)
+		if (vif->type == NL80211_IFTYPE_P2P_DEVICE ||
+		    (info_flags & IEEE80211_TX_CTL_TX_OFFCHAN &&
+		     !rcu_access_pointer(ahvif->link[0])))
 			link_id = ATH12K_FIRST_SCAN_LINK;
 		else
 			link_id = 0;
