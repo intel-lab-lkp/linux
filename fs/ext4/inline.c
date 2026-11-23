@@ -1121,6 +1121,8 @@ static int ext4_convert_inline_data_nolock(handle_t *handle,
 	struct buffer_head *data_bh = NULL;
 	struct ext4_map_blocks map;
 	int inline_size;
+	bool may_inline = ext4_test_inode_state(inode,
+						EXT4_STATE_MAY_INLINE_DATA);
 
 	inline_size = ext4_get_inline_size(inode);
 	buf = kmalloc(inline_size, GFP_NOFS);
@@ -1197,8 +1199,12 @@ static int ext4_convert_inline_data_nolock(handle_t *handle,
 	}
 
 out_restore:
-	if (error)
+	if (error) {
 		ext4_restore_inline_data(handle, inode, iloc, buf, inline_size);
+		if (!may_inline)
+			ext4_clear_inode_state(inode,
+					       EXT4_STATE_MAY_INLINE_DATA);
+	}
 
 out:
 	brelse(data_bh);
