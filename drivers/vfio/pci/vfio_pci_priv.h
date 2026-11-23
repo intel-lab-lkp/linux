@@ -14,6 +14,7 @@
 enum vfio_pci_tph_policy {
 	VFIO_PCI_TPH_POLICY_NO_ST = 0,
 	VFIO_PCI_TPH_POLICY_IV_ST,
+	VFIO_PCI_TPH_POLICY_DS_ST,
 };
 
 struct vfio_pci_ioeventfd {

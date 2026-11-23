@@ -1734,12 +1734,17 @@ static void vfio_pci_tph_dev_deinit(struct vfio_pci_core_device *vdev)
 static u32 vfio_pci_tph_get_capability(struct vfio_pci_core_device *vdev)
 {
 	bool has_arch_st;
+	u32 cap = 0;
 
 	has_arch_st = vfio_pci_tph_has_architected_st(vdev);
-	if (!has_arch_st)
-		return 0;
+	if (has_arch_st)
+		cap |= VFIO_DEVICE_TPH_CAP_PROG_ST_NONE |
+		       VFIO_DEVICE_TPH_CAP_PROG_ST_CPU;
 
-	return VFIO_DEVICE_TPH_CAP_PROG_ST_NONE | VFIO_DEVICE_TPH_CAP_PROG_ST_CPU;
+	if (vdev->tph_vcap & PCI_TPH_CAP_ST_DS)
+		cap |= VFIO_DEVICE_TPH_CAP_RESOLVE_CPU_ST;
+
+	return cap;
 }
 
 static int vfio_pci_core_feature_tph(struct vfio_pci_core_device *vdev,
@@ -1784,7 +1789,8 @@ static u32 vfio_pci_tph_get_src_mask(struct vfio_pci_core_device *vdev)
 
 	if (flags & VFIO_DEVICE_TPH_CAP_PROG_ST_NONE)
 		src_mask |= VFIO_DEVICE_TPH_SRC_NONE;
-	if (flags & VFIO_DEVICE_TPH_CAP_PROG_ST_CPU)
+	if (flags & (VFIO_DEVICE_TPH_CAP_PROG_ST_CPU |
+		     VFIO_DEVICE_TPH_CAP_RESOLVE_CPU_ST))
 		src_mask |= VFIO_DEVICE_TPH_SRC_CPU_VOLATILE |
 			    VFIO_DEVICE_TPH_SRC_CPU_PERSISTENT;
 
@@ -1915,6 +1921,50 @@ out:
 	return ret;
 }
 
+static int vfio_pci_core_feature_tph_resolve(struct vfio_pci_core_device *vdev,
+			u32 flags,
+			struct vfio_device_feature_tph_resolve __user *arg,
+			size_t argsz)
+{
+	struct vfio_device_feature_tph_resolve resolve;
+	u32 user_flags, src_mask;
+	bool extended;
+	u16 tag = 0;
+	int ret;
+
+	if (!vdev->tph_opt_in || !(vdev->tph_vcap & PCI_TPH_CAP_ST_DS))
+		return -EOPNOTSUPP;
+
+	ret = vfio_check_feature(flags, argsz, VFIO_DEVICE_FEATURE_GET,
+				 sizeof(resolve));
+	if (ret != 1)
+		return ret;
+
+	if (copy_from_user(&resolve, arg, sizeof(resolve)))
+		return -EFAULT;
+
+	user_flags = resolve.flags;
+	extended = !!(user_flags & VFIO_DEVICE_TPH_EXTENDED);
+	if (extended && !pcie_ext_tph_supported(vdev->pdev))
+		return -EOPNOTSUPP;
+	user_flags &= ~VFIO_DEVICE_TPH_EXTENDED;
+
+	src_mask = vfio_pci_tph_get_src_mask(vdev) & ~VFIO_DEVICE_TPH_SRC_NONE;
+	if (user_flags & ~src_mask || !is_power_of_2(user_flags))
+		return -EINVAL;
+
+	ret = vfio_pci_tph_resolve_st_tag(vdev->pdev, user_flags, resolve.src,
+					  extended, &tag);
+	if (ret != 0)
+		return ret;
+
+	resolve.valid = VFIO_DEVICE_TPH_VALID_ST;
+	resolve.rsv   = 0;
+	resolve.st    = tag;
+
+	return copy_to_user(arg, &resolve, sizeof(resolve)) ? -EFAULT : 0;
+}
+
 int vfio_pci_core_ioctl_feature(struct vfio_device *device, u32 flags,
 				void __user *arg, size_t argsz)
 {
@@ -1943,6 +1993,9 @@ int vfio_pci_core_ioctl_feature(struct vfio_device *device, u32 flags,
 		return vfio_pci_core_feature_tph(vdev, flags, arg, argsz);
 	case VFIO_DEVICE_FEATURE_TPH_PROGRAM:
 		return vfio_pci_core_feature_tph_program(vdev, flags,
+							 arg, argsz);
+	case VFIO_DEVICE_FEATURE_TPH_RESOLVE:
+		return vfio_pci_core_feature_tph_resolve(vdev, flags,
 							 arg, argsz);
 	default:
 		return -ENOTTY;

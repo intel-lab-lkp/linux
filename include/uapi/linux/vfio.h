@@ -1603,6 +1603,9 @@ struct vfio_device_feature_zpci_fmb_read {
  *    device TPH hardware.
  * 5. Program steering tag (ST) table entries by VFIO_DEVICE_FEATURE_TPH_PROGRAM
  *    if the device has an architected ST table.
+ * 6. Query the ST value for a given CPU ID via VFIO_DEVICE_FEATURE_TPH_RESOLVE
+ *    for DS-ST capable devices, userspace may then configure the ST through
+ *    device MMIO or firmware interfaces.
  */
 #define VFIO_DEVICE_FEATURE_TPH			16
 
@@ -1624,6 +1627,10 @@ struct vfio_device_feature_tph {
  * for either volatile or persistent memory type.
  */
 #define VFIO_DEVICE_TPH_CAP_PROG_ST_CPU		(1u << 1)
+/*
+ * Supports resolving a steering tag (ST) from a CPU source handle.
+ */
+#define VFIO_DEVICE_TPH_CAP_RESOLVE_CPU_ST	(1u << 2)
 
 /*
  * VFIO_DEVICE_FEATURE_TPH_PROGRAM - Batch program architected steering tag
@@ -1676,6 +1683,36 @@ struct vfio_device_feature_tph_program {
 #define VFIO_DEVICE_TPH_SRC_CPU_VOLATILE	(1u << 3)
 /* Source holds a persistent memory CPU ID */
 #define VFIO_DEVICE_TPH_SRC_CPU_PERSISTENT	(1u << 4)
+
+/*
+ * VFIO_DEVICE_FEATURE_TPH_RESOLVE - Resolve TPH attributes from given source
+ *
+ * GET only
+ *
+ * Requires prior successful SET on VFIO_DEVICE_FEATURE_TPH, otherwise
+ * this feature will return error.
+ *
+ * @flags: IN - source type selector (see VFIO_DEVICE_TPH_SRC_*)
+ *         and steering tag namespace selector (see VFIO_DEVICE_TPH_EXTENDED)
+ *         Note: only one source type is permitted (except SRC_NONE);
+ *               combining source type bits is rejected.
+ * @src:   IN - source identifier, e.g. CPU ID when SRC_CPU_VOLATILE is set
+ *         in flags
+ * @valid: OUT - bitmap indicating valid output fields, see
+ *         VFIO_DEVICE_TPH_VALID_*
+ * @rsv:   OUT - Reserved for future extension, kernel returns zero
+ * @st:    OUT - TPH steering tag (valid when VALID_ST is set in valid)
+ */
+#define VFIO_DEVICE_FEATURE_TPH_RESOLVE		18
+
+struct vfio_device_feature_tph_resolve {
+	__u32 flags;
+	__u32 src;
+	__u8  valid;
+#define VFIO_DEVICE_TPH_VALID_ST (1u << 0) /* st holds valid steering tag */
+	__u8  rsv;
+	__u16 st;
+};
 
 /* -------- API for Type1 VFIO IOMMU -------- */
 
