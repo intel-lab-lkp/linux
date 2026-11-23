@@ -1091,10 +1091,13 @@ void *kmalloc_nolock(size_t size, gfp_t gfp_flags, int node);
  * @FAM: The name of the flexible array member of @TYPE structure.
  * @COUNT: how many @FAM elements to allocate space for.
  *
+ * If @FAM is annotated with __counted_by() and the compiler supports
+ * __builtin_counted_by_ref(), the counter member is set to @COUNT. @COUNT
+ * is not checked against the type of that member: a value it cannot
+ * represent is stored truncated, so the caller must bound @COUNT.
+ *
  * Returns: Newly allocated pointer to @TYPE with @COUNT-many trailing
- * @FAM elements, or NULL on failure or if @COUNT cannot be represented
- * by the member of @TYPE that counts the @FAM elements (annotated via
- * __counted_by()).
+ * @FAM elements, or NULL on failure.
  */
 #define __alloc_flex(KMALLOC, GFP, TYPE, FAM, COUNT)			\
 ({									\
@@ -1137,9 +1140,9 @@ void *kmalloc_nolock(size_t size, gfp_t gfp_flags, int node);
  * @...: optional GFP flags for the allocation (GFP_KERNEL when not specified).
  *
  * Returns: newly allocated pointer to @VAR_OR_TYPE on success, NULL on
- * failure. If @FAM has been annotated with __counted_by(), the allocation
- * will immediately fail if @COUNT is larger than what the type of the
- * struct's counter variable can represent.
+ * failure. If @FAM has been annotated with __counted_by(), the struct's
+ * counter variable is set to @COUNT when the compiler supports it. @COUNT
+ * must fit in the type of that variable; it is not checked.
  */
 #define kmalloc_flex(VAR_OR_TYPE, FAM, COUNT, ...) \
 	__alloc_flex(kmalloc, default_gfp(__VA_ARGS__), typeof(VAR_OR_TYPE), FAM, COUNT)

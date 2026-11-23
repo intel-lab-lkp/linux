@@ -566,8 +566,9 @@ static __always_inline size_t __must_check size_sub(size_t minuend, size_t subtr
  * @FAM: Member name of the FAM within @TYPE.
  * @COUNT: Value to check against the __counted_by annotated @FAM's counter.
  *
- * Returns: true if @COUNT can be represented in the @FAM's counter. When
- * @FAM is not annotated with __counted_by(), always returns true.
+ * Returns: true if @COUNT cannot be represented in the @FAM's counter.
+ * When @FAM is not annotated with __counted_by(), or the compiler cannot
+ * resolve the counter, @COUNT is checked against size_t.
  */
 #define overflows_flex_counter_type(TYPE, FAM, COUNT)		\
 	(overflows_type(COUNT, typeof_flex_counter(((TYPE *)NULL)->FAM)))

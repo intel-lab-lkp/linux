@@ -405,7 +405,7 @@ become, respectively::
 	__auto_type ptr = kmalloc_obj(struct foo [, gfp] );
 
 The argument gfp is optional, the default value is GFP_KERNEL.
-If `ptr->flex_member` is annotated with __counted_by(), the allocation
-will automatically fail if `count` is larger than the maximum
-representable value that can be stored in the counter member associated
-with `flex_member`.
+If `ptr->flex_member` is annotated with __counted_by(), the counter
+member associated with `flex_member` is set to `count` on compilers that
+support it. `count` is not checked against the type of the counter, so
+the caller must make sure it fits.
