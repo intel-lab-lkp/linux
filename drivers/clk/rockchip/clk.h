@@ -1374,8 +1374,8 @@ struct rockchip_clk_provider *rockchip_clk_init(struct device_node *np,
 struct rockchip_clk_provider *rockchip_clk_init_early(struct device_node *np,
 			void __iomem *base, unsigned long nr_clks);
 void rockchip_clk_finalize(struct rockchip_clk_provider *ctx);
-void rockchip_clk_of_add_provider(struct device_node *np,
-				struct rockchip_clk_provider *ctx);
+int rockchip_clk_of_add_provider(struct device_node *np,
+				 struct rockchip_clk_provider *ctx);
 int rockchip_clk_add_grf(struct rockchip_clk_provider *ctx,
 			 struct regmap *grf,
 			 enum rockchip_grf_type type);

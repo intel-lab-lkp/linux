@@ -420,12 +420,16 @@ void rockchip_clk_finalize(struct rockchip_clk_provider *ctx)
 }
 EXPORT_SYMBOL_GPL(rockchip_clk_finalize);
 
-void rockchip_clk_of_add_provider(struct device_node *np,
-				  struct rockchip_clk_provider *ctx)
+int rockchip_clk_of_add_provider(struct device_node *np,
+				 struct rockchip_clk_provider *ctx)
 {
-	if (of_clk_add_provider(np, of_clk_src_onecell_get,
-				&ctx->clk_data))
-		pr_err("%s: could not register clk provider\n", __func__);
+	int ret;
+
+	ret = of_clk_add_provider(np, of_clk_src_onecell_get, &ctx->clk_data);
+	if (ret)
+		pr_err("%pOF: could not register clk provider: %d\n", np, ret);
+
+	return ret;
 }
 EXPORT_SYMBOL_GPL(rockchip_clk_of_add_provider);
 
