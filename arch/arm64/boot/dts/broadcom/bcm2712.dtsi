@@ -483,6 +483,9 @@
 			interrupt-names = "cec-tx", "cec-rx", "cec-low",
 					  "hpd-connected", "hpd-removed";
 			ddc = <&ddc0>;
+			/* DREQ 10, burst, wide source reads, priority 10, panic 15 */
+			dmas = <&dma40 (10 | (1 << 30) | (1 << 24) | (10 << 16) | (15 << 20))>;
+			dma-names = "audio-rx";
 			status = "disabled";
 		};
 
@@ -513,6 +516,9 @@
 			interrupt-names = "cec-tx", "cec-rx", "cec-low",
 					  "hpd-connected", "hpd-removed";
 			ddc = <&ddc1>;
+			/* DREQ 17, burst, wide source reads, priority 10, panic 15 */
+			dmas = <&dma40 (17 | (1 << 30) | (1 << 24) | (10 << 16) | (15 << 20))>;
+			dma-names = "audio-rx";
 			status = "disabled";
 		};
 
