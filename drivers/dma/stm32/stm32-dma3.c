@@ -396,7 +396,6 @@ static void stm32_dma3_chan_dump_hwdesc(struct stm32_dma3_chan *chan,
 
 static struct stm32_dma3_swdesc *stm32_dma3_chan_desc_alloc(struct stm32_dma3_chan *chan, u32 count)
 {
-	struct stm32_dma3_ddata *ddata = to_stm32_dma3_ddata(chan);
 	struct stm32_dma3_swdesc *swdesc;
 	int i;
 
@@ -422,10 +421,6 @@ static struct stm32_dma3_swdesc *stm32_dma3_chan_desc_alloc(struct stm32_dma3_ch
 			goto err_pool_free;
 	}
 	swdesc->ccr = 0;
-
-	/* Set LL base address */
-	writel_relaxed(swdesc->lli[0].hwdesc_addr & CLBAR_LBA,
-		       ddata->base + STM32_DMA3_CLBAR(chan->id));
 
 	/* Set LL allocated port */
 	swdesc->ccr &= ~CCR_LAP;
@@ -789,6 +784,10 @@ static void stm32_dma3_chan_start(struct stm32_dma3_chan *chan)
 	writel_relaxed(hwdesc->csar, ddata->base + STM32_DMA3_CSAR(id));
 	writel_relaxed(hwdesc->cdar, ddata->base + STM32_DMA3_CDAR(id));
 	writel_relaxed(hwdesc->cllr, ddata->base + STM32_DMA3_CLLR(id));
+
+	/* Set LL base address */
+	writel_relaxed(chan->swdesc->lli[0].hwdesc_addr & CLBAR_LBA,
+		       ddata->base + STM32_DMA3_CLBAR(chan->id));
 
 	/* Clear any pending interrupts */
 	csr = readl_relaxed(ddata->base + STM32_DMA3_CSR(id));
