@@ -20,8 +20,10 @@
  * must be negotiated with the underlying OS.
  */
 
+#include <linux/bitfield.h>
 #include <linux/fs.h>
 #include <linux/pci.h>
+#include <linux/pci-tph.h>
 #include <linux/uaccess.h>
 #include <linux/vfio.h>
 #include <linux/slab.h>
@@ -1085,6 +1087,151 @@ static int __init init_pci_ext_cap_pwr_perm(struct perm_bits *perm)
 	return 0;
 }
 
+static int vfio_find_cap_start(struct vfio_pci_core_device *vdev, int pos)
+{
+	u8 cap;
+	int base = (pos >= PCI_CFG_SPACE_SIZE) ? PCI_CFG_SPACE_SIZE :
+						 PCI_STD_HEADER_SIZEOF;
+	cap = vdev->pci_config_map[pos];
+
+	if (cap == PCI_CAP_ID_BASIC)
+		return 0;
+
+	/* XXX Can we have to abutting capabilities of the same type? */
+	while (pos - 1 >= base && vdev->pci_config_map[pos - 1] == cap)
+		pos--;
+
+	return pos;
+}
+
+/* Permissions for TPH extended capability */
+static int __init init_pci_ext_cap_tph_perm(struct perm_bits *perm)
+{
+	/*
+	 * We only virtualize the TPH header (excluding the ST table).
+	 * For the ST table (if any), the read operation returns 0 by
+	 * default, and the write operation is discarded by default.
+	 */
+	if (alloc_perm_bits(perm, PCI_TPH_BASE_SIZEOF))
+		return -ENOMEM;
+
+	p_setd(perm, 0, ALL_VIRT, NO_WRITE);
+	p_setd(perm, PCI_TPH_CAP, ALL_VIRT, NO_WRITE);
+
+	p_setd(perm, PCI_TPH_CTRL, ALL_VIRT,
+	       PCI_TPH_CTRL_MODE_SEL_MASK | PCI_TPH_CTRL_REQ_EN_MASK);
+
+	return 0;
+}
+
+static void vfio_tph_vcap_rewrite(struct vfio_pci_core_device *vdev, int pos)
+{
+	__le32 *vptr = (__le32 *)&vdev->vconfig[pos + PCI_TPH_CAP];
+	struct pci_dev *pdev = vdev->pdev;
+	u32 val = le32_to_cpu(*vptr);
+
+	if (!pcie_ext_tph_supported(pdev)) {
+		/* Remove extended TPH if root-port doesn't support */
+		val &= ~PCI_TPH_CAP_EXT_TPH;
+	}
+
+	if (vdev->tph_policy == VFIO_PCI_TPH_POLICY_NO_ST) {
+		/*
+		 * NO-ST policy: mask IV/DS mode, ST location and ST size fields.
+		 * Userspace only sees NO-ST capability.
+		 */
+		val &= ~(PCI_TPH_CAP_ST_IV | PCI_TPH_CAP_ST_DS |
+			 PCI_TPH_CAP_LOC_MASK | PCI_TPH_CAP_ST_MASK);
+	}
+
+	*vptr = cpu_to_le32(val);
+
+	/* Cache the final virtualized TPH capability value */
+	vdev->tph_vcap = val;
+}
+
+static int vfio_tph_config_read(struct vfio_pci_core_device *vdev, int pos,
+				int count, struct perm_bits *perm,
+				int offset, __le32 *val)
+{
+	int ret;
+
+	if (offset >= PCI_TPH_BASE_SIZEOF) {
+		*val = cpu_to_le32(0);
+		return count;
+	}
+
+	if (offset < PCI_TPH_CTRL)
+		return vfio_default_config_read(vdev, pos, count, perm,
+						offset, val);
+
+	/* Read the actual device value for CTRL register. */
+	ret = vfio_user_config_read(vdev->pdev, pos, val, count);
+	return ret != 0 ? ret : count;
+}
+
+static int vfio_tph_config_write(struct vfio_pci_core_device *vdev, int pos,
+				 int count, struct perm_bits *perm,
+				 int offset, __le32 val)
+{
+	u16 start = vfio_find_cap_start(vdev, pos);
+	struct pci_dev *pdev = vdev->pdev;
+	u8 mode, org_mode, req, org_req;
+	u32 org_ctrl, new_ctrl, cap;
+	__le32 ctrl_val = 0;
+	u16 cmd;
+	int ret;
+
+	if (!vdev->tph_opt_in || offset >= PCI_TPH_BASE_SIZEOF ||
+		offset < PCI_TPH_CTRL)
+		return count;
+
+	cmd = vfio_pci_memory_lock_and_enable(vdev);
+
+	/*
+	 * Synchronize the CTRL value of the hardware to the virt. Otherwise,
+	 * the value will be inconsistent when the device is reset.
+	 */
+	vfio_user_config_read(pdev, start + PCI_TPH_CTRL, &ctrl_val, 4);
+	vfio_default_config_write(vdev, start + PCI_TPH_CTRL, 4, perm,
+				  PCI_TPH_CTRL, ctrl_val);
+	org_ctrl = le32_to_cpu(ctrl_val);
+
+	/* Do write operation to virt. */
+	ret = vfio_default_config_write(vdev, pos, count, perm, offset, val);
+	if (ret != count)
+		goto out;
+
+	/* Reads the TPH_CTRL value after the write operation. */
+	new_ctrl = le32_to_cpu(*(__le32 *)&vdev->vconfig[start + PCI_TPH_CTRL]);
+	if (new_ctrl == org_ctrl)
+		goto out; /* Exit because there is no change. */
+
+	cap = vdev->tph_vcap;
+	mode = FIELD_GET(PCI_TPH_CTRL_MODE_SEL_MASK, new_ctrl);
+	req = FIELD_GET(PCI_TPH_CTRL_REQ_EN_MASK, new_ctrl);
+	if (mode != PCI_TPH_ST_NS_MODE || !(cap & (1u << mode)) ||
+		req == 0x2 /* reserved */ ||
+		(req == PCI_TPH_REQ_EXT_TPH && !(cap & PCI_TPH_CAP_EXT_TPH)))
+		goto out; /* Drop invalid or unsupported write value. */
+
+	org_req = FIELD_GET(PCI_TPH_CTRL_REQ_EN_MASK, org_ctrl);
+	org_mode = FIELD_GET(PCI_TPH_CTRL_MODE_SEL_MASK, org_ctrl);
+	if (req == org_req && mode == org_mode)
+		goto out; /* No change to requester type or ST mode. */
+
+	if (req == PCI_TPH_REQ_TPH_ONLY || req == PCI_TPH_REQ_EXT_TPH) {
+		pcie_disable_tph(pdev);
+		pcie_enable_tph_ext(pdev, mode, req);
+	} else if (req == PCI_TPH_REQ_DISABLE) {
+		pcie_disable_tph(pdev);
+	}
+
+out:
+	vfio_pci_memory_unlock_and_restore(vdev, cmd);
+	return count;
+}
+
 /*
  * Initialize the shared permission tables
  */
@@ -1100,6 +1247,7 @@ void vfio_pci_uninit_perm_bits(void)
 
 	free_perm_bits(&ecap_perms[PCI_EXT_CAP_ID_ERR]);
 	free_perm_bits(&ecap_perms[PCI_EXT_CAP_ID_PWR]);
+	free_perm_bits(&ecap_perms[PCI_EXT_CAP_ID_TPH]);
 }
 
 int __init vfio_pci_init_perm_bits(void)
@@ -1120,6 +1268,9 @@ int __init vfio_pci_init_perm_bits(void)
 	/* Extended capabilities */
 	ret |= init_pci_ext_cap_err_perm(&ecap_perms[PCI_EXT_CAP_ID_ERR]);
 	ret |= init_pci_ext_cap_pwr_perm(&ecap_perms[PCI_EXT_CAP_ID_PWR]);
+	ret |= init_pci_ext_cap_tph_perm(&ecap_perms[PCI_EXT_CAP_ID_TPH]);
+	ecap_perms[PCI_EXT_CAP_ID_TPH].readfn = vfio_tph_config_read;
+	ecap_perms[PCI_EXT_CAP_ID_TPH].writefn = vfio_tph_config_write;
 	ecap_perms[PCI_EXT_CAP_ID_VNDR].writefn = vfio_raw_config_write;
 	ecap_perms[PCI_EXT_CAP_ID_DVSEC].writefn = vfio_raw_config_write;
 
@@ -1127,23 +1278,6 @@ int __init vfio_pci_init_perm_bits(void)
 		vfio_pci_uninit_perm_bits();
 
 	return ret;
-}
-
-static int vfio_find_cap_start(struct vfio_pci_core_device *vdev, int pos)
-{
-	u8 cap;
-	int base = (pos >= PCI_CFG_SPACE_SIZE) ? PCI_CFG_SPACE_SIZE :
-						 PCI_STD_HEADER_SIZEOF;
-	cap = vdev->pci_config_map[pos];
-
-	if (cap == PCI_CAP_ID_BASIC)
-		return 0;
-
-	/* XXX Can we have to abutting capabilities of the same type? */
-	while (pos - 1 >= base && vdev->pci_config_map[pos - 1] == cap)
-		pos--;
-
-	return pos;
 }
 
 static int vfio_msi_config_read(struct vfio_pci_core_device *vdev, int pos,
@@ -1702,6 +1836,8 @@ static int vfio_ecap_init(struct vfio_pci_core_device *vdev)
 		ret = vfio_fill_vconfig_bytes(vdev, epos, len);
 		if (ret)
 			return ret;
+		if (ecap == PCI_EXT_CAP_ID_TPH)
+			vfio_tph_vcap_rewrite(vdev, epos);
 
 		/*
 		 * If we're just using this capability to anchor the list,
