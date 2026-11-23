@@ -50,6 +50,7 @@ extern const struct dev_pm_ops tb_nhi_pm_ops;
  * @release_ring_irq: NHI specific interrupt release hook
  * @is_present: Whether the device is currently present on the parent bus
  * @init_interrupts: NHI specific interrupt initialization hook
+ * @select_cm: optional hook to select a custom CM
  */
 struct tb_nhi_ops {
 	int (*init)(struct tb_nhi *nhi);
@@ -65,6 +66,7 @@ struct tb_nhi_ops {
 	void (*release_ring_irq)(struct tb_ring *ring);
 	bool (*is_present)(struct tb_nhi *nhi);
 	int (*init_interrupts)(struct tb_nhi *nhi);
+	struct tb * (*select_cm)(struct tb_nhi *nhi);
 };
 
 /*

@@ -9,7 +9,6 @@
 #include <linux/crc32.h>
 #include <linux/delay.h>
 #include <linux/slab.h>
-#include <linux/pci.h>
 #include <linux/dmapool.h>
 #include <linux/workqueue.h>
 
@@ -96,6 +95,7 @@ struct tb_cfg_request *tb_cfg_request_alloc(void)
 
 	return req;
 }
+EXPORT_SYMBOL_GPL(tb_cfg_request_alloc);
 
 /**
  * tb_cfg_request_get() - Increase refcount of a request
@@ -128,6 +128,7 @@ void tb_cfg_request_put(struct tb_cfg_request *req)
 	kref_put(&req->kref, tb_cfg_request_destroy);
 	mutex_unlock(&tb_cfg_request_lock);
 }
+EXPORT_SYMBOL_GPL(tb_cfg_request_put);
 
 static int tb_cfg_request_enqueue(struct tb_ctl *ctl,
 				  struct tb_cfg_request *req)
@@ -575,6 +576,7 @@ err_dequeue:
 	tb_cfg_request_dequeue(req);
 	return ret;
 }
+EXPORT_SYMBOL_GPL(tb_cfg_request);
 
 /**
  * tb_cfg_request_cancel() - Cancel a control request
@@ -634,6 +636,7 @@ struct tb_cfg_result tb_cfg_request_sync(struct tb_ctl *ctl,
 
 	return req->result;
 }
+EXPORT_SYMBOL_GPL(tb_cfg_request_sync);
 
 /* public interface, alloc/start/stop/free */
 
@@ -1009,6 +1012,7 @@ struct tb_cfg_result tb_cfg_read_raw(struct tb_ctl *ctl, void *buffer,
 		memcpy(buffer, &reply.data, 4 * length);
 	return res;
 }
+EXPORT_SYMBOL_GPL(tb_cfg_read_raw);
 
 /**
  * tb_cfg_write_raw() - write from buffer into config space

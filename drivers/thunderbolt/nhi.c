@@ -546,6 +546,7 @@ irqreturn_t tb_ring_msix(int irq, void *data)
 
 	return IRQ_HANDLED;
 }
+EXPORT_SYMBOL_GPL(tb_ring_msix);
 
 static int nhi_alloc_hop(struct tb_nhi *nhi, struct tb_ring *ring)
 {
@@ -1018,6 +1019,7 @@ irqreturn_t tb_nhi_isr(int irq, void *data)
 	schedule_work(&nhi->interrupt_work);
 	return IRQ_HANDLED;
 }
+EXPORT_SYMBOL_GPL(tb_nhi_isr);
 
 static int __nhi_suspend_noirq(struct device *dev, bool wakeup)
 {
@@ -1175,6 +1177,7 @@ void tb_nhi_shutdown(struct tb_nhi *nhi)
 	if (nhi->ops->shutdown)
 		nhi->ops->shutdown(nhi);
 }
+EXPORT_SYMBOL_GPL(tb_nhi_shutdown);
 
 static void nhi_reset(struct tb_nhi *nhi)
 {
@@ -1216,13 +1219,8 @@ static struct tb *nhi_select_cm(struct tb_nhi *nhi)
 	 * USB4 case is simple. If we got control of any of the
 	 * capabilities, we use software CM.
 	 */
-	if (!tb_acpi_is_native()) {
-		/*
-		 * Either firmware based CM is running (we did not get
-		 * control from the firmware) or this is pre-USB4 PC so
-		 * try first firmware CM and then fallback to software CM.
-		 */
-		tb = icm_probe(nhi);
+	if (!tb_acpi_is_native() && nhi->ops->select_cm) {
+		tb = nhi->ops->select_cm(nhi);
 		if (tb)
 			return tb;
 	}
@@ -1324,6 +1322,7 @@ int tb_nhi_probe(struct tb_nhi *nhi)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(tb_nhi_probe);
 
 /*
  * The tunneled pci bridges are siblings of us. Use resume_noirq to reenable
@@ -1346,3 +1345,4 @@ const struct dev_pm_ops tb_nhi_pm_ops = {
 	.runtime_suspend = nhi_runtime_suspend,
 	.runtime_resume = nhi_runtime_resume,
 };
+EXPORT_SYMBOL_GPL(tb_nhi_pm_ops);

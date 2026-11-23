@@ -86,6 +86,7 @@ bool tb_is_xdomain_enabled(void)
 {
 	return tb_xdomain_enabled && tb_acpi_is_xdomain_allowed();
 }
+EXPORT_SYMBOL_GPL(tb_is_xdomain_enabled);
 
 static bool tb_xdomain_match(const struct tb_cfg_request *req,
 			     const struct ctl_pkg *pkg)
@@ -2196,6 +2197,7 @@ err_free:
 
 	return NULL;
 }
+EXPORT_SYMBOL_GPL(tb_xdomain_alloc);
 
 /**
  * tb_xdomain_add() - Add XDomain to the bus
@@ -2211,6 +2213,7 @@ void tb_xdomain_add(struct tb_xdomain *xd)
 	/* Start exchanging properties with the other host */
 	start_handshake(xd);
 }
+EXPORT_SYMBOL_GPL(tb_xdomain_add);
 
 static int unregister_service(struct device *dev, void *data)
 {
@@ -2252,6 +2255,7 @@ void tb_xdomain_remove(struct tb_xdomain *xd)
 		put_device(&xd->dev);
 	}
 }
+EXPORT_SYMBOL_GPL(tb_xdomain_remove);
 
 /**
  * tb_xdomain_unregister() - Unregister XDomain
@@ -2593,6 +2597,7 @@ struct tb_xdomain *tb_xdomain_find_by_link_depth(struct tb *tb, u8 link,
 	xd = switch_find_xdomain(tb->root_switch, &lookup);
 	return tb_xdomain_get(xd);
 }
+EXPORT_SYMBOL_GPL(tb_xdomain_find_by_link_depth);
 
 /**
  * tb_xdomain_find_by_route() - Find an XDomain by route string
