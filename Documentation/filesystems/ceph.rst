@@ -214,6 +214,19 @@ Mount Options
 	  of them. If an inode contains any stale file locks, read/write on the
 	  inode is not allowed until applications release all stale file locks.
 
+  compression_hint=<none|compressible|incompressible>
+	Hint to the underlying OSD object store backend (e.g. BlueStore)
+	whether written data is compressible or incompressible. The default
+	is "none".
+
+	* none: do not send compression hints.
+
+	* compressible: hint that the data is compressible, enabling
+	  compression when the OSD compression mode is set to passive.
+
+	* incompressible: hint that the data is incompressible, disabling
+	  compression when the OSD compression mode is set to aggressive.
+
 More Information
 ================
 

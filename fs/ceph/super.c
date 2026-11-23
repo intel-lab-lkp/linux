@@ -177,6 +177,7 @@ enum {
 	Opt_snapdirname,
 	Opt_mds_namespace,
 	Opt_recover_session,
+	Opt_compression_hint,
 	Opt_source,
 	Opt_mon_addr,
 	Opt_test_dummy_encryption,
@@ -210,12 +211,27 @@ static const struct constant_table ceph_param_recover[] = {
 	{}
 };
 
+enum ceph_compression_hint {
+	Opt_compression_hint_none,
+	Opt_compression_hint_compressible,
+	Opt_compression_hint_incompressible,
+};
+
+static const struct constant_table ceph_param_compression_hint[] = {
+	{ "none",		Opt_compression_hint_none },
+	{ "compressible",	Opt_compression_hint_compressible },
+	{ "incompressible",	Opt_compression_hint_incompressible },
+	{}
+};
+
 static const struct fs_parameter_spec ceph_mount_parameters[] = {
 	fsparam_flag_no ("acl",				Opt_acl),
 	fsparam_flag_no ("asyncreaddir",		Opt_asyncreaddir),
 	fsparam_s32	("caps_max",			Opt_caps_max),
 	fsparam_u32	("caps_wanted_delay_max",	Opt_caps_wanted_delay_max),
 	fsparam_u32	("caps_wanted_delay_min",	Opt_caps_wanted_delay_min),
+	fsparam_enum	("compression_hint",		Opt_compression_hint,
+			 ceph_param_compression_hint),
 	fsparam_u32	("write_congestion_kb",		Opt_congestion_kb),
 	fsparam_flag_no ("copyfrom",			Opt_copyfrom),
 	fsparam_flag_no ("dcache",			Opt_dcache),
@@ -250,6 +266,7 @@ static const struct fs_parameter_spec ceph_mount_parameters[] = {
 struct ceph_parse_opts_ctx {
 	struct ceph_options		*copts;
 	struct ceph_mount_options	*opts;
+	bool				compression_hint_set;
 };
 
 /*
@@ -469,6 +486,30 @@ static int ceph_parse_mount_param(struct fs_context *fc,
 			fsopt->flags |= CEPH_MOUNT_OPT_CLEANRECOVER;
 		else
 			BUG();
+		break;
+	case Opt_compression_hint:
+		switch (result.uint_32) {
+		case Opt_compression_hint_none:
+			fsopt->alloc_hint_flags &=
+				~(CEPH_OSD_ALLOC_HINT_FLAG_COMPRESSIBLE |
+				  CEPH_OSD_ALLOC_HINT_FLAG_INCOMPRESSIBLE);
+			break;
+		case Opt_compression_hint_compressible:
+			fsopt->alloc_hint_flags |=
+				CEPH_OSD_ALLOC_HINT_FLAG_COMPRESSIBLE;
+			fsopt->alloc_hint_flags &=
+				~CEPH_OSD_ALLOC_HINT_FLAG_INCOMPRESSIBLE;
+			break;
+		case Opt_compression_hint_incompressible:
+			fsopt->alloc_hint_flags |=
+				CEPH_OSD_ALLOC_HINT_FLAG_INCOMPRESSIBLE;
+			fsopt->alloc_hint_flags &=
+				~CEPH_OSD_ALLOC_HINT_FLAG_COMPRESSIBLE;
+			break;
+		default:
+			BUG();
+		}
+		pctx->compression_hint_set = true;
 		break;
 	case Opt_source:
 		if (fc->source)
@@ -729,6 +770,7 @@ static int ceph_show_options(struct seq_file *m, struct dentry *root)
 {
 	struct ceph_fs_client *fsc = ceph_sb_to_fs_client(root->d_sb);
 	struct ceph_mount_options *fsopt = fsc->mount_options;
+	u32 alloc_hint_flags = READ_ONCE(fsopt->alloc_hint_flags);
 	size_t pos;
 	int ret;
 
@@ -781,6 +823,11 @@ static int ceph_show_options(struct seq_file *m, struct dentry *root)
 
 	if (fsopt->flags & CEPH_MOUNT_OPT_CLEANRECOVER)
 		seq_show_option(m, "recover_session", "clean");
+
+	if (alloc_hint_flags & CEPH_OSD_ALLOC_HINT_FLAG_COMPRESSIBLE)
+		seq_show_option(m, "compression_hint", "compressible");
+	else if (alloc_hint_flags & CEPH_OSD_ALLOC_HINT_FLAG_INCOMPRESSIBLE)
+		seq_show_option(m, "compression_hint", "incompressible");
 
 	if (!(fsopt->flags & CEPH_MOUNT_OPT_ASYNC_DIROPS))
 		seq_puts(m, ",wsync");
@@ -1483,6 +1530,10 @@ static int ceph_reconfigure_fc(struct fs_context *fc)
 		ceph_set_mount_opt(fsc, LAZYIO);
 	else
 		ceph_clear_mount_opt(fsc, LAZYIO);
+
+	if (pctx->compression_hint_set)
+		WRITE_ONCE(fsc->mount_options->alloc_hint_flags,
+			   fsopt->alloc_hint_flags);
 
 	if (strcmp_null(fsc->mount_options->mon_addr, fsopt->mon_addr)) {
 		kfree(fsc->mount_options->mon_addr);

@@ -1068,6 +1068,8 @@ static int write_folio_nounlock(struct folio *folio,
 	struct ceph_osd_request *req;
 	bool caching = ceph_is_cache_enabled(inode);
 	struct page *bounce_page = NULL;
+	u32 alloc_hint_flags = READ_ONCE(fsc->mount_options->alloc_hint_flags);
+	unsigned int op_idx = alloc_hint_flags ? 1 : 0;
 
 	boutc(cl, "%llx.%llx folio %p idx %lu\n", ceph_vinop(inode), folio,
 	      folio->index);
@@ -1129,7 +1131,8 @@ static int write_folio_nounlock(struct folio *folio,
 		fsc->write_congested = true;
 
 	req = ceph_osdc_new_request(osdc, &ci->i_layout, ceph_vino(inode),
-				    page_off, &wlen, 0, 1, CEPH_OSD_OP_WRITE,
+				    page_off, &wlen, op_idx, op_idx + 1,
+				    CEPH_OSD_OP_WRITE,
 				    CEPH_OSD_FLAG_WRITE, snapc,
 				    ceph_wbc.truncate_seq,
 				    ceph_wbc.truncate_size, true);
@@ -1140,6 +1143,9 @@ static int write_folio_nounlock(struct folio *folio,
 			fsc->write_congested = false;
 		return PTR_ERR(req);
 	}
+
+	if (alloc_hint_flags)
+		osd_req_op_alloc_hint_init(req, 0, 0, 0, alloc_hint_flags);
 
 	if (wlen < len)
 		len = wlen;
@@ -1167,7 +1173,7 @@ static int write_folio_nounlock(struct folio *folio,
 	/* it may be a short write due to an object boundary */
 	WARN_ON_ONCE(start + len > folio_size(folio));
 	page = bounce_page ? bounce_page : &folio->page;
-	osd_req_op_extent_osd_data_pages(req, 0, &page, wlen, start, false,
+	osd_req_op_extent_osd_data_pages(req, op_idx, &page, wlen, start, false,
 					 false);
 	boutc(cl, "%llx.%llx %llu~%llu (%llu bytes, %sencrypted)\n",
 	      ceph_vinop(inode), page_off, len, wlen,
@@ -1252,6 +1258,7 @@ static void writepages_finish(struct ceph_osd_request *req)
 	struct ceph_fs_client *fsc = ceph_inode_to_fs_client(inode);
 	struct ceph_mds_client *mdsc = ceph_sb_to_mdsc(inode->i_sb);
 	unsigned int len = 0;
+	unsigned int first_write_op = 0;
 	bool remove_page;
 	struct ceph_journal_info __ji;
 
@@ -1277,8 +1284,12 @@ static void writepages_finish(struct ceph_osd_request *req)
 	remove_page = !(ceph_caps_issued(ci) &
 			(CEPH_CAP_FILE_CACHE|CEPH_CAP_FILE_LAZYIO));
 
+	if (req->r_num_ops > 1 &&
+	    req->r_ops[0].op == CEPH_OSD_OP_SETALLOCHINT)
+		first_write_op = 1;
+
 	/* clean all pages */
-	for (i = 0; i < req->r_num_ops; i++) {
+	for (i = first_write_op; i < req->r_num_ops; i++) {
 		if (req->r_ops[i].op != CEPH_OSD_OP_WRITE) {
 			pr_warn_client(cl,
 				"%llx.%llx incorrect op %d req %p index %d tid %llu\n",
@@ -1342,7 +1353,7 @@ static void writepages_finish(struct ceph_osd_request *req)
 
 	ceph_put_wrbuffer_cap_refs(ci, total_pages, snapc);
 
-	osd_data = osd_req_op_extent_osd_data(req, 0);
+	osd_data = osd_req_op_extent_osd_data(req, first_write_op);
 	if (osd_data->pages_from_pool)
 		mempool_free(osd_data->pages, ceph_wb_pagevec_pool);
 	else
@@ -1645,10 +1656,14 @@ bool is_folio_index_contiguous(const struct ceph_writeback_ctl *ceph_wbc,
 }
 
 static inline
-bool is_num_ops_too_big(struct ceph_writeback_ctl *ceph_wbc)
+bool is_num_ops_too_big(struct ceph_fs_client *fsc,
+			struct ceph_writeback_ctl *ceph_wbc)
 {
-	return ceph_wbc->num_ops >=
-		(ceph_wbc->from_pool ?  CEPH_OSD_SLAB_OPS : CEPH_OSD_MAX_OPS);
+	unsigned int extra_ops =
+		READ_ONCE(fsc->mount_options->alloc_hint_flags) ? 1 : 0;
+
+	return ceph_wbc->num_ops + extra_ops >=
+		(ceph_wbc->from_pool ? CEPH_OSD_SLAB_OPS : CEPH_OSD_MAX_OPS);
 }
 
 static inline
@@ -1754,7 +1769,7 @@ void ceph_process_folio_batch(struct address_space *mapping,
 		 */
 		if (ceph_wbc->locked_pages &&
 		    !is_folio_index_contiguous(ceph_wbc, folio) &&
-		    is_num_ops_too_big(ceph_wbc)) {
+		    is_num_ops_too_big(fsc, ceph_wbc)) {
 			folio_unlock(folio);
 			break;
 		}
@@ -1854,6 +1869,8 @@ int ceph_submit_write(struct address_space *mapping,
 	struct ceph_osd_request *req = NULL;
 	struct folio *folio = NULL;
 	bool caching = ceph_is_cache_enabled(inode);
+	u32 alloc_hint_flags;
+	unsigned int first_op, write_ops, submitted_ops;
 	u64 offset, start, end, last_len = 0;
 	u64 len;
 	unsigned int i, align;
@@ -1862,19 +1879,25 @@ new_request:
 	folio = ceph_fscrypt_pagecache_folio(page_folio(ceph_wbc->pages[0]));
 	ceph_folio_write_range(folio, &offset, &end);
 	len = ceph_wbc->wsize;
+	alloc_hint_flags = READ_ONCE(fsc->mount_options->alloc_hint_flags);
+	first_op = alloc_hint_flags ? 1 : 0;
+	write_ops = min_t(unsigned int, ceph_wbc->num_ops,
+			  CEPH_OSD_MAX_OPS - first_op);
 
 	req = ceph_osdc_new_request(&fsc->client->osdc,
 				    &ci->i_layout, vino,
-				    offset, &len, 0, ceph_wbc->num_ops,
+				    offset, &len, first_op,
+				    write_ops + first_op,
 				    CEPH_OSD_OP_WRITE, CEPH_OSD_FLAG_WRITE,
 				    ceph_wbc->snapc, ceph_wbc->truncate_seq,
 				    ceph_wbc->truncate_size, false);
 	if (IS_ERR(req)) {
+		write_ops = min_t(unsigned int, ceph_wbc->num_ops,
+				  CEPH_OSD_SLAB_OPS - first_op);
 		req = ceph_osdc_new_request(&fsc->client->osdc,
 					    &ci->i_layout, vino,
-					    offset, &len, 0,
-					    min(ceph_wbc->num_ops,
-						CEPH_OSD_SLAB_OPS),
+					    offset, &len, first_op,
+					    write_ops + first_op,
 					    CEPH_OSD_OP_WRITE,
 					    CEPH_OSD_FLAG_WRITE,
 					    ceph_wbc->snapc,
@@ -1883,6 +1906,9 @@ new_request:
 					    true);
 		BUG_ON(IS_ERR(req));
 	}
+
+	if (alloc_hint_flags)
+		osd_req_op_alloc_hint_init(req, 0, 0, 0, alloc_hint_flags);
 
 	folio = ceph_fscrypt_pagecache_folio(
 			page_folio(ceph_wbc->pages[ceph_wbc->locked_pages - 1]));
@@ -1926,7 +1952,7 @@ new_request:
 	/* Format the osd request message and submit the write */
 	len = 0;
 	ceph_wbc->data_pages = ceph_wbc->pages;
-	ceph_wbc->op_idx = 0;
+	ceph_wbc->op_idx = first_op;
 	align = offset_in_page(offset);
 	for (i = 0; i < ceph_wbc->locked_pages; i++) {
 		u64 cur_offset;
@@ -2010,10 +2036,11 @@ new_request:
 
 	BUG_ON(ceph_wbc->op_idx + 1 != req->r_num_ops);
 
+	submitted_ops = req->r_num_ops - first_op;
 	ceph_wbc->from_pool = false;
 	if (i < ceph_wbc->locked_pages) {
-		BUG_ON(ceph_wbc->num_ops <= req->r_num_ops);
-		ceph_wbc->num_ops -= req->r_num_ops;
+		BUG_ON(ceph_wbc->num_ops <= submitted_ops);
+		ceph_wbc->num_ops -= submitted_ops;
 		ceph_wbc->locked_pages -= i;
 
 		/* allocate new pages array for next request */
@@ -2024,7 +2051,7 @@ new_request:
 		memset(ceph_wbc->data_pages + i, 0,
 			ceph_wbc->locked_pages * sizeof(*ceph_wbc->pages));
 	} else {
-		BUG_ON(ceph_wbc->num_ops != req->r_num_ops);
+		BUG_ON(ceph_wbc->num_ops != submitted_ops);
 		/* request message now owns the pages array */
 		ceph_wbc->pages = NULL;
 	}
@@ -3081,6 +3108,8 @@ int ceph_uninline_data(struct file *file)
 	struct ceph_snap_context *snapc = NULL;
 	u64 inline_version = CEPH_INLINE_NONE;
 	struct page *pages[1];
+	u32 alloc_hint_flags;
+	unsigned int write_op;
 	int err = 0;
 	u64 len;
 
@@ -3152,18 +3181,23 @@ int ceph_uninline_data(struct file *file)
 	if (err < 0)
 		goto out_unlock;
 
+	alloc_hint_flags = READ_ONCE(fsc->mount_options->alloc_hint_flags);
+	write_op = alloc_hint_flags ? 2 : 1;
+
 	req = ceph_osdc_new_request(&fsc->client->osdc, &ci->i_layout,
-				    ceph_vino(inode), 0, &len, 1, 3,
-				    CEPH_OSD_OP_WRITE, CEPH_OSD_FLAG_WRITE,
-				    snapc, ci->i_truncate_seq,
-				    ci->i_truncate_size, false);
+				    ceph_vino(inode), 0, &len, write_op,
+				    write_op + 2, CEPH_OSD_OP_WRITE,
+				    CEPH_OSD_FLAG_WRITE, snapc,
+				    ci->i_truncate_seq, ci->i_truncate_size,
+				    false);
 	if (IS_ERR(req)) {
 		err = PTR_ERR(req);
 		goto out_unlock;
 	}
 
 	pages[0] = folio_page(folio, 0);
-	osd_req_op_extent_osd_data_pages(req, 1, pages, len, 0, false, false);
+	osd_req_op_extent_osd_data_pages(req, write_op, pages, len, 0,
+					 false, false);
 
 	{
 		__le64 xattr_buf = cpu_to_le64(inline_version);
@@ -3176,11 +3210,15 @@ int ceph_uninline_data(struct file *file)
 			goto out_put_req;
 	}
 
+	if (alloc_hint_flags)
+		osd_req_op_alloc_hint_init(req, 1, 0, 0, alloc_hint_flags);
+
 	{
 		char xattr_buf[32];
 		int xattr_len = snprintf(xattr_buf, sizeof(xattr_buf),
 					 "%llu", inline_version);
-		err = osd_req_op_xattr_init(req, 2, CEPH_OSD_OP_SETXATTR,
+		err = osd_req_op_xattr_init(req, write_op + 1,
+					    CEPH_OSD_OP_SETXATTR,
 					    "inline_version",
 					    xattr_buf, xattr_len, 0, 0);
 		if (err)

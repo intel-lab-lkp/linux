@@ -94,6 +94,7 @@ struct ceph_mount_options {
 	int caps_max;
 	unsigned int max_readdir;       /* max readdir result (entries) */
 	unsigned int max_readdir_bytes; /* max readdir result (bytes) */
+	u32 alloc_hint_flags;           /* CEPH_OSD_ALLOC_HINT_FLAG_* */
 
 	bool new_dev_syntax;
 

@@ -1399,8 +1399,11 @@ static void ceph_aio_complete_req(struct ceph_osd_request *req)
 	int rc = req->r_result;
 	struct inode *inode = req->r_inode;
 	struct ceph_aio_request *aio_req = req->r_priv;
-	struct ceph_osd_data *osd_data = osd_req_op_extent_osd_data(req, 0);
-	struct ceph_osd_req_op *op = &req->r_ops[0];
+	unsigned int op_idx = (req->r_num_ops > 1 &&
+			       req->r_ops[0].op == CEPH_OSD_OP_SETALLOCHINT) ?
+			      1 : 0;
+	struct ceph_osd_data *osd_data = osd_req_op_extent_osd_data(req, op_idx);
+	struct ceph_osd_req_op *op = &req->r_ops[op_idx];
 	struct ceph_client_metric *metric = &ceph_sb_to_mdsc(inode->i_sb)->metric;
 	unsigned int len = osd_data->bvec_pos.iter.bi_size;
 	bool sparse = (op->op == CEPH_OSD_OP_SPARSE_READ);
@@ -1497,6 +1500,7 @@ static void ceph_aio_retry_work(struct work_struct *work)
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_snap_context *snapc;
 	struct ceph_osd_request *req;
+	unsigned int i, op_idx;
 	int ret;
 
 	spin_lock(&ci->i_ceph_lock);
@@ -1512,8 +1516,8 @@ static void ceph_aio_retry_work(struct work_struct *work)
 	}
 	spin_unlock(&ci->i_ceph_lock);
 
-	req = ceph_osdc_alloc_request(orig_req->r_osdc, snapc, 1,
-			false, GFP_NOFS);
+	req = ceph_osdc_alloc_request(orig_req->r_osdc, snapc,
+				      orig_req->r_num_ops, false, GFP_NOFS);
 	if (!req) {
 		ret = -ENOMEM;
 		req = orig_req;
@@ -1524,10 +1528,13 @@ static void ceph_aio_retry_work(struct work_struct *work)
 	ceph_oloc_copy(&req->r_base_oloc, &orig_req->r_base_oloc);
 	ceph_oid_copy(&req->r_base_oid, &orig_req->r_base_oid);
 
-	req->r_ops[0] = orig_req->r_ops[0];
+	for (i = 0; i < orig_req->r_num_ops; i++)
+		req->r_ops[i] = orig_req->r_ops[i];
 
+	op_idx = (orig_req->r_num_ops > 1 &&
+		  orig_req->r_ops[0].op == CEPH_OSD_OP_SETALLOCHINT) ? 1 : 0;
 	req->r_mtime = aio_req->mtime;
-	req->r_data_offset = req->r_ops[0].extent.offset;
+	req->r_data_offset = req->r_ops[op_idx].extent.offset;
 
 	ret = ceph_osdc_alloc_messages(req, GFP_NOFS);
 	if (ret) {
@@ -1609,6 +1616,9 @@ ceph_direct_read_write(struct kiocb *iocb, struct iov_iter *iter,
 		struct ceph_osd_req_op *op;
 		int readop = sparse ? CEPH_OSD_OP_SPARSE_READ : CEPH_OSD_OP_READ;
 		int extent_cnt;
+		u32 alloc_hint_flags = write ?
+			READ_ONCE(fsc->mount_options->alloc_hint_flags) : 0;
+		unsigned int op_idx = alloc_hint_flags ? 1 : 0;
 
 		if (write)
 			size = min_t(u64, size, fsc->mount_options->wsize);
@@ -1617,8 +1627,8 @@ ceph_direct_read_write(struct kiocb *iocb, struct iov_iter *iter,
 
 		vino = ceph_vino(inode);
 		req = ceph_osdc_new_request(&fsc->client->osdc, &ci->i_layout,
-					    vino, pos, &size, 0,
-					    1,
+					    vino, pos, &size, op_idx,
+					    op_idx + 1,
 					    write ? CEPH_OSD_OP_WRITE : readop,
 					    flags, snapc,
 					    ci->i_truncate_seq,
@@ -1629,7 +1639,11 @@ ceph_direct_read_write(struct kiocb *iocb, struct iov_iter *iter,
 			break;
 		}
 
-		op = &req->r_ops[0];
+		if (alloc_hint_flags)
+			osd_req_op_alloc_hint_init(req, 0, 0, 0,
+						   alloc_hint_flags);
+
+		op = &req->r_ops[op_idx];
 		if (!write && sparse) {
 			extent_cnt = __ceph_sparse_read_ext_count(inode, size);
 			ret = ceph_alloc_sparse_ext_map(op, extent_cnt);
@@ -1646,9 +1660,10 @@ ceph_direct_read_write(struct kiocb *iocb, struct iov_iter *iter,
 			break;
 		}
 		if (len != size)
-			osd_req_op_extent_update(req, 0, len);
+			osd_req_op_extent_update(req, op_idx, len);
 
-		osd_req_op_extent_osd_data_bvecs(req, 0, bvecs, num_bvecs, len);
+		osd_req_op_extent_osd_data_bvecs(req, op_idx, bvecs, num_bvecs,
+						 len);
 
 		/*
 		 * To simplify error handling, allow AIO when IO within i_size
@@ -1841,6 +1856,8 @@ ceph_sync_write(struct kiocb *iocb, struct iov_iter *from, loff_t pos,
 		bool first, last;
 		struct iov_iter saved_iter = *from;
 		size_t off;
+		u32 alloc_hint_flags;
+		unsigned int write_op;
 
 		ceph_fscrypt_adjust_off_and_len(inode, &write_pos, &write_len);
 
@@ -2095,9 +2112,13 @@ ceph_sync_write(struct kiocb *iocb, struct iov_iter *from, loff_t pos,
 			}
 		}
 
+		alloc_hint_flags =
+			READ_ONCE(fsc->mount_options->alloc_hint_flags);
+		write_op = (rmw ? 1 : 0) + (alloc_hint_flags ? 1 : 0);
+
 		req = ceph_osdc_new_request(osdc, &ci->i_layout,
-					    ceph_vino(inode), write_pos, &write_len,
-					    rmw ? 1 : 0, rmw ? 2 : 1,
+					    ceph_vino(inode), write_pos,
+					    &write_len, write_op, write_op + 1,
 					    CEPH_OSD_OP_WRITE,
 					    CEPH_OSD_FLAG_WRITE,
 					    snapc, ci->i_truncate_seq,
@@ -2109,9 +2130,10 @@ ceph_sync_write(struct kiocb *iocb, struct iov_iter *from, loff_t pos,
 		}
 
 		boutc(cl, "write op %lld~%llu\n", write_pos, write_len);
-		osd_req_op_extent_osd_data_pages(req, rmw ? 1 : 0, pages, write_len,
-						 offset_in_page(write_pos), false,
-						 true);
+		osd_req_op_extent_osd_data_pages(req, write_op, pages,
+						 write_len,
+						 offset_in_page(write_pos),
+						 false, true);
 		req->r_inode = inode;
 		req->r_mtime = mtime;
 
@@ -2131,6 +2153,10 @@ ceph_sync_write(struct kiocb *iocb, struct iov_iter *from, loff_t pos,
 						CEPH_OSD_OP_FLAG_EXCL);
 			}
 		}
+
+		if (alloc_hint_flags)
+			osd_req_op_alloc_hint_init(req, rmw ? 1 : 0, 0, 0,
+						   alloc_hint_flags);
 
 		ceph_osdc_start_request(osdc, req);
 		ret = ceph_osdc_wait_request(osdc, req);
