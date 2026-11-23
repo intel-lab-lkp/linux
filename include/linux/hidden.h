@@ -14,6 +14,11 @@
  * Fortunately, there is a way to inform the compiler that such symbol
  * references will be satisfied at link time rather than at load time, by
  * giving them 'hidden' visibility.
+ *
+ * Hidden symbols are ignored by bindgen, on the basis that they are never part
+ * of a public API, but this is not the case for the kernel.
  */
 
+#ifndef __BINDGEN__
 #pragma GCC visibility push(hidden)
+#endif
