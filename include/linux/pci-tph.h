@@ -23,6 +23,24 @@ enum tph_mem_type {
 };
 
 #ifdef CONFIG_PCIE_TPH
+/**
+ * pcie_std_tph_supported - check standard TPH requester support
+ * @pdev: PCI device
+ */
+static inline bool pcie_std_tph_supported(struct pci_dev *pdev)
+{
+	return pdev->tph_max_type >= PCI_TPH_REQ_TPH_ONLY;
+}
+
+/**
+ * pcie_ext_tph_supported - check extended TPH requester support
+ * @pdev: PCI device
+ */
+static inline bool pcie_ext_tph_supported(struct pci_dev *pdev)
+{
+	return pdev->tph_max_type == PCI_TPH_REQ_EXT_TPH;
+}
+
 int pcie_tph_set_st_entry(struct pci_dev *pdev,
 			  unsigned int index, u16 tag);
 int pcie_tph_get_cpu_st_ext(struct pci_dev *dev, enum tph_mem_type mem_type,
@@ -35,6 +53,10 @@ int pcie_enable_tph(struct pci_dev *pdev, u8 mode);
 u16 pcie_tph_get_st_table_size(struct pci_dev *pdev);
 u32 pcie_tph_get_st_table_loc(struct pci_dev *pdev);
 #else
+static inline bool pcie_std_tph_supported(struct pci_dev *pdev)
+{ return false; }
+static inline bool pcie_ext_tph_supported(struct pci_dev *pdev)
+{ return false; }
 static inline int pcie_tph_set_st_entry(struct pci_dev *pdev,
 					unsigned int index, u16 tag)
 { return -EINVAL; }
