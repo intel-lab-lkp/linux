@@ -54,6 +54,7 @@ int pcie_enable_tph_ext(struct pci_dev *pdev, u8 mode, u8 req_type);
 int pcie_enable_tph(struct pci_dev *pdev, u8 mode);
 u16 pcie_tph_get_st_table_size(struct pci_dev *pdev);
 u32 pcie_tph_get_st_table_loc(struct pci_dev *pdev);
+bool pcie_tph_dsm_supported(struct pci_dev *pdev);
 #else
 static inline bool pcie_std_tph_supported(struct pci_dev *pdev)
 { return false; }
@@ -85,6 +86,8 @@ static inline u16 pcie_tph_get_st_table_size(struct pci_dev *pdev)
 { return 0; }
 static inline u32 pcie_tph_get_st_table_loc(struct pci_dev *pdev)
 { return PCI_TPH_LOC_NONE; }
+static inline bool pcie_tph_dsm_supported(struct pci_dev *pdev)
+{ return false; }
 #endif
 
 #endif /* LINUX_PCI_TPH_H */
