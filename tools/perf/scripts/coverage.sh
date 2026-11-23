@@ -3,8 +3,9 @@
 #
 # Copyright (C) 2026, Red Hat Inc, Arnaldo Carvalho de Melo <acme@redhat.com>
 #
-# Build perf with clang source based coverage, run the perf test suite and
-# report line coverage.
+# Build perf with clang source based coverage, run the perf test suite,
+# report line coverage and the table of the files with the most uncovered
+# lines.  coverage-table.sh renders that table from the last report alone.
 # The build goes into tools/perf and the profiles and report into
 # tools/perf/cov; -b and -c override them, following perf's O= layout.
 # --prep stops after the instrumented build, for running the tests later as
@@ -44,7 +45,9 @@ usage()
 Usage: scripts/coverage.sh [options] [test name fragment...]
 
 Builds perf with clang source based coverage, runs the complete perf test
-suite and reports line coverage.  Use -t to run a subset.
+suite, reports line coverage and the files with the most uncovered lines.
+Use -t to run a subset; scripts/coverage-table.sh renders the table again
+with other options.
 
 Options:
   -b, --build-dir DIR    existing perf build directory (default: $PERF_DIR)
@@ -64,6 +67,7 @@ Through make:
   make -C tools/perf coverage
   make -C tools/perf coverage-prep O=/tmp/build/perf-coverage
   sudo make -C tools/perf coverage O=/tmp/build/perf-coverage
+  make -C tools/perf coverage-table O=/tmp/build/perf-coverage
 EOF
 }
 
@@ -481,6 +485,10 @@ export LC_ALL=C
 render_report
 print_summary
 update_baseline
+
+printf "\n"
+"$PERF_DIR/scripts/coverage-table.sh" --build-dir "$BUILD_DIR" \
+	--cov-dir "$COV_DIR" || warn "could not render the coverage table"
 
 printf "\nReport:  %s\n" "$REPORT"
 exit "$test_status"
