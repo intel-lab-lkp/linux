@@ -172,6 +172,30 @@ static int sparx5_port_attr_set(struct net_device *dev, const void *ctx,
 	return 0;
 }
 
+static void sparx5_cpu_copy_ena(struct sparx5 *spx5, u16 pgid, bool enable)
+{
+	spx5_rmw(ANA_AC_PGID_MISC_CFG_PGID_CPU_COPY_ENA_SET(enable),
+		 ANA_AC_PGID_MISC_CFG_PGID_CPU_COPY_ENA, spx5,
+		 ANA_AC_PGID_MISC_CFG(pgid));
+}
+
+static void sparx5_mdb_flush(struct sparx5 *sparx5)
+{
+	struct sparx5_mdb_entry *entry, *tmp;
+
+	mutex_lock(&sparx5->mdb_lock);
+	list_for_each_entry_safe(entry, tmp, &sparx5->mdb_entries, list) {
+		if (entry->cpu_copy)
+			sparx5_cpu_copy_ena(sparx5, entry->pgid_idx, false);
+		sparx5_pgid_clear(sparx5, entry->pgid_idx);
+		sparx5_mact_forget(sparx5, entry->addr, entry->vid);
+		list_del(&entry->list);
+		sparx5_pgid_free(sparx5, entry->pgid_idx);
+		kfree(entry);
+	}
+	mutex_unlock(&sparx5->mdb_lock);
+}
+
 static int sparx5_port_bridge_join(struct sparx5_port *port,
 				   struct net_device *bridge,
 				   struct netlink_ext_ack *extack)
@@ -227,8 +251,10 @@ static void sparx5_port_bridge_leave(struct sparx5_port *port,
 	switchdev_bridge_port_unoffload(port->ndev, NULL, NULL, NULL);
 
 	clear_bit(port->portno, sparx5->bridge_mask);
-	if (bitmap_empty(sparx5->bridge_mask, SPX5_PORTS))
+	if (bitmap_empty(sparx5->bridge_mask, SPX5_PORTS)) {
+		sparx5_mdb_flush(sparx5);
 		sparx5->hw_bridge_dev = NULL;
+	}
 
 	/* Clear bridge vlan settings before updating the port settings */
 	port->vlan_aware = 0;
@@ -528,13 +554,6 @@ out:
 	return found;
 }
 
-static void sparx5_cpu_copy_ena(struct sparx5 *spx5, u16 pgid, bool enable)
-{
-	spx5_rmw(ANA_AC_PGID_MISC_CFG_PGID_CPU_COPY_ENA_SET(enable),
-		 ANA_AC_PGID_MISC_CFG_PGID_CPU_COPY_ENA, spx5,
-		 ANA_AC_PGID_MISC_CFG(pgid));
-}
-
 static int sparx5_handle_port_mdb_add(struct net_device *dev,
 				      struct notifier_block *nb,
 				      const struct switchdev_obj_port_mdb *v)
@@ -548,6 +567,9 @@ static int sparx5_handle_port_mdb_add(struct net_device *dev,
 
 	if (!sparx5_netdevice_check(dev))
 		return -EOPNOTSUPP;
+
+	if (!spx5->hw_bridge_dev)
+		return 0;
 
 	is_host = netif_is_bridge_master(v->obj.orig_dev);
 
@@ -604,6 +626,9 @@ static int sparx5_handle_port_mdb_del(struct net_device *dev,
 
 	if (!sparx5_netdevice_check(dev))
 		return -EOPNOTSUPP;
+
+	if (!spx5->hw_bridge_dev)
+		return 0;
 
 	is_host = netif_is_bridge_master(v->obj.orig_dev);
 
