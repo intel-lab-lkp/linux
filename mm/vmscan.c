@@ -2794,9 +2794,18 @@ static bool __maybe_unused seq_is_valid(struct lruvec *lruvec)
  * walk_pmd_range(); the eviction also report them when walking the rmap
  * in lru_gen_look_around().
  *
+ * A second pair of filters works one level above the first pair, over a whole
+ * 1 GiB subtree (a PUD): BLOOM_FILTER_PUD next to BLOOM_FILTER_PMD. A false
+ * positive at the PMD level only costs a PTE walk when the PUD level also
+ * passes. A false positive at the PUD level is rare, because it holds far
+ * fewer keys, but it costs 512 PMD walks. So both levels keep the same m and
+ * k, even though the PUD level holds much fewer keys.
+ *
  * For future optimizations:
- * 1. It's not necessary to keep both filters all the time. The spare one can be
- *    freed after the RCU grace period and reallocated if needed again.
+ * 1. It's not necessary to keep both filters of a level all the time.
+ *    The spare one can be freed after the RCU grace period and reallocated
+ *    if needed again. Now: two levels of double buffering take 16 KiB
+ *    per lruvec.
  * 2. And when reallocating, it's worth scaling its size according to the number
  *    of inserted entries in the other filter, to reduce the memory overhead on
  *    small systems and false positives on large systems.
@@ -3110,8 +3119,10 @@ done:
 
 	spin_unlock(&mm_list->lock);
 
-	if (mm && first)
+	if (mm && first) {
 		reset_bloom_filter(mm_state, BLOOM_FILTER_PMD, walk->seq + 1);
+		reset_bloom_filter(mm_state, BLOOM_FILTER_PUD, walk->seq + 1);
+	}
 
 	if (*iter)
 		mmdrop(*iter);
@@ -3623,11 +3634,12 @@ restart:
 	return suitable_to_scan(total, young);
 }
 
-static void walk_pmd_range_locked(pud_t *pud, unsigned long addr, struct vm_area_struct *vma,
+static bool walk_pmd_range_locked(pud_t *pud, unsigned long addr, struct vm_area_struct *vma,
 				  struct mm_walk *args, unsigned long *bitmap, unsigned long *first)
 {
 	int i;
 	bool dirty;
+	bool young = false;
 	pmd_t *pmd;
 	spinlock_t *ptl;
 	struct folio *last = NULL;
@@ -3641,13 +3653,13 @@ static void walk_pmd_range_locked(pud_t *pud, unsigned long addr, struct vm_area
 	if (*first == -1) {
 		*first = addr;
 		bitmap_zero(bitmap, MIN_LRU_BATCH);
-		return;
+		return false;
 	}
 
 	i = addr == -1 ? 0 : pmd_index(addr) - pmd_index(*first);
 	if (i && i <= MIN_LRU_BATCH) {
 		__set_bit(i - 1, bitmap);
-		return;
+		return false;
 	}
 
 	pmd = pmd_offset(pud, *first);
@@ -3697,6 +3709,7 @@ static void walk_pmd_range_locked(pud_t *pud, unsigned long addr, struct vm_area
 			dirty = true;
 
 		walk->mm_stats[MM_LEAF_YOUNG]++;
+		young = true;
 next:
 		i = i > MIN_LRU_BATCH ? 0 : find_next_bit(bitmap, MIN_LRU_BATCH, i) + 1;
 	} while (i <= MIN_LRU_BATCH);
@@ -3707,12 +3720,15 @@ next:
 	spin_unlock(ptl);
 done:
 	*first = -1;
+
+	return young;
 }
 
-static void walk_pmd_range(pud_t *pud, unsigned long start, unsigned long end,
+static bool walk_pmd_range(pud_t *pud, unsigned long start, unsigned long end,
 			   struct mm_walk *args)
 {
 	int i;
+	bool young = false;
 	pmd_t *pmd;
 	unsigned long next;
 	unsigned long addr;
@@ -3750,7 +3766,8 @@ restart:
 			walk->mm_stats[MM_LEAF_TOTAL]++;
 
 			if (pfn != -1)
-				walk_pmd_range_locked(pud, addr, vma, args, bitmap, &first);
+				young |= walk_pmd_range_locked(pud, addr, vma, args,
+							       bitmap, &first);
 			continue;
 		}
 
@@ -3772,15 +3789,18 @@ restart:
 			continue;
 
 		walk->mm_stats[MM_NONLEAF_ADDED]++;
+		young = true;
 
 		/* carry over to the next generation */
 		update_bloom_filter(mm_state, BLOOM_FILTER_PMD, walk->seq + 1, pmd + i);
 	}
 
-	walk_pmd_range_locked(pud, -1, vma, args, bitmap, &first);
+	young |= walk_pmd_range_locked(pud, -1, vma, args, bitmap, &first);
 
 	if (i < PTRS_PER_PMD && get_next_vma(PUD_MASK, PMD_SIZE, args, &start, &end))
 		goto restart;
+
+	return young;
 }
 
 static int walk_pud_range(p4d_t *p4d, unsigned long start, unsigned long end,
@@ -3791,6 +3811,7 @@ static int walk_pud_range(p4d_t *p4d, unsigned long start, unsigned long end,
 	unsigned long addr;
 	unsigned long next;
 	struct lru_gen_mm_walk *walk = args->private;
+	struct lru_gen_mm_state *mm_state = get_mm_state(walk->lruvec);
 
 	VM_WARN_ON_ONCE(p4d_leaf(*p4d));
 
@@ -3798,13 +3819,29 @@ static int walk_pud_range(p4d_t *p4d, unsigned long start, unsigned long end,
 restart:
 	for (i = pud_index(start), addr = start; addr != end; i++, addr = next) {
 		pud_t val = pudp_get(pud + i);
+		void *pud_key;
 
 		next = pud_addr_end(addr, end);
 
 		if (!pud_present(val) || WARN_ON_ONCE(pud_leaf(val)))
 			continue;
 
-		walk_pmd_range(pud + i, addr, next, args);
+		/*
+		 * Use (mm, PUD-aligned address) as the filter key instead of
+		 * the page table pointer. It is stable across the aging walk
+		 * and the rmap feedback path, and avoids walking the page
+		 * tables in lru_gen_look_around().
+		 */
+		pud_key = (void *)((unsigned long)args->mm ^ (addr & PUD_MASK));
+
+		/* Skip a subtree that had nothing young for this lruvec last gen */
+		if (!walk->force_scan &&
+		    !test_bloom_filter(mm_state, BLOOM_FILTER_PUD, walk->seq, pud_key))
+			continue;
+
+		if (walk_pmd_range(pud + i, addr, next, args))
+			update_bloom_filter(mm_state, BLOOM_FILTER_PUD, walk->seq + 1,
+					    pud_key);
 
 		if (need_resched() || walk->batched >= MAX_LRU_BATCH) {
 			end = (addr | ~PUD_MASK) + 1;
@@ -4334,6 +4371,39 @@ static void lru_gen_age_node(struct pglist_data *pgdat, struct scan_control *sc)
  * the PTE table to the Bloom filter. This forms a feedback loop between the
  * eviction and the aging.
  */
+/*
+ * Mark the PUD covering addr as young for lruvec, so that the PUD-level filter
+ * walks that 1 GiB subtree in the next generation.
+ */
+static void lru_gen_update_pud_filter(struct lruvec *lruvec, struct mm_struct *mm,
+				      unsigned long addr)
+{
+	struct lru_gen_mm_state *mm_state = get_mm_state(lruvec);
+	unsigned long max_seq;
+
+	if (!mm_state)
+		return;
+
+	max_seq = READ_ONCE(lruvec->lrugen.max_seq);
+	update_bloom_filter(mm_state, BLOOM_FILTER_PUD, max_seq,
+			    (void *)((unsigned long)mm ^ (addr & PUD_MASK)));
+}
+
+/*
+ * Same for a PMD-mapped folio: folio_referenced_one() takes the
+ * pmdp_clear_flush_young_notify() branch for those and never reaches
+ * lru_gen_look_around(), so without this a PUD holding only THPs stays
+ * suppressed once it has been skipped for one generation.
+ */
+void lru_gen_mark_pud(struct mm_struct *mm, struct folio *folio, unsigned long addr)
+{
+	struct mem_cgroup *memcg = get_mem_cgroup_from_folio(folio);
+
+	lru_gen_update_pud_filter(mem_cgroup_lruvec(memcg, folio_pgdat(folio)),
+				  mm, addr);
+	mem_cgroup_put(memcg);
+}
+
 bool lru_gen_look_around(struct page_vma_mapped_walk *pvmw, unsigned int nr)
 {
 	int i;
@@ -4435,9 +4505,12 @@ bool lru_gen_look_around(struct page_vma_mapped_walk *pvmw, unsigned int nr)
 	lazy_mmu_mode_disable();
 
 	/* feedback from rmap walkers to page table walkers */
-	if (mm_state && suitable_to_scan(i, young))
-		update_bloom_filter(mm_state, BLOOM_FILTER_PMD,
-				    READ_ONCE(lruvec->lrugen.max_seq), pvmw->pmd);
+	if (mm_state && suitable_to_scan(i, young)) {
+		unsigned long max_seq = READ_ONCE(lruvec->lrugen.max_seq);
+
+		update_bloom_filter(mm_state, BLOOM_FILTER_PMD, max_seq, pvmw->pmd);
+		lru_gen_update_pud_filter(lruvec, vma->vm_mm, pvmw->address);
+	}
 
 	mem_cgroup_put(memcg);
 
