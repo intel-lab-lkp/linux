@@ -43,7 +43,6 @@ struct fib6_cleaner {
 	struct fib6_walker w;
 	struct net *net;
 	int (*func)(struct fib6_info *, void *arg);
-	int sernum;
 	void *arg;
 	bool skip_notify;
 };
@@ -123,21 +122,6 @@ static void fib6_walkers_skip_rt(struct net *net, struct fib6_info *rt)
 	fib6_walkers_replace_leaf(net, rt, next);
 }
 
-static int fib6_new_sernum(struct net *net)
-{
-	int new, old = atomic_read(&net->ipv6.fib6_sernum);
-
-	do {
-		new = old < INT_MAX ? old + 1 : 1;
-	} while (!atomic_try_cmpxchg(&net->ipv6.fib6_sernum, &old, new));
-
-	return new;
-}
-
-enum {
-	FIB6_NO_SERNUM_CHANGE = 0,
-};
-
 void fib6_update_sernum(struct net *net, struct fib6_info *f6i)
 {
 	struct fib6_node *fn;
@@ -145,7 +129,7 @@ void fib6_update_sernum(struct net *net, struct fib6_info *f6i)
 	fn = rcu_dereference_protected(f6i->fib6_node,
 			lockdep_is_held(&f6i->fib6_table->tb6_lock));
 	if (fn)
-		WRITE_ONCE(fn->fn_sernum, fib6_new_sernum(net));
+		WRITE_ONCE(fn->fn_sernum, rt_genid_bump_ipv6(net));
 }
 
 /* Tell route dumps that an exception was added under @f6i without
@@ -1464,7 +1448,7 @@ static void __fib6_update_sernum_upto_root(struct fib6_info *rt,
 
 void fib6_update_sernum_upto_root(struct net *net, struct fib6_info *rt)
 {
-	__fib6_update_sernum_upto_root(rt, fib6_new_sernum(net));
+	__fib6_update_sernum_upto_root(rt, rt_genid_bump_ipv6(net));
 }
 
 /*
@@ -1595,7 +1579,7 @@ int fib6_add(struct fib6_node *root, struct fib6_info *rt,
 			fib6_info_release(iter);
 		}
 
-		__fib6_update_sernum_upto_root(rt, fib6_new_sernum(info->nl_net));
+		__fib6_update_sernum_upto_root(rt, rt_genid_bump_ipv6(info->nl_net));
 
 		if (rt->fib6_flags & RTF_EXPIRES)
 			fib6_add_gc_list(rt);
@@ -2282,16 +2266,6 @@ static int fib6_clean_node(struct fib6_walker *w)
 		.skip_notify = c->skip_notify,
 	};
 
-	if (c->sernum != FIB6_NO_SERNUM_CHANGE &&
-	    READ_ONCE(w->node->fn_sernum) != c->sernum)
-		WRITE_ONCE(w->node->fn_sernum, c->sernum);
-
-	if (!c->func) {
-		WARN_ON_ONCE(c->sernum == FIB6_NO_SERNUM_CHANGE);
-		w->leaf = NULL;
-		return 0;
-	}
-
 	for_each_fib6_walker_rt(w) {
 		res = c->func(rt, c->arg);
 		if (res == -1) {
@@ -2331,7 +2305,7 @@ static int fib6_clean_node(struct fib6_walker *w)
 
 static void fib6_clean_tree(struct net *net, struct fib6_node *root,
 			    int (*func)(struct fib6_info *, void *arg),
-			    int sernum, void *arg, bool skip_notify)
+			    void *arg, bool skip_notify)
 {
 	struct fib6_cleaner c;
 
@@ -2341,7 +2315,6 @@ static void fib6_clean_tree(struct net *net, struct fib6_node *root,
 	c.w.skip = 0;
 	c.w.skip_in_node = 0;
 	c.func = func;
-	c.sernum = sernum;
 	c.arg = arg;
 	c.net = net;
 	c.skip_notify = skip_notify;
@@ -2351,7 +2324,7 @@ static void fib6_clean_tree(struct net *net, struct fib6_node *root,
 
 static void __fib6_clean_all(struct net *net,
 			     int (*func)(struct fib6_info *, void *),
-			     int sernum, void *arg, bool skip_notify)
+			     void *arg, bool skip_notify)
 {
 	struct fib6_table *table;
 	struct hlist_head *head;
@@ -2363,7 +2336,7 @@ static void __fib6_clean_all(struct net *net,
 		hlist_for_each_entry_rcu(table, head, tb6_hlist) {
 			spin_lock_bh(&table->tb6_lock);
 			fib6_clean_tree(net, &table->tb6_root,
-					func, sernum, arg, skip_notify);
+					func, arg, skip_notify);
 			spin_unlock_bh(&table->tb6_lock);
 		}
 	}
@@ -2373,21 +2346,14 @@ static void __fib6_clean_all(struct net *net,
 void fib6_clean_all(struct net *net, int (*func)(struct fib6_info *, void *),
 		    void *arg)
 {
-	__fib6_clean_all(net, func, FIB6_NO_SERNUM_CHANGE, arg, false);
+	__fib6_clean_all(net, func, arg, false);
 }
 
 void fib6_clean_all_skip_notify(struct net *net,
 				int (*func)(struct fib6_info *, void *),
 				void *arg)
 {
-	__fib6_clean_all(net, func, FIB6_NO_SERNUM_CHANGE, arg, true);
-}
-
-static void fib6_flush_trees(struct net *net)
-{
-	int new_sernum = fib6_new_sernum(net);
-
-	__fib6_clean_all(net, NULL, new_sernum, NULL, false);
+	__fib6_clean_all(net, func, arg, true);
 }
 
 /*
@@ -2624,7 +2590,6 @@ int __init fib6_init(void)
 	if (ret)
 		goto out_unregister_subsys;
 
-	__fib6_flush_trees = fib6_flush_trees;
 out:
 	return ret;
 
