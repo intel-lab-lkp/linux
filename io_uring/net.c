@@ -848,7 +848,8 @@ int io_recvmsg_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 	}
 
 	if (sr->flags & IORING_RECVSEND_BUNDLE) {
-		if (req->opcode == IORING_OP_RECVMSG)
+		if (req->opcode == IORING_OP_RECVMSG &&
+		    sr->flags & IORING_RECV_MULTISHOT)
 			return -EINVAL;
 	}
 
@@ -917,7 +918,8 @@ static inline bool io_recv_finish(struct io_kiocb *req,
 		 * If more is available AND it was a full transfer, retry and
 		 * append to this one
 		 */
-		if (!(sr->flags & IORING_RECV_NO_RETRY) &&
+		if (req->opcode != IORING_OP_RECVMSG &&
+		    !(sr->flags & IORING_RECV_NO_RETRY) &&
 		    kmsg->msg.msg_inq > 1 && this_ret > 0 &&
 		    !iov_iter_count(&kmsg->msg.msg_iter)) {
 			req->cqe.flags = cflags & ~CQE_F_MASK;
@@ -1079,29 +1081,65 @@ static int io_recv_bundle_peek(struct io_kiocb *req,
 	return nr_iovs;
 }
 
+static int io_recvmsg_bundle_select(struct io_kiocb *req,
+				    struct io_async_msghdr *kmsg,
+				    struct io_br_sel *sel)
+{
+	struct io_sr_msg *sr = io_kiocb_to_cmd(req, struct io_sr_msg);
+	struct buf_sel_arg arg;
+	int nr_iovs;
+
+	nr_iovs = io_recv_bundle_peek(req, kmsg, sel, &arg, sr->len);
+	if (unlikely(nr_iovs <= 0))
+		return !nr_iovs ? -ENOBUFS : nr_iovs;
+
+	if (!sel->buf_list)
+		arg.out_len = arg.iovs[0].iov_len;
+
+	if (nr_iovs == 1)
+		iov_iter_ubuf(&kmsg->msg.msg_iter, ITER_DEST,
+			      arg.iovs[0].iov_base, arg.out_len);
+	else
+		iov_iter_init(&kmsg->msg.msg_iter, ITER_DEST, arg.iovs,
+			      nr_iovs, arg.out_len);
+	return 0;
+}
+
 static int io_recvmsg_buf_select(struct io_kiocb *req,
 				 struct io_async_msghdr *kmsg,
 				 struct io_br_sel *sel,
 				 unsigned int issue_flags)
 {
 	struct io_sr_msg *sr = io_kiocb_to_cmd(req, struct io_sr_msg);
-	size_t len = sr->len;
 	int ret;
 
-	*sel = io_buffer_select(req, &len, sr->buf_group, issue_flags);
-	if (!sel->addr)
-		return -ENOBUFS;
-	len = min_t(size_t, len, MAX_RW_COUNT);
-
-	if (req->flags & REQ_F_APOLL_MULTISHOT) {
-		ret = io_recvmsg_prep_multishot(kmsg, sr, &sel->addr, &len);
-		if (ret) {
+	if (!(issue_flags & IO_URING_F_UNLOCKED) &&
+	    sr->flags & IORING_RECVSEND_BUNDLE) {
+		ret = io_recvmsg_bundle_select(req, kmsg, sel);
+		if (unlikely(ret < 0)) {
 			io_kbuf_recycle(req, sel->buf_list, issue_flags);
 			return ret;
 		}
+	} else {
+		size_t len = sr->len;
+
+		*sel = io_buffer_select(req, &len, sr->buf_group, issue_flags);
+		if (!sel->addr)
+			return -ENOBUFS;
+		len = min_t(size_t, len, MAX_RW_COUNT);
+
+		if (req->flags & REQ_F_APOLL_MULTISHOT) {
+			ret = io_recvmsg_prep_multishot(kmsg, sr, &sel->addr,
+							&len);
+			if (ret) {
+				io_kbuf_recycle(req, sel->buf_list, issue_flags);
+				return ret;
+			}
+		}
+
+		iov_iter_ubuf(&kmsg->msg.msg_iter, ITER_DEST, sel->addr, len);
 	}
 
-	iov_iter_ubuf(&kmsg->msg.msg_iter, ITER_DEST, sel->addr, len);
 	return 0;
 }
 
