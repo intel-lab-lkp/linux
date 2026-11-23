@@ -1607,24 +1607,6 @@ err_subdev:
 	return err;
 }
 
-static void tc358746_remove(struct i2c_client *client)
-{
-	struct v4l2_subdev *sd = i2c_get_clientdata(client);
-	struct tc358746 *tc358746 = to_tc358746(sd);
-
-	v4l2_subdev_cleanup(sd);
-	v4l2_ctrl_handler_free(&tc358746->ctrl_hdl);
-	v4l2_fwnode_endpoint_free(&tc358746->csi_vep);
-	v4l2_async_nf_unregister(&tc358746->notifier);
-	v4l2_async_nf_cleanup(&tc358746->notifier);
-	v4l2_async_unregister_subdev(sd);
-	media_entity_cleanup(&sd->entity);
-
-	pm_runtime_disable(sd->dev);
-	pm_runtime_set_suspended(sd->dev);
-	pm_runtime_dont_use_autosuspend(sd->dev);
-}
-
 /*
  * This function has been created just to avoid a smatch warning,
  * please do not merge it into tc358746_suspend until you have
@@ -1690,6 +1672,24 @@ err:
 	regulator_bulk_disable(ARRAY_SIZE(tc358746_supplies),
 			       tc358746->supplies);
 	return err;
+}
+
+static void tc358746_remove(struct i2c_client *client)
+{
+	struct v4l2_subdev *sd = i2c_get_clientdata(client);
+	struct tc358746 *tc358746 = to_tc358746(sd);
+
+	v4l2_subdev_cleanup(sd);
+	v4l2_ctrl_handler_free(&tc358746->ctrl_hdl);
+	v4l2_fwnode_endpoint_free(&tc358746->csi_vep);
+	v4l2_async_nf_unregister(&tc358746->notifier);
+	v4l2_async_nf_cleanup(&tc358746->notifier);
+	v4l2_async_unregister_subdev(sd);
+	media_entity_cleanup(&sd->entity);
+
+	pm_runtime_disable(sd->dev);
+	pm_runtime_set_suspended(sd->dev);
+	pm_runtime_dont_use_autosuspend(sd->dev);
 }
 
 static DEFINE_RUNTIME_DEV_PM_OPS(tc358746_pm_ops, tc358746_suspend,
