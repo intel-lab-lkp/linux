@@ -181,9 +181,9 @@ static int pinctrl_scmi_map_pinconf_arg_get(enum pin_config_param param, u32 *va
 		return -EINVAL;
 
 	if (param == PIN_CONFIG_DRIVE_STRENGTH) {
-		if (*value % MILLI)
+		if (*value % (MICRO / MILLI))
 			return -EINVAL;
-		*value /= MILLI;
+		*value /= (MICRO / MILLI);
 	}
 
 	return 0;
@@ -228,7 +228,7 @@ static int pinctrl_scmi_map_pinconf_type_set(enum pin_config_param param,
 		*arg = 1;
 
 	if (param == PIN_CONFIG_DRIVE_STRENGTH) {
-		if (check_mul_overflow(*arg, MILLI, arg))
+		if (check_mul_overflow(*arg, MICRO / MILLI, arg))
 			return -EINVAL;
 	}
 
