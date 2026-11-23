@@ -21,6 +21,7 @@
 #include <linux/property.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
+#include <linux/units.h>
 #include <linux/wait.h>
 
 #include <linux/iio/iio.h>
@@ -1094,7 +1095,7 @@ static int at91_adc_probe(struct platform_device *pdev)
 	 */
 	mstrclk = clk_get_rate(st->clk);
 	adc_clk = clk_get_rate(st->adc_clk);
-	adc_clk_khz = adc_clk / 1000;
+	adc_clk_khz = adc_clk / HZ_PER_KHZ;
 
 	dev_dbg(dev, "Master clock is set as: %d Hz, adc_clk should set as: %d Hz\n",
 		mstrclk, adc_clk);
