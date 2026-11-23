@@ -1597,6 +1597,10 @@ static void isl7998x_remove(struct i2c_client *client)
 	struct isl7998x *isl7998x = i2c_to_isl7998x(client);
 
 	pm_runtime_disable(&client->dev);
+	if (!pm_runtime_status_suspended(&client->dev)) {
+		isl7998x_runtime_suspend(&client->dev);
+		pm_runtime_set_suspended(&client->dev);
+	}
 	v4l2_async_unregister_subdev(&isl7998x->subdev);
 	isl7998x_remove_controls(isl7998x);
 	media_entity_cleanup(&isl7998x->subdev.entity);
