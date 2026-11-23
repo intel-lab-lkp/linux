@@ -486,7 +486,7 @@ int tb_port_state(struct tb_port *port)
  * @port: Port to wait
  * @wait_if_unplugged: Wait also when port is unplugged
  *
- * Wait up to 1 second for a port to reach state TB_PORT_UP. If
+ * Wait up to 2 seconds for a port to reach state TB_PORT_UP. If
  * wait_if_unplugged is set then we also wait if the port is in state
  * TB_PORT_UNPLUGGED (it takes a while for the device to be registered after
  * switch resume). Otherwise we only wait if a device is registered but the link
@@ -494,13 +494,13 @@ int tb_port_state(struct tb_port *port)
  *
  * Return:
  * * %0 - If the port is not connected or failed to reach
- *   state %TB_PORT_UP within one second.
+ *   state %TB_PORT_UP within two seconds.
  * * %1 - If the port is connected and in state %TB_PORT_UP.
  * * Negative errno - An error occurred.
  */
 int tb_wait_for_port(struct tb_port *port, bool wait_if_unplugged)
 {
-	int retries = 10;
+	int retries = 20;
 	int state;
 	if (!port->cap_phy) {
 		tb_port_WARN(port, "does not have PHY\n");
