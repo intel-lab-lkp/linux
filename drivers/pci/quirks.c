@@ -81,10 +81,15 @@ static bool pcie_lbms_seen(struct pci_dev *dev, u16 lnksta)
  * Restrict the speed to 2.5GT/s then with the Target Link Speed field,
  * request a retrain and check the result.
  *
- * If this turns out successful, or where a 2.5GT/s speed restriction has
- * been previously arranged by the firmware and the port reports its link
- * already being up, lift the restriction, in a hope it is safe to do so,
- * letting the devices negotiate a higher speed.
+ * If this turns out successful and the device is one where lifting the
+ * restriction is known to be safe, then lift it and let the devices
+ * negotiate a higher speed.
+ *
+ * Do not lift the restriction on a link that firmware has already brought
+ * up at 2.5GT/s merely because the port itself could go faster: a retrain
+ * at a speed the device behind the port does not support takes that device
+ * off the bus, and it does not come back.  For a display device this means
+ * a blank local console with no software-recoverable state.
  *
  * Otherwise revert the speed to the original setting and request a retrain
  * again to remove any residual state, ignoring the result as it's supposed
@@ -95,6 +100,10 @@ static bool pcie_lbms_seen(struct pci_dev *dev, u16 lnksta)
  */
 int pcie_failed_link_retrain(struct pci_dev *dev)
 {
+	static const struct pci_device_id ids[] = {
+		{ PCI_VDEVICE(ASMEDIA, 0x2824) },	/* ASMedia ASM2824 */
+		{}
+	};
 	u16 lnksta, lnkctl2, oldlnkctl2;
 	enum pci_bus_speed speed_cap;
 	int ret = -ENOTTY;
@@ -121,7 +130,8 @@ int pcie_failed_link_retrain(struct pci_dev *dev)
 	}
 
 	pcie_capability_read_word(dev, PCI_EXP_LNKCTL2, &lnkctl2);
-	if ((lnkctl2 & PCI_EXP_LNKCTL2_TLS) == PCI_EXP_LNKCTL2_TLS_2_5GT) {
+	if ((lnkctl2 & PCI_EXP_LNKCTL2_TLS) == PCI_EXP_LNKCTL2_TLS_2_5GT &&
+	    pci_match_id(ids, dev)) {
 		pci_info(dev, "removing 2.5GT/s downstream link speed restriction\n");
 		ret = pcie_set_target_speed(dev, speed_cap, false);
 		if (ret)
