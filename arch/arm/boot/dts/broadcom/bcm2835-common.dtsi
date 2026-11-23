@@ -130,7 +130,8 @@
 			clocks = <&clocks BCM2835_PLLH_PIX>,
 				 <&clocks BCM2835_CLOCK_HSM>;
 			clock-names = "pixel", "hdmi";
-			dmas = <&dma 17>;
+			/* DREQ 17, no AXI write response wait, wide source reads */
+			dmas = <&dma (17 | (1 << 27) | (1 << 24))>;
 			dma-names = "audio-rx";
 			status = "disabled";
 		};
