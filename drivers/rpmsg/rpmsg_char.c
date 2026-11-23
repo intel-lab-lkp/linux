@@ -77,6 +77,7 @@ struct rpmsg_eptdev {
 int rpmsg_chrdev_eptdev_destroy(struct device *dev, void *data)
 {
 	struct rpmsg_eptdev *eptdev = dev_to_eptdev(dev);
+	unsigned long flags;
 
 	mutex_lock(&eptdev->ept_lock);
 	if (!eptdev->rpdev) {
@@ -89,7 +90,9 @@ int rpmsg_chrdev_eptdev_destroy(struct device *dev, void *data)
 		/* The default endpoint is released by the rpmsg core */
 		if (!eptdev->default_ept)
 			rpmsg_destroy_ept(eptdev->ept);
+		spin_lock_irqsave(&eptdev->queue_lock, flags);
 		eptdev->ept = NULL;
+		spin_unlock_irqrestore(&eptdev->queue_lock, flags);
 	}
 	mutex_unlock(&eptdev->ept_lock);
 
@@ -108,19 +111,31 @@ static int rpmsg_ept_cb(struct rpmsg_device *rpdev, void *buf, int len,
 {
 	struct rpmsg_eptdev *eptdev = priv;
 	struct sk_buff *skb;
+	unsigned long flags;
 
 	if (!eptdev)
 		return 0;
 
+	spin_lock_irqsave(&eptdev->queue_lock, flags);
+	/*
+	 * A channel's default endpoint stays bound while the device is closed,
+	 * so this callback keeps running. Queuing now would grow the queue
+	 * without limit until the device is opened again. Drop the message.
+	 */
+	if (eptdev->default_ept && !eptdev->ept) {
+		spin_unlock_irqrestore(&eptdev->queue_lock, flags);
+		return 0;
+	}
+
 	skb = alloc_skb(len, GFP_ATOMIC);
-	if (!skb)
+	if (!skb) {
+		spin_unlock_irqrestore(&eptdev->queue_lock, flags);
 		return -ENOMEM;
+	}
 
 	skb_put_data(skb, buf, len);
-
-	spin_lock(&eptdev->queue_lock);
 	skb_queue_tail(&eptdev->queue, skb);
-	spin_unlock(&eptdev->queue_lock);
+	spin_unlock_irqrestore(&eptdev->queue_lock, flags);
 
 	/* wake up any blocking processes, waiting for new data */
 	wake_up_interruptible(&eptdev->readq);
@@ -149,6 +164,7 @@ static int rpmsg_eptdev_open(struct inode *inode, struct file *filp)
 	struct rpmsg_endpoint *ept;
 	struct rpmsg_device *rpdev = eptdev->rpdev;
 	struct device *dev = &eptdev->dev;
+	unsigned long flags;
 
 	mutex_lock(&eptdev->ept_lock);
 	if (eptdev->ept) {
@@ -180,7 +196,9 @@ static int rpmsg_eptdev_open(struct inode *inode, struct file *filp)
 	}
 
 	ept->flow_cb = rpmsg_ept_flow_cb;
+	spin_lock_irqsave(&eptdev->queue_lock, flags);
 	eptdev->ept = ept;
+	spin_unlock_irqrestore(&eptdev->queue_lock, flags);
 	filp->private_data = eptdev;
 	mutex_unlock(&eptdev->ept_lock);
 
@@ -191,19 +209,22 @@ static int rpmsg_eptdev_release(struct inode *inode, struct file *filp)
 {
 	struct rpmsg_eptdev *eptdev = cdev_to_eptdev(inode->i_cdev);
 	struct device *dev = &eptdev->dev;
+	unsigned long flags;
 
 	/* Close the endpoint, if it's not already destroyed by the parent */
 	mutex_lock(&eptdev->ept_lock);
 	if (eptdev->ept) {
 		if (!eptdev->default_ept)
 			rpmsg_destroy_ept(eptdev->ept);
+		spin_lock_irqsave(&eptdev->queue_lock, flags);
 		eptdev->ept = NULL;
+		spin_unlock_irqrestore(&eptdev->queue_lock, flags);
 	}
-	mutex_unlock(&eptdev->ept_lock);
 	eptdev->remote_flow_updated = false;
 
 	/* Discard all SKBs */
 	skb_queue_purge(&eptdev->queue);
+	mutex_unlock(&eptdev->ept_lock);
 
 	put_device(dev);
 
