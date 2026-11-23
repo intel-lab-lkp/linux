@@ -2874,14 +2874,13 @@ static void ip6_link_failure(struct sk_buff *skb)
 			rt6_remove_exception_rt(rt);
 		} else {
 			struct fib6_info *from;
-			struct fib6_node *fn;
 
+			/* Force sockets using this dst to look the route up
+			 * again; 0 never matches the netns generation.
+			 */
 			from = rcu_dereference(rt->from);
-			if (from) {
-				fn = rcu_dereference(from->fib6_node);
-				if (fn && (rt->rt6i_flags & RTF_DEFAULT))
-					WRITE_ONCE(fn->fn_sernum, -1);
-			}
+			if (from && (rt->rt6i_flags & RTF_DEFAULT))
+				WRITE_ONCE(rt->sernum, 0);
 		}
 		rcu_read_unlock();
 	}
