@@ -423,9 +423,20 @@ bool kvm_riscv_gstage_unmap_range(struct kvm_gstage *gstage,
 	bool found_leaf;
 	unsigned long page_size;
 	gpa_t addr = start, end = start + size;
+	gfn_t last_flush_gfn = start >> PAGE_SHIFT;
 	bool flush = false;
+	bool pending_flush = false;
+
+	if (!(gstage->flags & KVM_GSTAGE_FLAGS_LOCAL))
+		lockdep_assert_held_write(&gstage->kvm->mmu_lock);
 
 	while (addr < end) {
+		/* A concurrent teardown may have freed the root while unlocked. */
+		if (!(gstage->flags & KVM_GSTAGE_FLAGS_LOCAL) &&
+		    (!gstage->kvm->arch.pgd ||
+		     gstage->pgd != gstage->kvm->arch.pgd))
+			break;
+
 		found_leaf = kvm_riscv_gstage_get_leaf(gstage, addr, &ptep, &ptep_level);
 		ret = gstage_level_to_page_size(gstage, ptep_level, &page_size);
 		if (ret)
@@ -434,10 +445,11 @@ bool kvm_riscv_gstage_unmap_range(struct kvm_gstage *gstage,
 		if (!found_leaf) {
 			addr = ALIGN(addr + 1, page_size);
 		} else {
-			if (!(addr & (page_size - 1)) && ((end - addr) >= page_size))
-				flush |= kvm_riscv_gstage_op_pte(gstage, addr, ptep,
+			if (!(addr & (page_size - 1)) && ((end - addr) >= page_size)) {
+				pending_flush |= kvm_riscv_gstage_op_pte(gstage, addr, ptep,
 								 ptep_level, GSTAGE_OP_CLEAR);
-			else {
+				flush |= pending_flush;
+			} else {
 				WARN_ONCE(1, "Skip unmap range addr: %#llx, end: %#llx, page_size: %#lx\n",
 						addr, end, page_size);
 			}
@@ -448,9 +460,18 @@ bool kvm_riscv_gstage_unmap_range(struct kvm_gstage *gstage,
 		/*
 		 * If the range is too large, release the kvm->mmu_lock
 		 * to prevent starvation and lockup detector warnings.
+		 * Flush first so another invalidator cannot miss cleared PTEs.
 		 */
-		if (!(gstage->flags & KVM_GSTAGE_FLAGS_LOCAL) && may_block && addr < end)
+		if (!(gstage->flags & KVM_GSTAGE_FLAGS_LOCAL) && may_block && addr < end &&
+		    (need_resched() || rwlock_needbreak(&gstage->kvm->mmu_lock))) {
+			if (pending_flush) {
+				kvm_flush_remote_tlbs_range(gstage->kvm, last_flush_gfn,
+							    (addr >> PAGE_SHIFT) - last_flush_gfn);
+				pending_flush = false;
+			}
+			last_flush_gfn = addr >> PAGE_SHIFT;
 			cond_resched_rwlock_write(&gstage->kvm->mmu_lock);
+		}
 	}
 
 	return flush;

@@ -104,13 +104,21 @@ static inline unsigned long kvm_riscv_gstage_mode(unsigned long pgd_levels)
 	}
 }
 
-static inline void kvm_riscv_gstage_init(struct kvm_gstage *gstage, struct kvm *kvm)
+/* The caller must hold mmu_lock while accessing the shared page tables. */
+static inline bool kvm_riscv_gstage_init(struct kvm_gstage *gstage, struct kvm *kvm)
 {
+	lockdep_assert_held(&kvm->mmu_lock);
+
+	if (!kvm->arch.pgd)
+		return false;
+
 	gstage->kvm = kvm;
 	gstage->flags = 0;
 	gstage->vmid = READ_ONCE(kvm->arch.vmid.vmid);
 	gstage->pgd = kvm->arch.pgd;
 	gstage->pgd_levels = kvm->arch.pgd_levels;
+
+	return true;
 }
 
 #endif
