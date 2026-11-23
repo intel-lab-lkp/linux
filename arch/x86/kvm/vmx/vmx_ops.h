@@ -365,4 +365,13 @@ static inline void ept_sync_context(u64 eptp)
 		ept_sync_global();
 }
 
+/*
+ * The APX enumeration guarantees the presence of the extended fields. The host
+ * CPUID bit alone is sufficient to rely on it. eVMCS does not support them yet.
+ */
+static inline bool vmx_instr_info_extended(void)
+{
+	return cpu_feature_enabled(X86_FEATURE_APX) && !kvm_is_using_evmcs();
+}
+
 #endif /* __KVM_X86_VMX_INSN_H */
