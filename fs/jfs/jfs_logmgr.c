@@ -2279,9 +2279,11 @@ static void lbmIODone(struct bio *bio)
 	 *	Group Commit pageout:
 	 */
 	else if (bp->l_flag & lbmGC) {
+		/* lmPostGC() may free or requeue @bp. */
+		bp->l_flag |= lbmDONE;
 		LCACHE_UNLOCK(flags);
 		lmPostGC(bp);
-		LCACHE_LOCK(flags);		/* disable+lock */
+		return;
 	}
 
 	/*
