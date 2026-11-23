@@ -954,10 +954,11 @@ static int arm_smmu_cmdq_batch_submit(struct arm_smmu_device *smmu,
 					   cmds->num, true);
 }
 
-static void arm_smmu_page_response(struct device *dev, struct iopf_fault *unused,
+static void arm_smmu_page_response(struct device *dev, struct iopf_fault *evt,
 				   struct iommu_page_response *resp)
 {
 	struct arm_smmu_master *master = dev_iommu_priv_get(dev);
+	u32 sid = evt->fault.prm.private_data[0];
 	u8 resume_resp;
 
 	if (WARN_ON(!master->stall_enabled))
@@ -977,8 +978,7 @@ static void arm_smmu_page_response(struct device *dev, struct iopf_fault *unused
 	}
 
 	arm_smmu_cmdq_issue_cmd(master->smmu,
-				arm_smmu_make_cmd_resume(master->streams[0].id,
-							 resp->grpid,
+				arm_smmu_make_cmd_resume(sid, resp->grpid,
 							 resume_resp));
 	/*
 	 * Don't send a SYNC, it doesn't do anything for RESUME or PRI_RESP.
@@ -2164,6 +2164,7 @@ static int arm_smmu_handle_event(struct arm_smmu_device *smmu, u64 *evt,
 			.grpid = event->stag,
 			.perm = perm,
 			.addr = event->iova,
+			.private_data[0] = event->sid,
 		};
 
 		if (event->ssv) {
@@ -3312,10 +3313,6 @@ static int arm_smmu_enable_iopf(struct arm_smmu_master *master,
 	 */
 	if (!master->stall_enabled)
 		return 0;
-
-	/* We're not keeping track of SIDs in fault events */
-	if (master->num_streams != 1)
-		return -EOPNOTSUPP;
 
 	if (master->iopf_refcount) {
 		master->iopf_refcount++;
