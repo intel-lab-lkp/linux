@@ -49,6 +49,7 @@ struct rcu_tasks_percpu {
 	struct rcu_head barrier_q_head;
 	struct list_head rtp_blkd_tasks;
 	struct list_head rtp_exit_list;
+	struct list_head rtp_exit_cursor;
 	int cpu;
 	int index;
 	struct rcu_tasks *rtpp;
@@ -1068,7 +1069,6 @@ static void rcu_tasks_postscan(struct list_head *hop)
 		struct rcu_tasks_percpu *rtpcp = per_cpu_ptr(rcu_tasks.rtpcpu, cpu);
 		struct task_struct *t;
 		struct task_struct *t1;
-		struct list_head tmp;
 
 		raw_spin_lock_irq_rcu_node(rtpcp);
 		list_for_each_entry_safe(t, t1, &rtpcp->rtp_exit_list, rcu_tasks_exit_list) {
@@ -1081,14 +1081,15 @@ static void rcu_tasks_postscan(struct list_head *hop)
 				continue;
 
 			// Keep our place in the list while pausing.
-			// Nothing else traverses this list, so adding a
-			// bare list_head is OK.
-			list_add(&tmp, &t->rcu_tasks_exit_list);
+			// The cursor lives in rtpcp so that the exit-list
+			// visitors can recognize and skip it.
+			list_add(&rtpcp->rtp_exit_cursor, &t->rcu_tasks_exit_list);
 			raw_spin_unlock_irq_rcu_node(rtpcp);
 			cond_resched(); // For CONFIG_PREEMPT=n kernels
 			raw_spin_lock_irq_rcu_node(rtpcp);
-			t1 = list_entry(tmp.next, struct task_struct, rcu_tasks_exit_list);
-			list_del(&tmp);
+			t1 = list_entry(rtpcp->rtp_exit_cursor.next, struct task_struct,
+					rcu_tasks_exit_list);
+			list_del(&rtpcp->rtp_exit_cursor);
 			j = jiffies + 1;
 		}
 		raw_spin_unlock_irq_rcu_node(rtpcp);
@@ -1330,6 +1331,60 @@ void exit_tasks_rcu_finish(void)
 	raw_spin_lock_irqsave_rcu_node(rtpcp, flags);
 	list_del_init(&t->rcu_tasks_exit_list);
 	raw_spin_unlock_irqrestore_rcu_node(rtpcp, flags);
+}
+
+/*
+ * Call fn on every task on the exit lists, in place, with the per-CPU list
+ * lock held and interrupts disabled. fn must not sleep. Does not allocate.
+ * These are the tasks that have passed exit_tasks_rcu_start() but not
+ * exit_tasks_rcu_finish(). Once exit_notify() has run they are no longer on
+ * the task list, but they still run do_exit() and may sleep there.
+ */
+void rcu_tasks_visit_exiting(rcu_tasks_exiting_fn_t fn, void *arg)
+{
+	int cpu;
+	unsigned long flags;
+	struct task_struct *t;
+
+	for_each_possible_cpu(cpu) {
+		struct rcu_tasks_percpu *rtpcp = per_cpu_ptr(rcu_tasks.rtpcpu, cpu);
+
+		raw_spin_lock_irqsave_rcu_node(rtpcp, flags);
+		list_for_each_entry(t, &rtpcp->rtp_exit_list, rcu_tasks_exit_list) {
+			if (&t->rcu_tasks_exit_list == &rtpcp->rtp_exit_cursor)
+				continue;
+			fn(t, arg);
+		}
+		raw_spin_unlock_irqrestore_rcu_node(rtpcp, flags);
+	}
+}
+
+/*
+ * Copy up to max tasks on the exit lists into buf, taking a reference on
+ * each. Returns the number of tasks on the lists, which may exceed max.
+ */
+int rcu_tasks_snapshot_exiting(struct task_struct **buf, int max)
+{
+	int cpu, n = 0;
+	unsigned long flags;
+	struct task_struct *t;
+
+	for_each_possible_cpu(cpu) {
+		struct rcu_tasks_percpu *rtpcp = per_cpu_ptr(rcu_tasks.rtpcpu, cpu);
+
+		raw_spin_lock_irqsave_rcu_node(rtpcp, flags);
+		list_for_each_entry(t, &rtpcp->rtp_exit_list, rcu_tasks_exit_list) {
+			if (&t->rcu_tasks_exit_list == &rtpcp->rtp_exit_cursor)
+				continue;
+			if (n < max) {
+				get_task_struct(t);
+				buf[n] = t;
+			}
+			n++;
+		}
+		raw_spin_unlock_irqrestore_rcu_node(rtpcp, flags);
+	}
+	return n;
 }
 
 #else /* #ifdef CONFIG_TASKS_RCU */
