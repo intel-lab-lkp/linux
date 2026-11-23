@@ -17,6 +17,7 @@
 #include <linux/seq_file.h>
 #include <linux/input.h>
 #include <linux/slab.h>
+#include <linux/spinlock.h>
 #include <linux/acpi.h>
 #include <linux/dmi.h>
 #include <linux/platform_device.h>
@@ -203,6 +204,7 @@ struct acpi_button {
 	bool last_state;
 	ktime_t last_time;
 	bool suspended;
+	bool wakeup_pending;
 	bool lid_state_initialized;
 	bool gpe_enabled;
 };
@@ -474,6 +476,7 @@ static void acpi_button_notify(acpi_handle handle, u32 event, void *data)
 	struct acpi_device *device = button->adev;
 	struct input_dev *input;
 	int keycode;
+	bool suspended;
 
 	switch (event) {
 	case ACPI_BUTTON_NOTIFY_STATUS:
@@ -488,7 +491,16 @@ static void acpi_button_notify(acpi_handle handle, u32 event, void *data)
 
 	acpi_pm_wakeup_event(button->dev);
 
-	if (button->suspended || event == ACPI_BUTTON_NOTIFY_WAKE)
+	/*
+	 * Sample suspended once. Two separate READ_ONCE() calls can observe
+	 * different values if resume runs on another CPU, and then this path
+	 * either drops the event or emits both KEY_WAKEUP and KEY_POWER.
+	 */
+	suspended = smp_load_acquire(&button->suspended);
+	if (button->type == ACPI_BUTTON_TYPE_POWER && suspended)
+		smp_store_release(&button->wakeup_pending, true);
+
+	if (suspended || event == ACPI_BUTTON_NOTIFY_WAKE)
 		return;
 
 	input = button->input;
@@ -510,6 +522,12 @@ static void acpi_button_notify_run(void *data)
 
 static u32 acpi_button_event(void *data)
 {
+	struct acpi_button *button = data;
+
+	if (button->type == ACPI_BUTTON_TYPE_POWER &&
+	    smp_load_acquire(&button->suspended))
+		smp_store_release(&button->wakeup_pending, true);
+
 	acpi_os_execute(OSL_NOTIFY_HANDLER, acpi_button_notify_run, data);
 	return ACPI_INTERRUPT_HANDLED;
 }
@@ -519,7 +537,15 @@ static int acpi_button_suspend(struct device *dev)
 {
 	struct acpi_button *button = dev_get_drvdata(dev);
 
-	button->suspended = true;
+	/*
+	 * Clear wakeup_pending before marking suspended. Otherwise a power
+	 * button SCI between the two stores could set wakeup_pending and then
+	 * be overwritten here, losing a real wakeup. smp_wmb() makes that
+	 * order visible to the SCI and notify handlers on other CPUs.
+	 */
+	WRITE_ONCE(button->wakeup_pending, false);
+	smp_wmb();
+	WRITE_ONCE(button->suspended, true);
 	return 0;
 }
 
@@ -528,20 +554,61 @@ static int acpi_button_resume(struct device *dev)
 	struct acpi_button *button = dev_get_drvdata(dev);
 	struct input_dev *input;
 
-	button->suspended = false;
+	/*
+	 * Drain notify work queued while suspended so a late power-button
+	 * notify still observes suspended == true, sets wakeup_pending, and
+	 * does not synthesize KEY_POWER for userspace.
+	 */
+	acpi_os_wait_events_complete();
+
+	/*
+	 * Consume the fixed-button flag before combining it with
+	 * wakeup_pending. A short-circuit || would skip
+	 * acpi_sleep_pwr_btn_wakeup_pending() when wakeup_pending is already
+	 * true and leave the flag set for a later non-button resume. Only the
+	 * fixed power button owns that flag.
+	 *
+	 * Publish suspended == false with a release store, then sample
+	 * wakeup_pending again. A press that arrived after the first sample
+	 * still observed suspended == true and must be reported as KEY_WAKEUP
+	 * before the flag is cleared.
+	 */
+	if (button->type == ACPI_BUTTON_TYPE_POWER) {
+		bool from_button = READ_ONCE(button->wakeup_pending);
+		bool from_fixed = false;
+
+		if (button->adev->device_type == ACPI_BUS_TYPE_POWER_BUTTON)
+			from_fixed = acpi_sleep_pwr_btn_wakeup_pending();
+
+		if (from_button || from_fixed) {
+			input = button->input;
+			input_report_key(input, KEY_WAKEUP, 1);
+			input_sync(input);
+			input_report_key(input, KEY_WAKEUP, 0);
+			input_sync(input);
+		}
+		/* Drop the sample already reported, before publishing resume. */
+		WRITE_ONCE(button->wakeup_pending, false);
+	}
+
+	smp_store_release(&button->suspended, false);
+	smp_mb();
+	if (button->type == ACPI_BUTTON_TYPE_POWER &&
+	    smp_load_acquire(&button->wakeup_pending)) {
+		input = button->input;
+		input_report_key(input, KEY_WAKEUP, 1);
+		input_sync(input);
+		input_report_key(input, KEY_WAKEUP, 0);
+		input_sync(input);
+		WRITE_ONCE(button->wakeup_pending, false);
+	}
+
 	if (button->type == ACPI_BUTTON_TYPE_LID) {
 		button->last_state = !!acpi_lid_evaluate_state(ACPI_HANDLE(dev));
 		button->last_time = ktime_get();
 		acpi_lid_initialize_state(button);
 	}
 
-	if (button->type == ACPI_BUTTON_TYPE_POWER) {
-		input = button->input;
-		input_report_key(input, KEY_WAKEUP, 1);
-		input_sync(input);
-		input_report_key(input, KEY_WAKEUP, 0);
-		input_sync(input);
-	}
 	return 0;
 }
 #endif
