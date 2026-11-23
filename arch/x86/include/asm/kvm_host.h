@@ -211,6 +211,12 @@ enum kvm_reg {
 	NR_VCPU_TOTAL_REGS,
 };
 
+#ifdef CONFIG_X86_64
+#define NR_VCPU_LEGACY_GPRS	(VCPU_REGS_R15 + 1)
+#else
+#define NR_VCPU_LEGACY_GPRS	(VCPU_REGS_RDI + 1)
+#endif
+
 enum {
 	VCPU_SREG_ES,
 	VCPU_SREG_CS,

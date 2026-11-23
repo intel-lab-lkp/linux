@@ -9673,8 +9673,13 @@ void kvm_vcpu_reset(struct kvm_vcpu *vcpu, bool init_event)
 		kvm_msr_write(vcpu, MSR_IA32_XSS, 0);
 	}
 
-	/* All GPRs except RDX (handled below) are zeroed on RESET/INIT. */
-	memset(vcpu->arch.regs, 0, sizeof(vcpu->arch.regs));
+	/*
+	 * All legacy GPRs except RDX (handled below) are zeroed on RESET/INIT.
+	 * EGPRs (R16-R31) are zeroed on RESET, but are unchanged on INIT.
+	 */
+	memset(vcpu->arch.regs, 0,
+	       init_event ? NR_VCPU_LEGACY_GPRS * sizeof(vcpu->arch.regs[0]) :
+			    sizeof(vcpu->arch.regs));
 	kvm_register_mark_dirty(vcpu, VCPU_REGS_RSP);
 
 	/*
