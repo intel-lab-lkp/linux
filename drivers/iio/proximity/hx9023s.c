@@ -1185,7 +1185,7 @@ static int hx9023s_resume(struct device *dev)
 	struct hx9023s_data *data = iio_priv(dev_get_drvdata(dev));
 
 	guard(mutex)(&data->mutex);
-	if (data->trigger_enabled)
+	if (data->trigger_enabled || data->chan_event)
 		hx9023s_interrupt_enable(data);
 
 	return 0;
