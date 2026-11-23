@@ -3007,7 +3007,7 @@ static void ccs_cleanup(struct ccs_sensor *sensor)
 	unsigned int i;
 
 	for (i = 0; i < sensor->ssds_used; i++) {
-		v4l2_subdev_cleanup(&sensor->ssds[2].sd);
+		v4l2_subdev_cleanup(&sensor->ssds[i].sd);
 		media_entity_cleanup(&sensor->ssds[i].sd.entity);
 	}
 
