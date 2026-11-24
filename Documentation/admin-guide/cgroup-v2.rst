@@ -1667,8 +1667,10 @@ The following nested keys are defined.
 		structures.
 
 	  dmabuf (npn)
-		Amount of memory used for exported DMA buffers allocated by the cgroup.
-		Stays with the allocating cgroup regardless of how the buffer is shared.
+		Amount of memory used for exported DMA buffers allocated by or on
+		behalf of the cgroup, this currently includes system heap
+		allocations. Stays with the cgroup regardless of how the buffer
+		is shared.
 
 	  workingset_refault_anon
 		Number of refaults of previously evicted anonymous pages.

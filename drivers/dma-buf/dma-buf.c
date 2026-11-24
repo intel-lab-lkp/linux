@@ -750,6 +750,7 @@ struct dma_buf *dma_buf_export(const struct dma_buf_export_info *exp_info)
 	dmabuf->size = exp_info->size;
 	dmabuf->exp_name = exp_info->exp_name;
 	dmabuf->owner = exp_info->owner;
+	dmabuf->objcg = exp_info->objcg;
 	spin_lock_init(&dmabuf->name_lock);
 	init_waitqueue_head(&dmabuf->poll);
 	dmabuf->cb_in.poll = dmabuf->cb_out.poll = &dmabuf->poll;
@@ -770,6 +771,8 @@ struct dma_buf *dma_buf_export(const struct dma_buf_export_info *exp_info)
 	__dma_buf_list_add(dmabuf);
 
 	DMA_BUF_TRACE(trace_dma_buf_export, dmabuf);
+
+	mem_cgroup_commit_dmabuf(dmabuf);
 
 	return dmabuf;
 

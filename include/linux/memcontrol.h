@@ -1812,6 +1812,7 @@ void __memcg_kmem_uncharge_page(struct page *page, int order);
  */
 struct obj_cgroup *current_obj_cgroup(void);
 struct obj_cgroup *get_obj_cgroup_from_folio(const struct folio *folio);
+struct obj_cgroup *get_obj_cgroup_from_fd(int fd);
 
 static inline struct obj_cgroup *get_obj_cgroup_from_current(void)
 {
@@ -1915,6 +1916,16 @@ static inline void __memcg_kmem_uncharge_page(struct page *page, int order)
 }
 
 static inline struct obj_cgroup *get_obj_cgroup_from_folio(const struct folio *folio)
+{
+	return NULL;
+}
+
+static inline struct obj_cgroup *get_obj_cgroup_from_fd(int fd)
+{
+	return ERR_PTR(-EOPNOTSUPP);
+}
+
+static inline struct obj_cgroup *get_obj_cgroup_from_current(void)
 {
 	return NULL;
 }

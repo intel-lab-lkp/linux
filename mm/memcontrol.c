@@ -49,6 +49,7 @@
 #include <linux/slab.h>
 #include <linux/swapops.h>
 #include <linux/spinlock.h>
+#include <linux/file.h>
 #include <linux/fs.h>
 #include <linux/seq_file.h>
 #include <linux/vmpressure.h>
@@ -3167,6 +3168,88 @@ struct obj_cgroup *get_obj_cgroup_from_folio(const struct folio *folio)
 	objcg = folio_objcg(folio);
 	if (objcg)
 		obj_cgroup_get(objcg);
+
+	return objcg;
+}
+
+/*
+ * Charging outside the caller's own memcg subtree can escape its limits
+ * or push reclaim and OOM onto other cgroups.
+ */
+static bool mem_cgroup_may_charge(struct mem_cgroup *memcg)
+{
+	struct mem_cgroup *self = get_mem_cgroup_from_current();
+	bool ret = mem_cgroup_is_descendant(memcg, self);
+
+	mem_cgroup_put(self);
+	return ret || capable(CAP_SYS_RESOURCE);
+}
+
+/**
+ * get_obj_cgroup_from_fd - resolve an object cgroup from a cgroupfd or pidfd
+ * @fd: file descriptor (cgroupfd or pidfd)
+ *
+ * Tries @fd as a cgroupfd first; if that fails, tries it as a pidfd. Only
+ * cgroup2 directories are accepted as cgroupfds, any other fd is tried as a
+ * pidfd.
+ *
+ * Resolving a memcg outside the caller's own subtree requires CAP_SYS_RESOURCE.
+ *
+ * On success returns a referenced objcg pointer. On failure returns
+ * an ERR_PTR.
+ */
+struct obj_cgroup *get_obj_cgroup_from_fd(int fd)
+{
+	struct cgroup_subsys_state *css;
+	struct obj_cgroup *objcg;
+	struct mem_cgroup *memcg;
+	struct task_struct *task;
+	unsigned int pidfd_flags;
+
+	if (mem_cgroup_disabled())
+		return ERR_PTR(-EOPNOTSUPP);
+
+	CLASS(fd_raw, f)(fd);
+	if (fd_empty(f))
+		return ERR_PTR(-EBADF);
+
+	css = css_tryget_online_from_dir(fd_file(f)->f_path.dentry,
+					 &memory_cgrp_subsys);
+	if (!IS_ERR(css) && !cgroup_on_dfl(css->cgroup)) {
+		css_put(css);
+		css = ERR_PTR(-EBADF);
+	}
+
+	if (IS_ERR(css)) {
+		if (PTR_ERR(css) != -EBADF)
+			return ERR_CAST(css);
+
+		/* fd is a pidfd */
+		task = pidfd_get_task(fd, &pidfd_flags);
+		if (IS_ERR(task))
+			return ERR_CAST(task);
+
+		rcu_read_lock();
+		css = task_css(task, memory_cgrp_id);
+		put_task_struct(task);
+		if (!css || !css_tryget_online(css)) {
+			rcu_read_unlock();
+			return ERR_PTR(-ENOENT);
+		}
+		rcu_read_unlock();
+	}
+
+	memcg = mem_cgroup_from_css(css);
+	if (!mem_cgroup_may_charge(memcg)) {
+		mem_cgroup_put(memcg);
+		return ERR_PTR(-EPERM);
+	}
+
+	objcg = get_obj_cgroup_from_memcg(memcg, numa_node_id());
+	mem_cgroup_put(memcg);
+
+	if (!objcg)
+		return ERR_PTR(-ENOENT);
 
 	return objcg;
 }
