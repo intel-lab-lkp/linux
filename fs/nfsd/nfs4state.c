@@ -1453,7 +1453,32 @@ static void put_deleg_file(struct nfs4_file *fp)
 	}
 }
 
-static void nfsd4_finalize_deleg_timestamps(struct nfs4_delegation *dp, struct file *f)
+static void nfsd_cmtime_notice(struct inode *inode, int err)
+{
+	pr_notice_ratelimited("nfsd: Unable to update timestamps on inode %02x:%02x:%llu: %d\n",
+			      MAJOR(inode->i_sb->s_dev),
+			      MINOR(inode->i_sb->s_dev),
+			      inode->i_ino, err);
+}
+
+/* Caller holds freeze protection for @f's filesystem */
+static void __nfsd_update_cmtime_attr(struct file *f, unsigned int flags)
+{
+	struct inode *inode = file_inode(f);
+	struct iattr attr = {
+		.ia_valid = ATTR_CTIME | ATTR_MTIME | ATTR_DELEG | flags,
+	};
+	int ret;
+
+	inode_lock(inode);
+	ret = notify_change(&nop_mnt_idmap, f->f_path.dentry, &attr, NULL);
+	inode_unlock(inode);
+	if (ret)
+		nfsd_cmtime_notice(inode, ret);
+}
+
+static void nfsd4_finalize_deleg_timestamps(struct nfs4_delegation *dp, struct file *f,
+					    bool may_wait)
 {
 	/* don't do anything if FMODE_NOCMTIME isn't set */
 	if ((READ_ONCE(f->f_mode) & FMODE_NOCMTIME) == 0)
@@ -1471,28 +1496,46 @@ static void nfsd4_finalize_deleg_timestamps(struct nfs4_delegation *dp, struct f
 	if (dp->dl_setattr)
 		return;
 
+	/*
+	 * FMODE_NOCMTIME is clear now, so nothing later sets the times.
+	 * DELEGRETURN waits for a thaw as the WRITEs did. The laundromat
+	 * and NFSD shutdown may not, so they leave the times alone while
+	 * the filesystem is frozen.
+	 */
+	if (may_wait) {
+		file_start_write(f);
+	} else if (!file_start_write_trylock(f)) {
+		nfsd_cmtime_notice(file_inode(f), -EBUSY);
+		return;
+	}
 	/* Stamp everything to "now" */
-	nfsd_update_cmtime_attr(f, ATTR_ATIME);
+	__nfsd_update_cmtime_attr(f, ATTR_ATIME);
+	file_end_write(f);
 }
 
-static void nfs4_unlock_deleg_lease(struct nfs4_delegation *dp)
+static void nfs4_unlock_deleg_lease(struct nfs4_delegation *dp, bool may_wait)
 {
 	struct nfs4_file *fp = dp->dl_stid.sc_file;
 	struct nfsd_file *nf = rcu_dereference_protected(fp->fi_deleg_file, 1);
 
 	WARN_ON_ONCE(!fp->fi_delegees);
 
-	nfsd4_finalize_deleg_timestamps(dp, nf->nf_file);
+	nfsd4_finalize_deleg_timestamps(dp, nf->nf_file, may_wait);
 	kernel_setlease(nf->nf_file, F_UNLCK, NULL, (void **)&dp);
 	nfsd_fsnotify_recalc_mask(nf);
 	put_deleg_file(fp);
 }
 
-static void destroy_unhashed_deleg(struct nfs4_delegation *dp)
+static void __destroy_unhashed_deleg(struct nfs4_delegation *dp, bool may_wait)
 {
 	put_clnt_odstate(dp->dl_clnt_odstate);
-	nfs4_unlock_deleg_lease(dp);
+	nfs4_unlock_deleg_lease(dp, may_wait);
 	nfs4_put_stid(&dp->dl_stid);
+}
+
+static void destroy_unhashed_deleg(struct nfs4_delegation *dp)
+{
+	__destroy_unhashed_deleg(dp, false);
 }
 
 /**
@@ -1593,7 +1636,7 @@ unhash_delegation_locked(struct nfs4_delegation *dp, unsigned short statusmask)
 	return true;
 }
 
-static void destroy_delegation(struct nfs4_delegation *dp)
+static void destroy_delegation(struct nfs4_delegation *dp, bool may_wait)
 {
 	bool unhashed;
 	struct nfsd_net *nn = net_generic(dp->dl_stid.sc_client->net,
@@ -1603,7 +1646,7 @@ static void destroy_delegation(struct nfs4_delegation *dp)
 	unhashed = unhash_delegation_locked(dp, SC_STATUS_CLOSED);
 	spin_unlock(&nn->deleg_lock);
 	if (unhashed)
-		destroy_unhashed_deleg(dp);
+		__destroy_unhashed_deleg(dp, may_wait);
 }
 
 /**
@@ -7529,7 +7572,7 @@ nfs4_open_delegation(struct svc_rqst *rqstp, struct nfsd4_open *open,
 		f = rcu_dereference_protected(dp->dl_stid.sc_file->fi_deleg_file, 1)->nf_file;
 		if (!nfsd4_add_rdaccess_to_wrdeleg(rqstp, open, fh, stp) ||
 				!nfs4_delegation_stat(dp, currentfh, &stat)) {
-			destroy_delegation(dp);
+			destroy_delegation(dp, false);
 			nfs4_put_stid(&dp->dl_stid);
 			goto out_no_deleg;
 		}
@@ -9280,7 +9323,7 @@ nfsd4_delegreturn(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 		goto put_stateid;
 
 	trace_nfsd_deleg_return(stateid);
-	destroy_delegation(dp);
+	destroy_delegation(dp, true);
 	smp_mb__after_atomic();
 	wake_up_var(d_inode(cstate->current_fh.fh_dentry));
 put_stateid:
@@ -10755,8 +10798,11 @@ static int cb_getattr_update_times(struct dentry *dentry, struct nfs4_delegation
 {
 	struct inode *inode = d_inode(dentry);
 	struct nfs4_cb_fattr *ncf = &dp->dl_cb_fattr;
+	struct nfs4_file *fp = dp->dl_stid.sc_file;
 	struct iattr attrs = { };
-	int ret;
+	struct nfsd_file *nf;
+	bool hashed;
+	int ret = 0;
 
 	if (deleg_attrs_deleg(dp->dl_type)) {
 		struct timespec64 now = current_time(inode);
@@ -10780,10 +10826,40 @@ static int cb_getattr_update_times(struct dentry *dentry, struct nfs4_delegation
 	if (!attrs.ia_valid)
 		return 0;
 
+	/*
+	 * The reference on @dp doesn't keep the delegation's file open.
+	 * A racing DELEGRETURN or revocation can put fi_deleg_file, so
+	 * pin fi_deleg_file to keep the mount's write access.
+	 */
+	rcu_read_lock();
+	nf = nfsd_file_get(rcu_dereference(fp->fi_deleg_file));
+	rcu_read_unlock();
+	if (!nf)
+		return 0;
+
+	/*
+	 * Don't hold an nfsd thread until a frozen filesystem thaws.
+	 * NFS4ERR_DELAY makes the client retry.
+	 */
+	if (!file_start_write_trylock(nf->nf_file)) {
+		nfsd_file_put(nf);
+		return -EAGAIN;
+	}
 	attrs.ia_valid |= ATTR_DELEG;
 	inode_lock(inode);
-	ret = notify_change(&nop_mnt_idmap, dentry, &attrs, NULL);
+	/*
+	 * Once @dp is unhashed, its return or revocation may already have
+	 * finalized the times under inode_lock. The CB_GETATTR times are
+	 * older and would roll the finalized times back.
+	 */
+	spin_lock(&fp->fi_lock);
+	hashed = delegation_hashed(dp);
+	spin_unlock(&fp->fi_lock);
+	if (hashed)
+		ret = notify_change(&nop_mnt_idmap, dentry, &attrs, NULL);
 	inode_unlock(inode);
+	file_end_write(nf->nf_file);
+	nfsd_file_put(nf);
 	return ret;
 }
 
@@ -11052,25 +11128,14 @@ out_delegees:
  * @flags: any additional flags that should be updated
  *
  * Given upon opening a file delegated attributes were issues, update
- * @f attributes to current times.
+ * @f attributes to current times. Waits for a frozen filesystem to thaw,
+ * like the data change that makes this necessary.
  */
 void nfsd_update_cmtime_attr(struct file *f, unsigned int flags)
 {
-	int ret;
-	struct inode *inode = file_inode(f);
-	struct iattr attr = {
-		.ia_valid = ATTR_CTIME | ATTR_MTIME | ATTR_DELEG | flags,
-	};
-
-	inode_lock(inode);
-	ret = notify_change(&nop_mnt_idmap, f->f_path.dentry, &attr, NULL);
-	inode_unlock(inode);
-	if (ret)
-		pr_notice_ratelimited("nfsd: Unable to update timestamps on "
-				      "inode %02x:%02x:%llu: %d\n",
-				      MAJOR(inode->i_sb->s_dev),
-				      MINOR(inode->i_sb->s_dev),
-				      inode->i_ino, ret);
+	file_start_write(f);
+	__nfsd_update_cmtime_attr(f, flags);
+	file_end_write(f);
 }
 
 static void
