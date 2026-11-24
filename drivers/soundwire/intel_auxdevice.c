@@ -511,8 +511,6 @@ static void intel_link_remove(struct auxiliary_device *auxdev)
 	struct sdw_intel *sdw = cdns_to_intel(cdns);
 	struct sdw_bus *bus = &cdns->bus;
 
-	free_irq(sdw->link_res->irq, cdns);
-
 	/*
 	 * Since pm_runtime is already disabled, we don't decrease
 	 * the refcount when the clock_stop_quirk is
@@ -521,8 +519,15 @@ static void intel_link_remove(struct auxiliary_device *auxdev)
 	if (!bus->prop.hw_disabled) {
 		sdw_intel_debugfs_exit(sdw);
 		cancel_delayed_work_sync(&cdns->attach_dwork);
-		sdw_cdns_enable_interrupt(cdns, false);
 	}
+
+	sdw_bus_slaves_delete(bus);
+
+	free_irq(sdw->link_res->irq, cdns);
+
+	if (!bus->prop.hw_disabled)
+		sdw_cdns_enable_interrupt(cdns, false);
+
 	sdw_bus_master_delete(bus);
 }
 
