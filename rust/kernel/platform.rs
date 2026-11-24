@@ -10,7 +10,8 @@ use crate::{
     container_of,
     device::{
         self,
-        Bound, //
+        Bound,
+        pm, //
     },
     driver,
     error::{
@@ -72,6 +73,11 @@ unsafe impl<T: Driver> driver::RegistrationOps for Adapter<T> {
             None => core::ptr::null(),
         };
 
+        #[cfg(CONFIG_PM)]
+        let pm_ops = T::DEV_PM_OPS.map_or(core::ptr::null(), |ops| ops.as_raw());
+        #[cfg(not(CONFIG_PM))]
+        let pm_ops = core::ptr::null();
+
         // SAFETY: It's safe to set the fields of `struct platform_driver` on initialization.
         unsafe {
             (*pdrv.get()).driver.name = name.as_char_ptr();
@@ -79,6 +85,7 @@ unsafe impl<T: Driver> driver::RegistrationOps for Adapter<T> {
             (*pdrv.get()).remove = Some(Self::remove_callback);
             (*pdrv.get()).driver.of_match_table = of_table;
             (*pdrv.get()).driver.acpi_match_table = acpi_table;
+            (*pdrv.get()).driver.pm = pm_ops;
         }
 
         // SAFETY: `pdrv` is guaranteed to be a valid `DriverType`.
@@ -194,6 +201,7 @@ macro_rules! module_platform_driver {
 /// impl platform::Driver for MyDriver {
 ///     type IdInfo = ();
 ///     type Data<'bound> = Self;
+///
 ///     const OF_ID_TABLE: Option<of::IdTable<Self::IdInfo>> = Some(&OF_TABLE);
 ///     const ACPI_ID_TABLE: Option<acpi::IdTable<Self::IdInfo>> = Some(&ACPI_TABLE);
 ///
@@ -205,7 +213,7 @@ macro_rules! module_platform_driver {
 ///     }
 /// }
 ///```
-pub trait Driver {
+pub trait Driver: Sized {
     /// The type holding driver private data about each device id supported by the driver.
     // TODO: Use associated_type_defaults once stabilized:
     //
@@ -222,6 +230,9 @@ pub trait Driver {
 
     /// The table of ACPI device ids supported by the driver.
     const ACPI_ID_TABLE: Option<acpi::IdTable<Self::IdInfo>> = None;
+
+    /// Provides driver's PM callbacks, if any.
+    const DEV_PM_OPS: Option<pm::AdapterOpsRef<'static, Adapter<Self>>> = None;
 
     /// Platform driver probe.
     ///
@@ -587,3 +598,23 @@ unsafe impl Sync for Device {}
 // SAFETY: Same as `Device<Normal>` -- the underlying `struct platform_device` is the same;
 // `Bound` is a zero-sized type-state marker that does not affect thread safety.
 unsafe impl Sync for Device<device::Bound> {}
+
+#[allow(clippy::new_without_default)]
+impl<T> pm::Ops<T>
+where
+    T: Driver + pm::PMOps<
+        Adapter = Adapter<T>,
+        DeviceType = crate::platform::Device<device::Bound>,
+    >,
+{
+    /// Creates a platform driver's runtime PM callbacks for `T`.
+    ///
+    /// This constructor is available only when `T` is a platform driver and
+    /// its runtime PM callbacks accept a bound platform device.
+    #[inline]
+    pub const fn new() -> Self {
+        // SAFETY: `Adapter<T>` is the platform bus adapter for `T`, and the
+        // bound above forces PM callbacks to receive a platform bound device.
+        unsafe { pm::Ops::new_unchecked(pm::PMContext::<T>::PM_OPS) }
+    }
+}
