@@ -1670,7 +1670,7 @@ The following nested keys are defined.
 		Amount of memory used for exported DMA buffers allocated by or on
 		behalf of the cgroup, this currently includes system heap
 		allocations. Stays with the cgroup regardless of how the buffer
-		is shared.
+		is shared, unless moved with DMA_BUF_IOCTL_XFER_CHARGE.
 
 	  workingset_refault_anon
 		Number of refaults of previously evicted anonymous pages.

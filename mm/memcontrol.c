@@ -3254,6 +3254,64 @@ struct obj_cgroup *get_obj_cgroup_from_fd(int fd)
 	return objcg;
 }
 
+/**
+ * obj_cgroup_transfer_charge - move a charge between object cgroups
+ * @ptr_objcg: pointer to the object cgroup to transfer from
+ * @new_objcg: target object cgroup; caller must hold a reference
+ * @item: memcg stat counter to adjust; must not be a node stat
+ * @nr_pages: number of pages to transfer
+ *
+ * Transfers @nr_pages of charge from *@ptr_objcg to @new_objcg and, on
+ * success, stores @new_objcg in *@ptr_objcg. Does nothing if both resolve
+ * to the same memcg; *@ptr_objcg is left untouched in that case.
+ *
+ * Updates to *@ptr_objcg must be serialized by the caller.
+ * Returns %true on success, %false if the charge against @new_objcg
+ * failed.
+ */
+bool obj_cgroup_transfer_charge(struct obj_cgroup **ptr_objcg,
+				struct obj_cgroup *new_objcg,
+				enum memcg_stat_item item,
+				unsigned int nr_pages)
+{
+	struct obj_cgroup *old_objcg = *ptr_objcg;
+	struct mem_cgroup *old_memcg = NULL, *new_memcg;
+	bool ret = true;
+
+	if (!new_objcg || mem_cgroup_disabled())
+		return true;
+
+	new_memcg = get_mem_cgroup_from_objcg(new_objcg);
+	if (old_objcg)
+		old_memcg = get_mem_cgroup_from_objcg(old_objcg);
+
+	if (old_memcg == new_memcg)
+		goto out;
+
+	if (try_charge(new_memcg, GFP_KERNEL, nr_pages)) {
+		ret = false;
+		goto out;
+	}
+
+	mod_memcg_state(new_memcg, item, nr_pages);
+
+	if (old_objcg) {
+		/* Uncharge old cgroup */
+		mod_memcg_state(old_memcg, item, -nr_pages);
+		if (!mem_cgroup_is_root(old_memcg))
+			refill_stock(old_memcg, nr_pages);
+	}
+
+	obj_cgroup_get(new_objcg);
+	*ptr_objcg = new_objcg;
+	obj_cgroup_put(old_objcg);
+
+out:
+	mem_cgroup_put(new_memcg);
+	mem_cgroup_put(old_memcg);
+	return ret;
+}
+
 #ifdef CONFIG_MEMCG_NMI_SAFETY_REQUIRES_ATOMIC
 static inline void account_kmem_nmi_safe(struct mem_cgroup *memcg, int val)
 {
