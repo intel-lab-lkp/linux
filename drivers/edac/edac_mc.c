@@ -483,12 +483,12 @@ static void edac_mc_workq_function(struct work_struct *work_req)
 }
 
 /*
- * edac_mc_reset_delay_period(unsigned long value)
+ * edac_mc_reset_delay_period(unsigned long msec)
  *
  *	user space has updated our poll period value, need to
  *	reset our workq delays
  */
-void edac_mc_reset_delay_period(unsigned long value)
+void edac_mc_reset_delay_period(unsigned long msec)
 {
 	struct mem_ctl_info *mci;
 	struct list_head *item;
@@ -499,7 +499,7 @@ void edac_mc_reset_delay_period(unsigned long value)
 		mci = list_entry(item, struct mem_ctl_info, link);
 
 		if (mci->op_state == OP_RUNNING_POLL)
-			edac_mod_work(&mci->work, value);
+			edac_mod_work(&mci->work, msecs_to_jiffies(msec));
 	}
 	mutex_unlock(&mem_ctls_mutex);
 }
