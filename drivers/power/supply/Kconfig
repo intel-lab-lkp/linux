@@ -1183,6 +1183,17 @@ config BATTERY_CHARGER_SURFACE_RT
 	  This driver can also be built as a module. If so, the module
 	  will be called surface-rt-ec.
 
+config BATTERY_DS28E16
+	tristate "Maxim DS28E16 battery cycle counter"
+	depends on GPIOLIB && OF
+	help
+	  Say Y here to enable the Maxim DS28E16 battery authenticator
+	  driver. It reads the battery cycle count from the decrement
+	  counter of the chip over a GPIO driven 1-Wire line.
+
+	  This driver can also be built as a module. If so, the module
+	  will be called ds28e16_battery.
+
 config CHARGER_QCOM_SMB2
 	tristate "Qualcomm PMI8998 PMIC charger driver"
 	depends on MFD_SPMI_PMIC
