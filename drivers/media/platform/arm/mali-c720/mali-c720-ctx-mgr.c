@@ -1426,6 +1426,7 @@ void mali_c720_ctx_mgr_buffer_done(struct mali_c720_context *ctx, bool success)
 		mali_c720_cap_dev_buffer_done(&mali_c720->cap_devs[i], success);
 
 	mali_c720_stats_buffer_done(&mali_c720->stats, success);
+	mali_c720_params_buffer_done(&mali_c720->params, success);
 }
 
 void mali_c720_ctx_mgr_handle_sw_ready(struct mali_c720_context *ctx)

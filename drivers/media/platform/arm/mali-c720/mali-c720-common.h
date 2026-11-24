@@ -111,6 +111,7 @@ enum mali_c720_isp_pads {
 	MALI_C720_ISP_PAD_SINK_VIDEO,
 	MALI_C720_ISP_PAD_SOURCE_HV,
 	MALI_C720_ISP_PAD_SOURCE_STATS,
+	MALI_C720_ISP_PAD_SINK_PARAMS,
 	MALI_C720_ISP_NUM_PADS,
 };
 
@@ -219,6 +220,17 @@ struct mali_c720_stats_buf {
 	dma_addr_t addr;
 };
 
+struct mali_c720_params_buf {
+	struct vb2_v4l2_buffer vb;
+	struct list_head queue;
+	struct v4l2_isp_params_buffer *config;
+};
+
+struct mali_c720_param_target {
+	bool present;
+	u32 base;
+};
+
 struct mali_c720_stats_target {
 	struct mali_c720_cdma_sg_cfg desc[2];
 	u8 num_desc;
@@ -246,6 +258,29 @@ struct mali_c720_stats {
 	struct {
 		struct v4l2_ctrl_handler handler;
 		struct v4l2_ctrl *stats_capabilities;
+	} ctrls;
+};
+
+struct mali_c720_params {
+	struct mali_c720 *mali_c720;
+	struct video_device vdev;
+	struct vb2_queue queue;
+	struct media_pad pad;
+	/* Mutex to provide to vb2 */
+	struct mutex lock;
+
+	struct {
+		/* Spinlock to guard buffer queue */
+		spinlock_t lock;
+		struct list_head input;
+		struct list_head processing;
+	} buffers;
+
+	unsigned int num_targets;
+	struct mali_c720_param_target targets[MALI_C720_PARAM_BLOCK_MAX];
+	struct {
+		struct v4l2_ctrl_handler handler;
+		struct v4l2_ctrl *param_capabilities;
 	} ctrls;
 };
 
@@ -323,6 +358,7 @@ struct mali_c720 {
 	struct mali_c720_fr_pipe fr_pipe;
 	struct mali_c720_cap_dev cap_devs[MALI_C720_MAX_NUM_CAP_DEVS];
 	struct mali_c720_stats stats;
+	struct mali_c720_params params;
 
 	unsigned int num_async_endpoints;
 
@@ -374,6 +410,10 @@ int mali_c720_register_stats(struct mali_c720 *mali_c720);
 void mali_c720_unregister_stats(struct mali_c720 *mali_c720);
 void mali_c720_cleanup_stats(struct mali_c720 *mali_c720);
 
+int mali_c720_register_params(struct mali_c720 *mali_c720);
+void mali_c720_unregister_params(struct mali_c720 *mali_c720);
+void mali_c720_cleanup_params(struct mali_c720 *mali_c720);
+
 void mali_c720_fr_pipe_apply_resizer_config(struct mali_c720_fr_pipe *pipe);
 
 bool mali_c720_cap_dev_uses_requests(struct mali_c720_cap_dev *cap_dev);
@@ -390,6 +430,15 @@ int mali_c720_stats_is_ready(struct mali_c720_stats *stats);
 void mali_c720_stats_set_next_buffer(struct mali_c720_stats *stats,
 				     struct media_request *req);
 void mali_c720_stats_buffer_done(struct mali_c720_stats *stats, bool success);
+
+bool mali_c720_params_uses_requests(struct mali_c720_params *params);
+struct media_request *mali_c720_params_get_request(struct mali_c720_params *params);
+struct mali_c720_params_buf *
+mali_c720_params_get_next_buffer(struct mali_c720_params *params,
+				 struct media_request *req);
+void mali_c720_params_apply_config(struct mali_c720 *mali_c720,
+				   struct mali_c720_params_buf *buf);
+void mali_c720_params_buffer_done(struct mali_c720_params *params, bool success);
 
 void mali_c720_isp_queue_event_sof(struct mali_c720 *mali_c720, u32 sequence);
 

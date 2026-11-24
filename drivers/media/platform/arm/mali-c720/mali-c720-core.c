@@ -47,6 +47,7 @@ static void mali_c720_remove_links(struct mali_c720 *mali_c720)
 		media_entity_remove_links(&mali_c720->cap_devs[i].vdev.entity);
 
 	media_entity_remove_links(&mali_c720->stats.vdev.entity);
+	media_entity_remove_links(&mali_c720->params.vdev.entity);
 }
 
 static int mali_c720_create_tpg_links(struct mali_c720 *mali_c720,
@@ -159,6 +160,13 @@ static int mali_c720_create_3a_links(struct mali_c720 *mali_c720)
 		return ret;
 	}
 
+	ret = media_create_pad_link(&mali_c720->params.vdev.entity, 0,
+				    &isp_sd->entity,
+				    MALI_C720_ISP_PAD_SINK_PARAMS,
+				    0);
+	if (ret)
+		dev_err(mali_c720->dev, "Failed to link 3A params node and ISP\n");
+
 	return ret;
 }
 
@@ -206,6 +214,7 @@ static void mali_c720_unregister_video_devices(struct mali_c720 *mali_c720)
 
 	mali_c720_unregister_capture_devs(mali_c720);
 	mali_c720_unregister_stats(mali_c720);
+	mali_c720_unregister_params(mali_c720);
 }
 
 static void mali_c720_unregister_entities(struct mali_c720 *mali_c720)
@@ -247,6 +256,10 @@ static int mali_c720_register_entities(struct mali_c720 *mali_c720)
 		goto err_unregister_entities;
 
 	ret = mali_c720_register_stats(mali_c720);
+	if (ret)
+		goto err_unregister_entities;
+
+	ret = mali_c720_register_params(mali_c720);
 	if (ret)
 		goto err_unregister_entities;
 
@@ -371,6 +384,7 @@ static void mali_c720_release(struct v4l2_device *v4l2_dev)
 
 	mali_c720_cleanup_capture_devs(mali_c720);
 	mali_c720_cleanup_stats(mali_c720);
+	mali_c720_cleanup_params(mali_c720);
 	mali_c720_cleanup_fr_pipe(mali_c720);
 	mali_c720_cleanup_vision_pipe(mali_c720);
 	mali_c720_cleanup_isp(mali_c720);
@@ -608,6 +622,9 @@ static struct media_request *mali_c720_find_request(struct mali_c720 *mali_c720)
 	candidate = mali_c720_stats_get_request(&mali_c720->stats);
 	req = mali_c720_oldest_request(NULL, candidate);
 
+	candidate = mali_c720_params_get_request(&mali_c720->params);
+	req = mali_c720_oldest_request(req, candidate);
+
 	for (i = 0; i < MALI_C720_MAX_NUM_CAP_DEVS; i++) {
 		candidate = mali_c720_cap_dev_get_request(&mali_c720->cap_devs[i]);
 		req = mali_c720_oldest_request(req, candidate);
@@ -620,7 +637,8 @@ static bool mali_c720_uses_requests(struct mali_c720 *mali_c720)
 {
 	unsigned int i;
 
-	if (mali_c720_stats_uses_requests(&mali_c720->stats))
+	if (mali_c720_stats_uses_requests(&mali_c720->stats) ||
+	    mali_c720_params_uses_requests(&mali_c720->params))
 		return true;
 
 	for (i = 0; i < MALI_C720_MAX_NUM_CAP_DEVS; i++) {
@@ -651,6 +669,7 @@ static struct media_request *mali_c720_can_schedule_request(struct mali_c720_con
 void mali_c720_try_schedule_frame(struct mali_c720_context *ctx)
 {
 	struct mali_c720 *mali_c720 = ctx->mali_c720;
+	struct mali_c720_params_buf *params_buf = NULL;
 	struct media_request *req = NULL;
 	unsigned int i;
 
@@ -673,6 +692,7 @@ void mali_c720_try_schedule_frame(struct mali_c720_context *ctx)
 			mali_c720_cap_dev_set_next_buffer(&mali_c720->cap_devs[i], req);
 
 		mali_c720_stats_set_next_buffer(&mali_c720->stats, req);
+		params_buf = mali_c720_params_get_next_buffer(&mali_c720->params, req);
 	}
 
 	ctx->pipeline_busy = true;
@@ -680,6 +700,9 @@ void mali_c720_try_schedule_frame(struct mali_c720_context *ctx)
 
 	/* Resizer configurations should be synchronised with CDMA */
 	mali_c720_fr_pipe_apply_resizer_config(&mali_c720->fr_pipe);
+
+	if (params_buf)
+		mali_c720_params_apply_config(mali_c720, params_buf);
 
 	mali_c720_ctx_mgr_handle_sw_ready(ctx);
 }

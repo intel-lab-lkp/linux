@@ -10,6 +10,7 @@ mali-c720-y := mali-c720-capture.o \
 	      mali-c720-input.o \
 	      mali-c720-interrupts.o \
 	      mali-c720-isp.o \
+	      mali-c720-params.o \
 	      mali-c720-register-access.o \
 	      mali-c720-registers.o \
 	      mali-c720-registers-top.o \

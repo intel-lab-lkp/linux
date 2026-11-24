@@ -23,7 +23,8 @@ static int mali_c720_isp_enum_mbus_code(struct v4l2_subdev *sd,
 	struct mali_c720_mbus_format_match match;
 
 	/* HV uses the sink Bayer order at the internal 16-bit precision. */
-	if (code->pad == MALI_C720_ISP_PAD_SOURCE_STATS) {
+	if (code->pad == MALI_C720_ISP_PAD_SOURCE_STATS ||
+	    code->pad == MALI_C720_ISP_PAD_SINK_PARAMS) {
 		if (code->index)
 			return -EINVAL;
 		code->code = MEDIA_BUS_FMT_METADATA_FIXED;
@@ -94,6 +95,7 @@ static int mali_c720_isp_enum_frame_size(struct v4l2_subdev *sd,
 			return -EINVAL;
 		break;
 	case MALI_C720_ISP_PAD_SOURCE_STATS:
+	case MALI_C720_ISP_PAD_SINK_PARAMS:
 		return -ENOTTY;
 	default:
 		return -EINVAL;
@@ -298,7 +300,7 @@ static const struct v4l2_subdev_ops mali_c720_isp_ops = {
 static int mali_c720_isp_init_state(struct v4l2_subdev *sd,
 				    struct v4l2_subdev_state *state)
 {
-	struct v4l2_mbus_framefmt *sink_fmt, *src_fmt, *stats_fmt;
+	struct v4l2_mbus_framefmt *sink_fmt, *src_fmt, *stats_fmt, *params_fmt;
 
 	sink_fmt = v4l2_subdev_state_get_format(state, MALI_C720_ISP_PAD_SINK_VIDEO);
 	sink_fmt->width = MALI_C720_DEFAULT_WIDTH;
@@ -319,6 +321,12 @@ static int mali_c720_isp_init_state(struct v4l2_subdev *sd,
 	stats_fmt->height = 0;
 	stats_fmt->field = V4L2_FIELD_NONE;
 	stats_fmt->code = MEDIA_BUS_FMT_METADATA_FIXED;
+
+	params_fmt = v4l2_subdev_state_get_format(state, MALI_C720_ISP_PAD_SINK_PARAMS);
+	params_fmt->width = 0;
+	params_fmt->height = 0;
+	params_fmt->field = V4L2_FIELD_NONE;
+	params_fmt->code = MEDIA_BUS_FMT_METADATA_FIXED;
 
 	return 0;
 }
@@ -357,9 +365,21 @@ static int mali_c720_isp_subdev_link_setup(struct media_entity *entity,
 	return 0;
 }
 
+static int mali_c720_isp_subdev_link_validate(struct media_link *link)
+{
+	/*
+	 * Skip validation for the parameters sink pad, as the source is not
+	 * a subdevice.
+	 */
+	if (link->sink->index == MALI_C720_ISP_PAD_SINK_PARAMS)
+		return 0;
+
+	return v4l2_subdev_link_validate(link);
+}
+
 static const struct media_entity_operations mali_c720_isp_media_ops = {
 	.link_setup		= mali_c720_isp_subdev_link_setup,
-	.link_validate		= v4l2_subdev_link_validate,
+	.link_validate		= mali_c720_isp_subdev_link_validate,
 };
 
 int mali_c720_register_isp(struct mali_c720 *mali_c720)
@@ -383,6 +403,7 @@ int mali_c720_register_isp(struct mali_c720 *mali_c720)
 							MEDIA_PAD_FL_MUST_CONNECT;
 	isp->pads[MALI_C720_ISP_PAD_SOURCE_HV].flags = MEDIA_PAD_FL_SOURCE;
 	isp->pads[MALI_C720_ISP_PAD_SOURCE_STATS].flags = MEDIA_PAD_FL_SOURCE;
+	isp->pads[MALI_C720_ISP_PAD_SINK_PARAMS].flags = MEDIA_PAD_FL_SINK;
 
 	ret = media_entity_pads_init(&sd->entity,
 				     MALI_C720_ISP_NUM_PADS,
