@@ -2539,11 +2539,15 @@ static int pcm_chmap_ctl_tlv(struct snd_kcontrol *kcontrol, int op_flag,
 {
 	struct snd_pcm_chmap *info = snd_kcontrol_chip(kcontrol);
 	const struct snd_pcm_chmap_elem *map;
+	unsigned int tlv_type = SNDRV_CTL_TLVT_CHMAP_FIXED;
 	unsigned int __user *dst;
 	int c, count = 0;
 
 	if (!info->chmap)
 		return -EINVAL;
+	/* A writable control allows userspace to reorder the channels */
+	if (kcontrol->vd[0].access & SNDRV_CTL_ELEM_ACCESS_WRITE)
+		tlv_type = SNDRV_CTL_TLVT_CHMAP_VAR;
 	if (size < 8)
 		return -ENOMEM;
 	if (put_user(SNDRV_CTL_TLVT_CONTAINER, tlv))
@@ -2556,7 +2560,7 @@ static int pcm_chmap_ctl_tlv(struct snd_kcontrol *kcontrol, int op_flag,
 			continue;
 		if (size < 8)
 			return -ENOMEM;
-		if (put_user(SNDRV_CTL_TLVT_CHMAP_FIXED, dst) ||
+		if (put_user(tlv_type, dst) ||
 		    put_user(chs_bytes, dst + 1))
 			return -EFAULT;
 		dst += 2;
