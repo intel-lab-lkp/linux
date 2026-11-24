@@ -19,6 +19,9 @@ trap_cleanup() {
 }
 trap trap_cleanup EXIT TERM INT
 
+# perf top sizes its default ring buffer from kernel.perf_event_mlock_kb,
+# which a test host may have tuned large, pin it to the upstream default
+# of 128 pages (516 KiB) so the test does not depend on the host setting.
 test_basic_perf_top() {
 	echo "Basic perf top test"
 
@@ -36,7 +39,7 @@ test_basic_perf_top() {
 	# Use -e cpu-clock to ensure we get samples
 	# Use sleep to keep stdin open but silent, preventing EOF loop or interactive spam
 	retval=0
-	sleep 10 | timeout 5s perf top --stdio -d 1 -e cpu-clock \
+	sleep 10 | timeout 5s perf top --stdio -d 1 -m 128 -e cpu-clock \
 		-p $PID > "${log_file}" 2>&1 || retval=$?
 	if [ "${retval:-0}" -ne 124 ] && [ "${retval:-0}" -ne 0 ]; then
 		echo "Basic perf top test [Failed: perf top failed to start or run (ret=$retval)]"
@@ -83,7 +86,7 @@ test_hybrid_merge_perf_top() {
 	# environments can seamlessly fall back to cpu-clock while real
 	# hybrid hardware will naturally cover the merge logic.
 	retval=0
-	sleep 10 | timeout 5s perf top \
+	sleep 10 | timeout 5s perf top -m 128 \
 			--stdio --hybrid-merge -d 1 -p $PID > "${log_file}" 2>&1 || retval=$?
 	if [ "${retval:-0}" -ne 124 ] && [ "${retval:-0}" -ne 0 ]; then
 		echo "Perf top hybrid merge test [Failed: run err=$retval]"
