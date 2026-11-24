@@ -4775,6 +4775,15 @@ int xdp_do_redirect(struct net_device *dev, struct xdp_buff *xdp,
 	struct bpf_redirect_info *ri = bpf_net_ctx_get_ri();
 	enum bpf_map_type map_type = ri->map_type;
 
+	/* A sink buffer goes to an AF_XDP socket of its queue */
+	if (static_branch_unlikely(&xdp_sink_key) && xdp_buff_is_sink(xdp)) {
+		void *fwd = ri->tgt_value;
+
+		ri->map_id = 0;
+		ri->map_type = BPF_MAP_TYPE_UNSPEC;
+		return xsk_sink_redirect(xdp, map_type, fwd);
+	}
+
 	if (map_type == BPF_MAP_TYPE_XSKMAP)
 		return __xdp_do_redirect_xsk(ri, dev, xdp, xdp_prog);
 

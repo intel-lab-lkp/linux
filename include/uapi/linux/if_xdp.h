@@ -47,8 +47,9 @@
 
 /* RX buffers follow the device's layout: a page-sized chunk may hold
  * several of them, a packet may span chunks, and the device picks the
- * offsets. A FILL entry lends a chunk to the kernel. Needs aligned
- * page-sized chunks and no headroom.
+ * offsets. A FILL entry lends a chunk to the kernel, and an RX descriptor
+ * with XDP_RX_CHUNK_FREE gives it back. Needs aligned page-sized chunks and
+ * no headroom.
  */
 #define XDP_UMEM_DRV_LAYOUT		(1 << 4)
 
@@ -188,5 +189,12 @@ struct xdp_desc {
 
 /* TX packet carries valid metadata. */
 #define XDP_TX_METADATA (1 << 1)
+
+/* Flag on an RX descriptor of an XDP_UMEM_DRV_LAYOUT UMEM: the kernel is done
+ * with the UMEM chunk of the descriptor, and puts nothing more in it. The
+ * chunk is userspace's again. An empty descriptor at the chunk carries only
+ * this flag, when the device let go of the chunk after its last buffer.
+ */
+#define XDP_RX_CHUNK_FREE (1 << 2)
 
 #endif /* _UAPI_LINUX_IF_XDP_H */

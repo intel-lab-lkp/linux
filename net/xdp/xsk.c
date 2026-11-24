@@ -35,6 +35,7 @@
 #include "../core/dev.h"
 
 #include "xsk_queue.h"
+#include "xsk_sink.h"
 #include "xdp_umem.h"
 #include "xsk.h"
 
@@ -437,6 +438,12 @@ static bool xsk_dev_queue_valid(const struct xdp_sock *xs,
 	return false;
 }
 
+/* The pool receives in the device's buffer layout, or did */
+static bool xsk_drv_layout(const struct xdp_sock *xs)
+{
+	return xs->pool->umem->flags & XDP_UMEM_DRV_LAYOUT;
+}
+
 static int xsk_rcv_check(struct xdp_sock *xs, struct xdp_buff *xdp, u32 len)
 {
 	if (!xsk_is_bound(xs))
@@ -454,8 +461,14 @@ static int xsk_rcv_check(struct xdp_sock *xs, struct xdp_buff *xdp, u32 len)
 
 static void xsk_flush(struct xdp_sock *xs)
 {
+	struct xsk_sink *sink = xs->pool->sink;
+
+	if (sink)
+		xsk_sink_flush(sink);
 	xskq_prod_submit(xs->rx);
-	__xskq_cons_release(xs->pool->fq);
+	/* A sink releases FILL under its lock, see xsk_sink_take_fill() */
+	if (!sink)
+		__xskq_cons_release(xs->pool->fq);
 	sock_def_readable(&xs->sk);
 }
 
@@ -465,6 +478,11 @@ int xsk_generic_rcv(struct xdp_sock *xs, struct xdp_buff *xdp)
 	int err;
 
 	err = xsk_rcv_check(xs, xdp, len);
+	/* A sink socket takes buffers of its provider only */
+	if (!err && xsk_drv_layout(xs)) {
+		xs->rx_dropped++;
+		err = -EOPNOTSUPP;
+	}
 	if (!err) {
 		spin_lock_bh(&xs->pool->rx_lock);
 		err = __xsk_rcv(xs, xdp, len);
@@ -487,6 +505,14 @@ static int xsk_rcv(struct xdp_sock *xs, struct xdp_buff *xdp)
 	if (xdp->rxq->mem.type == MEM_TYPE_XSK_BUFF_POOL) {
 		len = xdp->data_end - xdp->data;
 		return xsk_rcv_zc(xs, xdp, len);
+	}
+
+	/* Sink buffers take xsk_sink_redirect(); others cannot go to a sink
+	 * socket
+	 */
+	if (xsk_drv_layout(xs)) {
+		xs->rx_dropped++;
+		return -EOPNOTSUPP;
 	}
 
 	err = __xsk_rcv(xs, xdp, len);

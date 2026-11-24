@@ -126,6 +126,8 @@ struct xsk_tx_metadata_ops {
 int xsk_generic_rcv(struct xdp_sock *xs, struct xdp_buff *xdp);
 int __xsk_map_redirect(struct xdp_sock *xs, struct xdp_buff *xdp);
 void __xsk_map_flush(struct list_head *flush_list);
+int xsk_sink_redirect(struct xdp_buff *xdp, enum bpf_map_type map_type,
+		      void *fwd);
 INDIRECT_CALLABLE_DECLARE(void xsk_destruct_skb(struct sk_buff *));
 
 /**
@@ -180,6 +182,12 @@ static inline void xsk_tx_metadata_complete(struct xsk_tx_metadata_compl *compl,
 static inline int xsk_generic_rcv(struct xdp_sock *xs, struct xdp_buff *xdp)
 {
 	return -ENOTSUPP;
+}
+
+static inline int xsk_sink_redirect(struct xdp_buff *xdp,
+				    enum bpf_map_type map_type, void *fwd)
+{
+	return -EOPNOTSUPP;
 }
 
 static inline int __xsk_map_redirect(struct xdp_sock *xs, struct xdp_buff *xdp)
