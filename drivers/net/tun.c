@@ -1951,11 +1951,18 @@ static ssize_t tun_get_user(struct tun_struct *tun, struct tun_file *tfile,
 		break;
 	}
 
-	if (tun_vnet_hdr_tnl_to_skb(tun->flags, features, skb, &hdr,
-				    (tun->flags & TUN_TYPE_MASK) == IFF_TAP)) {
-		atomic_long_inc(&tun->rx_frame_errors);
-		err = -EINVAL;
-		goto free_skb;
+	if (tun->flags & IFF_VNET_HDR) {
+		bool has_eth = (tun->flags & TUN_TYPE_MASK) == IFF_TAP;
+
+		if (tun_vnet_hdr_tnl_to_skb(tun->flags, features, skb, &hdr,
+					    has_eth)) {
+			atomic_long_inc(&tun->rx_frame_errors);
+			err = -EINVAL;
+			goto free_skb;
+		}
+	} else {
+		/* a zero hdr would only reset the MAC header */
+		skb_reset_mac_header(skb);
 	}
 
 	if ((tun->flags & TUN_TYPE_MASK) == IFF_TAP)
