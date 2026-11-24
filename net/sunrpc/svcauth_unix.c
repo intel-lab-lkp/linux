@@ -1139,8 +1139,9 @@ svcauth_tls_accept(struct svc_rqst *rqstp)
 		return SVC_DENIED;
 	}
 
-	/* AUTH_TLS is not valid on non-NULL procedures */
-	if (rqstp->rq_proc != 0) {
+	/* AUTH_BADCRED cases from RFC 9289 Section 4.1 */
+	if (rqstp->rq_proc != 0 ||
+	    test_bit(RQ_TLS_SESSION, &rqstp->rq_flags)) {
 		rqstp->rq_auth_stat = rpc_autherr_badcred;
 		return SVC_DENIED;
 	}
