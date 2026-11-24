@@ -402,6 +402,8 @@ static void svc_tcp_handshake_done(void *data, int status, key_serial_t peerid)
 		if (peerid != TLS_NO_PEERID)
 			set_bit(XPT_PEER_AUTH, &xprt->xpt_flags);
 		set_bit(XPT_TLS_SESSION, &xprt->xpt_flags);
+	} else {
+		set_bit(XPT_CLOSE, &xprt->xpt_flags);
 	}
 	clear_bit(XPT_HANDSHAKE, &xprt->xpt_flags);
 	complete_all(&svsk->sk_handshake_done);
@@ -442,7 +444,7 @@ static void svc_tcp_handshake(struct svc_xprt *xprt)
 	if (ret) {
 		trace_svc_tls_not_started(xprt);
 		svc_xprt_put(xprt);
-		goto out_failed;
+		goto out_close;
 	}
 
 	ret = wait_for_completion_interruptible_timeout(&svsk->sk_handshake_done,
@@ -474,7 +476,6 @@ static void svc_tcp_handshake(struct svc_xprt *xprt)
 
 out_close:
 	set_bit(XPT_CLOSE, &xprt->xpt_flags);
-out_failed:
 	clear_bit(XPT_HANDSHAKE, &xprt->xpt_flags);
 	set_bit(XPT_DATA, &xprt->xpt_flags);
 	svc_xprt_enqueue(xprt);
@@ -1336,6 +1337,7 @@ static int svc_tcp_sendto(struct svc_rqst *rqstp)
 	struct xdr_buf *xdr = &rqstp->rq_res;
 	rpc_fraghdr marker = cpu_to_be32(RPC_LAST_STREAM_FRAGMENT |
 					 (u32)xdr->len);
+	unsigned long xpt_flags;
 	int count, sent;
 
 	svc_sock_release_ctxt(xprt, rqstp->rq_xprt_ctxt);
@@ -1345,8 +1347,20 @@ static int svc_tcp_sendto(struct svc_rqst *rqstp)
 	count = svc_rqst_res_to_bvec(rqstp, SVC_TCP_MARKER_BVECS);
 
 	mutex_lock(&xprt->xpt_mutex);
-	if (svc_xprt_is_dead(xprt))
+	/* RFC 9289 Section 5.1.1: a plaintext reply does not go out once the
+	 * AUTH_TLS probe starts a handshake, and the connection is dropped.
+	 * Every path that clears XPT_HANDSHAKE sets XPT_TLS_SESSION or
+	 * XPT_CLOSE first, so once the probe sets XPT_HANDSHAKE, one read of
+	 * xpt_flags sees at least one of the three.
+	 */
+	xpt_flags = READ_ONCE(xprt->xpt_flags);
+	if (xpt_flags & (BIT(XPT_DEAD) | BIT(XPT_CLOSE)))
 		goto out_notconn;
+	if (!test_bit(RQ_TLS_SESSION, &rqstp->rq_flags) &&
+	    (xpt_flags & BIT(XPT_TLS_SESSION) ||
+	     (xpt_flags & BIT(XPT_HANDSHAKE) &&
+	      !test_bit(RQ_TLS_PROBE, &rqstp->rq_flags))))
+		goto out_spurious;
 	sent = count;
 	if (count >= 0)
 		sent = svc_tcp_sendmsg(svsk, rqstp, marker, count);
@@ -1357,6 +1371,11 @@ static int svc_tcp_sendto(struct svc_rqst *rqstp)
 	return sent;
 
 out_notconn:
+	mutex_unlock(&xprt->xpt_mutex);
+	return -ENOTCONN;
+out_spurious:
+	trace_svc_tls_spurious(xprt);
+	svc_xprt_deferred_close(xprt);
 	mutex_unlock(&xprt->xpt_mutex);
 	return -ENOTCONN;
 out_close:

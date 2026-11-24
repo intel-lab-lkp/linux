@@ -1675,7 +1675,8 @@ DEFINE_SVCXDRBUF_EVENT(sendto);
 	svc_rqst_flag(VICTIM)						\
 	svc_rqst_flag(DATA)						\
 	svc_rqst_flag(TLS_SESSION)					\
-	svc_rqst_flag_end(PEER_AUTH)
+	svc_rqst_flag(PEER_AUTH)					\
+	svc_rqst_flag_end(TLS_PROBE)
 
 #undef svc_rqst_flag
 #undef svc_rqst_flag_end
@@ -2097,6 +2098,7 @@ DEFINE_SVC_TLS_EVENT(upcall);
 DEFINE_SVC_TLS_EVENT(unavailable);
 DEFINE_SVC_TLS_EVENT(not_started);
 DEFINE_SVC_TLS_EVENT(timed_out);
+DEFINE_SVC_TLS_EVENT(spurious);
 
 TRACE_EVENT(svc_xprt_accept,
 	TP_PROTO(

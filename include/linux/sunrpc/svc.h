@@ -289,6 +289,7 @@ enum {
 	RQ_DATA,		/* request has data */
 	RQ_TLS_SESSION,		/* request arrived on a TLS session */
 	RQ_PEER_AUTH,		/* request arrived from an authenticated peer */
+	RQ_TLS_PROBE,		/* request started a TLS handshake */
 };
 
 #define SVC_NET(rqst) (rqst->rq_xprt ? rqst->rq_xprt->xpt_net : rqst->rq_bc_net)
