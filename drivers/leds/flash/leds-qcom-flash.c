@@ -951,7 +951,11 @@ static int qcom_flash_led_probe(struct platform_device *pdev)
 		flash_data->leds_count++;
 	}
 
-	return regmap_field_write(flash_data->r_fields[REG_TORCH_CLAMP], flash_data->torch_clamp);
+	rc = regmap_field_write(flash_data->r_fields[REG_TORCH_CLAMP], flash_data->torch_clamp);
+	if (rc < 0)
+		goto release;
+
+	return 0;
 release:
 	while (flash_data->leds_count)
 		v4l2_flash_release(flash_data->v4l2_flash[--flash_data->leds_count]);
