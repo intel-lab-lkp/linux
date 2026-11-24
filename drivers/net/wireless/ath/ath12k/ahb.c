@@ -701,6 +701,14 @@ static int ath12k_ahb_config_ext_irq(struct ath12k_base *ab)
 
 			irq = platform_get_irq_byname(ab->pdev,
 						      irq_name[irq_idx]);
+			if (irq < 0) {
+				ath12k_warn(ab, "failed to get irq %s: %d\n",
+					    irq_name[irq_idx], irq);
+				ret = irq;
+				ath12k_ahb_free_napi_for_group(irq_grp);
+				goto free_napi_ndev;
+			}
+
 			ab->irq_num[irq_idx] = irq;
 			irq_set_status_flags(irq, IRQ_NOAUTOEN | IRQ_DISABLE_UNLAZY);
 			ret = devm_request_irq(ab->dev, irq,
@@ -741,6 +749,12 @@ static int ath12k_ahb_config_irq(struct ath12k_base *ab)
 
 		INIT_WORK(&ce_pipe->intr_wq, ath12k_ahb_ce_workqueue);
 		irq = platform_get_irq_byname(ab->pdev, irq_name[irq_idx]);
+		if (irq < 0) {
+			ath12k_warn(ab, "failed to get irq %s: %d\n",
+				    irq_name[irq_idx], irq);
+			return irq;
+		}
+
 		ret = devm_request_irq(ab->dev, irq, ath12k_ahb_ce_interrupt_handler,
 				       IRQF_TRIGGER_RISING, irq_name[irq_idx],
 				       ce_pipe);
