@@ -765,15 +765,14 @@ static void fbnic_page_pool_init(struct fbnic_ring *ring, unsigned int idx,
 	rx_buf->netmem = netmem;
 }
 
-static struct page *
+static netmem_ref
 fbnic_page_pool_get_head(struct fbnic_q_triad *qt, unsigned int idx)
 {
 	struct fbnic_rx_buf *rx_buf = &qt->sub0.rx_buf[idx];
 
 	rx_buf->pagecnt_bias--;
 
-	/* sub0 is always fed system pages, from the NAPI-level page_pool */
-	return netmem_to_page(rx_buf->netmem);
+	return rx_buf->netmem;
 }
 
 static netmem_ref
@@ -1001,13 +1000,12 @@ static void fbnic_pkt_prepare(struct fbnic_napi_vector *nv, u64 rcd,
 	unsigned int len = FIELD_GET(FBNIC_RCD_AL_BUFF_LEN_MASK, rcd);
 	unsigned int hdr_pg_idx = fbnic_rcd_bd_idx(&qt->sub0, rcd);
 	unsigned int frame_sz, hdr_pg_start, hdr_pg_end, headroom;
-	unsigned char *hdr_start;
-	struct page *page;
+	netmem_ref netmem;
 
 	/* data_hard_start should always be NULL when this is called */
 	WARN_ON_ONCE(pkt->buff.data_hard_start);
 
-	page = fbnic_page_pool_get_head(qt, hdr_pg_idx);
+	netmem = fbnic_page_pool_get_head(qt, hdr_pg_idx);
 
 	/* Short-cut the end calculation if we know page is fully consumed */
 	hdr_pg_end = FIELD_GET(FBNIC_RCD_AL_PAGE_FIN, rcd) ?
@@ -1020,15 +1018,20 @@ static void fbnic_pkt_prepare(struct fbnic_napi_vector *nv, u64 rcd,
 	hdr_pg_start += fbnic_rcd_bd_page_offset(&qt->sub0, rcd);
 
 	/* Sync DMA buffer */
-	dma_sync_single_range_for_cpu(nv->dev, page_pool_get_dma_addr(page),
+	dma_sync_single_range_for_cpu(nv->dev,
+				      page_pool_get_dma_addr_netmem(netmem),
 				      hdr_pg_start, frame_sz,
 				      DMA_BIDIRECTIONAL);
 
 	/* Build frame around buffer */
-	hdr_start = page_address(page) + hdr_pg_start;
-	net_prefetch(hdr_start + headroom);
-	xdp_prepare_buff(&pkt->buff, hdr_start, headroom,
-			 len - FBNIC_RX_PAD, true);
+	xdp_prepare_buff(&pkt->buff, xdp_netmem_address(netmem) + hdr_pg_start,
+			 headroom, len - FBNIC_RX_PAD, true);
+	pkt->head = netmem;
+	/* The kernel reads an XDP-only head only if the program does, and a
+	 * prefetch may cost a page walk
+	 */
+	if (!netmem_is_net_iov(netmem))
+		net_prefetch(pkt->buff.data);
 
 	pkt->hwtstamp = 0;
 	pkt->add_frag_failed = false;
@@ -1072,8 +1075,6 @@ static void fbnic_add_rx_frag(struct fbnic_napi_vector *nv, u64 rcd,
 static void fbnic_put_pkt_buff(struct fbnic_q_triad *qt,
 			       struct fbnic_pkt_buff *pkt, int budget)
 {
-	struct page *page;
-
 	if (!pkt->buff.data_hard_start)
 		return;
 
@@ -1092,8 +1093,7 @@ static void fbnic_put_pkt_buff(struct fbnic_q_triad *qt,
 		}
 	}
 
-	page = virt_to_page(pkt->buff.data_hard_start);
-	page_pool_put_full_page(qt->sub0.page_pool, page, !!budget);
+	page_pool_put_full_netmem(qt->sub0.page_pool, pkt->head, !!budget);
 }
 
 static struct sk_buff *fbnic_build_skb(struct fbnic_napi_vector *nv,
@@ -1611,7 +1611,8 @@ fbnic_alloc_qt_page_pools(struct fbnic_net *fbn, struct fbnic_q_triad *qt,
 	struct page_pool_params pp_params = {
 		.order = 0,
 		.flags = PP_FLAG_DMA_MAP |
-			 PP_FLAG_DMA_SYNC_DEV,
+			 PP_FLAG_DMA_SYNC_DEV |
+			 PP_FLAG_ALLOW_XDP_ONLY_NETMEM,
 		.pool_size = fbn->hpq_size + fbn->ppq_size,
 		.nid = NUMA_NO_NODE,
 		.dev = fbn->netdev->dev.parent,

@@ -81,6 +81,8 @@ struct fbnic_net;
 
 struct fbnic_pkt_buff {
 	struct xdp_buff buff;
+	/* Head buffer, from the HPQ */
+	netmem_ref head;
 	ktime_t hwtstamp;
 	bool add_frag_failed;
 };
