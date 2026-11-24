@@ -68,6 +68,25 @@ impl NovaCoreModule {
     }
 }
 
+impl NovaCoreModule {
+    /// Check whether nova-core is allowed to bind to GPUs.
+    ///
+    /// Binding needs to be requested explicitly, either through the
+    /// NOVA_CORE_BIND_GSP Kconfig option or the `bind_gsp` module parameter.
+    /// Otherwise, NVIDIA GPUs are left to other drivers, such as nouveau.
+    pub(crate) fn check_bind_allowed(pdev: &pci::Device<device::Core<'_>>) -> Result {
+        if crate::module_parameters::bind_gsp.value() {
+            return Ok(());
+        }
+
+        dev_info!(
+            pdev,
+            "Not binding to GPU; enable with CONFIG_NOVA_CORE_BIND_GSP=y or nova-core.bind_gsp=1\n"
+        );
+        Err(ENODEV)
+    }
+}
+
 impl InPlaceModule for NovaCoreModule {
     fn init(module: &'static kernel::ThisModule) -> impl PinInit<Self, Error> {
         try_pin_init!(Self {
@@ -96,6 +115,10 @@ module! {
         gsp_keep_logs: bool {
             default: false,
             description: "Keep the GSP-RM log buffers in debugfs after their GPU is unbound",
+        },
+        bind_gsp: bool {
+            default: cfg!(CONFIG_NOVA_CORE_BIND_GSP),
+            description: "Bind to GSP-capable GPUs, making nova-core the default NVIDIA driver",
         },
     },
 }

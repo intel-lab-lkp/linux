@@ -106,6 +106,10 @@ impl pci::Driver for NovaCoreDriver {
 
         try_pin_init!(NovaCore {
             _: {
+                crate::NovaCoreModule::check_bind_allowed(pdev)?;
+            },
+
+            _: {
                 pdev.enable_device_mem()?;
                 pdev.set_master();
             },
