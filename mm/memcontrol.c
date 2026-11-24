@@ -60,6 +60,7 @@
 #include <linux/lockdep.h>
 #include <linux/resume_user_mode.h>
 #include <linux/psi.h>
+#include <linux/security.h>
 #include <linux/seq_buf.h>
 #include <linux/sched/isolation.h>
 #include <linux/kmemleak.h>
@@ -3201,10 +3202,12 @@ static bool mem_cgroup_may_charge(struct mem_cgroup *memcg)
 struct obj_cgroup *get_obj_cgroup_from_fd(int fd)
 {
 	struct cgroup_subsys_state *css;
+	const struct cred *tcred;
 	struct obj_cgroup *objcg;
 	struct mem_cgroup *memcg;
 	struct task_struct *task;
 	unsigned int pidfd_flags;
+	int ret;
 
 	if (mem_cgroup_disabled())
 		return ERR_PTR(-EOPNOTSUPP);
@@ -3228,6 +3231,14 @@ struct obj_cgroup *get_obj_cgroup_from_fd(int fd)
 		task = pidfd_get_task(fd, &pidfd_flags);
 		if (IS_ERR(task))
 			return ERR_CAST(task);
+
+		tcred = get_task_cred(task);
+		ret = security_current_memcg_charge_task(tcred);
+		put_cred(tcred);
+		if (ret) {
+			put_task_struct(task);
+			return ERR_PTR(ret);
+		}
 
 		rcu_read_lock();
 		css = task_css(task, memory_cgrp_id);
