@@ -890,6 +890,7 @@ struct v4l2_pix_format {
 #define V4L2_META_FMT_MALI_C55_STATS	v4l2_fourcc('C', '5', '5', 'S') /* ARM Mali-C55 3A Statistics */
 
 /* Vendor specific - used for Arm Mali-C720 ISP */
+#define V4L2_META_FMT_MALI_C720_PARAMS	v4l2_fourcc('C', '7', '2', 'P') /* ARM Mali-C720 Parameters */
 #define V4L2_META_FMT_MALI_C720_STATS	v4l2_fourcc('C', '7', '2', 'S') /* ARM Mali-C720 3A Statistics */
 
 /* Vendor specific - used for Dreamchip RPP-X1 ISP */
