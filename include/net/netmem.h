@@ -68,6 +68,7 @@ DECLARE_STATIC_KEY_FALSE(page_pool_mem_providers);
 enum net_iov_type {
 	NET_IOV_DMABUF,
 	NET_IOV_IOURING,
+	NET_IOV_XSK,
 };
 
 /* A memory descriptor representing abstract networking I/O vectors.
@@ -81,7 +82,9 @@ enum net_iov_type {
  * CPU-readable or unreadable. New code must not assume net_iov implies
  * unreadable memory (check readability via netmem_address() or
  * skb_frags_readable() instead) and should, as much as possible, generalize
- * existing limitations to match the design principles.
+ * existing limitations to match the design principles. AF_XDP sink
+ * net_iovs (%NET_IOV_XSK) are unreadable for the core and the stack as well:
+ * only XDP reads them, through their XDP view (&net_iov_area.xdp_vaddr).
  *
  * @pp_magic:	pp field, similar to the one in struct page/struct
  *		netmem_desc.

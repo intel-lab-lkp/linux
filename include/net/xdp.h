@@ -65,6 +65,10 @@ struct xdp_rxq_info {
 	u32 reg_state;
 	struct xdp_mem_info mem;
 	u32 frag_size;
+	/* Area of the MP_XDP_ONLY provider of the page pool, see
+	 * xdp_sink_mark()
+	 */
+	struct net_iov_area *sink_area;
 	/* Shared info of buffers with %XDP_FLAGS_SINFO_EXT, in kernel
 	 * memory, see xdp_rxq_info_reg_ext_sinfo(). The queue builds one
 	 * such buffer at a time.
@@ -95,6 +99,15 @@ enum xdp_buff_flags {
 	 * frame, see xdp_data_hard_end(): the frame must hold nothing else.
 	 */
 	XDP_FLAGS_SINFO_EXT		= BIT(3),
+	/* AF_XDP sink memory, see %MP_XDP_ONLY: the buffer may only go to the
+	 * AF_XDP socket of its queue. Userspace may write it at any time,
+	 * also while the kernel reads it. So the kernel takes bounds only
+	 * from its own fields, and only the XDP program and its helpers read
+	 * the bytes. A helper that checks bytes and reads them again later
+	 * must check a copy, see bpf_syncookie_th(). Nothing builds a frame
+	 * or an skb in the buffer.
+	 */
+	XDP_FLAGS_SINK			= BIT(4),
 };
 
 struct xdp_buff {
@@ -150,6 +163,14 @@ static __always_inline void xdp_buff_set_frag_unreadable(struct xdp_buff *xdp)
 	xdp->flags |= XDP_FLAGS_FRAGS_UNREADABLE;
 }
 
+static __always_inline bool xdp_buff_is_sink(const struct xdp_buff *xdp)
+{
+	return !!(xdp->flags & XDP_FLAGS_SINK);
+}
+
+/* Enabled while an AF_XDP socket receives in the device's buffer layout */
+DECLARE_STATIC_KEY_FALSE(xdp_sink_key);
+
 static __always_inline u32 xdp_buff_get_skb_flags(const struct xdp_buff *xdp)
 {
 	return xdp->flags;
@@ -176,6 +197,21 @@ xdp_init_buff(struct xdp_buff *xdp, u32 frame_sz, struct xdp_rxq_info *rxq)
 	xdp->frame_sz = frame_sz;
 	xdp->flags = 0;
 #endif
+}
+
+/* Drivers take the address of a head buffer with xdp_netmem_address(),
+ * which for an AF_XDP sink lies in its XDP view, the UMEM, see
+ * &net_iov_area.xdp_vaddr. Mark such buffers before the driver adds
+ * fragments: their shared info lives in the queue, and they may only go to
+ * the AF_XDP socket of the queue.
+ */
+static __always_inline void xdp_sink_mark(struct xdp_buff *xdp)
+{
+	struct net_iov_area *area = xdp->rxq->sink_area;
+	unsigned long off = (u8 *)xdp->data_hard_start - (u8 *)area->xdp_vaddr;
+
+	if (off < area->xdp_vsize)
+		xdp->flags |= XDP_FLAGS_SINK | XDP_FLAGS_SINFO_EXT;
 }
 
 /* XDP view of net_iovs: a memory provider may give XDP an address for its
@@ -212,6 +248,9 @@ static __always_inline void *xdp_frag_address(const skb_frag_t *frag)
 	return addr ? addr + skb_frag_off(frag) : NULL;
 }
 
+/* Marks sink buffers in @xdp->flags too: call it after xdp_init_buff(), which
+ * clears the flags
+ */
 static __always_inline void
 xdp_prepare_buff(struct xdp_buff *xdp, unsigned char *hard_start,
 		 int headroom, int data_len, const bool meta_valid)
@@ -222,6 +261,10 @@ xdp_prepare_buff(struct xdp_buff *xdp, unsigned char *hard_start,
 	xdp->data = data;
 	xdp->data_end = data + data_len;
 	xdp->data_meta = meta_valid ? data : data + 1;
+
+	if (static_branch_unlikely(&xdp_sink_key) && xdp->rxq &&
+	    unlikely(xdp->rxq->sink_area))
+		xdp_sink_mark(xdp);
 }
 
 /* Reserve memory area at end-of data area.
@@ -348,8 +391,12 @@ static inline bool xdp_buff_add_frag(struct xdp_buff *xdp, netmem_ref netmem,
 
 	if (unlikely(netmem_is_pfmemalloc(netmem)))
 		xdp_buff_set_frag_pfmemalloc(xdp);
-	if (unlikely(netmem_is_net_iov(netmem)))
+	if (unlikely(netmem_is_net_iov(netmem))) {
 		xdp_buff_set_frag_unreadable(xdp);
+		/* AF_XDP sink memory may only go to the socket of its queue */
+		if (netmem_to_net_iov(netmem)->type == NET_IOV_XSK)
+			xdp->flags |= XDP_FLAGS_SINK;
+	}
 
 	return true;
 }
@@ -478,8 +525,10 @@ int xdp_update_frame_from_buff(const struct xdp_buff *xdp,
 		return -ENOSPC;
 	}
 
-	/* A frame keeps its shared info in the buffer */
-	if (unlikely(xdp->flags & XDP_FLAGS_SINFO_EXT))
+	/* Sink buffers go to their AF_XDP socket, or nowhere. A frame keeps
+	 * its shared info in the buffer.
+	 */
+	if (unlikely(xdp->flags & (XDP_FLAGS_SINK | XDP_FLAGS_SINFO_EXT)))
 		return -EFAULT;
 
 	xdp_frame->data = xdp->data;
@@ -762,6 +811,11 @@ static __always_inline u32 bpf_prog_run_xdp(const struct bpf_prog *prog,
 	 * for accessing map entries.
 	 */
 	u32 act = __bpf_prog_run(prog, xdp, BPF_DISPATCHER_FUNC(xdp));
+
+	/* Sink buffers go to the AF_XDP socket of their queue, or nowhere */
+	if (static_branch_unlikely(&xdp_sink_key) && xdp_buff_is_sink(xdp) &&
+	    (act == XDP_PASS || act == XDP_TX))
+		act = XDP_DROP;
 
 	if (static_branch_unlikely(&bpf_master_redirect_enabled_key)) {
 		if (act == XDP_TX && netif_is_bond_slave(xdp->rxq->dev))

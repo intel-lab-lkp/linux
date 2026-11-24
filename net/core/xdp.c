@@ -15,6 +15,7 @@
 #include <linux/rhashtable.h>
 #include <linux/bug.h>
 #include <net/page_pool/helpers.h>
+#include <net/page_pool/memory_provider.h>
 
 #include <net/hotdata.h>
 #include <net/netdev_lock.h>
@@ -142,6 +143,7 @@ void xdp_rxq_info_unreg_mem_model(struct xdp_rxq_info *xdp_rxq)
 	}
 
 	xdp_unreg_mem_model(&xdp_rxq->mem);
+	xdp_rxq->sink_area = NULL;
 	kfree(xdp_rxq->ext_sinfo);
 	xdp_rxq->ext_sinfo = NULL;
 }
@@ -334,10 +336,25 @@ err:
 	return ERR_PTR(errno);
 }
 
+/* The page pool has an MP_XDP_ONLY provider */
+static bool xdp_mem_is_sink(enum xdp_mem_type type, void *allocator)
+{
+	struct page_pool *pp = allocator;
+
+	return type == MEM_TYPE_PAGE_POOL && pp && pp->mp_ops &&
+	       pp->mp_ops->flags & MP_XDP_ONLY;
+}
+
 int xdp_reg_mem_model(struct xdp_mem_info *mem,
 		      enum xdp_mem_type type, void *allocator)
 {
 	struct xdp_mem_allocator *xdp_alloc;
+
+	/* Sink buffers need the area and shared info that only
+	 * xdp_rxq_info_reg_mem_model() sets up
+	 */
+	if (xdp_mem_is_sink(type, allocator))
+		return -EOPNOTSUPP;
 
 	xdp_alloc = __xdp_reg_mem_model(mem, type, allocator);
 	if (IS_ERR(xdp_alloc))
@@ -346,22 +363,43 @@ int xdp_reg_mem_model(struct xdp_mem_info *mem,
 }
 EXPORT_SYMBOL_GPL(xdp_reg_mem_model);
 
+DEFINE_STATIC_KEY_FALSE(xdp_sink_key);
+EXPORT_SYMBOL_GPL(xdp_sink_key);
+
 int xdp_rxq_info_reg_mem_model(struct xdp_rxq_info *xdp_rxq,
 			       enum xdp_mem_type type, void *allocator)
 {
+	bool had_sinfo = xdp_rxq->ext_sinfo;
 	struct xdp_mem_allocator *xdp_alloc;
+	int err;
 
 	if (xdp_rxq->reg_state != REG_STATE_REGISTERED) {
 		WARN(1, "Missing register, driver bug");
 		return -EFAULT;
 	}
 
+	/* Userspace may write sink buffers: their shared info lives here */
+	if (xdp_mem_is_sink(type, allocator)) {
+		err = xdp_rxq_info_reg_ext_sinfo(xdp_rxq);
+		if (err)
+			return err;
+	}
+
 	xdp_alloc = __xdp_reg_mem_model(&xdp_rxq->mem, type, allocator);
-	if (IS_ERR(xdp_alloc))
+	if (IS_ERR(xdp_alloc)) {
+		if (!had_sinfo) {
+			kfree(xdp_rxq->ext_sinfo);
+			xdp_rxq->ext_sinfo = NULL;
+		}
 		return PTR_ERR(xdp_alloc);
+	}
 
 	if (type == MEM_TYPE_XSK_BUFF_POOL && allocator)
 		xsk_pool_set_rxq_info(allocator, xdp_rxq);
+
+	/* MP_XDP_ONLY providers put their net_iov_area first in mp_priv */
+	xdp_rxq->sink_area = xdp_mem_is_sink(type, allocator) ?
+			     ((struct page_pool *)allocator)->mp_priv : NULL;
 
 	if (trace_mem_connect_enabled() && xdp_alloc)
 		trace_mem_connect(xdp_alloc, xdp_rxq);
@@ -664,8 +702,10 @@ struct sk_buff *xdp_build_skb_from_buff(const struct xdp_buff *xdp)
 	u32 nr_frags = 0;
 	int metalen;
 
-	/* An skb keeps its shared info in the buffer */
-	if (unlikely(xdp->flags & XDP_FLAGS_SINFO_EXT))
+	/* Sink buffers go to their AF_XDP socket, or nowhere. An skb keeps
+	 * its shared info in the buffer.
+	 */
+	if (unlikely(xdp->flags & (XDP_FLAGS_SINK | XDP_FLAGS_SINFO_EXT)))
 		return NULL;
 
 	if (unlikely(xdp_buff_has_frags(xdp))) {

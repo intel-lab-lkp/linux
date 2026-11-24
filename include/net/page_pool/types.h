@@ -33,9 +33,10 @@
 
 /*
  * Allow an XDP-only memory provider of the queue (%MP_XDP_ONLY) to back the
- * pool. The driver registers the pool as the memory model of the RX queue,
- * sets up XDP buffers with xdp_prepare_buff() at xdp_netmem_address() of
- * their head, and puts heads back by netmem, not by address.
+ * pool. The driver registers the pool as the memory model of the RX queue
+ * with xdp_rxq_info_reg_mem_model(), sets up XDP buffers with
+ * xdp_prepare_buff() at xdp_netmem_address() of their head, and puts heads
+ * back by netmem, not by address.
  */
 #define PP_FLAG_ALLOW_XDP_ONLY_NETMEM BIT(4)
 
