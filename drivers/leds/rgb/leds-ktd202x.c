@@ -533,6 +533,7 @@ static int ktd202x_probe(struct i2c_client *client)
 {
 	struct device *dev = &client->dev;
 	struct ktd202x *chip;
+	unsigned long num_leds;
 	int count;
 	int ret;
 
@@ -540,7 +541,9 @@ static int ktd202x_probe(struct i2c_client *client)
 	if (!count || count > KTD202X_MAX_LEDS)
 		return dev_err_probe(dev, -EINVAL, "Incorrect number of leds (%d)", count);
 
-	chip = devm_kzalloc_flex(dev, *chip, leds, count);
+	num_leds = (unsigned long)i2c_get_match_data(client);
+
+	chip = devm_kzalloc_flex(dev, *chip, leds, num_leds);
 	if (!chip)
 		return -ENOMEM;
 
@@ -557,8 +560,6 @@ static int ktd202x_probe(struct i2c_client *client)
 	ret = devm_mutex_init(dev, &chip->mutex);
 	if (ret)
 		return ret;
-
-	chip->num_leds = (unsigned long)i2c_get_match_data(client);
 
 	chip->regulators[0].supply = "vin";
 	chip->regulators[1].supply = "vio";
