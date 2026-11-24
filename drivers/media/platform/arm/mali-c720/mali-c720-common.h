@@ -15,6 +15,9 @@
 #include <linux/spinlock.h>
 #include <linux/videodev2.h>
 
+#include <media/v4l2-device.h>
+#include <media/v4l2-subdev.h>
+
 #include "mali-c720-ctx-mgr.h"
 #include "mali-c720-discovery.h"
 #include "mali-c720-formats.h"
@@ -26,7 +29,45 @@
 #include "mali-c720-registers-ctx-mgr.h"
 #include "mali-c720-registers-modules.h"
 
+#define MALI_C720_MIN_INPUT_WIDTH	256
+#define MALI_C720_MIN_INPUT_HEIGHT	256
+#define MALI_C720_MAX_WIDTH		8192
+#define MALI_C720_MAX_HEIGHT		4608
+#define MALI_C720_DEFAULT_WIDTH		1920
+#define MALI_C720_DEFAULT_HEIGHT	1080
+
 #define MALI_C720_FRAME_TIMESTAMP_COUNT	256
+
+struct mali_c720_subdev {
+	struct v4l2_subdev sd;
+	struct mali_c720 *mali_c720;
+};
+
+#define v4l2_sd_to_mali_c720_sd(_sd) \
+	container_of(_sd, struct mali_c720_subdev, sd)
+
+#define mali_c720_sd_to_sd(_mdev, type) \
+	container_of(_mdev, type, mdev)
+
+enum mali_c720_input_pads {
+	MALI_C720_INPUT_PAD_SOURCE_SLOT_INPUT,
+	MALI_C720_INPUT_PAD_SINK_INPUT0,
+	MALI_C720_INPUT_NUM_PADS,
+};
+
+struct mali_c720_slot_input {
+	struct mali_c720_buffer_pool raw_buffer_desc;
+	struct media_pad *sink_pad;
+	struct media_pad *src_pad;
+	u32 stream;
+	bool prepared;
+};
+
+struct mali_c720_input {
+	struct mali_c720_subdev mdev;
+	struct media_pad pads[MALI_C720_INPUT_NUM_PADS];
+	struct mali_c720_slot_input slot_input;
+};
 
 enum mali_c720_cap_devs {
 	MALI_C720_CAP_DEV_FR0_RGB,
@@ -82,6 +123,10 @@ struct mali_c720 {
 	resource_size_t mmio_size;
 	u32 top_base;
 
+	struct v4l2_device v4l2_dev;
+
+	struct mali_c720_input input;
+
 	struct mali_c720_registers registers;
 	u8 *default_regs;
 
@@ -99,5 +144,9 @@ struct mali_c720 {
 	/* Spinlock to guard IRQ fifo */
 	spinlock_t irq_lock;
 };
+
+int mali_c720_register_input(struct mali_c720 *mali_c720);
+void mali_c720_unregister_input(struct mali_c720 *mali_c720);
+void mali_c720_cleanup_input(struct mali_c720 *mali_c720);
 
 #endif /* MALI_C720_COMMON_H */
