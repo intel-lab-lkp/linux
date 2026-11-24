@@ -1156,6 +1156,16 @@ static int svc_tcp_recvfrom(struct svc_rqst *rqstp)
 	svc_tcp_restore_pages(svsk, rqstp);
 
 	lock_sock(sock->sk);
+	/* svcauth_tls_accept() sets XPT_HANDSHAKE before the STARTTLS
+	 * reply goes out, and sending the reply takes the socket lock.
+	 * Testing XPT_HANDSHAKE under that lock leaves the ClientHello
+	 * for tlshd.
+	 */
+	if (test_bit(XPT_HANDSHAKE, &svsk->sk_xprt.xpt_flags)) {
+		release_sock(sock->sk);
+		len = -EAGAIN;
+		goto err_incomplete;
+	}
 	len = sock->ops->read_sock(sock->sk, &desc, svc_tcp_recv_actor);
 	/* ->read_sock stops at urgent data and consumes none of it.
 	 * Only recvmsg() clears the condition, and this path calls
