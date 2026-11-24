@@ -104,6 +104,14 @@ struct net_iov_area {
 	/* Array of net_iovs for this area. */
 	struct net_iov *niovs;
 	size_t num_niovs;
+	/* XDP view, see xdp_netmem_address(): XDP may read and write net_iov i
+	 * at xdp_vaddr + (i << xdp_shift), xdp_vsize bytes in all. NULL if the
+	 * provider offers none. The core and the stack take every net_iov as
+	 * unreadable either way.
+	 */
+	void *xdp_vaddr;
+	size_t xdp_vsize;
+	unsigned int xdp_shift;
 };
 
 static inline struct net_iov_area *net_iov_owner(const struct net_iov *niov)

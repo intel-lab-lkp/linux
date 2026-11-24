@@ -164,6 +164,40 @@ xdp_init_buff(struct xdp_buff *xdp, u32 frame_sz, struct xdp_rxq_info *rxq)
 #endif
 }
 
+/* XDP view of net_iovs: a memory provider may give XDP an address for its
+ * net_iovs, see &net_iov_area.xdp_vaddr. XDP code may read and write a
+ * net_iov only through these helpers, and only if its provider offers a
+ * view; such buffers must not become skb frags or xdp_frames. For the core
+ * and the stack every net_iov stays unreadable: netmem_address() and
+ * skb_frag_address() give NULL for it. A net_iov without a view gives NULL
+ * here too, so a reader that does not use these helpers fails closed.
+ */
+static __always_inline void *xdp_net_iov_address(const struct net_iov *niov)
+{
+	const struct net_iov_area *area = net_iov_owner(niov);
+
+	if (!area->xdp_vaddr)
+		return NULL;
+	return area->xdp_vaddr +
+	       ((unsigned long)net_iov_idx(niov) << area->xdp_shift);
+}
+
+/* Address of @netmem, which a driver uses as the head of an XDP buffer */
+static __always_inline void *xdp_netmem_address(netmem_ref netmem)
+{
+	if (netmem_is_net_iov(netmem))
+		return xdp_net_iov_address(netmem_to_net_iov(netmem));
+	return __netmem_address(netmem);
+}
+
+/* Address of the bytes of @frag of an XDP buffer */
+static __always_inline void *xdp_frag_address(const skb_frag_t *frag)
+{
+	void *addr = xdp_netmem_address(skb_frag_netmem(frag));
+
+	return addr ? addr + skb_frag_off(frag) : NULL;
+}
+
 static __always_inline void
 xdp_prepare_buff(struct xdp_buff *xdp, unsigned char *hard_start,
 		 int headroom, int data_len, const bool meta_valid)
