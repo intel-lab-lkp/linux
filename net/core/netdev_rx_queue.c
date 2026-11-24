@@ -79,12 +79,18 @@ __netif_get_rx_queue_lease(struct net_device **dev, unsigned int *rxq_idx,
 	return rxq;
 }
 
-/* See also page_pool_is_unreadable() */
+/* See also page_pool_is_unreadable(). An XDP-only provider backs the headers
+ * too, so its queue needs no header split, see %MP_XDP_ONLY.
+ */
 bool netif_rxq_has_unreadable_mp(struct net_device *dev, unsigned int rxq_idx)
 {
-	if (rxq_idx < dev->real_num_rx_queues)
-		return __netif_get_rx_queue(dev, rxq_idx)->mp_params.mp_ops;
-	return false;
+	const struct memory_provider_ops *ops;
+
+	if (rxq_idx >= dev->real_num_rx_queues)
+		return false;
+
+	ops = __netif_get_rx_queue(dev, rxq_idx)->mp_params.mp_ops;
+	return ops && !(ops->flags & MP_XDP_ONLY);
 }
 EXPORT_SYMBOL(netif_rxq_has_unreadable_mp);
 
@@ -189,6 +195,7 @@ static int __netif_mp_open_rxq(struct net_device *dev, unsigned int rxq_idx,
 			       struct netlink_ext_ack *extack)
 {
 	const struct netdev_queue_mgmt_ops *qops = dev->queue_mgmt_ops;
+	bool xdp_only = p->mp_ops->flags & MP_XDP_ONLY;
 	struct netdev_queue_config qcfg[2];
 	struct netdev_rx_queue *rxq;
 	int ret;
@@ -196,15 +203,17 @@ static int __netif_mp_open_rxq(struct net_device *dev, unsigned int rxq_idx,
 	if (!qops)
 		return -EOPNOTSUPP;
 
-	if (dev->cfg->hds_config != ETHTOOL_TCP_DATA_SPLIT_ENABLED) {
+	/* An XDP-only provider backs headers too, and runs next to XDP */
+	if (!xdp_only &&
+	    dev->cfg->hds_config != ETHTOOL_TCP_DATA_SPLIT_ENABLED) {
 		NL_SET_ERR_MSG(extack, "tcp-data-split is disabled");
 		return -EINVAL;
 	}
-	if (dev->cfg->hds_thresh) {
+	if (!xdp_only && dev->cfg->hds_thresh) {
 		NL_SET_ERR_MSG(extack, "hds-thresh is not zero");
 		return -EINVAL;
 	}
-	if (dev_xdp_prog_count(dev)) {
+	if (!xdp_only && dev_xdp_prog_count(dev)) {
 		NL_SET_ERR_MSG(extack, "unable to custom memory provider to device with XDP program attached");
 		return -EEXIST;
 	}
@@ -219,7 +228,8 @@ static int __netif_mp_open_rxq(struct net_device *dev, unsigned int rxq_idx,
 		return -EEXIST;
 	}
 #ifdef CONFIG_XDP_SOCKETS
-	if (rxq->pool) {
+	/* Only the AF_XDP socket of the queue installs an XDP-only provider */
+	if (rxq->pool && !xdp_only) {
 		NL_SET_ERR_MSG(extack, "designated queue already in use by AF_XDP");
 		return -EBUSY;
 	}

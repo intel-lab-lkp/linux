@@ -258,7 +258,10 @@ ethnl_set_rings(struct ethnl_req_info *req_info, struct genl_info *info)
 		return -EINVAL;
 	}
 
-	if (dev_get_min_mp_channel_count(dev)) {
+	/* Providers that take the payload need header split. XDP-only
+	 * providers back whole packets: they neither need it nor block XDP.
+	 */
+	if (dev_mp_blocks_xdp(dev)) {
 		if (kernel_ringparam.tcp_data_split !=
 		    ETHTOOL_TCP_DATA_SPLIT_ENABLED) {
 			NL_SET_ERR_MSG(info->extack,

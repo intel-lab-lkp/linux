@@ -31,8 +31,18 @@
  */
 #define PP_FLAG_ALLOW_UNREADABLE_NETMEM BIT(3)
 
+/*
+ * Allow an XDP-only memory provider of the queue (%MP_XDP_ONLY) to back the
+ * pool. The driver registers the pool as the memory model of the RX queue,
+ * sets up XDP buffers with xdp_prepare_buff() at xdp_netmem_address() of
+ * their head, and puts heads back by netmem, not by address.
+ */
+#define PP_FLAG_ALLOW_XDP_ONLY_NETMEM BIT(4)
+
 #define PP_FLAG_ALL		(PP_FLAG_DMA_MAP | PP_FLAG_DMA_SYNC_DEV | \
-				 PP_FLAG_SYSTEM_POOL | PP_FLAG_ALLOW_UNREADABLE_NETMEM)
+				 PP_FLAG_SYSTEM_POOL | \
+				 PP_FLAG_ALLOW_UNREADABLE_NETMEM | \
+				 PP_FLAG_ALLOW_XDP_ONLY_NETMEM)
 
 /* Index limit to stay within PP_DMA_INDEX_BITS for DMA indices */
 #define PP_DMA_INDEX_LIMIT XA_LIMIT(1, BIT(PP_DMA_INDEX_BITS) - 1)
@@ -82,7 +92,7 @@ struct pp_alloc_cache {
  * @netdev:	netdev this pool will serve (leave as NULL if none or multiple)
  * @queue_idx:	queue idx this page_pool is being created for.
  * @flags:	PP_FLAG_DMA_MAP, PP_FLAG_DMA_SYNC_DEV, PP_FLAG_SYSTEM_POOL,
- *		PP_FLAG_ALLOW_UNREADABLE_NETMEM.
+ *		PP_FLAG_ALLOW_UNREADABLE_NETMEM, PP_FLAG_ALLOW_XDP_ONLY_NETMEM.
  */
 struct page_pool_params {
 	struct_group_tagged(page_pool_params_fast, fast,

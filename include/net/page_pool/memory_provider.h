@@ -19,6 +19,20 @@ struct sk_buff;
  * Per-provider custom logic must be delegated to memory_provider_ops rather
  * than handled directly in page_pool core code.
  */
+
+/**
+ * enum mp_flags - how a memory provider differs from the default
+ * @MP_XDP_ONLY: Only XDP consumes the buffers: they never reach the stack.
+ *	They back the RX page pools of the queue that set
+ *	%PP_FLAG_ALLOW_XDP_ONLY_NETMEM, so header split is not needed, and
+ *	native XDP may run next to them.
+ *	XDP may read them, but userspace may write them at any time,
+ *	so the kernel must keep its own data out of them.
+ */
+enum mp_flags {
+	MP_XDP_ONLY		= BIT(0),
+};
+
 struct memory_provider_ops {
 	netmem_ref (*alloc_netmems)(struct page_pool *pool, gfp_t gfp);
 	bool (*release_netmem)(struct page_pool *pool, netmem_ref netmem);
@@ -27,6 +41,7 @@ struct memory_provider_ops {
 	int (*nl_fill)(void *mp_priv, struct sk_buff *rsp,
 		       struct netdev_rx_queue *rxq);
 	void (*uninstall)(void *mp_priv, struct netdev_rx_queue *rxq);
+	u32 flags;
 };
 
 bool net_mp_niov_set_dma_addr(struct net_iov *niov, dma_addr_t addr);

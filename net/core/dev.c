@@ -10645,7 +10645,7 @@ int netif_xdp_propagate(struct net_device *dev, struct netdev_bpf *bpf)
 			return -EBUSY;
 		}
 
-		if (dev_get_min_mp_channel_count(dev)) {
+		if (dev_mp_blocks_xdp(dev)) {
 			NL_SET_ERR_MSG(bpf->extack,
 				       "unable to propagate XDP to device using memory provider");
 			return -EBUSY;
@@ -10726,7 +10726,7 @@ static int dev_xdp_install(struct net_device *dev, enum bpf_xdp_mode mode,
 				       "unable to install XDP to device using tcp-data-split");
 			return -EBUSY;
 		}
-		if (dev_get_min_mp_channel_count(dev)) {
+		if (dev_mp_blocks_xdp(dev)) {
 			NL_SET_ERR_MSG(extack,
 				       "unable to install XDP to device using memory provider");
 			return -EBUSY;
@@ -11144,6 +11144,23 @@ err_out:
 	if (old_prog)
 		bpf_prog_put(old_prog);
 	return err;
+}
+
+/* Native XDP runs next to XDP-only providers only, see %MP_XDP_ONLY */
+bool dev_mp_blocks_xdp(const struct net_device *dev)
+{
+	const struct memory_provider_ops *ops;
+	unsigned int i;
+
+	netdev_assert_locked_ops_compat(dev);
+
+	for (i = 0; i < dev->real_num_rx_queues; i++) {
+		ops = dev->_rx[i].mp_params.mp_ops;
+		if (ops && !(ops->flags & MP_XDP_ONLY))
+			return true;
+	}
+
+	return false;
 }
 
 u32 dev_get_min_mp_channel_count(const struct net_device *dev)
