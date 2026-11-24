@@ -7286,11 +7286,35 @@ nfs4_delegation_record_grant_slot(struct nfs4_delegation *dp,
 	dp->dl_recall_grant.valid = true;
 }
 
+static bool
+nfs4_delegation_stat(struct nfs4_delegation *dp, struct svc_fh *currentfh,
+		     struct kstat *stat)
+{
+	struct nfsd_file *nf = find_writeable_file(dp->dl_stid.sc_file);
+	struct path path;
+	int rc;
+
+	if (!nf)
+		return false;
+
+	path.mnt = currentfh->fh_export->ex_path.mnt;
+	path.dentry = file_dentry(nf->nf_file);
+
+	rc = vfs_getattr(&path, stat,
+			 STATX_MODE | STATX_SIZE | STATX_ATIME |
+			 STATX_MTIME | STATX_CTIME | STATX_CHANGE_COOKIE,
+			 AT_STATX_SYNC_AS_STAT);
+
+	nfsd_file_put(nf);
+	return rc == 0;
+}
+
 static struct nfs4_delegation *
 nfs4_set_delegation(struct nfsd4_open *open,
 		    const struct nfsd4_compound_state *cstate,
 		    struct nfs4_ol_stateid *stp, struct svc_fh *parent,
-		    u32 *held_type)
+		    struct svc_fh *currentfh, u32 *held_type,
+		    u64 *grant_change)
 {
 	bool deleg_ts = nfsd4_want_deleg_timestamps(open);
 	struct nfs4_client *clp = stp->st_stid.sc_client;
@@ -7434,6 +7458,25 @@ nfs4_set_delegation(struct nfsd4_open *open,
 	if (fp->fi_had_conflict)
 		goto out_unlock;
 
+	/*
+	 * Anything that can reach the delegation once the delegation is
+	 * hashed may read ncf_initial_cinfo and dl_[amc]time, so set them
+	 * before hashing. nfs4_open_delegation() stats again after hashing
+	 * to catch a write that lands between the two stats.
+	 */
+	if (deleg_is_write(dl_type)) {
+		struct kstat stat;
+
+		status = -EIO;
+		if (!nfs4_delegation_stat(dp, currentfh, &stat))
+			goto out_unlock;
+		*grant_change = nfsd4_change_attribute(&stat);
+		dp->dl_cb_fattr.ncf_initial_cinfo = *grant_change;
+		dp->dl_atime = stat.atime;
+		dp->dl_ctime = stat.ctime;
+		dp->dl_mtime = stat.mtime;
+	}
+
 	spin_lock(&nn->deleg_lock);
 	spin_lock(&clp->cl_lock);
 	spin_lock(&fp->fi_lock);
@@ -7495,29 +7538,6 @@ static void nfsd4_open_deleg_none_ext(struct nfsd4_open *open, int status,
 			WARN_ON_ONCE(1);
 		}
 	}
-}
-
-static bool
-nfs4_delegation_stat(struct nfs4_delegation *dp, struct svc_fh *currentfh,
-		     struct kstat *stat)
-{
-	struct nfsd_file *nf = find_writeable_file(dp->dl_stid.sc_file);
-	struct path path;
-	int rc;
-
-	if (!nf)
-		return false;
-
-	path.mnt = currentfh->fh_export->ex_path.mnt;
-	path.dentry = file_dentry(nf->nf_file);
-
-	rc = vfs_getattr(&path, stat,
-			 STATX_MODE | STATX_SIZE | STATX_ATIME |
-			 STATX_MTIME | STATX_CTIME | STATX_CHANGE_COOKIE,
-			 AT_STATX_SYNC_AS_STAT);
-
-	nfsd_file_put(nf);
-	return rc == 0;
 }
 
 /*
@@ -7588,6 +7608,7 @@ nfs4_open_delegation(struct svc_rqst *rqstp, struct nfsd4_open *open,
 	struct svc_fh *parent = NULL;
 	struct nfs4_delegation *dp;
 	u32 held_type = OPEN_DELEGATE_NONE;
+	u64 grant_change = 0;
 	struct kstat stat;
 	int status = 0;
 	int cb_up;
@@ -7622,8 +7643,8 @@ nfs4_open_delegation(struct svc_rqst *rqstp, struct nfsd4_open *open,
 		default:
 			goto out_no_deleg;
 	}
-	dp = nfs4_set_delegation(open, &resp->cstate, stp, parent,
-				 &held_type);
+	dp = nfs4_set_delegation(open, &resp->cstate, stp, parent, currentfh,
+				 &held_type, &grant_change);
 	if (IS_ERR(dp)) {
 		status = PTR_ERR(dp);
 		goto out_no_deleg;
@@ -7641,12 +7662,24 @@ nfs4_open_delegation(struct svc_rqst *rqstp, struct nfsd4_open *open,
 			nfs4_put_stid(&dp->dl_stid);
 			goto out_no_deleg;
 		}
+		/*
+		 * The holder's own WRITE through an earlier open doesn't
+		 * break the lease and can land after the grant stat, as can
+		 * a foreign write whose break raced past the fi_had_conflict
+		 * check. A plain write delegation synthesizes change from
+		 * ncf_initial_cinfo, so ncf_initial_cinfo must not be stale.
+		 * Compare with the grant stat's change attribute, not with
+		 * ncf_initial_cinfo. A GETATTR can already have advanced
+		 * ncf_initial_cinfo past the grant stat's value.
+		 */
+		if (nfsd4_change_attribute(&stat) != grant_change) {
+			destroy_delegation(dp, false);
+			nfs4_put_stid(&dp->dl_stid);
+			status = -EAGAIN;
+			goto out_no_deleg;
+		}
 		open->op_delegate_type = deleg_ts ? OPEN_DELEGATE_WRITE_ATTRS_DELEG :
 						    OPEN_DELEGATE_WRITE;
-		dp->dl_cb_fattr.ncf_initial_cinfo = nfsd4_change_attribute(&stat);
-		dp->dl_atime = stat.atime;
-		dp->dl_ctime = stat.ctime;
-		dp->dl_mtime = stat.mtime;
 		spin_lock(&f->f_lock);
 		if (deleg_ts)
 			f->f_mode |= FMODE_NOCMTIME;
