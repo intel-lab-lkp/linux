@@ -1378,10 +1378,10 @@ vet_deleg_attrs(struct nfsd4_setattr *setattr, struct nfs4_delegation *dp)
 
 	if (setattr->sa_bmval[2] & FATTR4_WORD2_TIME_DELEG_MODIFY) {
 		if (nfsd4_vet_deleg_time(&iattr->ia_mtime, &dp->dl_mtime, &now)) {
+			/* ctime moves too, so DELEGRETURN needn't restamp */
+			dp->dl_setattr = true;
 			iattr->ia_ctime = iattr->ia_mtime;
-			if (nfsd4_vet_deleg_time(&iattr->ia_ctime, &dp->dl_ctime, &now))
-				dp->dl_setattr = true;
-			else
+			if (!nfsd4_vet_deleg_time(&iattr->ia_ctime, &dp->dl_ctime, &now))
 				iattr->ia_valid &= ~(ATTR_CTIME | ATTR_CTIME_SET);
 		} else {
 			iattr->ia_valid &= ~(ATTR_CTIME | ATTR_CTIME_SET |

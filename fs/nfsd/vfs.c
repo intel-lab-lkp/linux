@@ -513,10 +513,12 @@ static int __nfsd_setattr(struct dentry *dentry, struct iattr *iap)
 	/*
 	 * If ATTR_DELEG is set, then this is an update from a client that
 	 * holds a delegation. If this is an update for only the atime, the
-	 * ctime should not be changed. If the update contains the mtime
-	 * too, then ATTR_CTIME should already be set.
+	 * ctime should not be changed. Any other attribute change, such as
+	 * a mode or owner change sent along with a delegated atime, must
+	 * update the ctime.
 	 */
-	if (!(iap->ia_valid & ATTR_DELEG))
+	if (!(iap->ia_valid & ATTR_DELEG) ||
+	    (iap->ia_valid & ~(ATTR_DELEG | ATTR_ATIME | ATTR_ATIME_SET)))
 		iap->ia_valid |= ATTR_CTIME;
 
 	return notify_change(&nop_mnt_idmap, dentry, iap, NULL);
