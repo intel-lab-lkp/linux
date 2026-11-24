@@ -34,8 +34,13 @@ properties:
   interrupt-controller: true
 
   interrupts:
-    maxItems: 1
-    description: Interrupt line connecting this controller to its parent.
+    minItems: 1
+    maxItems: 6
+    description:
+      CPU interrupt lines connecting this controller to its parent. The
+      controller presents the number of the pending interrupt plus one, in
+      binary, on the CPU interrupt lines IP2-IP7, so it can be connected to
+      up to six of them.
 
   econet,shadow-interrupts:
     $ref: /schemas/types.yaml#/definitions/uint32-matrix
