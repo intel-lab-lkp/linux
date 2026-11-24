@@ -15,6 +15,7 @@ mali-c720-y := mali-c720-capture.o \
 	      mali-c720-registers-top.o \
 	      mali-c720-registers-ctx-mgr.o \
 	      mali-c720-registers-modules.o \
+	      mali-c720-tpg.o \
 	      mali-c720-vision-pipe.o \
 
 obj-$(CONFIG_VIDEO_MALI_C720) += mali-c720.o

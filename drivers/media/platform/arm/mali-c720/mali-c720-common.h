@@ -64,6 +64,27 @@ struct mali_c720_subdev {
 #define mali_c720_sd_to_sd(_mdev, type) \
 	container_of(_mdev, type, mdev)
 
+enum mali_c720_tpg_ids {
+	MALI_C720_TPG0,
+	MALI_C720_TPG1,
+	MALI_C720_NUM_TPGS,
+};
+
+struct mali_c720_tpg {
+	struct mali_c720_subdev mdev;
+	unsigned int id;
+	unsigned long clk_rate;
+
+	struct media_pad pad;
+	struct media_pad *remote;
+
+	struct mali_c720_tpg_ctrls {
+		struct v4l2_ctrl_handler handler;
+		struct v4l2_ctrl *pattern;
+		struct v4l2_ctrl *vblank;
+	} ctrls;
+};
+
 enum mali_c720_input_pads {
 	MALI_C720_INPUT_PAD_SOURCE_SLOT_INPUT,
 	MALI_C720_INPUT_PAD_SINK_INPUT0,
@@ -256,6 +277,7 @@ struct mali_c720 {
 	struct v4l2_async_notifier notifier;
 	struct media_pipeline pipe;
 
+	struct mali_c720_tpg tpg[MALI_C720_NUM_TPGS];
 	struct mali_c720_input input;
 	struct mali_c720_isp isp;
 	struct mali_c720_vision_pipe vision_pipe;
@@ -283,6 +305,10 @@ struct mali_c720 {
 };
 
 /* ISP subdevice registration functions */
+
+int mali_c720_register_tpgs(struct mali_c720 *mali_c720);
+void mali_c720_unregister_tpgs(struct mali_c720 *mali_c720);
+void mali_c720_cleanup_tpgs(struct mali_c720 *mali_c720);
 
 int mali_c720_register_input(struct mali_c720 *mali_c720);
 void mali_c720_unregister_input(struct mali_c720 *mali_c720);

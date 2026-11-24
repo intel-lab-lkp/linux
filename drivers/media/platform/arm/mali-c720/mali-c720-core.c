@@ -30,7 +30,13 @@ static void mali_c720_remove_links(struct mali_c720 *mali_c720)
 	struct v4l2_subdev *isp_sd = &mali_c720->isp.mdev.sd;
 	struct v4l2_subdev *hv_sd = &mali_c720->vision_pipe.mdev.sd;
 	struct v4l2_subdev *fr_sd = &mali_c720->fr_pipe.mdev.sd;
+	struct v4l2_subdev *sd;
 	unsigned int i;
+
+	for (i = 0; i < MALI_C720_NUM_TPGS; i++) {
+		sd = &mali_c720->tpg[i].mdev.sd;
+		media_entity_remove_links(&sd->entity);
+	}
 
 	media_entity_remove_links(&input_sd->entity);
 	media_entity_remove_links(&isp_sd->entity);
@@ -39,6 +45,32 @@ static void mali_c720_remove_links(struct mali_c720 *mali_c720)
 
 	for (i = 0; i < MALI_C720_MAX_NUM_CAP_DEVS; i++)
 		media_entity_remove_links(&mali_c720->cap_devs[i].vdev.entity);
+}
+
+static int mali_c720_create_tpg_links(struct mali_c720 *mali_c720,
+				      bool tpg_present)
+{
+	struct v4l2_subdev *input_sd = &mali_c720->input.mdev.sd;
+	struct v4l2_subdev *sd;
+	unsigned int i;
+	int ret;
+
+	if (!tpg_present)
+		return 0;
+
+	for (i = 0; i < MALI_C720_NUM_TPGS; i++) {
+		sd = &mali_c720->tpg[i].mdev.sd;
+
+		ret = media_create_pad_link(&sd->entity, 0, &input_sd->entity,
+					    MALI_C720_INPUT_PAD_SINK_INPUT0, 0);
+		if (ret) {
+			dev_err(mali_c720->dev,
+				"failed to link TPG %u and input sink\n", i);
+			return ret;
+		}
+	}
+
+	return 0;
 }
 
 static int mali_c720_create_isp_input_links(struct mali_c720 *mali_c720)
@@ -112,7 +144,17 @@ static int mali_c720_create_fr_pipe_links(struct mali_c720 *mali_c720)
 
 static int mali_c720_create_links(struct mali_c720 *mali_c720)
 {
+	const struct mali_c720_discovery_target tpg = {
+		.module_id = MALI_C720_DISC_MODULE_ID_TPG_RAW_MULTI,
+		.pipeline_id = MALI_C720_DISC_PIPE_GLOBAL,
+	};
+	const bool tpg_present =
+		mali_c720_discovery_module_present(mali_c720, &tpg);
 	int ret;
+
+	ret = mali_c720_create_tpg_links(mali_c720, tpg_present);
+	if (ret)
+		goto err_remove_links;
 
 	ret = mali_c720_create_isp_input_links(mali_c720);
 	if (ret)
@@ -148,11 +190,16 @@ static void mali_c720_unregister_entities(struct mali_c720 *mali_c720)
 	mali_c720_unregister_vision_pipe(mali_c720);
 	mali_c720_unregister_isp(mali_c720);
 	mali_c720_unregister_input(mali_c720);
+	mali_c720_unregister_tpgs(mali_c720);
 }
 
 static int mali_c720_register_entities(struct mali_c720 *mali_c720)
 {
 	int ret;
+
+	ret = mali_c720_register_tpgs(mali_c720);
+	if (ret)
+		goto err_unregister_entities;
 
 	ret = mali_c720_register_input(mali_c720);
 	if (ret)
@@ -298,6 +345,7 @@ static void mali_c720_release(struct v4l2_device *v4l2_dev)
 	mali_c720_cleanup_vision_pipe(mali_c720);
 	mali_c720_cleanup_isp(mali_c720);
 	mali_c720_cleanup_input(mali_c720);
+	mali_c720_cleanup_tpgs(mali_c720);
 	media_device_cleanup(&mali_c720->media_dev);
 	mali_c720_free(mali_c720);
 }
