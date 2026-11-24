@@ -969,10 +969,19 @@ static void svc_handle_xprt(struct svc_rqst *rqstp, struct svc_xprt *xprt)
 		assign_bit(RQ_LOCAL, &rqstp->rq_flags,
 			   test_bit(XPT_LOCAL, &xprt->xpt_flags));
 		rqstp->rq_deferred = svc_deferred_dequeue(xprt);
-		if (rqstp->rq_deferred)
+		if (rqstp->rq_deferred) {
 			len = svc_deferred_recv(rqstp);
-		else
+		} else {
+			/* XPT_BUSY holds off a handshake during the receive,
+			 * and svc_tcp_handshake() closes the transport rather
+			 * than start one partway through a record.
+			 */
+			assign_bit(RQ_TLS_SESSION, &rqstp->rq_flags,
+				   test_bit(XPT_TLS_SESSION, &xprt->xpt_flags));
+			assign_bit(RQ_PEER_AUTH, &rqstp->rq_flags,
+				   test_bit(XPT_PEER_AUTH, &xprt->xpt_flags));
 			len = xprt->xpt_ops->xpo_recvfrom(rqstp);
+		}
 		rqstp->rq_reserved = serv->sv_max_mesg;
 		if (xprt->xpt_class->xcl_flags & SVC_XPRT_FLAG_WSPACE_RESERVE)
 			atomic_add(rqstp->rq_reserved, &xprt->xpt_reserved);
@@ -1422,6 +1431,8 @@ static struct cache_deferred_req *svc_defer(struct cache_req *req)
 		dr->daddrlen = rqstp->rq_daddrlen;
 		dr->secure = test_bit(RQ_SECURE, &rqstp->rq_flags);
 		dr->argslen = rqstp->rq_arg.len >> 2;
+		dr->tls_session = test_bit(RQ_TLS_SESSION, &rqstp->rq_flags);
+		dr->peer_auth = test_bit(RQ_PEER_AUTH, &rqstp->rq_flags);
 
 		memcpy(dr->args, rqstp->rq_arg.head[0].iov_base,
 		       dr->argslen << 2);
@@ -1462,6 +1473,8 @@ static noinline int svc_deferred_recv(struct svc_rqst *rqstp)
 	 * it handled last. Restore the value computed at receive time.
 	 */
 	assign_bit(RQ_SECURE, &rqstp->rq_flags, dr->secure);
+	assign_bit(RQ_TLS_SESSION, &rqstp->rq_flags, dr->tls_session);
+	assign_bit(RQ_PEER_AUTH, &rqstp->rq_flags, dr->peer_auth);
 
 	dr->xprt_ctxt = NULL;
 	svc_xprt_received(rqstp->rq_xprt);

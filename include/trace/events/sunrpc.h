@@ -1673,7 +1673,9 @@ DEFINE_SVCXDRBUF_EVENT(sendto);
 	svc_rqst_flag(USEDEFERRAL)					\
 	svc_rqst_flag(DROPME)						\
 	svc_rqst_flag(VICTIM)						\
-	svc_rqst_flag_end(DATA)
+	svc_rqst_flag(DATA)						\
+	svc_rqst_flag(TLS_SESSION)					\
+	svc_rqst_flag_end(PEER_AUTH)
 
 #undef svc_rqst_flag
 #undef svc_rqst_flag_end

@@ -287,6 +287,8 @@ enum {
 	RQ_DROPME,		/* drop current reply */
 	RQ_VICTIM,		/* Have agreed to shut down */
 	RQ_DATA,		/* request has data */
+	RQ_TLS_SESSION,		/* request arrived on a TLS session */
+	RQ_PEER_AUTH,		/* request arrived from an authenticated peer */
 };
 
 #define SVC_NET(rqst) (rqst->rq_xprt ? rqst->rq_xprt->xpt_net : rqst->rq_bc_net)
@@ -374,6 +376,8 @@ struct svc_deferred_req {
 	size_t			addrlen;
 	struct sockaddr_storage	daddr;	/* where reply must come from */
 	size_t			daddrlen;
+	bool			tls_session;	/* RQ_TLS_SESSION at receive */
+	bool			peer_auth;	/* RQ_PEER_AUTH at receive */
 	void			*xprt_ctxt;
 	struct cache_deferred_req handle;
 	int			argslen;
