@@ -968,6 +968,7 @@ static void svc_handle_xprt(struct svc_rqst *rqstp, struct svc_xprt *xprt)
 		/* XPT_DATA|XPT_DEFERRED case: */
 		assign_bit(RQ_LOCAL, &rqstp->rq_flags,
 			   test_bit(XPT_LOCAL, &xprt->xpt_flags));
+		clear_bit(RQ_TLS_PROBE_RECV, &rqstp->rq_flags);
 		rqstp->rq_deferred = svc_deferred_dequeue(xprt);
 		if (rqstp->rq_deferred) {
 			len = svc_deferred_recv(rqstp);

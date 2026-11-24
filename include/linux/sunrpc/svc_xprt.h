@@ -110,6 +110,7 @@ enum {
 	XPT_RPCB_UNREG,		/* transport that needs unregistering
 				 * with rpcbind (TCP, UDP) on destroy
 				 */
+	XPT_TLS_PROBE,		/* AUTH_TLS probe pending or accepted */
 };
 
 /*

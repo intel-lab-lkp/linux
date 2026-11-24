@@ -1676,7 +1676,8 @@ DEFINE_SVCXDRBUF_EVENT(sendto);
 	svc_rqst_flag(DATA)						\
 	svc_rqst_flag(TLS_SESSION)					\
 	svc_rqst_flag(PEER_AUTH)					\
-	svc_rqst_flag_end(TLS_PROBE)
+	svc_rqst_flag(TLS_PROBE)					\
+	svc_rqst_flag_end(TLS_PROBE_RECV)
 
 #undef svc_rqst_flag
 #undef svc_rqst_flag_end
@@ -1938,7 +1939,8 @@ TRACE_EVENT(svc_stats_latency,
 	svc_xprt_flag(TLS_SESSION)					\
 	svc_xprt_flag(PEER_AUTH)					\
 	svc_xprt_flag(PEER_VALID)					\
-	svc_xprt_flag_end(RPCB_UNREG)
+	svc_xprt_flag(RPCB_UNREG)					\
+	svc_xprt_flag_end(TLS_PROBE)
 
 #undef svc_xprt_flag
 #undef svc_xprt_flag_end
