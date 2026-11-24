@@ -271,6 +271,15 @@ static int pcrypt_create_aead(struct crypto_template *tmpl, struct rtattr **tb,
 		goto err_free_inst;
 
 	alg = crypto_spawn_aead_alg(&ctx->spawn);
+
+	/*
+	 * A pcrypt instance keeps the cra_name of the algorithm it wraps, so
+	 * the inner lookup can return an existing pcrypt instance. Do not nest.
+	 */
+	err = -EEXIST;
+	if (strstarts(alg->base.cra_driver_name, "pcrypt("))
+		goto err_free_inst;
+
 	err = pcrypt_init_instance(aead_crypto_instance(inst), &alg->base);
 	if (err)
 		goto err_free_inst;
