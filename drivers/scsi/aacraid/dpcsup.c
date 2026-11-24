@@ -379,8 +379,10 @@ unsigned int aac_intr_normal(struct aac_dev *dev, u32 index, int isAif,
 					mflags);
 
 				FIB_COUNTER_INCREMENT(aac_config.NativeRecved);
-				if (completed)
+				if (completed) {
 					aac_fib_complete(fib);
+					aac_fib_free(fib);
+				}
 			}
 		} else {
 			struct hw_fib *hwfib = fib->hw_fib_va;
@@ -432,8 +434,10 @@ unsigned int aac_intr_normal(struct aac_dev *dev, u32 index, int isAif,
 					mflags);
 
 				FIB_COUNTER_INCREMENT(aac_config.NormalRecved);
-				if (completed)
+				if (completed) {
 					aac_fib_complete(fib);
+					aac_fib_free(fib);
+				}
 			}
 		}
 
