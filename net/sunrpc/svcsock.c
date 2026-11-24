@@ -424,6 +424,12 @@ static void svc_tcp_handshake(struct svc_xprt *xprt)
 	};
 	int ret;
 
+	/* A record that began in plaintext cannot finish under TLS. */
+	if (svsk->sk_tcplen || svsk->sk_datalen) {
+		trace_svc_tls_partial_record(xprt);
+		goto out_close;
+	}
+
 	trace_svc_tls_upcall(xprt);
 
 	clear_bit(XPT_TLS_SESSION, &xprt->xpt_flags);

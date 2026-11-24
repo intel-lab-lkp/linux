@@ -2090,6 +2090,7 @@ DEFINE_SVC_XPRT_EVENT(free);
 		TP_ARGS(xprt))
 
 DEFINE_SVC_TLS_EVENT(start);
+DEFINE_SVC_TLS_EVENT(partial_record);
 DEFINE_SVC_TLS_EVENT(upcall);
 DEFINE_SVC_TLS_EVENT(unavailable);
 DEFINE_SVC_TLS_EVENT(not_started);
