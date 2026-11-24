@@ -2052,6 +2052,13 @@ static void ri_timer(struct timer_list *timer)
 	 */
 	raw_write_seqcount_begin(&utask->ri_seqcount);
 
+	/*
+	 * expire_timers() calls detach_timer() before invoking us.
+	 * Order its pending-state store before loading return_instances.
+	 * A publisher that saw the timer pending must be visible here.
+	 */
+	smp_mb();
+
 	for_each_ret_instance_rcu(ri, utask->return_instances)
 		hprobe_expire(&ri->hprobe, false);
 
@@ -2304,7 +2311,16 @@ static void prepare_uretprobe(struct uprobe *uprobe, struct pt_regs *regs,
 	ri->next = utask->return_instances;
 	rcu_assign_pointer(utask->return_instances, ri);
 
-	mod_timer(&utask->ri_timer, jiffies + RI_TIMER_PERIOD);
+	/*
+	 * Order the return-instance store before timer_pending() loads
+	 * the pending state. Either the callback sees this instance or
+	 * we rearm the timer.
+	 */
+	smp_mb();
+	if (!timer_pending(&utask->ri_timer)) {
+		utask->ri_timer.expires = jiffies + RI_TIMER_PERIOD;
+		add_timer(&utask->ri_timer);
+	}
 
 	return;
 free:
