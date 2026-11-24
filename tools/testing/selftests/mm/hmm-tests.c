@@ -2250,7 +2250,8 @@ TEST_F(hmm, migrate_remap_fault)
 {
 	struct hmm_buffer *buffer;
 	unsigned long npages;
-	unsigned long size = pmd_psize();
+	unsigned long pmd_size = pmd_psize();
+	unsigned long size;
 	unsigned long offsets[3];
 	unsigned long i;
 	void *old_ptr, *new_ptr = NULL;
@@ -2258,16 +2259,17 @@ TEST_F(hmm, migrate_remap_fault)
 	int *ptr;
 	int ret, j, use_thp, dont_unmap, before;
 
-	if (!size)
-		size = TWOMEG;
-
-	offsets[0] = 0;
-	offsets[1] = size / 4;
-	offsets[2] = size / 2;
+	if (!pmd_size)
+		pmd_size = TWOMEG;
 
 	for (before = 0; before < 2; ++before) {
 		for (dont_unmap = 0; dont_unmap < 2; ++dont_unmap) {
 			for (use_thp = 0; use_thp < 2; ++use_thp) {
+				/* Keep a full PMD for the huge-page cases. */
+				size = use_thp || pmd_size <= TWOMEG ? pmd_size : TWOMEG;
+				offsets[0] = 0;
+				offsets[1] = size / 4;
+				offsets[2] = size / 2;
 				for (j = 0; j < ARRAY_SIZE(offsets); ++j) {
 					int flags = MREMAP_MAYMOVE | MREMAP_FIXED;
 
@@ -2309,8 +2311,10 @@ TEST_F(hmm, migrate_remap_fault)
 
 					/* Check what the device read. */
 					for (i = 0, ptr = buffer->mirror;
-					     i < size / sizeof(*ptr); ++i)
-						ASSERT_EQ(ptr[i], i);
+					     i < size / sizeof(*ptr); ++i) {
+						if (ptr[i] != i)
+							ASSERT_EQ(ptr[i], i);
+					}
 
 					if (!before) {
 						new_ptr = mremap((void *)map, size, size, flags,
@@ -2321,8 +2325,10 @@ TEST_F(hmm, migrate_remap_fault)
 
 					/* Fault pages back to system memory and check them. */
 					for (i = 0, ptr = buffer->ptr;
-					     i < size / sizeof(*ptr); ++i)
-						ASSERT_EQ(ptr[i], i);
+					     i < size / sizeof(*ptr); ++i) {
+						if (ptr[i] != i)
+							ASSERT_EQ(ptr[i], i);
+					}
 
 					munmap(new_ptr, size);
 					buffer->ptr = old_ptr;
