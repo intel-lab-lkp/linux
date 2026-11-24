@@ -1502,6 +1502,12 @@ extern const struct snd_pcm_chmap_elem snd_pcm_alt_chmaps[];
 #define SND_PCM_CHMAP_MASK_246	(SND_PCM_CHMAP_MASK_24 | (1U << 6))
 #define SND_PCM_CHMAP_MASK_2468	(SND_PCM_CHMAP_MASK_246 | (1U << 8))
 
+int snd_pcm_add_named_chmap_ctls(struct snd_pcm *pcm, int stream,
+				 const char *name,
+				 const struct snd_pcm_chmap_elem *chmap,
+				 int max_channels,
+				 unsigned long private_value,
+				 struct snd_pcm_chmap **info_ret);
 int snd_pcm_add_chmap_ctls(struct snd_pcm *pcm, int stream,
 			   const struct snd_pcm_chmap_elem *chmap,
 			   int max_channels,
