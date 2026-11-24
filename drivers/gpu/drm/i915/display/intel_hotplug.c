@@ -1246,20 +1246,7 @@ static ssize_t i915_hpd_storm_ctl_write(struct file *file,
 
 	return len;
 }
-
-static int i915_hpd_storm_ctl_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, i915_hpd_storm_ctl_show, inode->i_private);
-}
-
-static const struct file_operations i915_hpd_storm_ctl_fops = {
-	.owner = THIS_MODULE,
-	.open = i915_hpd_storm_ctl_open,
-	.read = seq_read,
-	.llseek = seq_lseek,
-	.release = single_release,
-	.write = i915_hpd_storm_ctl_write
-};
+DEFINE_SHOW_STORE_ATTRIBUTE(i915_hpd_storm_ctl);
 
 static int i915_hpd_short_storm_ctl_show(struct seq_file *m, void *data)
 {
@@ -1269,13 +1256,6 @@ static int i915_hpd_short_storm_ctl_show(struct seq_file *m, void *data)
 		   str_yes_no(display->hotplug.hpd_short_storm_enabled));
 
 	return 0;
-}
-
-static int
-i915_hpd_short_storm_ctl_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, i915_hpd_short_storm_ctl_show,
-			   inode->i_private);
 }
 
 static ssize_t i915_hpd_short_storm_ctl_write(struct file *file,
@@ -1324,15 +1304,7 @@ static ssize_t i915_hpd_short_storm_ctl_write(struct file *file,
 
 	return len;
 }
-
-static const struct file_operations i915_hpd_short_storm_ctl_fops = {
-	.owner = THIS_MODULE,
-	.open = i915_hpd_short_storm_ctl_open,
-	.read = seq_read,
-	.llseek = seq_lseek,
-	.release = single_release,
-	.write = i915_hpd_short_storm_ctl_write,
-};
+DEFINE_SHOW_STORE_ATTRIBUTE(i915_hpd_short_storm_ctl);
 
 void intel_hpd_debugfs_register(struct intel_display *display)
 {
