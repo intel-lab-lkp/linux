@@ -1286,7 +1286,10 @@ static struct virtio_device_id id_table[] = {
 MODULE_DEVICE_TABLE(virtio, id_table);
 
 static struct virtio_driver virtio_iommu_drv = {
-	.driver.name		= KBUILD_MODNAME,
+	.driver		= {
+		.name		= KBUILD_MODNAME,
+		.suppress_bind_attrs     = true,
+	},
 	.id_table		= id_table,
 	.feature_table		= features,
 	.feature_table_size	= ARRAY_SIZE(features),
