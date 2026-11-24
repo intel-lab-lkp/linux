@@ -12,13 +12,21 @@
 #include <linux/mutex.h>
 #include <linux/refcount.h>
 #include <linux/spinlock.h>
+#include <linux/videodev2.h>
 
+#include "mali-c720-formats.h"
 #include "mali-c720-id.h"
 #include "mali-c720-register-access.h"
 #include "mali-c720-registers.h"
 #include "mali-c720-registers-top.h"
 #include "mali-c720-registers-ctx-mgr.h"
 #include "mali-c720-registers-modules.h"
+
+enum mali_c720_cap_devs {
+	MALI_C720_CAP_DEV_FR0_RGB,
+	MALI_C720_CAP_DEV_FR0_YUV,
+	MALI_C720_MAX_NUM_CAP_DEVS,
+};
 
 struct mali_c720_context_regs {
 	dma_addr_t dma_handle;
