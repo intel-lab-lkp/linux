@@ -200,12 +200,27 @@ static void ath12k_ahb_free_napi_for_group(struct ath12k_ext_irq_grp *irq_grp)
 	irq_grp->napi_ndev = NULL;
 }
 
-static void ath12k_ahb_free_napi(struct ath12k_base *ab, int num_ext_irq_grp)
+static void ath12k_ahb_clear_irq_flags(struct ath12k_base *ab,
+				       struct ath12k_ext_irq_grp *irq_grp,
+				       int count)
 {
 	int i;
 
-	for (i = 0; i < num_ext_irq_grp; i++)
-		ath12k_ahb_free_napi_for_group(&ab->ext_irq_grp[i]);
+	for (i = 0; i < count; i++)
+		irq_clear_status_flags(ab->irq_num[irq_grp->irqs[i]],
+				       IRQ_NOAUTOEN | IRQ_DISABLE_UNLAZY);
+}
+
+static void ath12k_ahb_cleanup_ext_irq(struct ath12k_base *ab, int num_ext_irq_grp)
+{
+	int i;
+
+	for (i = 0; i < num_ext_irq_grp; i++) {
+		struct ath12k_ext_irq_grp *irq_grp = &ab->ext_irq_grp[i];
+
+		ath12k_ahb_clear_irq_flags(ab, irq_grp, irq_grp->num_irq);
+		ath12k_ahb_free_napi_for_group(irq_grp);
+	}
 }
 
 static void ath12k_ahb_free_config_irq(struct ath12k_base *ab)
@@ -215,7 +230,7 @@ static void ath12k_ahb_free_config_irq(struct ath12k_base *ab)
 		return;
 	}
 
-	ath12k_ahb_free_napi(ab, ATH12K_EXT_IRQ_GRP_NUM_MAX);
+	ath12k_ahb_cleanup_ext_irq(ab, ATH12K_EXT_IRQ_GRP_NUM_MAX);
 }
 
 static void ath12k_ahb_ext_grp_enable(struct ath12k_ext_irq_grp *irq_grp)
@@ -705,11 +720,11 @@ static int ath12k_ahb_config_ext_irq(struct ath12k_base *ab)
 				ath12k_warn(ab, "failed to get irq %s: %d\n",
 					    irq_name[irq_idx], irq);
 				ret = irq;
+				ath12k_ahb_clear_irq_flags(ab, irq_grp, j);
 				ath12k_ahb_free_napi_for_group(irq_grp);
 				goto free_napi_ndev;
 			}
 
-			ab->irq_num[irq_idx] = irq;
 			irq_set_status_flags(irq, IRQ_NOAUTOEN | IRQ_DISABLE_UNLAZY);
 			ret = devm_request_irq(ab->dev, irq,
 					       ath12k_ahb_ext_interrupt_handler,
@@ -717,16 +732,21 @@ static int ath12k_ahb_config_ext_irq(struct ath12k_base *ab)
 					       irq_name[irq_idx], irq_grp);
 			if (ret) {
 				ath12k_warn(ab, "failed request_irq for %d\n", irq);
+				irq_clear_status_flags(irq, IRQ_NOAUTOEN |
+						       IRQ_DISABLE_UNLAZY);
+				ath12k_ahb_clear_irq_flags(ab, irq_grp, j);
 				ath12k_ahb_free_napi_for_group(irq_grp);
 				goto free_napi_ndev;
 			}
+
+			ab->irq_num[irq_idx] = irq;
 		}
 	}
 
 	return 0;
 
 free_napi_ndev:
-	ath12k_ahb_free_napi(ab, i);
+	ath12k_ahb_cleanup_ext_irq(ab, i);
 	return ret;
 }
 
