@@ -817,10 +817,30 @@ static int validate_av1_tile_info(struct v4l2_av1_tile_info *t)
 	return 0;
 }
 
+static int validate_av1_reference_index(struct v4l2_ctrl_av1_frame *f)
+{
+	int idx;
+
+	if (f->primary_ref_frame > V4L2_AV1_PRIMARY_REF_NONE)
+		return -EINVAL;
+
+	if (f->primary_ref_frame == V4L2_AV1_PRIMARY_REF_NONE)
+		return 0;
+
+	idx = f->ref_frame_idx[f->primary_ref_frame];
+	if (idx < 0 || idx >= V4L2_AV1_TOTAL_REFS_PER_FRAME)
+		return -EINVAL;
+
+	return 0;
+}
+
 static int validate_av1_frame(struct v4l2_ctrl_av1_frame *f)
 {
 	int ret = 0;
 
+	ret = validate_av1_reference_index(f);
+	if (ret)
+		return ret;
 	ret = validate_av1_tile_info(&f->tile_info);
 	if (ret)
 		return ret;
