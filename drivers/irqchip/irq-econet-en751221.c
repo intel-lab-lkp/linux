@@ -18,6 +18,15 @@
  * When VPE#1 requests IRQ 30, the driver manipulates the mask bit for IRQ 29,
  * telling the hardware to mask VPE#1's view of IRQ 30.
  *
+ * The controller does not give each source its own CPU interrupt line. It
+ * presents the number of the pending interrupt plus one, in binary, on the
+ * CPU interrupt lines IP2-IP7, which a CPU in VEIC mode takes as the vector.
+ * Without VEIC, IRQ 21, for example, shows up as 22 = 0b010110 on IP3, IP4
+ * and IP6, so the controller is chained to every CPU line listed in its
+ * "interrupts" property. Chained to IP2 alone, it would see the odd-numbered
+ * IRQs only when an even-numbered one, such as the timer, happened to run
+ * the handler.
+ *
  * Copyright (C) 2025 Caleb James DeLisle <cjd@cjdns.fr>
  */
 
@@ -145,9 +154,12 @@ static void econet_intc_from_parent(struct irq_desc *desc)
 	pending0 = ioread32(econet_intc.membase + REG_PENDING0);
 	pending1 = ioread32(econet_intc.membase + REG_PENDING1);
 
-	if (unlikely(!(pending0 | pending1))) {
-		spurious_interrupt();
-	} else {
+	/*
+	 * An interrupt usually raises several CPU lines. It is handled when
+	 * the first of them runs this function, and the others find nothing
+	 * pending.
+	 */
+	if (pending0 | pending1) {
 		domain = irq_desc_get_handler_data(desc);
 		econet_intc_handle_pending(domain, pending0, 0);
 		econet_intc_handle_pending(domain, pending1, 32);
@@ -461,7 +473,22 @@ static int __init econet_intc_of_init(struct device_node *node, struct device_no
 		if (ret)
 			return ret;
 	} else {
+		int nr_parents = of_irq_count(node);
+
 		irq_set_chained_handler_and_data(irq, econet_intc_from_parent, domain);
+
+		for (int i = 1; i < nr_parents; i++) {
+			int virq = irq_of_parse_and_map(node, i);
+
+			if (!virq) {
+				pr_warn("%pOF: DT: Failed to get IRQ %d from 'interrupts'\n",
+					node, i);
+				continue;
+			}
+
+			irq_set_chained_handler_and_data(virq, econet_intc_from_parent,
+							 domain);
+		}
 	}
 
 	econet_intc.domain = domain;
