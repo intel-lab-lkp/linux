@@ -7542,6 +7542,9 @@ nfs4_open_delegation(struct svc_rqst *rqstp, struct nfsd4_open *open,
 	open->op_recall = false;
 	switch (open->op_claim_type) {
 		case NFS4_OPEN_CLAIM_PREVIOUS:
+			if (open->op_share_access & NFS4_SHARE_ACCESS_WRITE &&
+			    clp->cl_minorversion == 0)
+				goto out_no_deleg;
 			if (!cb_up)
 				open->op_recall = true;
 			break;
