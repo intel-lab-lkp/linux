@@ -1056,6 +1056,7 @@ gss_create_new(const struct rpc_auth_create_args *args, struct rpc_clnt *clnt)
 	auth->au_rslack = GSS_KRB5_MAX_SLACK_NEEDED >> 2;
 	auth->au_verfsize = GSS_VERF_SLACK >> 2;
 	auth->au_ralign = GSS_VERF_SLACK >> 2;
+	auth->au_flags = 0;
 	__set_bit(RPCAUTH_AUTH_UPDATE_SLACK, &auth->au_flags);
 	auth->au_ops = &authgss_ops;
 	auth->au_flavor = flavor;
