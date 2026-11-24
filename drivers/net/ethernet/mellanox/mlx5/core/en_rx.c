@@ -327,7 +327,7 @@ static void *mlx5e_mpwqe_get_linear_page_frag(struct mlx5e_rq *rq)
 	frag_offset = li->frag_page.frags << MLX5E_XDP_LOG_MAX_LINEAR_SZ;
 	WARN_ON(frag_offset >= BIT(rq->mpwqe.page_shift));
 
-	return netmem_address(li->frag_page.netmem) + frag_offset;
+	return xdp_netmem_address(li->frag_page.netmem) + frag_offset;
 }
 
 static inline int mlx5e_get_rx_frag(struct mlx5e_rq *rq,
@@ -1585,7 +1585,7 @@ mlx5e_skb_from_cqe_linear(struct mlx5e_rq *rq, struct mlx5e_wqe_frag_info *wi,
 	dma_addr_t addr;
 	u32 frag_size;
 
-	va             = netmem_address(frag_page->netmem) + wi->offset;
+	va             = xdp_netmem_address(frag_page->netmem) + wi->offset;
 	data           = va + rx_headroom;
 	frag_size      = MLX5_SKB_FRAG_SZ(rx_headroom + cqe_bcnt);
 
@@ -1640,7 +1640,7 @@ mlx5e_skb_from_cqe_nonlinear(struct mlx5e_rq *rq, struct mlx5e_wqe_frag_info *wi
 
 	frag_page = wi->frag_page;
 
-	va = netmem_address(frag_page->netmem) + wi->offset;
+	va = xdp_netmem_address(frag_page->netmem) + wi->offset;
 	frag_consumed_bytes = min_t(u32, frag_info->frag_size, cqe_bcnt);
 
 	addr = page_pool_get_dma_addr_netmem(frag_page->netmem);
@@ -1940,7 +1940,7 @@ mlx5e_skb_from_cqe_mpwrq_nonlinear(struct mlx5e_rq *rq, struct mlx5e_mpw_info *w
 
 	prog = rcu_dereference(rq->xdp_prog);
 
-	head_addr = netmem_address(head_page->netmem) + head_offset;
+	head_addr = xdp_netmem_address(head_page->netmem) + head_offset;
 
 	if (prog) {
 		/* area for bpf_xdp_[store|load]_bytes */
@@ -2114,7 +2114,7 @@ mlx5e_skb_from_cqe_mpwrq_linear(struct mlx5e_rq *rq, struct mlx5e_mpw_info *wi,
 		return NULL;
 	}
 
-	va             = netmem_address(frag_page->netmem) + head_offset;
+	va             = xdp_netmem_address(frag_page->netmem) + head_offset;
 	data           = va + rx_headroom;
 	frag_size      = MLX5_SKB_FRAG_SZ(rx_headroom + cqe_bcnt);
 

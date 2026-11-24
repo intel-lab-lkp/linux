@@ -1012,6 +1012,9 @@ static int mlx5e_alloc_rq(struct mlx5e_params *params,
 
 		pp_params.order     = pool_order;
 		pp_params.flags     = PP_FLAG_DMA_MAP | PP_FLAG_DMA_SYNC_DEV;
+		/* Trap and PTP RQs use queue 0 too, without a program */
+		if (params->xdp_prog)
+			pp_params.flags |= PP_FLAG_ALLOW_XDP_ONLY_NETMEM;
 		pp_params.pool_size = pool_size;
 		pp_params.nid       = node;
 		pp_params.dev       = rq->pdev;
@@ -3048,6 +3051,14 @@ static int mlx5e_wait_channels_min_rx_wqes(struct mlx5e_channels *chs)
 		struct mlx5e_channel *c = chs->c[i];
 
 		if (test_bit(MLX5E_CHANNEL_STATE_XSK, c->state))
+			continue;
+
+		/* An RQ that an XDP-only provider backs fills from the FILL
+		 * ring of its socket, which stays empty until the socket
+		 * gets its chunks back, so a queue that restarts under a
+		 * slow reader would never meet the bound.
+		 */
+		if (netif_rxq_has_xdp_only_mp(c->netdev, c->ix))
 			continue;
 
 		err |= mlx5e_wait_for_min_rx_wqes(&c->rq, timeout);
@@ -5754,10 +5765,9 @@ static int mlx5e_queue_mem_alloc(struct net_device *dev,
 
 	if (MLX5E_GET_PFLAG(&chs->params, MLX5E_PFLAG_TX_PORT_TS) ||
 	    chs->params.ptp_rx   ||
-	    chs->params.xdp_prog ||
 	    priv->htb) {
 		netdev_err(priv->netdev,
-			   "Cloning channels with Port/rx PTP, XDP or HTB is not supported\n");
+			   "Cloning channels with Port/rx PTP or HTB is not supported\n");
 		err = -EOPNOTSUPP;
 		goto unlock;
 	}
