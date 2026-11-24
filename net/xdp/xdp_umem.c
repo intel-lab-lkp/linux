@@ -153,6 +153,7 @@ static int xdp_umem_account_pages(struct xdp_umem *umem)
 		XDP_UMEM_UNALIGNED_CHUNK_FLAG | \
 		XDP_UMEM_TX_SW_CSUM | \
 		XDP_UMEM_TX_METADATA_LEN | \
+		XDP_UMEM_DRV_LAYOUT | \
 	0)
 
 static int xdp_umem_reg(struct xdp_umem *umem, struct xdp_umem_reg *mr)
@@ -205,6 +206,10 @@ static int xdp_umem_reg(struct xdp_umem *umem, struct xdp_umem_reg *mr)
 
 	if (headroom > chunk_size - XDP_PACKET_HEADROOM -
 		       SKB_DATA_ALIGN(sizeof(struct skb_shared_info)) - 128)
+		return -EINVAL;
+
+	if (mr->flags & XDP_UMEM_DRV_LAYOUT &&
+	    (unaligned_chunks || chunk_size != PAGE_SIZE || headroom))
 		return -EINVAL;
 
 	if (mr->flags & XDP_UMEM_TX_METADATA_LEN) {

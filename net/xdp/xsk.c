@@ -55,7 +55,8 @@ void xsk_set_rx_need_wakeup(struct xsk_buff_pool *pool)
 		return;
 
 	pool->fq->ring->flags |= XDP_RING_NEED_WAKEUP;
-	pool->cached_need_wakeup |= XDP_WAKEUP_RX;
+	WRITE_ONCE(pool->cached_need_wakeup,
+		   pool->cached_need_wakeup | XDP_WAKEUP_RX);
 }
 EXPORT_SYMBOL(xsk_set_rx_need_wakeup);
 
@@ -72,7 +73,8 @@ void xsk_set_tx_need_wakeup(struct xsk_buff_pool *pool)
 	}
 	rcu_read_unlock();
 
-	pool->cached_need_wakeup |= XDP_WAKEUP_TX;
+	WRITE_ONCE(pool->cached_need_wakeup,
+		   pool->cached_need_wakeup | XDP_WAKEUP_TX);
 }
 EXPORT_SYMBOL(xsk_set_tx_need_wakeup);
 
@@ -82,7 +84,8 @@ void xsk_clear_rx_need_wakeup(struct xsk_buff_pool *pool)
 		return;
 
 	pool->fq->ring->flags &= ~XDP_RING_NEED_WAKEUP;
-	pool->cached_need_wakeup &= ~XDP_WAKEUP_RX;
+	WRITE_ONCE(pool->cached_need_wakeup,
+		   pool->cached_need_wakeup & ~XDP_WAKEUP_RX);
 }
 EXPORT_SYMBOL(xsk_clear_rx_need_wakeup);
 
@@ -99,7 +102,8 @@ void xsk_clear_tx_need_wakeup(struct xsk_buff_pool *pool)
 	}
 	rcu_read_unlock();
 
-	pool->cached_need_wakeup &= ~XDP_WAKEUP_TX;
+	WRITE_ONCE(pool->cached_need_wakeup,
+		   pool->cached_need_wakeup & ~XDP_WAKEUP_TX);
 }
 EXPORT_SYMBOL(xsk_clear_tx_need_wakeup);
 
@@ -817,9 +821,16 @@ out:
 }
 EXPORT_SYMBOL(xsk_tx_peek_release_desc_batch);
 
+/* Context: RCU read side, see xsk_sink_unbind() for a sink */
 static int xsk_wakeup(struct xdp_sock *xs, u8 flags)
 {
 	struct net_device *dev = xs->dev;
+	struct xsk_sink *sink;
+
+	if (xsk_drv_layout(xs)) {
+		sink = READ_ONCE(xs->pool->sink);
+		return sink ? xsk_sink_wakeup(sink) : -ENETDOWN;
+	}
 
 	return dev->netdev_ops->ndo_xsk_wakeup(dev, xs->queue_id, flags);
 }
@@ -1418,7 +1429,7 @@ static int __xsk_sendmsg(struct socket *sock, struct msghdr *m, size_t total_len
 		return 0;
 
 	pool = xs->pool;
-	if (pool->cached_need_wakeup & XDP_WAKEUP_TX) {
+	if (READ_ONCE(pool->cached_need_wakeup) & XDP_WAKEUP_TX) {
 		if (xs->zc)
 			return xsk_wakeup(xs, XDP_WAKEUP_TX);
 		return xsk_generic_xmit(sk);
@@ -1458,7 +1469,9 @@ static int __xsk_recvmsg(struct socket *sock, struct msghdr *m, size_t len, int 
 	if (xsk_no_wakeup(sk))
 		return 0;
 
-	if (xs->pool->cached_need_wakeup & XDP_WAKEUP_RX && xs->zc)
+	/* A sink socket receives without driver zero copy */
+	if (READ_ONCE(xs->pool->cached_need_wakeup) & XDP_WAKEUP_RX &&
+	    (xs->zc || xsk_drv_layout(xs)))
 		return xsk_wakeup(xs, XDP_WAKEUP_RX);
 	return 0;
 }
@@ -1481,6 +1494,7 @@ static __poll_t xsk_poll(struct file *file, struct socket *sock,
 	struct sock *sk = sock->sk;
 	struct xdp_sock *xs = xdp_sk(sk);
 	struct xsk_buff_pool *pool;
+	u8 need_wakeup;
 
 	sock_poll_wait(file, sock, wait);
 
@@ -1489,13 +1503,19 @@ static __poll_t xsk_poll(struct file *file, struct socket *sock,
 		goto out;
 
 	pool = xs->pool;
+	/* Drivers change it from their NAPI */
+	need_wakeup = READ_ONCE(pool->cached_need_wakeup);
 
-	if (pool->cached_need_wakeup) {
-		if (xs->zc)
-			xsk_wakeup(xs, pool->cached_need_wakeup);
-		else if (xs->tx)
-			/* Poll needs to drive Tx also in copy mode */
-			xsk_generic_xmit(sk);
+	if (need_wakeup) {
+		if (xs->zc) {
+			xsk_wakeup(xs, need_wakeup);
+		} else {
+			if (xsk_drv_layout(xs) && need_wakeup & XDP_WAKEUP_RX)
+				xsk_wakeup(xs, XDP_WAKEUP_RX);
+			if (xs->tx)
+				/* Poll needs to drive Tx also in copy mode */
+				xsk_generic_xmit(sk);
+		}
 	}
 
 	if (xs->rx && !xskq_prod_is_empty(xs->rx))
@@ -1585,6 +1605,29 @@ static void xsk_delete_from_maps(struct xdp_sock *xs)
 	}
 }
 
+/* The pool may outlive the socket, see xp_put_pool(). A queue in the
+ * device's buffer layout stops receiving when its receiving socket goes,
+ * so that its program can go right after.
+ */
+static void xsk_sink_release(struct xdp_sock *xs)
+{
+	struct xsk_buff_pool *pool = READ_ONCE(xs->pool);
+	struct net_device *dev;
+
+	if (!pool || !READ_ONCE(pool->sink))
+		return;
+
+	rtnl_lock();
+	dev = pool->netdev;
+	if (dev) {
+		netdev_lock_ops(dev);
+		if (pool->sink && xsk_sink_sock(pool->sink) == xs)
+			xsk_sink_unbind(pool);
+		netdev_unlock_ops(dev);
+	}
+	rtnl_unlock();
+}
+
 static int xsk_release(struct socket *sock)
 {
 	struct sock *sk = sock->sk;
@@ -1606,6 +1649,7 @@ static int xsk_release(struct socket *sock)
 	sock_prot_inuse_add(net, sk->sk_prot, -1);
 
 	xsk_delete_from_maps(xs);
+	xsk_sink_release(xs);
 	mutex_lock(&xs->mutex);
 	xsk_unbind_dev(xs);
 	mutex_unlock(&xs->mutex);
@@ -1758,6 +1802,18 @@ static int xsk_bind(struct socket *sock, struct sockaddr_unsized *addr, int addr
 				goto out_unlock;
 			}
 
+			/* A queue in the device's buffer layout has one
+			 * receiving socket, and none once that one went
+			 */
+			if (xs->rx &&
+			    umem_xs->umem->flags & XDP_UMEM_DRV_LAYOUT &&
+			    (!umem_xs->pool->sink ||
+			     xsk_sink_sock(umem_xs->pool->sink))) {
+				err = -EBUSY;
+				sockfd_put(sock);
+				goto out_unlock;
+			}
+
 			xp_get_pool(umem_xs->pool);
 			xs->pool = umem_xs->pool;
 
@@ -1810,6 +1866,8 @@ static int xsk_bind(struct socket *sock, struct sockaddr_unsized *addr, int addr
 	xs->sg = !!(xs->umem->flags & XDP_UMEM_SG_FLAG);
 	xs->queue_id = qid;
 	xp_add_xsk(xs->pool, xs);
+	if (xs->pool->sink)
+		xsk_sink_add_sock(xs->pool->sink, xs);
 
 	if (qid < dev->real_num_rx_queues) {
 		struct netdev_rx_queue *rxq;

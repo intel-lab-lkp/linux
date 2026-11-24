@@ -297,7 +297,7 @@ static netmem_ref xsk_sink_alloc_netmems(struct page_pool *pp, gfp_t gfp)
 	 * chunks that waited. Process context refills new queues only and
 	 * leaves the flags to their NAPI and to bind.
 	 */
-	if (napi && fq && sink->pool->uses_need_wakeup) {
+	if (napi && fq) {
 		if (n && llist_empty(&sink->handed))
 			xsk_clear_rx_need_wakeup(sink->pool);
 		else
@@ -501,6 +501,10 @@ int xsk_sink_bind(struct xsk_buff_pool *pool, struct net_device *dev,
 	struct xsk_sink *sink;
 	int err;
 
+	/* Without a wakeup, a queue that used up the FILL ring stays dry */
+	if (!(flags & XDP_USE_NEED_WAKEUP))
+		return -EINVAL;
+
 	if (flags & XDP_USE_SG)
 		needed |= NETDEV_XDP_ACT_RX_SG;
 	if (flags & XDP_COPY || !dev->queue_mgmt_ops ||
@@ -535,8 +539,7 @@ int xsk_sink_bind(struct xsk_buff_pool *pool, struct net_device *dev,
 	/* Until the first refill of the NAPI: the queue may need FILL to
 	 * start. Set before the NAPI runs, which owns the flags after that.
 	 */
-	if (pool->uses_need_wakeup)
-		xsk_set_rx_need_wakeup(pool);
+	xsk_set_rx_need_wakeup(pool);
 
 	/* The core keeps sink buffers to the socket once the queue runs */
 	static_branch_inc(&xdp_sink_key);
@@ -589,6 +592,22 @@ void xsk_sink_unbind(struct xsk_buff_pool *pool)
 	    netif_mp_close_rxq(pool->netdev, pool->queue_id, &p))
 		netif_close(pool->netdev);
 	xsk_sink_detach(pool);
+}
+
+int xsk_sink_wakeup(struct xsk_sink *sink)
+{
+	struct netdev_rx_queue *rxq;
+	struct napi_struct *napi;
+
+	rxq = READ_ONCE(sink->rxq);
+	napi = rxq ? READ_ONCE(rxq->napi) : NULL;
+	if (!napi)
+		return -ENETDOWN;
+
+	local_bh_disable();
+	napi_schedule(napi);
+	local_bh_enable();
+	return 0;
 }
 
 /* The net_iov of @netmem if it is one of ours; tells by its address */
