@@ -65,6 +65,44 @@ test_record()
 	fi
 }
 
+test_report()
+{
+	echo "Testing perf lock report"
+	# the output goes to the stderr and all keys are printed unless -F
+	# selects a subset, so walk the sort keys
+	for key in acquired contended avg_wait wait_total wait_max wait_min; do
+		perf lock report -i ${perfdata} -k ${key} -E 5 2> ${result}
+		if ! grep -q "Name" "${result}"; then
+			echo "[Fail] perf lock report --key ${key} has no output:" "$(cat "${result}")"
+			err=1
+			exit
+		fi
+	done
+
+	perf lock report -i ${perfdata} -c -v -E 5 2> ${result}
+	if ! grep -q "Name" "${result}"; then
+		echo "[Fail] perf lock report --combine-locks has no output:" "$(cat "${result}")"
+		err=1
+		exit
+	fi
+}
+
+test_info()
+{
+	echo "Testing perf lock info"
+	perf lock info -i ${perfdata} 2> ${result}
+	if ! grep -q "Thread ID" "${result}"; then
+		echo "[Fail] perf lock info has no thread list:" "$(cat "${result}")"
+		err=1
+		exit
+	fi
+	if ! grep -q "Address of instance" "${result}"; then
+		echo "[Fail] perf lock info has no lock list:" "$(cat "${result}")"
+		err=1
+		exit
+	fi
+}
+
 test_bpf()
 {
 	echo "Testing perf lock contention --use-bpf"
@@ -347,6 +385,8 @@ test_csv_output()
 check
 
 test_record
+test_report
+test_info
 test_bpf
 test_record_concurrent
 test_aggr_task
