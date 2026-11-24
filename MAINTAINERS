@@ -10539,6 +10539,14 @@ F:	Documentation/devicetree/bindings/sound/foursemi,fs2105s.yaml
 F:	sound/soc/codecs/fs-amp-lib.*
 F:	sound/soc/codecs/fs210x.*
 
+FPC1540 FINGERPRINT SENSOR QSEE DRIVER
+M:	Armandas Kvietkus <armandas.kvietkus@proton.me>
+L:	linux-arm-msm@vger.kernel.org
+S:	Maintained
+F:	Documentation/devicetree/bindings/misc/fpc,fpc1540-tee.yaml
+F:	drivers/misc/fpc1540-tee.c
+F:	include/uapi/linux/fpc1540-tee.h
+
 FPGA DFL DRIVERS
 M:	Xu Yilun <yilun.xu@intel.com>
 R:	Tom Rix <trix@redhat.com>

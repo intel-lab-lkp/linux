@@ -583,6 +583,16 @@ config TC9564_PCI
 	  quirk causes the ranges property in the endpoint's devicetree
 	  node to be updated dynamically.
 
+config FPC1540_TEE
+	tristate "FPC1540 fingerprint sensor through a QSEE trusted application"
+	depends on QCOM_SCM && QCOM_QSEECOM
+	depends on OF && GPIOLIB
+	help
+	  Support for the FPC1540 fingerprint sensor on Qualcomm phones where
+	  the sensor is driven by a QSEE trusted application. The driver
+	  powers and resets the sensor, loads the trusted application and
+	  passes commands and finger interrupts to userspace.
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"
