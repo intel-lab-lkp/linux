@@ -175,8 +175,18 @@ static int sdw_delete_slave(struct device *dev, void *data)
 
 	sdw_slave_debugfs_exit(slave);
 
-	mutex_lock(&bus->bus_lock);
+	/*
+	 * Split device_unregister(), the framework level needs to access
+	 * members of the slave structure after the slave driver has been
+	 * removed, thus the device_put() needs to be delayed. The device
+	 * number needs to be marked as unused and the slave needs to be
+	 * removed from the slave list. These can't be done before the
+	 * drivers remove callback as the remove callback should still
+	 * be able to communicate with the device.
+	 */
+	device_del(dev);
 
+	mutex_lock(&bus->bus_lock);
 	if (slave->dev_num) { /* clear dev_num if assigned */
 		clear_bit(slave->dev_num, bus->assigned);
 		if (bus->ops && bus->ops->put_device_num)
@@ -185,7 +195,8 @@ static int sdw_delete_slave(struct device *dev, void *data)
 	list_del_init(&slave->node);
 	mutex_unlock(&bus->bus_lock);
 
-	device_unregister(dev);
+	put_device(dev);
+
 	return 0;
 }
 
