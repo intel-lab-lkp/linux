@@ -10,13 +10,19 @@
 
 #include <linux/io.h>
 #include <linux/kfifo.h>
+#include <linux/list.h>
 #include <linux/mutex.h>
 #include <linux/refcount.h>
 #include <linux/spinlock.h>
 #include <linux/videodev2.h>
 
+#include <media/media-device.h>
+#include <media/v4l2-ctrls.h>
+#include <media/v4l2-dev.h>
 #include <media/v4l2-device.h>
 #include <media/v4l2-subdev.h>
+#include <media/videobuf2-core.h>
+#include <media/videobuf2-v4l2.h>
 
 #include "mali-c720-ctx-mgr.h"
 #include "mali-c720-discovery.h"
@@ -28,6 +34,8 @@
 #include "mali-c720-registers-top.h"
 #include "mali-c720-registers-ctx-mgr.h"
 #include "mali-c720-registers-modules.h"
+
+#define MALI_C720_DRIVER_NAME		"mali-c720"
 
 #define MALI_C720_MIN_INPUT_WIDTH	256
 #define MALI_C720_MIN_INPUT_HEIGHT	256
@@ -145,6 +153,39 @@ enum mali_c720_cap_devs {
 	MALI_C720_MAX_NUM_CAP_DEVS,
 };
 
+struct mali_c720_cap_buffer {
+	struct vb2_v4l2_buffer vb;
+	struct list_head queue;
+	dma_addr_t addr;
+};
+
+struct mali_c720_cap_dev {
+	unsigned int id;
+	struct mali_c720 *mali_c720;
+	struct v4l2_subdev *src_sd;
+	u32 src_pad;
+	struct video_device vdev;
+	struct media_pad pad;
+	struct vb2_queue queue;
+	/* Mutex to provide to vb2 */
+	struct mutex lock;
+
+	struct {
+		const struct mali_c720_v4l2_format_info *info;
+		struct v4l2_pix_format_mplane pix_mp;
+		struct mali_c720_buffer_request_info buffer_request;
+		u32 default_format;
+	} format;
+
+	struct {
+		/* Spinlock to guard buffer queue */
+		spinlock_t lock;
+		struct list_head input;
+		struct list_head processing;
+		struct mali_c720_buffer_pool pool;
+	} buffers;
+};
+
 struct mali_c720_context_regs {
 	dma_addr_t dma_handle;
 	u8 *base;
@@ -193,12 +234,15 @@ struct mali_c720 {
 	resource_size_t mmio_size;
 	u32 top_base;
 
+	struct media_device media_dev;
 	struct v4l2_device v4l2_dev;
+	struct media_pipeline pipe;
 
 	struct mali_c720_input input;
 	struct mali_c720_isp isp;
 	struct mali_c720_vision_pipe vision_pipe;
 	struct mali_c720_fr_pipe fr_pipe;
+	struct mali_c720_cap_dev cap_devs[MALI_C720_MAX_NUM_CAP_DEVS];
 
 	struct mali_c720_registers registers;
 	u8 *default_regs;
@@ -236,7 +280,19 @@ int mali_c720_register_fr_pipe(struct mali_c720 *mali_c720);
 void mali_c720_unregister_fr_pipe(struct mali_c720 *mali_c720);
 void mali_c720_cleanup_fr_pipe(struct mali_c720 *mali_c720);
 
+int mali_c720_register_capture_devs(struct mali_c720 *mali_c720);
+void mali_c720_unregister_capture_devs(struct mali_c720 *mali_c720);
+void mali_c720_cleanup_capture_devs(struct mali_c720 *mali_c720);
+
 void mali_c720_fr_pipe_apply_resizer_config(struct mali_c720_fr_pipe *pipe);
+
+bool mali_c720_cap_dev_uses_requests(struct mali_c720_cap_dev *cap_dev);
+struct media_request *mali_c720_cap_dev_get_request(struct mali_c720_cap_dev *cap_dev);
+int mali_c720_cap_dev_is_ready(struct mali_c720_cap_dev *cap_dev);
+void mali_c720_cap_dev_set_next_buffer(struct mali_c720_cap_dev *cap_dev,
+				       struct media_request *req);
+void mali_c720_cap_dev_buffer_done(struct mali_c720_cap_dev *cap_dev,
+				   bool success);
 
 void mali_c720_isp_queue_event_sof(struct mali_c720 *mali_c720, u32 sequence);
 

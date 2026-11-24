@@ -1266,7 +1266,13 @@ void mali_c720_ctx_mgr_prepare_frame(struct mali_c720_context *ctx)
 
 void mali_c720_ctx_mgr_buffer_done(struct mali_c720_context *ctx, bool success)
 {
+	struct mali_c720 *mali_c720 = ctx->mali_c720;
+	unsigned int i;
+
 	lockdep_assert_held(&ctx->state_lock);
+
+	for (i = 0; i < MALI_C720_MAX_NUM_CAP_DEVS; i++)
+		mali_c720_cap_dev_buffer_done(&mali_c720->cap_devs[i], success);
 }
 
 void mali_c720_ctx_mgr_handle_sw_ready(struct mali_c720_context *ctx)
