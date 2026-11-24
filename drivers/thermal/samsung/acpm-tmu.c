@@ -39,6 +39,10 @@
 
 #define GS101_REG_INTPEND(i)		((i) * 0x50 + 0xf8)
 
+#define ACPM_TMU_NUM_THRESHOLDS		8
+/* Threshold 7 throttles the CPUs in hardware, regardless of the INTEN mask. */
+#define ACPM_TMU_HW_TRIP_THRESHOLD	7
+
 enum {
 	P0_INTPEND,
 	P1_INTPEND,
@@ -70,6 +74,9 @@ struct acpm_tmu_sensor {
 	struct acpm_tmu_priv *priv;
 	struct mutex lock; /* protects sensor state */
 	enum thermal_device_mode mode;
+	/* Last requested window, protected by the thermal zone lock */
+	int low;
+	int high;
 	bool enabled;
 };
 
@@ -228,7 +235,8 @@ static int acpm_tmu_get_temp(struct thermal_zone_device *tz, int *temp)
 }
 
 static int acpm_tmu_update_thresholds(struct acpm_tmu_sensor *sensor,
-				      u8 thresholds[2], u8 inten)
+				      u8 thresholds[ACPM_TMU_NUM_THRESHOLDS],
+				      u8 inten)
 {
 	struct acpm_tmu_priv *priv = sensor->priv;
 	struct acpm_handle *handle = priv->handle;
@@ -249,7 +257,7 @@ static int acpm_tmu_update_thresholds(struct acpm_tmu_sensor *sensor,
 	}
 
 	ret = ops->set_threshold(handle, mbox_chan_id, acpm_sensor_id,
-				 thresholds, 2);
+				 thresholds, ACPM_TMU_NUM_THRESHOLDS);
 	if (!ret) {
 		ret = ops->set_interrupt_enable(handle, mbox_chan_id,
 						acpm_sensor_id, inten);
@@ -267,14 +275,39 @@ static int acpm_tmu_update_thresholds(struct acpm_tmu_sensor *sensor,
 	return ret;
 }
 
-static int acpm_tmu_set_trips(struct thermal_zone_device *tz, int low, int high)
+struct acpm_tmu_critical_trip {
+	const struct thermal_trip *updated;
+	int temperature;
+};
+
+static int acpm_tmu_get_crit_temp(struct thermal_trip *trip, void *arg)
+{
+	struct acpm_tmu_critical_trip *critical = arg;
+
+	if (trip->type == THERMAL_TRIP_CRITICAL && trip != critical->updated &&
+	    trip->temperature != THERMAL_TEMP_INVALID)
+		critical->temperature = min(critical->temperature, trip->temperature);
+
+	return 0;
+}
+
+static int acpm_tmu_program_thresholds(struct thermal_zone_device *tz,
+				       const struct thermal_trip *trip, int temp)
 {
 	struct acpm_tmu_sensor *sensor = thermal_zone_device_priv(tz);
-	struct acpm_tmu_priv *priv = sensor->priv;
-	struct device *dev = priv->dev;
-	u8 thresholds[2] = {};
+	struct device *dev = sensor->priv->dev;
+	struct acpm_tmu_critical_trip critical = { trip, INT_MAX };
+	u8 thresholds[ACPM_TMU_NUM_THRESHOLDS] = {};
+	int low = sensor->low, high = sensor->high;
 	u8 inten = 0;
 	int ret;
+
+	/* Exclude the trip being updated until the proposed value is considered. */
+	for_each_thermal_trip(tz, acpm_tmu_get_crit_temp, &critical);
+	if (temp != THERMAL_TEMP_INVALID)
+		critical.temperature = min(critical.temperature, temp);
+	thresholds[ACPM_TMU_HW_TRIP_THRESHOLD] =
+		clamp_val(critical.temperature / MILLIDEGREE_PER_DEGREE, 0, 255);
 
 	/* If a valid lower bound exists, set the threshold and enable its interrupt */
 	if (low > -INT_MAX) {
@@ -297,6 +330,34 @@ static int acpm_tmu_set_trips(struct thermal_zone_device *tz, int low, int high)
 	pm_runtime_put_autosuspend(dev);
 
 	return ret;
+}
+
+static int acpm_tmu_set_trips(struct thermal_zone_device *tz, int low, int high)
+{
+	struct acpm_tmu_sensor *sensor = thermal_zone_device_priv(tz);
+
+	/* The core remembers this window even if programming fails. */
+	sensor->low = low;
+	sensor->high = high;
+
+	return acpm_tmu_program_thresholds(tz, NULL, INT_MAX);
+}
+
+static int acpm_tmu_set_trip_temp(struct thermal_zone_device *tz,
+				  const struct thermal_trip *trip, int temp)
+{
+	if (trip->type != THERMAL_TRIP_CRITICAL)
+		return 0;
+
+	if (temp != THERMAL_TEMP_INVALID &&
+	    (temp < 0 || temp > 255 * MILLIDEGREE_PER_DEGREE))
+		return -EINVAL;
+
+	/*
+	 * The core can skip .set_trips() when the window is unchanged and has
+	 * not committed trip->temperature yet. Substitute the proposed value.
+	 */
+	return acpm_tmu_program_thresholds(tz, trip, temp);
 }
 
 static int acpm_tmu_change_mode(struct thermal_zone_device *tz,
@@ -329,6 +390,7 @@ static const struct thermal_zone_device_ops acpm_tmu_sensor_ops = {
 	.change_mode = acpm_tmu_change_mode,
 	.get_temp = acpm_tmu_get_temp,
 	.set_trips = acpm_tmu_set_trips,
+	.set_trip_temp = acpm_tmu_set_trip_temp,
 };
 
 static bool acpm_tmu_clear_pending_irq(struct acpm_tmu_sensor *sensor)
@@ -477,6 +539,8 @@ static int acpm_tmu_probe(struct platform_device *pdev)
 		mutex_init(&sensor->lock);
 		sensor->group = &data->sensor_groups[i];
 		sensor->priv = priv;
+		sensor->low = -INT_MAX;
+		sensor->high = INT_MAX;
 
 		tzd = devm_thermal_of_zone_register(dev, i, sensor,
 						    &acpm_tmu_sensor_ops);
