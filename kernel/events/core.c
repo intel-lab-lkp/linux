@@ -15330,6 +15330,9 @@ static void __perf_event_exit_context(void *__info)
 	list_for_each_entry(event, &ctx->event_list, event_entry) {
 		__perf_remove_from_context(event, cpuctx, ctx,
 					   (void *)(DETACH_EXIT | DETACH_GROUP));
+		/* Kick perf_poll() for is_event_hup(). */
+		event->pending_wakeup = 1;
+		irq_work_queue(&event->pending_irq);
 	}
 	raw_spin_unlock(&ctx->lock);
 }
