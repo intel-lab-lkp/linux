@@ -31,15 +31,22 @@ static int igb_realloc_rx_buffer_info(struct igb_ring *ring, bool pool_present)
 	return 0;
 }
 
+/* With VFs, the device has a single Tx queue but can have more Rx queues */
+static struct igb_ring *igb_xsk_tx_ring(struct igb_adapter *adapter, u16 qid)
+{
+	return qid < adapter->num_tx_queues ? adapter->tx_ring[qid] : NULL;
+}
+
 static void igb_txrx_ring_disable(struct igb_adapter *adapter, u16 qid)
 {
-	struct igb_ring *tx_ring = adapter->tx_ring[qid];
+	struct igb_ring *tx_ring = igb_xsk_tx_ring(adapter, qid);
 	struct igb_ring *rx_ring = adapter->rx_ring[qid];
 	struct e1000_hw *hw = &adapter->hw;
 
-	set_bit(IGB_RING_FLAG_TX_DISABLED, &tx_ring->flags);
-
-	wr32(E1000_TXDCTL(tx_ring->reg_idx), 0);
+	if (tx_ring) {
+		set_bit(IGB_RING_FLAG_TX_DISABLED, &tx_ring->flags);
+		wr32(E1000_TXDCTL(tx_ring->reg_idx), 0);
+	}
 	wr32(E1000_RXDCTL(rx_ring->reg_idx), 0);
 
 	synchronize_net();
@@ -47,24 +54,27 @@ static void igb_txrx_ring_disable(struct igb_adapter *adapter, u16 qid)
 	/* Rx/Tx share the same napi context. */
 	napi_disable(&rx_ring->q_vector->napi);
 
-	igb_clean_tx_ring(tx_ring);
+	if (tx_ring) {
+		igb_clean_tx_ring(tx_ring);
+		memset(&tx_ring->tx_stats, 0, sizeof(tx_ring->tx_stats));
+	}
 	igb_clean_rx_ring(rx_ring);
-
 	memset(&rx_ring->rx_stats, 0, sizeof(rx_ring->rx_stats));
-	memset(&tx_ring->tx_stats, 0, sizeof(tx_ring->tx_stats));
 }
 
 static void igb_txrx_ring_enable(struct igb_adapter *adapter, u16 qid)
 {
-	struct igb_ring *tx_ring = adapter->tx_ring[qid];
+	struct igb_ring *tx_ring = igb_xsk_tx_ring(adapter, qid);
 	struct igb_ring *rx_ring = adapter->rx_ring[qid];
 
-	igb_configure_tx_ring(adapter, tx_ring);
+	if (tx_ring)
+		igb_configure_tx_ring(adapter, tx_ring);
 	igb_configure_rx_ring(adapter, rx_ring);
 
 	synchronize_net();
 
-	clear_bit(IGB_RING_FLAG_TX_DISABLED, &tx_ring->flags);
+	if (tx_ring)
+		clear_bit(IGB_RING_FLAG_TX_DISABLED, &tx_ring->flags);
 
 	/* call igb_desc_unused which always leaves
 	 * at least 1 descriptor unused to make sure
@@ -148,7 +158,12 @@ static int igb_xsk_pool_disable(struct igb_adapter *adapter, u16 qid)
 		return -EINVAL;
 
 	rx_ring = adapter->rx_ring[qid];
-	if_running = netif_running(adapter->netdev) && igb_xdp_is_enabled(adapter);
+	/* The stack can know more queues than the device has, e.g. after a
+	 * fallback to fewer queues on resume: skip the rings it doesn't have.
+	 */
+	if_running = netif_running(adapter->netdev) &&
+		     igb_xdp_is_enabled(adapter) &&
+		     qid < adapter->num_rx_queues;
 	if (if_running)
 		igb_txrx_ring_disable(adapter, qid);
 
