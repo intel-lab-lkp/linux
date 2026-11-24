@@ -9,10 +9,14 @@
 #include <linux/io.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/mutex.h>
+#include <linux/notifier.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/stringify.h>
 #include <linux/watchdog.h>
+
+#include <soc/tegra/pmc.h>
 
 /* Timer registers */
 #define TIMER_PTV			0x0
@@ -40,6 +44,9 @@
 struct tegra20_wdt {
 	struct watchdog_device	wdd;
 	void __iomem		*tmr_regs;
+	struct notifier_block	powergate_nb;
+	struct mutex		lock;		/* hardware and vde_off */
+	bool			vde_off;
 };
 
 #define WDT_HEARTBEAT 120
@@ -55,10 +62,26 @@ MODULE_PARM_DESC(nowayout,
 	"Watchdog cannot be stopped once started (default="
 	__stringify(WATCHDOG_NOWAYOUT) ")");
 
-static int tegra20_wdt_start(struct watchdog_device *wdd)
+/*
+ * After a watchdog reset, Tegra20's boot ROM hangs if the VDE partition is
+ * powered off, which the PMC driver does when it registers the partition,
+ * unless booted with tegra_pmc.vde_always_on=1. By default, the watchdog is
+ * therefore only used until the partition is powered off for the first time,
+ * which still allows a watchdog started by the bootloader to catch hangs early
+ * during boot. tegra_pmc.vde_always_on=1 keeps the watchdog usable for good.
+ * Clearing this keeps it usable as well, but at the risk of the system
+ * hanging instead of rebooting. This takes precedence over nowayout, as a
+ * watchdog that can't reset the system is of no use. Clear this to keep a
+ * nowayout watchdog running.
+ */
+static bool stop_on_vde_off = true;
+module_param(stop_on_vde_off, bool, 0);
+MODULE_PARM_DESC(stop_on_vde_off,
+	"Stop the watchdog for good when the VDE partition is powered off, even with nowayout (default=1)");
+
+static int __tegra20_wdt_start(struct tegra20_wdt *wdt)
 {
-	struct tegra20_wdt *wdt = watchdog_get_drvdata(wdd);
-	u32 period = wdd->timeout * USEC_PER_SEC / 2;
+	u32 period = wdt->wdd.timeout * USEC_PER_SEC / 2;
 
 	writel(TIMER_EN | TIMER_PERIODIC | (period - 1),
 	       wdt->tmr_regs + TIMER_PTV);
@@ -72,9 +95,8 @@ static int tegra20_wdt_start(struct watchdog_device *wdd)
 	return tegra20_clk_watchdog_enable(true);
 }
 
-static int tegra20_wdt_stop(struct watchdog_device *wdd)
+static int __tegra20_wdt_stop(struct tegra20_wdt *wdt)
 {
-	struct tegra20_wdt *wdt = watchdog_get_drvdata(wdd);
 	int ret;
 
 	ret = tegra20_clk_watchdog_enable(false);
@@ -86,32 +108,90 @@ static int tegra20_wdt_stop(struct watchdog_device *wdd)
 	return ret;
 }
 
+static int tegra20_wdt_start(struct watchdog_device *wdd)
+{
+	struct tegra20_wdt *wdt = watchdog_get_drvdata(wdd);
+	int ret;
+
+	mutex_lock(&wdt->lock);
+
+	/* a reset would hang with the VDE partition powered off */
+	if (wdt->vde_off)
+		ret = -EBUSY;
+	else
+		ret = __tegra20_wdt_start(wdt);
+
+	mutex_unlock(&wdt->lock);
+
+	return ret;
+}
+
+static int tegra20_wdt_stop(struct watchdog_device *wdd)
+{
+	struct tegra20_wdt *wdt = watchdog_get_drvdata(wdd);
+	int ret;
+
+	mutex_lock(&wdt->lock);
+	ret = __tegra20_wdt_stop(wdt);
+	mutex_unlock(&wdt->lock);
+
+	return ret;
+}
+
 static int tegra20_wdt_ping(struct watchdog_device *wdd)
 {
 	struct tegra20_wdt *wdt = watchdog_get_drvdata(wdd);
+	int ret = 0;
+
+	mutex_lock(&wdt->lock);
+
+	/*
+	 * The notifier stopped the watchdog behind the core's back, which keeps
+	 * considering it running. Fail the pings, so that opening the device
+	 * fails, and user space that has it open finds out.
+	 */
+	if (wdt->vde_off) {
+		ret = -EBUSY;
+		goto unlock;
+	}
 
 	/*
 	 * Clearing the interrupt alone doesn't restart the timer's period, so
 	 * the reset could follow as soon as half the timeout after the ping.
 	 * Rewriting the timer setting restarts the period. The interrupt is
-	 * cleared afterwards, so one fired in between doesn't count.
+	 * cleared afterwards, so one fired in between doesn't count. While
+	 * stopped, the timer setting reads back as 0, so this doesn't start it.
 	 */
 	writel(readl(wdt->tmr_regs + TIMER_PTV), wdt->tmr_regs + TIMER_PTV);
 	writel(TIMER_PCR_INTR_CLR, wdt->tmr_regs + TIMER_PCR);
 
-	return 0;
+unlock:
+	mutex_unlock(&wdt->lock);
+
+	return ret;
 }
 
 static int tegra20_wdt_set_timeout(struct watchdog_device *wdd,
 				   unsigned int timeout)
 {
-	wdd->timeout = timeout;
+	struct tegra20_wdt *wdt = watchdog_get_drvdata(wdd);
+	int ret = 0;
 
-	/* starting again reprograms the running watchdog */
-	if (watchdog_active(wdd))
-		return tegra20_wdt_start(wdd);
+	mutex_lock(&wdt->lock);
 
-	return 0;
+	if (wdt->vde_off) {
+		ret = -EBUSY;
+	} else {
+		wdd->timeout = timeout;
+
+		/* starting again reprograms the running watchdog */
+		if (watchdog_active(wdd))
+			ret = __tegra20_wdt_start(wdt);
+	}
+
+	mutex_unlock(&wdt->lock);
+
+	return ret;
 }
 
 static const struct watchdog_info tegra20_wdt_info = {
@@ -130,30 +210,96 @@ static const struct watchdog_ops tegra20_wdt_ops = {
 	.set_timeout =	tegra20_wdt_set_timeout,
 };
 
+/*
+ * This runs outside of the watchdog core's locking, and possibly before the
+ * watchdog is registered, so it must not touch the core's state, such as
+ * WDOG_ACTIVE and WDOG_HW_RUNNING. The core keeps considering a stopped
+ * watchdog as running, along with the references it holds for it, and the
+ * operations refuse to start or ping it instead.
+ */
+static int tegra20_wdt_powergate_notify(struct notifier_block *nb,
+					unsigned long event, void *data)
+{
+	struct tegra20_wdt *wdt = container_of(nb, struct tegra20_wdt,
+					       powergate_nb);
+	unsigned int id = *(unsigned int *)data;
+
+	if (event != TEGRA_PMC_POWERGATE_POWER_OFF ||
+	    id != TEGRA_POWERGATE_VDEC)
+		return NOTIFY_DONE;
+
+	mutex_lock(&wdt->lock);
+
+	if (!wdt->vde_off) {
+		wdt->vde_off = true;
+		__tegra20_wdt_stop(wdt);
+
+		dev_info(wdt->wdd.parent,
+			 "VDE powered off, watchdog stopped for good\n");
+	}
+
+	mutex_unlock(&wdt->lock);
+
+	return NOTIFY_OK;
+}
+
+static void tegra20_wdt_unregister_notifier(void *data)
+{
+	struct tegra20_wdt *wdt = data;
+
+	tegra_pmc_powergate_unregister_notifier(&wdt->powergate_nb);
+}
+
 static int tegra20_wdt_init(struct platform_device *pdev,
 			    struct tegra20_wdt *wdt,
 			    void __iomem *regs)
 {
 	struct device *dev = &pdev->dev;
-	int ret;
+	int ret, err;
 
 	wdt->tmr_regs = regs;
+
+	ret = devm_mutex_init(dev, &wdt->lock);
+	if (ret)
+		return ret;
+
+	/*
+	 * If the VDE partition is already powered off, the notifier is called
+	 * right away and stops a watchdog left running by the bootloader.
+	 */
+	if (stop_on_vde_off) {
+		wdt->powergate_nb.notifier_call = tegra20_wdt_powergate_notify;
+
+		err = tegra_pmc_powergate_register_notifier(&wdt->powergate_nb);
+		if (err) {
+			dev_warn(dev, "failed to register VDE notifier: %d\n",
+				 err);
+		} else {
+			ret = devm_add_action_or_reset(dev,
+					tegra20_wdt_unregister_notifier, wdt);
+			if (ret)
+				return ret;
+		}
+	}
 
 	/*
 	 * The bootloader may leave the watchdog running. Take it over with
 	 * our own timeout and timer 1, and let the core ping it until user
 	 * space opens the device.
 	 */
-	if (tegra20_clk_watchdog_is_enabled()) {
+	mutex_lock(&wdt->lock);
+
+	if (!wdt->vde_off && tegra20_clk_watchdog_is_enabled()) {
 		dev_info(dev, "watchdog left running by the bootloader, taking it over (timeout %u sec)\n",
 			 wdt->wdd.timeout);
-		ret = tegra20_wdt_start(&wdt->wdd);
-		if (ret)
-			return ret;
-		set_bit(WDOG_HW_RUNNING, &wdt->wdd.status);
+		ret = __tegra20_wdt_start(wdt);
+		if (!ret)
+			set_bit(WDOG_HW_RUNNING, &wdt->wdd.status);
 	}
 
-	return 0;
+	mutex_unlock(&wdt->lock);
+
+	return ret;
 }
 
 static int tegra20_wdt_probe(struct platform_device *pdev)
