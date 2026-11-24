@@ -31,10 +31,14 @@
 
 #define MALI_C720_MIN_INPUT_WIDTH	256
 #define MALI_C720_MIN_INPUT_HEIGHT	256
+#define MALI_C720_MIN_OUTPUT_WIDTH	64
+#define MALI_C720_MIN_OUTPUT_HEIGHT	64
 #define MALI_C720_MAX_WIDTH		8192
 #define MALI_C720_MAX_HEIGHT		4608
 #define MALI_C720_DEFAULT_WIDTH		1920
 #define MALI_C720_DEFAULT_HEIGHT	1080
+
+#define MALI_C720_MAX_DOWNSCALE_RATIO	0xffffff /* Q4.20 */
 
 #define MALI_C720_FRAME_TIMESTAMP_COUNT	256
 
@@ -91,6 +95,48 @@ enum mali_c720_vision_pipe_pads {
 struct mali_c720_vision_pipe {
 	struct mali_c720_subdev mdev;
 	struct media_pad pads[MALI_C720_VISION_PIPE_NUM_PADS];
+};
+
+enum mali_c720_fr_pipe_pads {
+	MALI_C720_FR_PIPE_PAD_SINK_VIDEO,
+	MALI_C720_FR_PIPE_PAD_SOURCE_RGB,
+	MALI_C720_FR_PIPE_PAD_SOURCE_YUV,
+	MALI_C720_FR_PIPE_NUM_PADS,
+};
+
+struct mali_c720_crop_config {
+	u32 start_x;
+	u32 start_y;
+	u32 size_x;
+	u32 size_y;
+	bool bypass;
+};
+
+struct mali_c720_fr_resizer_config {
+	struct mali_c720_crop_config crop;
+	u32 hfilt_tincr;
+	u32 vfilt_tincr;
+	unsigned int hbank;
+	unsigned int vbank;
+	bool hfilt_enable;
+	bool vfilt_enable;
+};
+
+struct mali_c720_fr_pipe {
+	struct mali_c720_subdev mdev;
+	struct media_pad pads[MALI_C720_FR_PIPE_NUM_PADS];
+	struct media_pad *remote_src;
+	u32 crop_base;
+	u32 scaler_base;
+	u32 scaler_hmem_base;
+	u32 scaler_vmem_base;
+	u32 output_formatter_base;
+
+	/* Protect resizer_config, resizer_updated and enabled_crops. */
+	spinlock_t resizer_lock;
+	struct mali_c720_fr_resizer_config resizer_config;
+	bool resizer_updated;
+	unsigned long enabled_crops;
 };
 
 enum mali_c720_cap_devs {
@@ -152,6 +198,7 @@ struct mali_c720 {
 	struct mali_c720_input input;
 	struct mali_c720_isp isp;
 	struct mali_c720_vision_pipe vision_pipe;
+	struct mali_c720_fr_pipe fr_pipe;
 
 	struct mali_c720_registers registers;
 	u8 *default_regs;
@@ -184,6 +231,12 @@ void mali_c720_cleanup_isp(struct mali_c720 *mali_c720);
 int mali_c720_register_vision_pipe(struct mali_c720 *mali_c720);
 void mali_c720_unregister_vision_pipe(struct mali_c720 *mali_c720);
 void mali_c720_cleanup_vision_pipe(struct mali_c720 *mali_c720);
+
+int mali_c720_register_fr_pipe(struct mali_c720 *mali_c720);
+void mali_c720_unregister_fr_pipe(struct mali_c720 *mali_c720);
+void mali_c720_cleanup_fr_pipe(struct mali_c720 *mali_c720);
+
+void mali_c720_fr_pipe_apply_resizer_config(struct mali_c720_fr_pipe *pipe);
 
 void mali_c720_isp_queue_event_sof(struct mali_c720 *mali_c720, u32 sequence);
 
