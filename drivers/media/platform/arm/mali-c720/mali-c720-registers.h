@@ -10,6 +10,8 @@
 
 #include <linux/types.h>
 
+enum mali_c720_version_id;
+
 struct mali_c720_top_regs;
 struct mali_c720_ctx_mgr_regs;
 struct mali_c720_modules_regs;
@@ -56,7 +58,8 @@ struct mali_c720_registers {
 };
 
 const struct mali_c720_id_regs *mali_c720_get_id_regs(void);
-int mali_c720_get_registers(struct mali_c720_registers *regs);
+int mali_c720_get_registers(enum mali_c720_version_id version,
+			    struct mali_c720_registers *regs);
 
 static inline u32 mali_c720_reg_addr(u32 base, const struct mali_c720_reg_field *field)
 {

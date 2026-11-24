@@ -36,15 +36,22 @@ const struct mali_c720_id_regs *mali_c720_get_id_regs(void)
 	return &id_regs;
 }
 
-int mali_c720_get_registers(struct mali_c720_registers *regs)
+int mali_c720_get_registers(enum mali_c720_version_id version,
+			    struct mali_c720_registers *regs)
 {
-	*regs = (struct mali_c720_registers) {
-		.id = &id_regs,
-		.top = mali_c720_get_top_regs(),
-		.cm = mali_c720_get_ctx_mgr_regs(),
-		.modules = mali_c720_get_modules_regs(),
-		.context_offset = 0x80000,
-		.context_size = 0x100000,
-	};
-	return 0;
+	switch (version) {
+	case MALI_C720_VERSION_ID_R0_P0:
+	case MALI_C720_VERSION_ID_R0_P1:
+		*regs = (struct mali_c720_registers) {
+			.id = &id_regs,
+			.top = mali_c720_get_top_regs(),
+			.cm = mali_c720_get_ctx_mgr_regs(),
+			.modules = mali_c720_get_modules_regs(),
+			.context_offset = 0x80000,
+			.context_size = 0x100000,
+		};
+		return 0;
+	default:
+		return -ENODEV;
+	}
 }

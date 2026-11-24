@@ -13,6 +13,7 @@
 #include <linux/refcount.h>
 #include <linux/spinlock.h>
 
+#include "mali-c720-id.h"
 #include "mali-c720-register-access.h"
 #include "mali-c720-registers.h"
 #include "mali-c720-registers-top.h"
@@ -40,6 +41,8 @@ struct mali_c720 {
 	resource_size_t mmio_size;
 
 	struct mali_c720_registers registers;
+
+	const struct mali_c720_hw_version *hw_version;
 };
 
 #endif /* MALI_C720_COMMON_H */
