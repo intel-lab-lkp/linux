@@ -143,6 +143,11 @@ int qcom_scm_shm_bridge_delete(u64 handle);
 int qcom_scm_qseecom_app_get_id(const char *app_name, u32 *app_id);
 int qcom_scm_qseecom_app_send(u32 app_id, void *req, size_t req_size,
 			      void *rsp, size_t rsp_size);
+int qcom_scm_qseecom_app_start(phys_addr_t image, size_t mdt_len,
+			       size_t img_len, u32 *app_id);
+int qcom_scm_qseecom_app_shutdown(u32 app_id);
+int qcom_scm_qseecom_services_image_load(phys_addr_t image, size_t mdt_len,
+					 size_t img_len);
 
 #else /* CONFIG_QCOM_QSEECOM */
 
@@ -154,6 +159,24 @@ static inline int qcom_scm_qseecom_app_get_id(const char *app_name, u32 *app_id)
 static inline int qcom_scm_qseecom_app_send(u32 app_id,
 					    void *req, size_t req_size,
 					    void *rsp, size_t rsp_size)
+{
+	return -EINVAL;
+}
+
+static inline int qcom_scm_qseecom_app_start(phys_addr_t image, size_t mdt_len,
+					     size_t img_len, u32 *app_id)
+{
+	return -EINVAL;
+}
+
+static inline int qcom_scm_qseecom_app_shutdown(u32 app_id)
+{
+	return -EINVAL;
+}
+
+static inline int qcom_scm_qseecom_services_image_load(phys_addr_t image,
+						       size_t mdt_len,
+						       size_t img_len)
 {
 	return -EINVAL;
 }

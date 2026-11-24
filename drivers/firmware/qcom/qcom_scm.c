@@ -119,6 +119,12 @@ enum qcom_scm_qseecom_tz_cmd_app {
 	QSEECOM_TZ_CMD_APP_LOOKUP		= 3,
 };
 
+enum qcom_scm_qseecom_tz_cmd_app_mgr {
+	QSEECOM_TZ_CMD_APP_START		= 1,
+	QSEECOM_TZ_CMD_APP_SHUTDOWN		= 2,
+	QSEECOM_TZ_CMD_SERVICES_IMAGE_LOAD	= 7,
+};
+
 enum qcom_scm_qseecom_tz_cmd_info {
 	QSEECOM_TZ_CMD_INFO_VERSION		= 3,
 };
@@ -2219,6 +2225,83 @@ int qcom_scm_qseecom_app_send(u32 app_id, void *req, size_t req_size,
 	return 0;
 }
 EXPORT_SYMBOL_GPL(qcom_scm_qseecom_app_send);
+
+static int qcom_scm_qseecom_image_call(u32 cmd, phys_addr_t image,
+				       size_t mdt_len, size_t img_len,
+				       struct qcom_scm_qseecom_resp *res)
+{
+	struct qcom_scm_desc desc = {};
+	int status;
+
+	desc.owner = QSEECOM_TZ_OWNER_QSEE_OS;
+	desc.svc = QSEECOM_TZ_SVC_APP_MGR;
+	desc.cmd = cmd;
+	desc.arginfo = QCOM_SCM_ARGS(3);
+	desc.args[0] = mdt_len;
+	desc.args[1] = img_len;
+	desc.args[2] = image;
+
+	status = qcom_scm_qseecom_call(&desc, res);
+	if (status)
+		return status;
+
+	if (res->result != QSEECOM_RESULT_SUCCESS)
+		return -EIO;
+
+	return 0;
+}
+
+int qcom_scm_qseecom_app_start(phys_addr_t image, size_t mdt_len,
+			       size_t img_len, u32 *app_id)
+{
+	struct qcom_scm_qseecom_resp res = {};
+	int status;
+
+	status = qcom_scm_qseecom_image_call(QSEECOM_TZ_CMD_APP_START, image,
+					     mdt_len, img_len, &res);
+	if (status)
+		return status;
+
+	if (res.resp_type != QSEECOM_SCM_RES_APP_ID)
+		return -EIO;
+
+	*app_id = res.data;
+	return 0;
+}
+EXPORT_SYMBOL_GPL(qcom_scm_qseecom_app_start);
+
+int qcom_scm_qseecom_app_shutdown(u32 app_id)
+{
+	struct qcom_scm_desc desc = {};
+	struct qcom_scm_qseecom_resp res = {};
+	int status;
+
+	desc.owner = QSEECOM_TZ_OWNER_QSEE_OS;
+	desc.svc = QSEECOM_TZ_SVC_APP_MGR;
+	desc.cmd = QSEECOM_TZ_CMD_APP_SHUTDOWN;
+	desc.arginfo = QCOM_SCM_ARGS(1);
+	desc.args[0] = app_id;
+
+	status = qcom_scm_qseecom_call(&desc, &res);
+	if (status)
+		return status;
+
+	if (res.result != QSEECOM_RESULT_SUCCESS)
+		return -EIO;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(qcom_scm_qseecom_app_shutdown);
+
+int qcom_scm_qseecom_services_image_load(phys_addr_t image, size_t mdt_len,
+					 size_t img_len)
+{
+	struct qcom_scm_qseecom_resp res = {};
+
+	return qcom_scm_qseecom_image_call(QSEECOM_TZ_CMD_SERVICES_IMAGE_LOAD,
+					   image, mdt_len, img_len, &res);
+}
+EXPORT_SYMBOL_GPL(qcom_scm_qseecom_services_image_load);
 
 /*
  * We do not yet support re-entrant calls via the qseecom interface. To prevent
