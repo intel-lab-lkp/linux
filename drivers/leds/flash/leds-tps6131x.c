@@ -529,6 +529,11 @@ static const struct led_flash_ops flash_ops = {
 	.fault_get = tps6131x_flash_fault_get,
 };
 
+static void tps6131x_led_node_put(void *data)
+{
+	fwnode_handle_put(data);
+}
+
 static int tps6131x_parse_node(struct tps6131x *tps6131x)
 {
 	const struct tps6131x_timer_config *timer_config;
@@ -549,6 +554,10 @@ static int tps6131x_parse_node(struct tps6131x *tps6131x)
 		dev_err(dev, "Missing LED node\n");
 		return -EINVAL;
 	}
+
+	ret = devm_add_action_or_reset(dev, tps6131x_led_node_put, tps6131x->led_node);
+	if (ret)
+		return ret;
 
 	num_channels = fwnode_property_count_u32(tps6131x->led_node, "led-sources");
 	if (num_channels <= 0) {
