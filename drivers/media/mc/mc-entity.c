@@ -791,10 +791,13 @@ __must_check int __media_pipeline_start(struct media_pad *origin,
 		return -EINVAL;
 
 	/*
-	 * If the pipeline has already been started, it is guaranteed to be
-	 * valid, so just increase the start count.
+	 * If the pipeline has already been started, ensure the pad is a part of the pipeline.
+	 * If so, it is guaranteed to be valid, so just increase the start count.
 	 */
 	if (pipe->start_count) {
+		if (!origin->pipe)
+			return -EINVAL;
+
 		pipe->start_count++;
 		return 0;
 	}
