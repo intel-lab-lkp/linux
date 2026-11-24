@@ -500,6 +500,12 @@ static int ecryptfs_get_tree(struct fs_context *fc)
 		goto out_free;
 	}
 
+	if (d_real_inode(path.dentry)->i_sb->s_iflags & SB_I_PSEUDO) {
+		rc = -EINVAL;
+		printk(KERN_ERR "Mounting on pseudo filesystems disallowed\n");
+		goto out_free;
+	}
+
 	if (ctx->check_ruid &&
 	    !uid_eq(d_inode(path.dentry)->i_uid, current_uid())) {
 		rc = -EPERM;
