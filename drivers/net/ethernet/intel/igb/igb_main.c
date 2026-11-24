@@ -2942,16 +2942,28 @@ static int igb_xdp_setup(struct net_device *dev, struct netdev_bpf *bpf)
 static int igb_xdp(struct net_device *dev, struct netdev_bpf *xdp)
 {
 	struct igb_adapter *adapter = netdev_priv(dev);
+	int err;
+
+	/* The rings only exist while the device is resumed, and resuming
+	 * rebuilds them without RTNL
+	 */
+	pm_runtime_get_sync(&adapter->pdev->dev);
 
 	switch (xdp->command) {
 	case XDP_SETUP_PROG:
-		return igb_xdp_setup(dev, xdp);
+		err = igb_xdp_setup(dev, xdp);
+		break;
 	case XDP_SETUP_XSK_POOL:
-		return igb_xsk_pool_setup(adapter, xdp->xsk.pool,
-					  xdp->xsk.queue_id);
+		err = igb_xsk_pool_setup(adapter, xdp->xsk.pool,
+					 xdp->xsk.queue_id);
+		break;
 	default:
-		return -EINVAL;
+		err = -EINVAL;
 	}
+
+	pm_runtime_put(&adapter->pdev->dev);
+
+	return err;
 }
 
 int igb_xdp_xmit_back(struct igb_adapter *adapter, struct xdp_buff *xdp)
