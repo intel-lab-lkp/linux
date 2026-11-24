@@ -64,6 +64,10 @@ struct acpi_power_resource_entry {
 
 static bool hp_eb_gp12pxp_quirk;
 static bool unused_power_resources_quirk;
+static bool serialize_power_on_quirk;
+
+/* Serializes _ON evaluation when serialize_power_on_quirk is set */
+static DEFINE_MUTEX(power_on_lock);
 
 static LIST_HEAD(acpi_power_resource_list);
 static DEFINE_MUTEX(power_resource_list_lock);
@@ -362,13 +366,27 @@ void acpi_device_power_remove_dependent(struct acpi_device *adev,
 		acpi_power_resource_remove_dependent(entry->resource, dev);
 }
 
+static acpi_status acpi_power_evaluate_on(acpi_handle handle)
+{
+	acpi_status status;
+
+	if (!serialize_power_on_quirk)
+		return acpi_evaluate_object(handle, "_ON", NULL, NULL);
+
+	mutex_lock(&power_on_lock);
+	status = acpi_evaluate_object(handle, "_ON", NULL, NULL);
+	mutex_unlock(&power_on_lock);
+
+	return status;
+}
+
 static int __acpi_power_on(struct acpi_power_resource *resource)
 {
 	acpi_handle handle = resource->device.handle;
 	struct acpi_power_dependent_device *dep;
 	acpi_status status = AE_OK;
 
-	status = acpi_evaluate_object(handle, "_ON", NULL, NULL);
+	status = acpi_power_evaluate_on(handle);
 	if (ACPI_FAILURE(status)) {
 		resource->state = ACPI_POWER_RESOURCE_STATE_UNKNOWN;
 		return -ENODEV;
@@ -1096,6 +1114,24 @@ static const struct dmi_system_id dmi_hp_elitebook_gp12pxp_quirk[] = {
 	{}
 };
 
+static const struct dmi_system_id dmi_serialize_power_on[] = {
+	/*
+	 * On the Lenovo Yoga Pro 7 14AKP10, the _ON methods of the M.2 slot
+	 * power resources update a shared clock control register without
+	 * locking and sleep in the middle of the update. When the root ports
+	 * are resumed concurrently, one slot's reference clock can end up
+	 * disabled and its NVMe drive is lost after resume.
+	 */
+	{
+		/* Lenovo Yoga Pro 7 14AKP10 */
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "83KG"),
+		},
+	},
+	{}
+};
+
 static const struct dmi_system_id dmi_leave_unused_power_resources_on[] = {
 	{
 		/*
@@ -1156,4 +1192,7 @@ void __init acpi_power_resources_init(void)
 	hp_eb_gp12pxp_quirk = dmi_check_system(dmi_hp_elitebook_gp12pxp_quirk);
 	unused_power_resources_quirk =
 		dmi_check_system(dmi_leave_unused_power_resources_on);
+	serialize_power_on_quirk = dmi_check_system(dmi_serialize_power_on);
+	if (serialize_power_on_quirk)
+		pr_info("Serializing power resource _ON methods\n");
 }
