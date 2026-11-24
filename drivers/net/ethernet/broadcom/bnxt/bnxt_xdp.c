@@ -210,9 +210,9 @@ void bnxt_xdp_buff_frags_free(struct bnxt_rx_ring_info *rxr,
 		return;
 	shinfo = xdp_get_shared_info_from_buff(xdp);
 	for (i = 0; i < shinfo->nr_frags; i++) {
-		struct page *page = skb_frag_page(&shinfo->frags[i]);
+		netmem_ref netmem = skb_frag_netmem(&shinfo->frags[i]);
 
-		page_pool_recycle_direct(rxr->page_pool, page);
+		page_pool_recycle_direct_netmem(rxr->page_pool, netmem);
 	}
 	shinfo->nr_frags = 0;
 }
@@ -222,7 +222,7 @@ void bnxt_xdp_buff_frags_free(struct bnxt_rx_ring_info *rxr,
  * false   - packet should be passed to the stack.
  */
 bool bnxt_rx_xdp(struct bnxt *bp, struct bnxt_rx_ring_info *rxr, u16 cons,
-		 struct xdp_buff *xdp, struct page *page, u8 **data_ptr,
+		 struct xdp_buff *xdp, void *data, u8 **data_ptr,
 		 unsigned int *len, u8 *event)
 {
 	struct bpf_prog *xdp_prog = READ_ONCE(rxr->xdp_prog);
@@ -278,7 +278,7 @@ bool bnxt_rx_xdp(struct bnxt *bp, struct bnxt_rx_ring_info *rxr, u16 cons,
 		if (tx_avail < tx_needed) {
 			trace_xdp_exception(bp->dev, xdp_prog, act);
 			bnxt_xdp_buff_frags_free(rxr, xdp);
-			bnxt_reuse_rx_data(rxr, cons, page);
+			bnxt_reuse_rx_data(rxr, cons, data);
 			return true;
 		}
 
@@ -289,7 +289,7 @@ bool bnxt_rx_xdp(struct bnxt *bp, struct bnxt_rx_ring_info *rxr, u16 cons,
 		*event |= BNXT_TX_EVENT;
 		__bnxt_xmit_xdp(bp, txr, mapping + offset, *len,
 				NEXT_RX(rxr->rx_prod), xdp);
-		bnxt_reuse_rx_data(rxr, cons, page);
+		bnxt_reuse_rx_data(rxr, cons, data);
 		return true;
 	case XDP_REDIRECT:
 		/* if we are calling this here then we know that the
@@ -301,14 +301,17 @@ bool bnxt_rx_xdp(struct bnxt *bp, struct bnxt_rx_ring_info *rxr, u16 cons,
 		if (bnxt_alloc_rx_data(bp, rxr, rxr->rx_prod, GFP_ATOMIC)) {
 			trace_xdp_exception(bp->dev, xdp_prog, act);
 			bnxt_xdp_buff_frags_free(rxr, xdp);
-			bnxt_reuse_rx_data(rxr, cons, page);
+			bnxt_reuse_rx_data(rxr, cons, data);
 			return true;
 		}
 
 		if (xdp_do_redirect(bp->dev, xdp, xdp_prog)) {
+			/* data holds the netmem of the head */
+			netmem_ref head = (__force netmem_ref)data;
+
 			trace_xdp_exception(bp->dev, xdp_prog, act);
 			bnxt_xdp_buff_frags_free(rxr, xdp);
-			page_pool_recycle_direct(rxr->page_pool, page);
+			page_pool_recycle_direct_netmem(rxr->page_pool, head);
 			return true;
 		}
 
@@ -322,7 +325,7 @@ bool bnxt_rx_xdp(struct bnxt *bp, struct bnxt_rx_ring_info *rxr, u16 cons,
 		fallthrough;
 	case XDP_DROP:
 		bnxt_xdp_buff_frags_free(rxr, xdp);
-		bnxt_reuse_rx_data(rxr, cons, page);
+		bnxt_reuse_rx_data(rxr, cons, data);
 		break;
 	}
 	return true;

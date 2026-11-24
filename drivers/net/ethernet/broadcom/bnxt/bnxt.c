@@ -962,27 +962,6 @@ static bool bnxt_separate_head_pool(struct bnxt_rx_ring_info *rxr)
 	return rxr->need_head_pool || rxr->rx_page_size < PAGE_SIZE;
 }
 
-static struct page *__bnxt_alloc_rx_page(struct bnxt *bp, dma_addr_t *mapping,
-					 struct bnxt_rx_ring_info *rxr,
-					 unsigned int *offset,
-					 gfp_t gfp)
-{
-	struct page *page;
-
-	if (rxr->rx_page_size < PAGE_SIZE) {
-		page = page_pool_dev_alloc_frag(rxr->page_pool, offset,
-						rxr->rx_page_size);
-	} else {
-		page = page_pool_dev_alloc_pages(rxr->page_pool);
-		*offset = 0;
-	}
-	if (!page)
-		return NULL;
-
-	*mapping = page_pool_get_dma_addr(page) + *offset;
-	return page;
-}
-
 static netmem_ref __bnxt_alloc_rx_netmem(struct bnxt *bp, dma_addr_t *mapping,
 					 struct bnxt_rx_ring_info *rxr,
 					 unsigned int *offset,
@@ -1029,15 +1008,17 @@ int bnxt_alloc_rx_data(struct bnxt *bp, struct bnxt_rx_ring_info *rxr,
 
 	if (BNXT_RX_PAGE_MODE(bp)) {
 		unsigned int offset;
-		struct page *page =
-			__bnxt_alloc_rx_page(bp, &mapping, rxr, &offset, gfp);
+		netmem_ref netmem =
+			__bnxt_alloc_rx_netmem(bp, &mapping, rxr, &offset, gfp);
 
-		if (!page)
+		if (!netmem)
 			return -ENOMEM;
 
+		/* Same bits as the struct page for system pages */
 		mapping += bp->rx_dma_offset;
-		rx_buf->data = page;
-		rx_buf->data_ptr = page_address(page) + offset + bp->rx_offset;
+		rx_buf->data = (__force void *)netmem;
+		rx_buf->data_ptr = xdp_netmem_address(netmem) + offset +
+				   bp->rx_offset;
 		rx_buf->offset = offset;
 	} else {
 		u8 *data = __bnxt_alloc_rx_frag(bp, &mapping, rxr, gfp);
@@ -3593,13 +3574,14 @@ static void bnxt_free_one_rx_ring(struct bnxt *bp, struct bnxt_rx_ring_info *rxr
 	for (i = 0; i < max_idx; i++) {
 		struct bnxt_sw_rx_bd *rx_buf = &rxr->rx_buf_ring[i];
 		void *data = rx_buf->data;
+		netmem_ref netmem = (__force netmem_ref)data;
 
 		if (!data)
 			continue;
 
 		rx_buf->data = NULL;
 		if (BNXT_RX_PAGE_MODE(bp))
-			page_pool_recycle_direct(rxr->page_pool, data);
+			page_pool_recycle_direct_netmem(rxr->page_pool, netmem);
 		else
 			page_pool_free_va(rxr->head_pool, data, true);
 	}
@@ -3969,7 +3951,8 @@ static int bnxt_alloc_rx_page_pool(struct bnxt *bp,
 	pp.dma_dir = bp->rx_dir;
 	pp.max_len = PAGE_SIZE << pp.order;
 	pp.flags = PP_FLAG_DMA_MAP | PP_FLAG_DMA_SYNC_DEV |
-		   PP_FLAG_ALLOW_UNREADABLE_NETMEM;
+		   PP_FLAG_ALLOW_UNREADABLE_NETMEM |
+		   PP_FLAG_ALLOW_XDP_ONLY_NETMEM;
 	pp.queue_idx = rxr->bnapi->index;
 
 	pool = page_pool_create(&pp);
