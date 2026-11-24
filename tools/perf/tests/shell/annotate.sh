@@ -105,8 +105,72 @@ test_basic() {
   echo "${mode} annotate test [Success]"
 }
 
+test_options() {
+  echo "Options annotate test"
+  perf record -o "${perfdata}" ${testprog} 2> /dev/null
+
+  # --stdio2 prints each instruction with the symbol header
+  if ! perf annotate -i "${perfdata}" --stdio2 -s "${testsym}" 2> /dev/null | grep -q "${testsym}()"
+  then
+    echo "Options annotate [Failed: missing --stdio2 output]"
+    err=1
+    return
+  fi
+
+  # -l/--print-line prints a summary of the annotated file with source lines
+  if ! perf annotate -i "${perfdata}" --stdio --print-line -s "${testsym}" 2> /dev/null | grep -q "Sorted summary for file"
+  then
+    echo "Options annotate [Failed: missing --print-line output]"
+    err=1
+    return
+  fi
+
+  # --show-total-period adds a period column; --asm-raw is the default
+  if ! perf annotate -i "${perfdata}" --stdio --asm-raw --show-total-period -s "${testsym}" 2> /dev/null | grep -q "Period"
+  then
+    echo "Options annotate [Failed: missing --show-total-period output]"
+    err=1
+    return
+  fi
+
+  # --show-nr-samples adds a samples column
+  if ! perf annotate -i "${perfdata}" --stdio -n -s "${testsym}" 2> /dev/null | grep -q "Samples"
+  then
+    echo "Options annotate [Failed: missing --show-nr-samples output]"
+    err=1
+    return
+  fi
+
+  # --percent-type selects the percentage type shown in the header
+  if ! perf annotate -i "${perfdata}" --stdio --percent-type global-period -s "${testsym}" 2> /dev/null | grep -q "percent: global period"
+  then
+    echo "Options annotate [Failed: missing --percent-type output]"
+    err=1
+    return
+  fi
+
+  # -d limits the annotation to the given DSO: perf has the symbol, a
+  # DSO absent from the data produces no annotation
+  if ! perf annotate -i "${perfdata}" --stdio -s "${testsym}" -d perf 2> /dev/null | grep -q "Disassembly of"
+  then
+    echo "Options annotate [Failed: missing -d output]"
+    err=1
+    return
+  fi
+
+  if perf annotate -i "${perfdata}" --stdio -s "${testsym}" -d nonexistent-dso 2> /dev/null | grep -q "Disassembly of"
+  then
+    echo "Options annotate [Failed: -d did not filter the DSO]"
+    err=1
+    return
+  fi
+
+  echo "Options annotate test [Success]"
+}
+
 test_basic Basic
 test_basic Pipe
+test_options
 
 cleanup
 exit $err
