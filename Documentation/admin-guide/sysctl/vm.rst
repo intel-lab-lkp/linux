@@ -56,6 +56,7 @@ Currently, these files are in /proc/sys/vm:
 - nr_overcommit_hugepages
 - nr_trim_pages         (only if CONFIG_MMU=n)
 - numa_zonelist_order
+- oom_dump_cmdline
 - oom_dump_tasks
 - oom_kill_allocating_task
 - overcommit_kbytes
@@ -782,6 +783,35 @@ order will be selected.
 
 Default order is recommended unless this is causing problems for your
 system/application.
+
+
+oom_dump_cmdline
+================
+
+Enables best-effort logging of an OOM victim's command-line arguments
+as a separate rate-limited companion message alongside the existing
+"Killed process" kernel log line when the OOM killer terminates a task
+(available only when ``CONFIG_MMU`` is enabled).  This helps identify
+which script or worker instance was killed when ``comm`` only records
+an interpreter binary name (for example, ``python3``) and
+``/proc/[pid]/cmdline`` disappears once the task exits.
+
+Because the OOM killer runs under ``oom_lock`` and cannot safely sleep
+on ``mmap_lock`` or trigger page faults, only a bounded prefix of
+anonymous pages already resident in memory is inspected, with
+non-printable characters escaped.  If ``mmap_lock`` is contended or the
+argument pages have already been reclaimed to swap, the companion line
+is omitted or marked ``(truncated)``.
+
+Command-line arguments may contain sensitive information that would
+otherwise be restricted via ``/proc`` mount options such as
+``hidepid``, whereas the kernel log buffer may be readable by
+unprivileged users when ``kernel.dmesg_restrict`` is disabled.
+
+= ===================================================================
+0 Suppress OOM victim command-line logging (default).
+1 Enable best-effort OOM victim command-line logging.
+= ===================================================================
 
 
 oom_dump_tasks

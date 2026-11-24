@@ -45,6 +45,11 @@
 #include <linux/mmu_notifier.h>
 #include <linux/cred.h>
 #include <linux/nmi.h>
+#include <linux/cacheflush.h>
+#include <linux/highmem.h>
+#include <linux/overflow.h>
+#include <linux/pagewalk.h>
+#include <linux/uaccess.h>
 
 #include <asm/tlb.h>
 #include "internal.h"
@@ -688,6 +693,191 @@ static void queue_oom_reaper(struct task_struct *tsk)
 	add_timer(&tsk->oom_reaper_timer);
 }
 
+#define OOM_CMDLINE_LEN 256
+
+static int sysctl_oom_dump_cmdline;
+
+/**
+ * oom_copy_mm_resident() - copy resident anonymous user memory without faulting
+ * @mm: target address space to copy from
+ * @addr: starting user virtual address
+ * @buf: destination kernel buffer
+ * @len: maximum number of bytes to copy
+ *
+ * Walks present, non-PageHWPoison() page table entries in anonymous VMAs of
+ * @mm and copies up to @len contiguous resident bytes into @buf without
+ * triggering page faults, memory allocations, or sleeping locks.
+ *
+ * Context: Process context. Caller must hold @mm->mmap_lock for read.
+ * Return: Number of bytes copied (may be less than @len if an unmapped,
+ * non-anonymous, non-resident, or poisoned page is encountered).
+ */
+static size_t oom_copy_mm_resident(struct mm_struct *mm, unsigned long addr,
+				   char *buf, size_t len)
+{
+	size_t copied = 0;
+
+	addr = untagged_addr_remote(mm, addr);
+
+	while (len > 0) {
+		struct vm_area_struct *vma;
+		struct folio_walk fw;
+		struct folio *folio;
+		struct page *page;
+		size_t offset, bytes;
+		void *maddr;
+
+		vma = vma_lookup(mm, addr);
+		if (!vma || !vma_is_anonymous(vma))
+			break;
+
+		folio = folio_walk_start(&fw, vma, addr, 0);
+		if (!folio)
+			break;
+
+		page = fw.page;
+		if (unlikely(PageHWPoison(page))) {
+			folio_walk_end(&fw, vma);
+			break;
+		}
+		folio_get(folio);
+		folio_walk_end(&fw, vma);
+
+		flush_anon_page(vma, page, addr);
+		offset = offset_in_page(addr);
+		bytes = min_t(size_t, len, PAGE_SIZE - offset);
+		maddr = kmap_local_page(page);
+		copy_from_user_page(vma, page, addr, buf + copied,
+				    maddr + offset, bytes);
+		kunmap_local(maddr);
+		folio_put(folio);
+
+		copied += bytes;
+		len -= bytes;
+		if (len && check_add_overflow(addr, bytes, &addr))
+			break;
+	}
+
+	return copied;
+}
+
+static noinline_for_stack void __oom_dump_cmdline(struct task_struct *victim,
+						  struct mm_struct *mm,
+						  const char *message)
+{
+	static DEFINE_RATELIMIT_STATE(oom_cmdline_rs,
+				      DEFAULT_RATELIMIT_INTERVAL,
+				      DEFAULT_RATELIMIT_BURST);
+	unsigned long arg_start, arg_end, env_start, env_end, arg_len;
+	size_t to_copy, copied;
+	bool truncated = false;
+	bool proctitle;
+	char buf[OOM_CMDLINE_LEN];
+
+	spin_lock(&mm->arg_lock);
+	arg_start = mm->arg_start;
+	arg_end = mm->arg_end;
+	env_start = mm->env_start;
+	env_end = mm->env_end;
+	spin_unlock(&mm->arg_lock);
+
+	if (!env_end || arg_start >= arg_end)
+		return;
+
+	arg_len = arg_end - arg_start;
+	to_copy = min_t(unsigned long, arg_len, sizeof(buf));
+
+	if (!mmap_read_trylock(mm))
+		return;
+
+	if (mm_flags_test(MMF_OOM_SKIP, mm) ||
+	    mm_flags_test(MMF_UNSTABLE, mm)) {
+		mmap_read_unlock(mm);
+		return;
+	}
+
+	copied = oom_copy_mm_resident(mm, arg_start, buf, to_copy);
+	if (!copied) {
+		mmap_read_unlock(mm);
+		return;
+	}
+
+	if (copied == arg_len) {
+		proctitle = buf[copied - 1] != '\0';
+	} else {
+		char c;
+
+		proctitle = oom_copy_mm_resident(mm, arg_end - 1, &c, 1) == 1 &&
+			    c != '\0';
+	}
+
+	if (proctitle) {
+		/*
+		 * The NUL terminator at arg_end - 1 was overwritten, which
+		 * indicates setproctitle(3); treat the buffer as a single
+		 * NUL-terminated string that may spill into [env_start, env_end).
+		 */
+		unsigned long max_len = arg_len;
+		size_t n;
+
+		if (env_start == arg_end && env_end > env_start)
+			max_len = env_end - arg_start;
+
+		n = strnlen(buf, copied);
+		if (n == copied && copied == arg_len &&
+		    max_len > arg_len && copied < sizeof(buf)) {
+			size_t rem = min_t(unsigned long, max_len - arg_len,
+					   sizeof(buf) - copied);
+
+			copied += oom_copy_mm_resident(mm, env_start,
+						       buf + copied, rem);
+			n = strnlen(buf, copied);
+		}
+		truncated = (n == copied && copied < max_len);
+		copied = n;
+	} else {
+		size_t i;
+
+		truncated = copied < arg_len;
+		while (copied > 0 && buf[copied - 1] == '\0')
+			copied--;
+		for (i = 0; i < copied; i++) {
+			if (buf[i] == '\0')
+				buf[i] = ' ';
+		}
+	}
+	mmap_read_unlock(mm);
+
+	if (!copied || !__ratelimit(&oom_cmdline_rs))
+		return;
+
+	pr_err("%s: Process %d (%s) cmdline%s: %*pE\n",
+	       message, task_pid_nr(victim), victim->comm,
+	       truncated ? " (truncated)" : "", (int)copied, buf);
+}
+
+/**
+ * oom_dump_cmdline() - best-effort log of an OOM victim's command line
+ * @victim: OOM victim task
+ * @mm: victim's address space
+ * @message: OOM context prefix string
+ *
+ * When enabled via vm.oom_dump_cmdline, emits a separate rate-limited
+ * companion kernel log line containing @victim's resident command-line
+ * arguments (with non-printable bytes escaped). Uses a non-blocking
+ * mmap_read_trylock() and skips logging if @mm is contended or already
+ * being torn down.
+ *
+ * Context: Process context. Must be called after releasing task_lock(@victim)
+ * while holding references on @victim and @mm (mmgrab()).
+ */
+static inline void oom_dump_cmdline(struct task_struct *victim,
+				    struct mm_struct *mm, const char *message)
+{
+	if (unlikely(READ_ONCE(sysctl_oom_dump_cmdline)))
+		__oom_dump_cmdline(victim, mm, message);
+}
+
 #ifdef CONFIG_SYSCTL
 static const struct ctl_table vm_oom_kill_table[] = {
 	{
@@ -713,6 +903,15 @@ static const struct ctl_table vm_oom_kill_table[] = {
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec,
 	},
+	{
+		.procname	= "oom_dump_cmdline",
+		.data		= &sysctl_oom_dump_cmdline,
+		.maxlen		= sizeof(sysctl_oom_dump_cmdline),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE,
+	},
 };
 #endif
 
@@ -727,6 +926,11 @@ static int __init oom_init(void)
 subsys_initcall(oom_init)
 #else
 static inline void queue_oom_reaper(struct task_struct *tsk)
+{
+}
+
+static inline void oom_dump_cmdline(struct task_struct *victim,
+				    struct mm_struct *mm, const char *message)
 {
 }
 #endif /* CONFIG_MMU */
@@ -943,6 +1147,8 @@ static void __oom_kill_process(struct task_struct *victim, const char *message)
 		from_kuid(&init_user_ns, task_uid(victim)),
 		mm_pgtables_bytes(mm) >> 10, victim->signal->oom_score_adj);
 	task_unlock(victim);
+
+	oom_dump_cmdline(victim, mm, message);
 
 	/*
 	 * Kill all user processes sharing victim->mm in other thread groups, if
