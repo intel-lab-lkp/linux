@@ -66,7 +66,12 @@
 		compatible = "econet,en751221-intc";
 		reg = <0x1fb40000 0x100>;
 		interrupt-parent = <&cpuintc>;
-		interrupts = <2>;
+		/*
+		 * The number of the pending interrupt plus one is presented in
+		 * binary on IP2-IP7. IP7 is left out: the CPU can also signal its
+		 * own timer on it, and only hwirq 31, which is unused, needs it.
+		 */
+		interrupts = <2>, <3>, <4>, <5>, <6>;
 
 		interrupt-controller;
 		#interrupt-cells = <1>;
