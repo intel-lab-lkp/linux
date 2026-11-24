@@ -101,6 +101,8 @@ static int mali_c720_vb2_queue_setup(struct vb2_queue *q, unsigned int *num_buff
 static void mali_c720_buf_queue(struct vb2_buffer *vb)
 {
 	struct mali_c720_cap_dev *cap_dev = vb2_get_drv_priv(vb->vb2_queue);
+	struct mali_c720 *mali_c720 = cap_dev->mali_c720;
+	struct mali_c720_context *ctx = mali_c720_get_active_context(mali_c720);
 	struct vb2_v4l2_buffer *vbuf = to_vb2_v4l2_buffer(vb);
 	struct mali_c720_cap_buffer *buf = container_of(vbuf,
 						   struct mali_c720_cap_buffer, vb);
@@ -116,6 +118,9 @@ static void mali_c720_buf_queue(struct vb2_buffer *vb)
 
 	scoped_guard(spinlock, &cap_dev->buffers.lock)
 		list_add_tail(&buf->queue, &cap_dev->buffers.input);
+
+	if (!mali_c720_cap_dev_uses_requests(cap_dev))
+		mali_c720_try_schedule_frame(ctx);
 }
 
 static int mali_c720_buf_init(struct vb2_buffer *vb)
@@ -289,6 +294,7 @@ static int mali_c720_vb2_start_streaming(struct vb2_queue *q, unsigned int count
 	struct mali_c720_cap_dev *cap_dev = q->drv_priv;
 	struct mali_c720 *mali_c720 = cap_dev->mali_c720;
 	struct mali_c720_context *ctx = mali_c720_get_active_context(mali_c720);
+	struct v4l2_subdev *isp_sd = &mali_c720->isp.mdev.sd;
 	int ret;
 
 	guard(mutex)(&mali_c720->device_lock);
@@ -328,8 +334,30 @@ static int mali_c720_vb2_start_streaming(struct vb2_queue *q, unsigned int count
 		goto err_release_buffer_pool;
 	}
 
+	/*
+	 * All ISP source pads use the same start process, so the HV pad can
+	 * represent the ISP when starting the pipeline.
+	 */
+	ret = mali_c720_pipeline_ready(mali_c720);
+	if (ret && ret != -EAGAIN)
+		goto err_disable_src;
+
+	if (!ret) {
+		ret = v4l2_subdev_enable_streams(isp_sd,
+						 MALI_C720_ISP_PAD_SOURCE_HV,
+						 BIT(0));
+		if (ret) {
+			dev_err(mali_c720->dev, "%s failed to start ISP subdevice\n",
+				cap_dev->vdev.name);
+			goto err_disable_src;
+		}
+	}
+
 	return 0;
 
+err_disable_src:
+	v4l2_subdev_disable_streams(cap_dev->src_sd, cap_dev->src_pad,
+				    BIT(0));
 err_release_buffer_pool:
 	mali_c720_cap_dev_release_buffer_pool(cap_dev);
 err_free_context:
@@ -574,7 +602,7 @@ static const struct v4l2_ioctl_ops mali_c720_v4l2_ioctl_ops = {
 	.vidioc_expbuf = vb2_ioctl_expbuf,
 	.vidioc_dqbuf = vb2_ioctl_dqbuf,
 	.vidioc_prepare_buf = vb2_ioctl_prepare_buf,
-	.vidioc_streamon = vb2_ioctl_streamon,
+	.vidioc_streamon = mali_c720_streamon,
 	.vidioc_streamoff = vb2_ioctl_streamoff,
 	.vidioc_try_fmt_vid_cap_mplane = mali_c720_try_fmt_vid_cap_mplane,
 	.vidioc_s_fmt_vid_cap_mplane = mali_c720_s_fmt_vid_cap_mplane,

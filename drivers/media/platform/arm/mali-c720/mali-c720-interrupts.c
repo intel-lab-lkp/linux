@@ -202,6 +202,8 @@ static void mali_c720_handle_frame_end(struct mali_c720 *mali_c720,
 
 		ctx->pipeline_busy = false;
 	}
+
+	mali_c720_try_schedule_frame(ctx);
 }
 
 irqreturn_t mali_c720_isr(int irq, void *dev_id)

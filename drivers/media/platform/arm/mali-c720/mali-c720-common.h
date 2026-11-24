@@ -8,15 +8,18 @@
 #ifndef MALI_C720_COMMON_H
 #define MALI_C720_COMMON_H
 
+#include <linux/clk.h>
 #include <linux/io.h>
 #include <linux/kfifo.h>
 #include <linux/list.h>
 #include <linux/mutex.h>
 #include <linux/refcount.h>
+#include <linux/reset.h>
 #include <linux/spinlock.h>
 #include <linux/videodev2.h>
 
 #include <media/media-device.h>
+#include <media/v4l2-async.h>
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-dev.h>
 #include <media/v4l2-device.h>
@@ -186,6 +189,18 @@ struct mali_c720_cap_dev {
 	} buffers;
 };
 
+struct mali_c720_request {
+	struct media_request req;
+	unsigned int queue_sequence;
+	bool submitted;
+};
+
+static inline struct mali_c720_request *
+to_mali_c720_request(struct media_request *req)
+{
+	return container_of(req, struct mali_c720_request, req);
+}
+
 struct mali_c720_context_regs {
 	dma_addr_t dma_handle;
 	u8 *base;
@@ -233,9 +248,12 @@ struct mali_c720 {
 	u8 __iomem *base;
 	resource_size_t mmio_size;
 	u32 top_base;
+	struct clk *clk;
+	struct reset_control *reset;
 
 	struct media_device media_dev;
 	struct v4l2_device v4l2_dev;
+	struct v4l2_async_notifier notifier;
 	struct media_pipeline pipe;
 
 	struct mali_c720_input input;
@@ -243,6 +261,8 @@ struct mali_c720 {
 	struct mali_c720_vision_pipe vision_pipe;
 	struct mali_c720_fr_pipe fr_pipe;
 	struct mali_c720_cap_dev cap_devs[MALI_C720_MAX_NUM_CAP_DEVS];
+
+	unsigned int num_async_endpoints;
 
 	struct mali_c720_registers registers;
 	u8 *default_regs;
@@ -295,5 +315,11 @@ void mali_c720_cap_dev_buffer_done(struct mali_c720_cap_dev *cap_dev,
 				   bool success);
 
 void mali_c720_isp_queue_event_sof(struct mali_c720 *mali_c720, u32 sequence);
+
+int mali_c720_pipeline_ready(struct mali_c720 *mali_c720);
+
+int mali_c720_streamon(struct file *file, void *priv, enum v4l2_buf_type type);
+
+void mali_c720_try_schedule_frame(struct mali_c720_context *ctx);
 
 #endif /* MALI_C720_COMMON_H */

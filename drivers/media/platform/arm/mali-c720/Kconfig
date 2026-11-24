@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: GPL-2.0-only
+config VIDEO_MALI_C720
+	tristate "ARM Mali-C720 Image Signal Processor driver"
+	depends on V4L_PLATFORM_DRIVERS
+	depends on VIDEO_DEV && OF
+	select CRC_CCITT
+	select CRC_ITU_T
+	select MEDIA_CONTROLLER
+	select V4L2_FWNODE
+	select VIDEO_V4L2_SUBDEV_API
+	select VIDEOBUF2_DMA_CONTIG
+	select VIDEOBUF2_VMALLOC
+	help
+	  Enable this to support Arm's Mali-C720 Image Signal Processor.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called mali-c720.
