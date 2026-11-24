@@ -742,6 +742,9 @@ class KUnitMainTest(unittest.TestCase):
 		self.linux_source_mock.build_kernel.return_value = True
 		self.linux_source_mock.run_kernel.return_value = all_passed_log
 
+		self.default_arch_mock = mock.patch('kunit.get_default_arch').start()
+		self.default_arch_mock.return_value = 'um'
+
 	def test_config_passes_args_pass(self):
 		kunit.main(['config', '--build_dir=.kunit'])
 		self.assertEqual(self.linux_source_mock.build_reconfig.call_count, 1)

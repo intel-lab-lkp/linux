@@ -9,6 +9,7 @@
 
 import argparse
 import os
+import platform
 import re
 import shlex
 import sys
@@ -355,6 +356,30 @@ def get_default_jobs() -> int:
 		return ncpu
 	raise RuntimeError("os.cpu_count() returned None")
 
+# Map from host architecture (uname -m) -> default KUnit architecture
+# Should be 'um' for architectures supporting UML, or the name of the
+# qemu_config otherwise (typically the kernel arch name).
+# See scripts/subarch.include for a reference.
+default_arch_map = {
+		'i386': 'um',
+		'i486': 'um',
+		'i586': 'um',
+		'i686': 'um',
+		'x86_64': 'um',
+		'aarch64': 'arm64',
+		'sun4u': 'sparc64',
+		's390x': 's390',
+		'loongarch64': 'loongarch',
+		'ppc64': 'powerpc64',
+}
+
+def get_default_arch() -> str:
+	host_uname_arch = platform.machine()
+	if host_uname_arch in default_arch_map:
+		return default_arch_map[host_uname_arch]
+
+	return host_uname_arch
+
 def get_default_build_dir() -> str:
 	if 'KBUILD_OUTPUT' in os.environ:
 		return os.path.join(os.environ['KBUILD_OUTPUT'], '.kunit')
@@ -399,7 +424,7 @@ def add_common_opts(parser: argparse.ArgumentParser) -> None:
 				  'string passed to the ARCH make param, '
 				  'e.g. i386, x86_64, arm, um, etc. Non-UML '
 				  'architectures run on QEMU.'),
-			    type=str, default='um', metavar='ARCH')
+				  type=str, default=get_default_arch(), metavar='ARCH')
 
 	parser.add_argument('--cross_compile',
 			    help=('Sets make\'s CROSS_COMPILE variable; it should '
