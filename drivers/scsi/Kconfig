@@ -765,9 +765,9 @@ config SCSI_IBMVFC_KUNIT_TEST
 	default KUNIT_ALL_TESTS
 	help
 	  Compile IBM POWER Virtual FC client KUnit tests. These tests
-	  cover the sub-CRQ channel deregistration guard path.
-	  To compile this driver as a module, choose M here: the module
-	  will be called ibmvfc_kunit.
+	  cover the sub-CRQ channel deregistration guard path and FPIN
+	  event processing. To compile this driver as a module, choose
+	  M here: the module will be called ibmvfc_kunit.
 
 config SCSI_IBMVFC_TRACE
 	bool "enable driver internal trace"
