@@ -7338,10 +7338,14 @@ nfs4_set_delegation(struct nfsd4_open *open,
 	 * A read delegation can go to a client that holds a write open
 	 * of the file: nfsd_breaker_owns_lease() keeps the holder's own
 	 * opens from breaking it.
+	 *
+	 * Never OPEN_DELEGATE_READ_ATTRS_DELEG: delegating atime correctly
+	 * would need exclusive authority over it, or merging the times of
+	 * several read holders. The want flag is only a request.
 	 */
 	if (!nf && (open->op_share_access & NFS4_SHARE_ACCESS_READ)) {
 		nf = find_readable_file(fp);
-		dl_type = deleg_ts ? OPEN_DELEGATE_READ_ATTRS_DELEG : OPEN_DELEGATE_READ;
+		dl_type = OPEN_DELEGATE_READ;
 	}
 
 	if (!nf)
@@ -7639,9 +7643,7 @@ nfs4_open_delegation(struct svc_rqst *rqstp, struct nfsd4_open *open,
 		spin_unlock(&f->f_lock);
 		trace_nfsd_deleg_write(&dp->dl_stid.sc_stateid);
 	} else {
-		open->op_delegate_type = deleg_ts && nfs4_delegation_stat(dp, currentfh, &stat) ?
-					 OPEN_DELEGATE_READ_ATTRS_DELEG : OPEN_DELEGATE_READ;
-		dp->dl_atime = stat.atime;
+		open->op_delegate_type = OPEN_DELEGATE_READ;
 		trace_nfsd_deleg_read(&dp->dl_stid.sc_stateid);
 	}
 	nfs4_put_stid(&dp->dl_stid);
