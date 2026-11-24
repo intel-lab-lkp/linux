@@ -66,7 +66,9 @@ void rtw_tx_fill_tx_desc(struct rtw_dev *rtwdev,
 		      le32_encode_bits(pkt_info->nav_use_hdr, RTW_TX_DESC_W3_NAVUSEHDR) |
 		      le32_encode_bits(pkt_info->ampdu_factor, RTW_TX_DESC_W3_MAX_AGG_NUM);
 
-	tx_desc->w4 = le32_encode_bits(pkt_info->rate, RTW_TX_DESC_W4_DATARATE);
+	tx_desc->w4 = le32_encode_bits(pkt_info->rate, RTW_TX_DESC_W4_DATARATE) |
+		      le32_encode_bits(pkt_info->rty_lmt_en, RTW_TX_DESC_W4_RTY_LMT_EN) |
+		      le32_encode_bits(pkt_info->data_rty_lmt, RTW_TX_DESC_W4_DATA_RTY_LMT);
 
 	if (rtwdev->chip->old_datarate_fb_limit)
 		tx_desc->w4 |= le32_encode_bits(0x1f, RTW_TX_DESC_W4_DATARATE_FB_LIMIT);
@@ -224,6 +226,8 @@ static void rtw_tx_report_tx_status(struct rtw_dev *rtwdev,
 
 	info = IEEE80211_SKB_CB(skb);
 	ieee80211_tx_info_clear_status(info);
+	if (info->flags & IEEE80211_TX_CTL_NO_ACK)
+		info->flags |= IEEE80211_TX_STAT_NOACK_TRANSMITTED;
 	if (acked)
 		info->flags |= IEEE80211_TX_STAT_ACK;
 	else
@@ -411,6 +415,14 @@ static void rtw_tx_injected_pkt_info_update(struct rtw_dev *rtwdev,
 {
 	struct ieee80211_tx_rate *rate = &info->control.rates[0];
 	u8 nss, mcs;
+
+	if (info->flags & IEEE80211_TX_CTL_NO_ACK) {
+		pkt_info->rty_lmt_en = true;
+		pkt_info->data_rty_lmt = 0;
+	} else if (rate->count) {
+		pkt_info->rty_lmt_en = true;
+		pkt_info->data_rty_lmt = rate->count - 1;
+	}
 
 	if (!(info->control.flags & IEEE80211_TX_CTRL_RATE_INJECT))
 		return;

@@ -625,6 +625,8 @@ struct rtw_tx_pkt_info {
 	bool stbc;
 	bool ldpc;
 	bool dis_rate_fallback;
+	bool rty_lmt_en;
+	u8 data_rty_lmt;
 	bool bmc;
 	bool use_rate;
 	bool ls;
