@@ -6654,11 +6654,20 @@ nfsd_break_deleg_cb(struct file_lease *fl)
 
 	trace_nfsd_cb_recall(&dp->dl_stid);
 
-	dp->dl_recalled = true;
-	atomic_inc(&clp->cl_delegs_in_recall);
-	if (try_to_expire_client(clp)) {
-		nn = net_generic(clp->net, nfsd_net_id);
-		mod_delayed_work(laundry_wq, &nn->laundromat_work, 0);
+	/*
+	 * lm_break runs again for a write breaker after a read breaker, and
+	 * the dir notification paths call nfsd_break_deleg_cb() directly.
+	 * Only the first call may count the recall, since
+	 * nfsd_change_deleg_cb() decrements cl_delegs_in_recall only once.
+	 */
+	if (!dp->dl_recalled) {
+		dp->dl_recalled = true;
+		atomic_inc(&clp->cl_delegs_in_recall);
+		if (try_to_expire_client(clp)) {
+			nn = net_generic(clp->net, nfsd_net_id);
+			mod_delayed_work(laundry_wq, &nn->laundromat_work, 0);
+		}
+		fp->fi_had_conflict = true;
 	}
 
 	/*
@@ -6668,7 +6677,6 @@ nfsd_break_deleg_cb(struct file_lease *fl)
 	 */
 	fl->fl_break_time = 0;
 
-	fp->fi_had_conflict = true;
 	nfsd_break_one_deleg(dp);
 	return false;
 }
