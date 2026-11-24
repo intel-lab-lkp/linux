@@ -7,8 +7,12 @@ struct nvkm_device_pci {
 	struct nvkm_device device;
 	struct pci_dev *pdev;
 	bool suspend;
+	/* GSP-capable (Turing and later) GPUs may be bound; mirrors the
+	 * bind_gsp module parameter.
+	 */
+	bool bind_gsp;
 };
 
 int nvkm_device_pci_new(struct pci_dev *, const char *cfg, const char *dbg,
-			struct nvkm_device **);
+			bool bind_gsp, struct nvkm_device **);
 #endif

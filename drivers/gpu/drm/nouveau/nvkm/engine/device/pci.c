@@ -1650,7 +1650,7 @@ nvkm_device_pci_func = {
 
 int
 nvkm_device_pci_new(struct pci_dev *pci_dev, const char *cfg, const char *dbg,
-		    struct nvkm_device **pdevice)
+		    bool bind_gsp, struct nvkm_device **pdevice)
 {
 	const struct nvkm_device_quirk *quirk = NULL;
 	const struct nvkm_device_pci_device *pcid;
@@ -1692,8 +1692,8 @@ nvkm_device_pci_new(struct pci_dev *pci_dev, const char *cfg, const char *dbg,
 		pci_disable_device(pci_dev);
 		return -ENOMEM;
 	}
-	*pdevice = &pdev->device;
 	pdev->pdev = pci_dev;
+	pdev->bind_gsp = bind_gsp;
 
 	ret = nvkm_device_ctor(&nvkm_device_pci_func, quirk, &pci_dev->dev,
 			       pci_is_pcie(pci_dev) ? NVKM_DEVICE_PCIE :
@@ -1705,8 +1705,13 @@ nvkm_device_pci_new(struct pci_dev *pci_dev, const char *cfg, const char *dbg,
 				    PCI_FUNC(pci_dev->devfn), name,
 			       cfg, dbg, &pdev->device);
 
-	if (ret)
+	if (ret) {
+		pci_disable_device(pci_dev);
+		kfree(pdev);
 		return ret;
+	}
+
+	*pdevice = &pdev->device;
 
 	/* Set DMA mask based on capabilities reported by the MMU subdev. */
 	if (pdev->device.mmu && !pdev->device.pci->agp.bridge)

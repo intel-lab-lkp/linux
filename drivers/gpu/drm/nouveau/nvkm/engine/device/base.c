@@ -25,6 +25,7 @@
 #include "acpi.h"
 
 #include <core/option.h>
+#include <core/pci.h>
 
 #include <subdev/bios.h>
 #include <subdev/therm.h>
@@ -3081,22 +3082,37 @@ fail:
 	return ret;
 }
 
+/* Release the state constructed by nvkm_device_ctor(), apart from the
+ * resources owned by the caller (bus-specific state and the container
+ * allocation).
+ *
+ * Must be called with nv_devices_mutex held.
+ */
+static void
+nvkm_device_dtor(struct nvkm_device *device)
+{
+	struct nvkm_subdev *subdev, *tmp;
+
+	nvkm_intr_dtor(device);
+
+	list_for_each_entry_safe_reverse(subdev, tmp, &device->subdev, head)
+		nvkm_subdev_del(&subdev);
+
+	if (device->pri)
+		iounmap(device->pri);
+
+	list_del(&device->head);
+}
+
 void
 nvkm_device_del(struct nvkm_device **pdevice)
 {
 	struct nvkm_device *device = *pdevice;
-	struct nvkm_subdev *subdev, *subtmp;
+
 	if (device) {
 		mutex_lock(&nv_devices_mutex);
 
-		nvkm_intr_dtor(device);
-
-		list_for_each_entry_safe_reverse(subdev, subtmp, &device->subdev, head)
-			nvkm_subdev_del(&subdev);
-
-		if (device->pri)
-			iounmap(device->pri);
-		list_del(&device->head);
+		nvkm_device_dtor(device);
 
 		if (device->func->dtor)
 			*pdevice = device->func->dtor(device);
@@ -3152,6 +3168,14 @@ nvkm_device_ctor(const struct nvkm_device_func *func,
 	unsigned chipset;
 
 	mutex_lock(&nv_devices_mutex);
+
+	/* Initialize the state that the failure unwinding at done: relies
+	 * on, so that it is safe to run on every error path.
+	 */
+	INIT_LIST_HEAD(&device->head);
+	INIT_LIST_HEAD(&device->subdev);
+	nvkm_intr_ctor(device);
+
 	if (nvkm_device_find_locked(handle))
 		goto done;
 
@@ -3165,7 +3189,6 @@ nvkm_device_ctor(const struct nvkm_device_func *func,
 	device->name = name;
 	list_add_tail(&device->head, &nv_devices);
 	device->debug = nvkm_dbgopt(device->dbgopt, "device");
-	INIT_LIST_HEAD(&device->subdev);
 
 	mmio_base = device->func->resource_addr(device, NVKM_BAR0_PRI);
 	mmio_size = device->func->resource_size(device, NVKM_BAR0_PRI);
@@ -3381,6 +3404,21 @@ nvkm_device_ctor(const struct nvkm_device_func *func,
 		goto done;
 	}
 
+	/* Unless nouveau is the default NVIDIA driver, leave GSP-capable
+	 * (Turing and later) PCI GPUs to other drivers, such as nova-core.
+	 * Older GPUs are always bound.
+	 *
+	 * Reject before subdevs are constructed, as that would already load
+	 * GSP firmware for GPUs that are not going to be used.
+	 */
+	if (device->func->pci && device->card_type >= TU100 &&
+	    !device->func->pci(device)->bind_gsp) {
+		nvdev_info(device, "leaving GSP-capable GPU to other drivers "
+			   "(bind_gsp=0)\n");
+		ret = -ENODEV;
+		goto done;
+	}
+
 	/* read strapping information */
 	strap = nvkm_rd32(device, 0x101000);
 
@@ -3402,7 +3440,6 @@ nvkm_device_ctor(const struct nvkm_device_func *func,
 		device->name = device->chip->name;
 
 	mutex_init(&device->mutex);
-	nvkm_intr_ctor(device);
 
 #define NVKM_LAYOUT_ONCE(type,data,ptr)                                                      \
 	if (device->chip->ptr.inst) {                                                        \
@@ -3446,9 +3483,11 @@ nvkm_device_ctor(const struct nvkm_device_func *func,
 
 	ret = nvkm_intr_install(device);
 done:
-	if (ret && device->pri) {
-		iounmap(device->pri);
-		device->pri = NULL;
+	if (ret) {
+		/* Unwind the partially constructed device, so that the caller
+		 * only has to release the resources it allocated itself.
+		 */
+		nvkm_device_dtor(device);
 	}
 	mutex_unlock(&nv_devices_mutex);
 	return ret;
