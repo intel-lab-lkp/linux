@@ -4125,6 +4125,26 @@ static int igb_sw_init(struct igb_adapter *adapter)
 	return 0;
 }
 
+/* ethtool refuses to remove a queue that still has an XSK pool. igb can't
+ * refuse when it lowers its queue counts by itself, so keep the stack's Rx
+ * queue instead, or the pool couldn't be disabled anymore: lower the count
+ * once it's gone, at the next open.
+ */
+static int igb_set_real_num_queues(struct igb_adapter *adapter)
+{
+	struct net_device *netdev = adapter->netdev;
+	unsigned int rxq = adapter->num_rx_queues;
+	unsigned int i;
+
+	for (i = netdev->real_num_rx_queues; i > rxq; i--)
+		if (xsk_get_pool_from_qid(netdev, i - 1)) {
+			rxq = i;
+			break;
+		}
+
+	return netif_set_real_num_queues(netdev, adapter->num_tx_queues, rxq);
+}
+
 /* Some settings need RTNL, which isn't held when resuming from runtime
  * suspend: apply them from here instead, if the device is still up.
  */
@@ -4136,9 +4156,7 @@ static void igb_rtnl_resume_task(struct work_struct *work)
 	rtnl_lock();
 	if (!test_bit(__IGB_DOWN, &adapter->state) &&
 	    netif_running(adapter->netdev)) {
-		if (netif_set_real_num_queues(adapter->netdev,
-					      adapter->num_tx_queues,
-					      adapter->num_rx_queues))
+		if (igb_set_real_num_queues(adapter))
 			netdev_err(adapter->netdev,
 				   "error setting real queue count\n");
 	}
@@ -4207,8 +4225,7 @@ static int __igb_open(struct net_device *netdev, bool resuming,
 	 * runtime resume igb_rtnl_resume_task() does it.
 	 */
 	if (rtnl_held) {
-		err = netif_set_real_num_queues(netdev, adapter->num_tx_queues,
-						adapter->num_rx_queues);
+		err = igb_set_real_num_queues(adapter);
 		if (err)
 			goto err_set_queues;
 	}
