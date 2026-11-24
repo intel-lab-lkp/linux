@@ -1044,6 +1044,9 @@ static struct iommu_device *viommu_probe_device(struct device *dev)
 			goto err_free_dev;
 	}
 
+	if (!device_link_add(dev, viommu->dev, DL_FLAG_AUTOREMOVE_SUPPLIER))
+		dev_dbg(dev, "could not add device link\n");
+
 	return &viommu->iommu;
 
 err_free_dev:
