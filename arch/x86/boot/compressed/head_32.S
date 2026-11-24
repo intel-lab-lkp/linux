@@ -82,7 +82,6 @@ SYM_FUNC_START(startup_32)
  * %ebp is calculated to be the address that the kernel will be decompressed to.
  */
 
-#ifdef CONFIG_RELOCATABLE
 	leal	startup_32@GOTOFF(%edx), %ebx
 	movl	BP_kernel_alignment(%esi), %eax
 	decl	%eax
@@ -91,7 +90,6 @@ SYM_FUNC_START(startup_32)
 	andl    %eax, %ebx
 	cmpl	$LOAD_PHYSICAL_ADDR, %ebx
 	jae	1f
-#endif
 	movl	$LOAD_PHYSICAL_ADDR, %ebx
 1:
 

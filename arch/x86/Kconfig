@@ -19,6 +19,7 @@ config X86_32
 	select MODULES_USE_ELF_REL
 	select OLD_SIGACTION
 	select ARCH_SPLIT_ARG64
+	select RELOCATABLE
 
 config X86_64
 	def_bool y
@@ -1902,7 +1903,6 @@ config EFI
 config EFI_STUB
 	bool "EFI stub support"
 	depends on EFI
-	select RELOCATABLE
 	help
 	  This kernel feature allows a bzImage to be loaded directly
 	  by EFI firmware without the use of a bootloader.
@@ -1994,66 +1994,37 @@ config ARCH_HAS_GENERIC_CRASHKERNEL_RESERVATION
 	def_bool CRASH_RESERVE
 
 config PHYSICAL_START
-	hex "Physical address where the kernel is loaded" if (EXPERT || CRASH_DUMP)
+	hex "Physical load address of the kernel" if (EXPERT || CRASH_DUMP) && X86_32
 	default "0x1000000"
 	help
-	  This gives the physical address where the kernel is loaded.
+	  The minimum physical load address of the decompressed image. The
+	  kernel will be placed here by the decompressor if it was loaded below
+	  this address. If it was loaded at or above this address, the kernel
+	  will be placed at the actual load address rounded up to
+	  PHYSICAL_ALIGN.
 
-	  If the kernel is not relocatable (CONFIG_RELOCATABLE=n) then bzImage
-	  will decompress itself to above physical address and run from there.
-	  Otherwise, bzImage will run from the address where it has been loaded
-	  by the boot loader. The only exception is if it is loaded below the
-	  above physical address, in which case it will relocate itself there.
-
-	  In normal kdump cases one does not have to set/change this option
-	  as now bzImage can be compiled as a completely relocatable image
-	  (CONFIG_RELOCATABLE=y) and be used to load and run from a different
-	  address. This option is mainly useful for the folks who don't want
-	  to use a bzImage for capturing the crash dump and want to use a
-	  vmlinux instead. vmlinux is not relocatable hence a kernel needs
-	  to be specifically compiled to run from a specific memory area
-	  (normally a reserved region) and this option comes handy.
-
-	  So if you are using bzImage for capturing the crash dump,
-	  leave the value here unchanged to 0x1000000 and set
-	  CONFIG_RELOCATABLE=y.  Otherwise if you plan to use vmlinux
-	  for capturing the crash dump change this value to start of
-	  the reserved region.  In other words, it can be set based on
-	  the "X" value as specified in the "crashkernel=YM@XM"
-	  command line boot parameter passed to the panic-ed
-	  kernel. Please take a look at Documentation/admin-guide/kdump/kdump.rst
-	  for more details about crash dumps.
-
-	  Usage of bzImage for capturing the crash dump is recommended as
-	  one does not have to build two kernels. Same kernel can be used
-	  as production kernel and capture kernel. Above option should have
-	  gone away after relocatable bzImage support is introduced. But it
-	  is present because there are users out there who continue to use
-	  vmlinux for dump capture. This option should go away down the
-	  line.
-
-	  Don't change this unless you know what you are doing.
+	  Legacy i386 kdump use cases based on vmlinux rather than bzImage
+	  might need to override this, otherwise leave at its default.
 
 config RELOCATABLE
-	bool "Build a relocatable kernel"
-	default y
+	def_bool y
 	help
-	  This builds a kernel image that retains relocation information
-	  so it can be loaded someplace besides the default 1MB.
-	  The relocations tend to make the kernel binary about 10% larger,
-	  but are discarded at runtime.
+	  This builds a kernel image that retains relocation information,
+	  allowing its placement in the virtual address space to deviate from
+	  the build time default. The relocations are applied at boot and then
+	  discarded, so their runtime memory footprint is zero.
 
-	  One use is for the kexec on panic case where the recovery kernel
-	  must live at a different physical address than the primary
-	  kernel.
+	  On i386, the virtual displacement relative to PAGE_OFFSET must equal
+	  the physical displacement relative to LOAD_OFFSET, and so this option
+	  must always be set.
 
-	  Note: If CONFIG_RELOCATABLE=y, then the kernel runs from the address
-	  it has been loaded at and the compile time physical address
-	  (CONFIG_PHYSICAL_START) is used as the minimum location.
+	  On x86_64, the virtual displacement is independent from the physical
+	  placement, and the relocations are only used when randomizing the
+	  virtual address space (KASLR).
 
 config RANDOMIZE_BASE
 	bool "Randomize the address of the kernel image (KASLR)"
-	depends on RELOCATABLE
+	select RELOCATABLE
 	default y
 	help
 	  In support of Kernel Address Space Layout Randomization (KASLR),
@@ -2089,30 +2060,19 @@ config RANDOMIZE_BASE
 # Relocation on x86 needs some additional build support
 config X86_NEED_RELOCS
 	def_bool y
-	depends on RANDOMIZE_BASE || (X86_32 && RELOCATABLE)
+	depends on RELOCATABLE
 	select ARCH_VMLINUX_NEEDS_RELOCS
 
 config PHYSICAL_ALIGN
-	hex "Alignment value to which kernel should be aligned"
+	hex "Minimum alignment of the physical load address"
 	default "0x200000"
 	range 0x2000 0x1000000 if X86_32
 	range 0x200000 0x1000000 if X86_64
 	help
-	  This value puts the alignment restrictions on physical address
-	  where kernel is loaded and run from. Kernel is compiled for an
-	  address which meets above alignment restriction.
-
-	  If bootloader loads the kernel at a non-aligned address and
-	  CONFIG_RELOCATABLE is set, kernel will move itself to nearest
-	  address aligned to above value and run from there.
-
-	  If bootloader loads the kernel at a non-aligned address and
-	  CONFIG_RELOCATABLE is not set, kernel will ignore the run time
-	  load address and decompress itself to the address it has been
-	  compiled for and run from there. The address for which kernel is
-	  compiled already meets above alignment restrictions. Hence the
-	  end result is that kernel runs from a physical address meeting
-	  above alignment restrictions.
+	  The minimum alignment of the kernel's physical load address. If the
+	  decompressor was loaded at a physical address > PHYSICAL_START but
+	  not aligned to this value, it will round it up to the next multiple
+	  and decompress the kernel there.
 
 	  On 32-bit this value must be a multiple of 0x2000. On 64-bit
 	  this value must be a multiple of 0x200000.
