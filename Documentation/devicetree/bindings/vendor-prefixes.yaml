@@ -628,6 +628,8 @@ patternProperties:
     description: Shanghai FourSemi Semiconductor Co.,Ltd.
   "^foxlink,.*":
     description: Foxlink Group
+  "^fpc,.*":
+    description: Fingerprint Cards AB
   "^freebox,.*":
     description: Freebox SAS
   "^freecom,.*":
