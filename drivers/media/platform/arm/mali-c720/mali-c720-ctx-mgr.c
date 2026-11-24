@@ -188,6 +188,35 @@ static u16 mali_c720_crc16_mcrf4xx_reg(u16 crc, u32 data, u32 mask)
 					    mali_c720_reg_width(mask));
 }
 
+static u16 mali_c720_ctx_mgr_calc_cdma_sg_crc(const struct mali_c720_registers *regs,
+					      const struct mali_c720_cdma_sg_table *sg_table,
+					      unsigned int sg_table_size)
+{
+	const struct mali_c720_cm_sg_regs *load_cdma_sg_load = regs->cm->load_cdma_sg_load;
+	u16 crc = MALI_C720_CRC16_MCRF4XX_INIT;
+	u32 mask;
+	unsigned int i;
+
+	for (i = 0; i < sg_table_size; i++) {
+		const struct mali_c720_cdma_sg_cfg *desc = &sg_table->desc[i];
+
+		/* Load and store register masks are identical */
+		mask = mali_c720_reg_mask(&load_cdma_sg_load->isp_address);
+		crc = mali_c720_crc16_mcrf4xx_reg(crc, desc->isp_address, mask);
+		mask = mali_c720_reg_mask(&load_cdma_sg_load->length_low);
+		crc = mali_c720_crc16_mcrf4xx_reg(crc, desc->length_low, mask);
+		mask = mali_c720_reg_mask(&load_cdma_sg_load->length_high);
+		crc = mali_c720_crc16_mcrf4xx_reg(crc, desc->length_high, mask);
+		mask = mali_c720_reg_mask(&load_cdma_sg_load->axi_address);
+		crc = mali_c720_crc16_mcrf4xx_reg(crc, desc->axi_address, mask);
+		crc = mali_c720_crc16_mcrf4xx_bits(crc, 0, 7);
+		mask = mali_c720_reg_mask(&load_cdma_sg_load->alt_address);
+		crc = mali_c720_crc16_mcrf4xx_reg(crc, desc->alt_address, mask);
+	}
+
+	return crc;
+}
+
 static u16 mali_c720_ctx_mgr_calc_cdma_desc_crc(struct mali_c720_context *ctx)
 {
 	const struct mali_c720_cm_cdma_slot_regs *cdma_slot =
@@ -504,6 +533,92 @@ static void mali_c720_ctx_mgr_prepare_output_fifos(struct mali_c720_context *ctx
 	}
 }
 
+int mali_c720_ctx_mgr_prepare_cdma_sg_descriptors(struct mali_c720 *mali_c720)
+{
+	const struct mali_c720_registers *regs = &mali_c720->registers;
+	struct mali_c720_ctx_mgr *ctx_mgr = &mali_c720->ctx_mgr;
+	struct mali_c720_cdma_sg_table *store = &ctx_mgr->sg_descriptors.store;
+	unsigned int i;
+
+	memset(&ctx_mgr->sg_descriptors, 0, sizeof(ctx_mgr->sg_descriptors));
+
+	for (i = 0; i < MALI_C720_STATS_MAX; i++) {
+		const struct mali_c720_stats_target *target = &mali_c720->stats.targets[i];
+
+		if (!target->present)
+			continue;
+
+		if (target->num_desc > ctx_mgr->cdma_sg_size - store->num_desc) {
+			dev_warn_once(mali_c720->dev, "Insufficient CDMA SG descriptors\n");
+			return -ENOSPC;
+		}
+
+		memcpy(&store->desc[store->num_desc], target->desc,
+		       target->num_desc * sizeof(*target->desc));
+		store->num_desc += target->num_desc;
+	}
+
+	ctx_mgr->sg_descriptors.load.crc =
+		mali_c720_ctx_mgr_calc_cdma_sg_crc(regs, &ctx_mgr->sg_descriptors.load,
+						   ctx_mgr->cdma_sg_size);
+	ctx_mgr->sg_descriptors.store.crc =
+		mali_c720_ctx_mgr_calc_cdma_sg_crc(regs, &ctx_mgr->sg_descriptors.store,
+						   ctx_mgr->cdma_sg_size);
+
+	return 0;
+}
+
+static void mali_c720_ctx_mgr_write_cdma_sg_descriptors(struct mali_c720_context *ctx)
+{
+	struct mali_c720 *mali_c720 = ctx->mali_c720;
+	const struct mali_c720_registers *regs = &mali_c720->registers;
+	const struct mali_c720_cm_sg_regs *load_cdma_sg_load =
+		regs->cm->load_cdma_sg_load;
+	const struct mali_c720_cm_sg_regs *load_cdma_sg_store =
+		regs->cm->load_cdma_sg_store;
+	const struct mali_c720_cm_sg_crc_regs *load_cdma_sg_load_crc =
+		regs->cm->load_cdma_sg_load_crc;
+	const struct mali_c720_cm_sg_crc_regs *load_cdma_sg_store_crc =
+		regs->cm->load_cdma_sg_store_crc;
+	struct mali_c720_ctx_mgr *ctx_mgr = &mali_c720->ctx_mgr;
+	unsigned int i;
+
+	for (i = 0; i < ctx_mgr->cdma_sg_size; i++) {
+		const struct mali_c720_cdma_sg_cfg *load = &ctx_mgr->sg_descriptors.load.desc[i];
+		const struct mali_c720_cdma_sg_cfg *store = &ctx_mgr->sg_descriptors.store.desc[i];
+		u32 base;
+
+		base = mali_c720_group_base(&load_cdma_sg_load->group, i);
+		mali_c720_ctx_group_write(ctx, base, &load_cdma_sg_load->isp_address,
+					  load->isp_address);
+		mali_c720_ctx_group_write(ctx, base, &load_cdma_sg_load->length_low,
+					  load->length_low);
+		mali_c720_ctx_group_write(ctx, base, &load_cdma_sg_load->length_high,
+					  load->length_high);
+		mali_c720_ctx_group_write(ctx, base, &load_cdma_sg_load->axi_address,
+					  load->axi_address);
+		mali_c720_ctx_group_write(ctx, base, &load_cdma_sg_load->alt_address,
+					  load->alt_address);
+
+		base = mali_c720_group_base(&load_cdma_sg_store->group, i);
+		mali_c720_ctx_group_write(ctx, base, &load_cdma_sg_store->isp_address,
+					  store->isp_address);
+		mali_c720_ctx_group_write(ctx, base, &load_cdma_sg_store->length_low,
+					  store->length_low);
+		mali_c720_ctx_group_write(ctx, base, &load_cdma_sg_store->length_high,
+					  store->length_high);
+		mali_c720_ctx_group_write(ctx, base, &load_cdma_sg_store->axi_address,
+					  store->axi_address);
+		mali_c720_ctx_group_write(ctx, base, &load_cdma_sg_store->alt_address,
+					  store->alt_address);
+	}
+
+	mali_c720_ctx_write(ctx, &load_cdma_sg_load_crc->cdma_sg_crc,
+			    ctx_mgr->sg_descriptors.load.crc);
+	mali_c720_ctx_write(ctx, &load_cdma_sg_store_crc->cdma_sg_crc,
+			    ctx_mgr->sg_descriptors.store.crc);
+}
+
 static void mali_c720_ctx_mgr_write_buffer_desc(struct mali_c720_context *ctx,
 						struct mali_c720_buffer_pool *pool,
 						unsigned int index)
@@ -632,6 +747,25 @@ static void mali_c720_ctx_mgr_write_cdma_desc(struct mali_c720_context *ctx)
 			      &cdma_slot->base_address_low, desc->base_address_low);
 	mali_c720_group_write(mali_c720, cdma_slot_addr,
 			      &cdma_slot->base_address_high, desc->base_address_high);
+	mali_c720_group_write(mali_c720, cdma_slot_addr,
+			      &cdma_slot->alt_base_address_low, desc->alt_base_address_low);
+	mali_c720_group_write(mali_c720, cdma_slot_addr,
+			      &cdma_slot->alt_base_address_high, desc->alt_base_address_high);
+	mali_c720_group_write(mali_c720, cdma_slot_addr,
+			      &cdma_slot->st_sg_count, desc->st_sg_count);
+	mali_c720_group_write(mali_c720, cdma_slot_addr,
+			      &cdma_slot->crc, desc->crc);
+}
+
+static void mali_c720_ctx_mgr_update_cdma_desc(struct mali_c720_context *ctx)
+{
+	struct mali_c720 *mali_c720 = ctx->mali_c720;
+	const struct mali_c720_cm_cdma_slot_regs *cdma_slot = mali_c720->registers.cm->cdma_slot;
+	struct mali_c720_cdma_desc *desc = &ctx->cdma_desc;
+	u32 cdma_slot_addr = mali_c720_group_base(&cdma_slot->group, ctx->id);
+
+	desc->crc = mali_c720_ctx_mgr_calc_cdma_desc_crc(ctx);
+
 	mali_c720_group_write(mali_c720, cdma_slot_addr,
 			      &cdma_slot->alt_base_address_low, desc->alt_base_address_low);
 	mali_c720_group_write(mali_c720, cdma_slot_addr,
@@ -1245,6 +1379,23 @@ void mali_c720_ctx_mgr_update_buffer(struct mali_c720_context *ctx,
 	mali_c720_ctx_mgr_relinquish_buffer_control(ctx, pool, index);
 }
 
+void mali_c720_ctx_mgr_set_stats_buffer_address(struct mali_c720_context *ctx, dma_addr_t *addr)
+{
+	struct mali_c720_ctx_mgr *ctx_mgr = &ctx->mali_c720->ctx_mgr;
+
+	if (addr) {
+		ctx->cdma_desc.alt_base_address_low = lower_32_bits(*addr);
+		ctx->cdma_desc.alt_base_address_high = upper_32_bits(*addr);
+		ctx->cdma_desc.st_sg_count = ctx_mgr->sg_descriptors.store.num_desc;
+	} else {
+		ctx->cdma_desc.alt_base_address_low = 0;
+		ctx->cdma_desc.alt_base_address_high = 0;
+		ctx->cdma_desc.st_sg_count = 0;
+	}
+
+	mali_c720_ctx_mgr_update_cdma_desc(ctx);
+}
+
 void mali_c720_ctx_mgr_prepare_frame(struct mali_c720_context *ctx)
 {
 	lockdep_assert_held(&ctx->state_lock);
@@ -1273,6 +1424,8 @@ void mali_c720_ctx_mgr_buffer_done(struct mali_c720_context *ctx, bool success)
 
 	for (i = 0; i < MALI_C720_MAX_NUM_CAP_DEVS; i++)
 		mali_c720_cap_dev_buffer_done(&mali_c720->cap_devs[i], success);
+
+	mali_c720_stats_buffer_done(&mali_c720->stats, success);
 }
 
 void mali_c720_ctx_mgr_handle_sw_ready(struct mali_c720_context *ctx)
@@ -1290,6 +1443,7 @@ void mali_c720_ctx_mgr_configure_context(struct mali_c720_context *ctx,
 	struct mali_c720 *mali_c720 = ctx->mali_c720;
 	const struct mali_c720_registers *regs = &mali_c720->registers;
 	const struct mali_c720_pipeline_regs *pipeline = regs->top->pipeline;
+	struct mali_c720_ctx_mgr *ctx_mgr = &mali_c720->ctx_mgr;
 	dma_addr_t ctx_regs_addr = ctx->regs.dma_handle;
 
 	mali_c720_ctx_group_write(ctx, mali_c720->top_base,
@@ -1307,9 +1461,9 @@ void mali_c720_ctx_mgr_configure_context(struct mali_c720_context *ctx,
 	ctx->cdma_desc.units_high = 0;
 	ctx->cdma_desc.base_address_low = lower_32_bits(ctx_regs_addr);
 	ctx->cdma_desc.base_address_high = upper_32_bits(ctx_regs_addr);
-	ctx->cdma_desc.ld_sg_count = 0;
+	ctx->cdma_desc.ld_sg_count = ctx_mgr->sg_descriptors.load.num_desc;
 	ctx->cdma_desc.st_sg_count = 0;
-	ctx->cdma_desc.alt_transfer_size = 0;
+	ctx->cdma_desc.alt_transfer_size = mali_c720->stats.buffer_size;
 	ctx->cdma_desc.alt_base_address_low = 0;
 	ctx->cdma_desc.alt_base_address_high = 0;
 
@@ -1347,6 +1501,7 @@ void mali_c720_ctx_mgr_configure_context(struct mali_c720_context *ctx,
 	ctx->slot_desc_updated = false;
 
 	mali_c720_ctx_mgr_write_cdma_desc(ctx);
+	mali_c720_ctx_mgr_write_cdma_sg_descriptors(ctx);
 }
 
 void mali_c720_ctx_mgr_prepare_context(struct mali_c720_context *ctx,
@@ -1689,6 +1844,7 @@ int mali_c720_init_ctx_mgr(struct mali_c720 *mali_c720)
 		ctx_mgr->num_inputs * ctx_mgr->num_input_streams;
 	ctx_mgr->input_fifo_size = caps->input_fifo_size;
 	ctx_mgr->output_fifo_size = caps->output_fifo_size;
+	ctx_mgr->cdma_sg_size = caps->cdma_sg_size;
 
 	if (!ctx_mgr->num_raw_buffer_descriptors) {
 		dev_err(mali_c720->dev, "No raw buffer descriptors available\n");
@@ -1729,6 +1885,12 @@ int mali_c720_init_ctx_mgr(struct mali_c720 *mali_c720)
 			"Input topology exceeds driver limits: %u inputs, %u streams per input\n",
 			ctx_mgr->num_inputs, ctx_mgr->num_input_streams);
 		return -EINVAL;
+	}
+
+	if (ctx_mgr->cdma_sg_size > MALI_C720_MAX_CDMA_SG_DESCRIPTORS) {
+		dev_dbg(mali_c720->dev, "CDMA SG table size %u exceeds driver limit, truncating\n",
+			ctx_mgr->cdma_sg_size);
+		ctx_mgr->cdma_sg_size = MALI_C720_MAX_CDMA_SG_DESCRIPTORS;
 	}
 
 	num_slots = caps->num_slots;

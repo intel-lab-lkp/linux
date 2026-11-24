@@ -45,6 +45,8 @@ static void mali_c720_remove_links(struct mali_c720 *mali_c720)
 
 	for (i = 0; i < MALI_C720_MAX_NUM_CAP_DEVS; i++)
 		media_entity_remove_links(&mali_c720->cap_devs[i].vdev.entity);
+
+	media_entity_remove_links(&mali_c720->stats.vdev.entity);
 }
 
 static int mali_c720_create_tpg_links(struct mali_c720 *mali_c720,
@@ -142,6 +144,24 @@ static int mali_c720_create_fr_pipe_links(struct mali_c720 *mali_c720)
 	return ret;
 }
 
+static int mali_c720_create_3a_links(struct mali_c720 *mali_c720)
+{
+	struct v4l2_subdev *isp_sd = &mali_c720->isp.mdev.sd;
+	int ret;
+
+	ret = media_create_pad_link(&isp_sd->entity,
+				    MALI_C720_ISP_PAD_SOURCE_STATS,
+				    &mali_c720->stats.vdev.entity, 0,
+				    0);
+	if (ret) {
+		dev_err(mali_c720->dev,
+			"Failed to link ISP and 3A stats node\n");
+		return ret;
+	}
+
+	return ret;
+}
+
 static int mali_c720_create_links(struct mali_c720 *mali_c720)
 {
 	const struct mali_c720_discovery_target tpg = {
@@ -168,6 +188,10 @@ static int mali_c720_create_links(struct mali_c720 *mali_c720)
 	if (ret)
 		goto err_remove_links;
 
+	ret = mali_c720_create_3a_links(mali_c720);
+	if (ret)
+		goto err_remove_links;
+
 	return 0;
 
 err_remove_links:
@@ -181,6 +205,7 @@ static void mali_c720_unregister_video_devices(struct mali_c720 *mali_c720)
 	guard(mutex)(&mali_c720->media_dev.req_queue_mutex);
 
 	mali_c720_unregister_capture_devs(mali_c720);
+	mali_c720_unregister_stats(mali_c720);
 }
 
 static void mali_c720_unregister_entities(struct mali_c720 *mali_c720)
@@ -218,6 +243,10 @@ static int mali_c720_register_entities(struct mali_c720 *mali_c720)
 		goto err_unregister_entities;
 
 	ret = mali_c720_register_capture_devs(mali_c720);
+	if (ret)
+		goto err_unregister_entities;
+
+	ret = mali_c720_register_stats(mali_c720);
 	if (ret)
 		goto err_unregister_entities;
 
@@ -341,6 +370,7 @@ static void mali_c720_release(struct v4l2_device *v4l2_dev)
 	struct mali_c720 *mali_c720 = container_of(v4l2_dev, struct mali_c720, v4l2_dev);
 
 	mali_c720_cleanup_capture_devs(mali_c720);
+	mali_c720_cleanup_stats(mali_c720);
 	mali_c720_cleanup_fr_pipe(mali_c720);
 	mali_c720_cleanup_vision_pipe(mali_c720);
 	mali_c720_cleanup_isp(mali_c720);
@@ -538,6 +568,9 @@ static bool mali_c720_has_ready_output(struct mali_c720 *mali_c720)
 {
 	unsigned int i;
 
+	if (!mali_c720_stats_is_ready(&mali_c720->stats))
+		return true;
+
 	for (i = 0; i < MALI_C720_MAX_NUM_CAP_DEVS; i++) {
 		if (!mali_c720_cap_dev_is_ready(&mali_c720->cap_devs[i]))
 			return true;
@@ -569,8 +602,11 @@ mali_c720_oldest_request(struct media_request *oldest, struct media_request *can
 
 static struct media_request *mali_c720_find_request(struct mali_c720 *mali_c720)
 {
-	struct media_request *candidate, *req = NULL;
+	struct media_request *candidate, *req;
 	unsigned int i;
+
+	candidate = mali_c720_stats_get_request(&mali_c720->stats);
+	req = mali_c720_oldest_request(NULL, candidate);
 
 	for (i = 0; i < MALI_C720_MAX_NUM_CAP_DEVS; i++) {
 		candidate = mali_c720_cap_dev_get_request(&mali_c720->cap_devs[i]);
@@ -583,6 +619,9 @@ static struct media_request *mali_c720_find_request(struct mali_c720 *mali_c720)
 static bool mali_c720_uses_requests(struct mali_c720 *mali_c720)
 {
 	unsigned int i;
+
+	if (mali_c720_stats_uses_requests(&mali_c720->stats))
+		return true;
 
 	for (i = 0; i < MALI_C720_MAX_NUM_CAP_DEVS; i++) {
 		if (mali_c720_cap_dev_uses_requests(&mali_c720->cap_devs[i]))
@@ -632,6 +671,8 @@ void mali_c720_try_schedule_frame(struct mali_c720_context *ctx)
 
 		for (i = 0; i < MALI_C720_MAX_NUM_CAP_DEVS; i++)
 			mali_c720_cap_dev_set_next_buffer(&mali_c720->cap_devs[i], req);
+
+		mali_c720_stats_set_next_buffer(&mali_c720->stats, req);
 	}
 
 	ctx->pipeline_busy = true;

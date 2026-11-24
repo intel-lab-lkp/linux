@@ -24,6 +24,7 @@ struct mali_c720_context;
 #define MALI_C720_MAX_STREAMS_PER_INPUT	4
 #define MALI_C720_MAX_VIRTUAL_INPUTS	(MALI_C720_MAX_INPUTS * MALI_C720_MAX_STREAMS_PER_INPUT)
 #define MALI_C720_MAX_CONTEXTS		16
+#define MALI_C720_MAX_CDMA_SG_DESCRIPTORS 32
 #define MALI_C720_NUM_SAFETY_SLOTS	4
 
 enum mali_c720_input_command {
@@ -185,6 +186,20 @@ struct mali_c720_cdma_desc {
 	u32 alt_base_address_high;
 };
 
+struct mali_c720_cdma_sg_cfg {
+	u32 isp_address;
+	u16 length_low;
+	u8 length_high;
+	u32 axi_address;
+	u8 alt_address;
+};
+
+struct mali_c720_cdma_sg_table {
+	struct mali_c720_cdma_sg_cfg desc[MALI_C720_MAX_CDMA_SG_DESCRIPTORS];
+	u16 crc;
+	u8 num_desc;
+};
+
 struct mali_c720_buffer_desc {
 	u16 crc;
 	u8 data_format;
@@ -253,6 +268,10 @@ struct mali_c720_ctx_mgr {
 	u8 input_context_map[MALI_C720_MAX_VIRTUAL_INPUTS];
 	unsigned long raw_buffer_descriptors[BITS_TO_LONGS(MALI_C720_MAX_RAW_BUFFERS)];
 	unsigned long out_buffer_descriptors[BITS_TO_LONGS(MALI_C720_MAX_OUT_BUFFERS)];
+	struct {
+		struct mali_c720_cdma_sg_table load;
+		struct mali_c720_cdma_sg_table store;
+	} sg_descriptors;
 	unsigned int num_raw_buffer_descriptors;
 	unsigned int reuse_buffer;
 	unsigned int num_out_buffer_descriptors;
@@ -260,6 +279,7 @@ struct mali_c720_ctx_mgr {
 	unsigned int num_input_streams;
 	unsigned int num_virtual_inputs;
 	unsigned int num_contexts;
+	unsigned int cdma_sg_size;
 	unsigned int input_fifo_size;
 	unsigned int output_fifo_size;
 };
@@ -271,6 +291,8 @@ int mali_c720_alloc_context(struct mali_c720_context *ctx);
 void mali_c720_free_context(struct mali_c720_context *ctx);
 
 int mali_c720_init_ctx_mgr(struct mali_c720 *mali_c720);
+
+int mali_c720_ctx_mgr_prepare_cdma_sg_descriptors(struct mali_c720 *mali_c720);
 
 int mali_c720_ctx_mgr_start_context_inputs(struct mali_c720_context *ctx);
 void mali_c720_ctx_mgr_stop_context_inputs(struct mali_c720_context *ctx);
@@ -287,6 +309,8 @@ void mali_c720_ctx_mgr_update_buffer(struct mali_c720_context *ctx,
 				     struct mali_c720_buffer_pool *pool,
 				     dma_addr_t *addr,
 				     unsigned int index);
+void mali_c720_ctx_mgr_set_stats_buffer_address(struct mali_c720_context *ctx,
+						dma_addr_t *addr);
 
 void mali_c720_ctx_mgr_configure_context(struct mali_c720_context *ctx,
 					 const struct mali_c720_top_cfg *cfg);
