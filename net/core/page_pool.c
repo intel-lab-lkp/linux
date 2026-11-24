@@ -840,6 +840,16 @@ static bool __page_pool_page_can_be_recycled(netmem_ref netmem)
 		!page_is_pfmemalloc(netmem_to_page(netmem)));
 }
 
+/* A memory provider takes back a free net_iov it marked, see
+ * &memory_provider_ops.hand_off
+ */
+static bool page_pool_hand_off(struct page_pool *pool, netmem_ref netmem)
+{
+	return netmem_is_net_iov(netmem) &&
+	       unlikely(netmem_to_net_iov(netmem)->mp_hand_off) &&
+	       pool->mp_ops->hand_off(pool, netmem);
+}
+
 /* If the page refcnt == 1, this will try to recycle the page.
  * If pool->dma_sync is set, we'll try to sync the DMA area for
  * the configured size min(dma_sync_size, pool->max_len).
@@ -851,6 +861,10 @@ __page_pool_put_page(struct page_pool *pool, netmem_ref netmem,
 		     unsigned int dma_sync_size, bool allow_direct)
 {
 	lockdep_assert_no_hardirq();
+
+	/* The provider takes the net_iovs it marked */
+	if (page_pool_hand_off(pool, netmem))
+		return 0;
 
 	/* This allocator is optimized for the XDP mode that uses
 	 * one-frame-per-page, but have fallbacks that act like the
@@ -1051,6 +1065,9 @@ static netmem_ref page_pool_drain_frag(struct page_pool *pool,
 	if (likely(page_pool_unref_netmem(netmem, drain_count)))
 		return 0;
 
+	if (page_pool_hand_off(pool, netmem))
+		return 0;
+
 	if (__page_pool_page_can_be_recycled(netmem)) {
 		page_pool_dma_sync_for_device(pool, netmem, -1);
 		return netmem;
@@ -1067,7 +1084,8 @@ static void page_pool_free_frag(struct page_pool *pool)
 
 	pool->frag_page = 0;
 
-	if (!netmem || page_pool_unref_netmem(netmem, drain_count))
+	if (!netmem || page_pool_unref_netmem(netmem, drain_count) ||
+	    page_pool_hand_off(pool, netmem))
 		return;
 
 	page_pool_return_netmem(pool, netmem);

@@ -97,6 +97,12 @@ enum net_iov_type {
 struct net_iov {
 	struct netmem_desc desc;
 	enum net_iov_type type;
+	/* The last put hands it to its memory provider instead of the page
+	 * pool cache, see &memory_provider_ops.hand_off
+	 */
+	bool mp_hand_off;
+	/* Owned by the memory provider */
+	u8 mp_state;
 	struct net_iov_area *owner;
 };
 
@@ -132,6 +138,8 @@ static inline void net_iov_init(struct net_iov *niov,
 {
 	niov->owner = owner;
 	niov->type = type;
+	niov->mp_hand_off = false;
+	niov->mp_state = 0;
 }
 
 /* netmem */

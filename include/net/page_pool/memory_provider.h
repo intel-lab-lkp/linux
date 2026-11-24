@@ -36,6 +36,12 @@ enum mp_flags {
 struct memory_provider_ops {
 	netmem_ref (*alloc_netmems)(struct page_pool *pool, gfp_t gfp);
 	bool (*release_netmem)(struct page_pool *pool, netmem_ref netmem);
+	/* Takes a free net_iov marked mp_hand_off that stays charged to the
+	 * pool; the provider puts it back later. Returns false to have the
+	 * pool recycle it instead. Called where the pool puts netmem, outside
+	 * hard IRQ context. Needed by providers that mark net_iovs.
+	 */
+	bool (*hand_off)(struct page_pool *pool, netmem_ref netmem);
 	int (*init)(struct page_pool *pool);
 	void (*destroy)(struct page_pool *pool);
 	int (*nl_fill)(void *mp_priv, struct sk_buff *rsp,
