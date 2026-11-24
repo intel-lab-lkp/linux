@@ -159,11 +159,6 @@ typedef enum {
 } gpio_ID_t;
 
 typedef enum {
-	TIMED_CTRL0_ID = 0,
-	N_TIMED_CTRL_ID
-} timed_ctrl_ID_t;
-
-typedef enum {
 	INPUT_FORMATTER0_ID = 0,
 	INPUT_FORMATTER1_ID,
 	INPUT_FORMATTER2_ID,

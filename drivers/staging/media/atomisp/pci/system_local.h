@@ -61,9 +61,6 @@ extern const hrt_address GP_TIMER_BASE;
 /* GPIO */
 extern const hrt_address GPIO_BASE[N_GPIO_ID];
 
-/* TIMED_CTRL */
-extern const hrt_address TIMED_CTRL_BASE[N_TIMED_CTRL_ID];
-
 /* INPUT_FORMATTER */
 extern const hrt_address INPUT_FORMATTER_BASE[N_INPUT_FORMATTER_ID];
 
