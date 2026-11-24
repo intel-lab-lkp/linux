@@ -4145,8 +4145,19 @@ static int igb_set_real_num_queues(struct igb_adapter *adapter)
 	return netif_set_real_num_queues(netdev, adapter->num_tx_queues, rxq);
 }
 
+static void igb_link_queue_napis(struct igb_adapter *adapter)
+{
+	int i;
+
+	for (i = 0; i < adapter->num_q_vectors; i++)
+		igb_set_queue_napi(adapter, i, &adapter->q_vector[i]->napi);
+}
+
 /* Some settings need RTNL, which isn't held when resuming from runtime
- * suspend: apply them from here instead, if the device is still up.
+ * suspend: apply them from here instead, if the device is still up. A
+ * suspend cancels this work before freeing the q_vectors, so it only runs
+ * after the resume that scheduled it allocated them; checking __IGB_DOWN
+ * under RTNL covers a close in the meantime.
  */
 static void igb_rtnl_resume_task(struct work_struct *work)
 {
@@ -4159,6 +4170,7 @@ static void igb_rtnl_resume_task(struct work_struct *work)
 		if (igb_set_real_num_queues(adapter))
 			netdev_err(adapter->netdev,
 				   "error setting real queue count\n");
+		igb_link_queue_napis(adapter);
 	}
 	rtnl_unlock();
 }
@@ -4236,7 +4248,8 @@ static int __igb_open(struct net_device *netdev, bool resuming,
 	for (i = 0; i < adapter->num_q_vectors; i++) {
 		napi = &adapter->q_vector[i]->napi;
 		napi_enable(napi);
-		igb_set_queue_napi(adapter, i, napi);
+		if (rtnl_held)
+			igb_set_queue_napi(adapter, i, napi);
 	}
 
 	/* Clear any pending interrupts. */
@@ -9546,6 +9559,11 @@ static int __igb_shutdown(struct pci_dev *pdev, bool *enable_wake,
 	u32 ctrl, rctl, status;
 	u32 wufc = runtime ? E1000_WUFC_LNKC : adapter->wol;
 	bool wake;
+
+	/* Don't let a work item queued by an earlier resume run once the
+	 * q_vectors are freed or reallocated
+	 */
+	cancel_work_sync(&adapter->rtnl_resume_task);
 
 	rtnl_lock();
 	netif_device_detach(netdev);
