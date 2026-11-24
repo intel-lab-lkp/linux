@@ -64,11 +64,6 @@
  * - Tx thread Transmits a number of packets from veth<xxxx> to veth<yyyy>
  * - Rx thread verifies if all packets were received and delivered in-order,
  *   and have the right content
- *
- * Enable/disable packet dump mode:
- * --------------------------
- * To enable L2 - L4 headers and payload dump of each packet on STDOUT, add
- * parameter -D to params array in test_xsk.sh, i.e. params=("-S" "-D")
  */
 
 #define _GNU_SOURCE
@@ -164,6 +159,7 @@ static struct option long_options[] = {
 	{"mode", required_argument, 0, 'm'},
 	{"list", no_argument, 0, 'l'},
 	{"test", required_argument, 0, 't'},
+	{"drv-layout", no_argument, 0, 'D'},
 	{"help", no_argument, 0, 'h'},
 	{0, 0, 0, 0}
 };
@@ -179,6 +175,7 @@ static void print_usage(char **argv)
 		"  -m, --mode           Run only mode skb, drv, or zc\n"
 		"  -l, --list           List all available tests\n"
 		"  -t, --test           Run a specific test. Enter number from -l option.\n"
+		"  -D, --drv-layout     Receive in the device's buffer layout (drv mode)\n"
 		"  -h, --help           Display this help and exit\n";
 
 	ksft_print_msg(str, basename(argv[0]));
@@ -202,7 +199,8 @@ static void parse_command_line(struct ifobject *ifobj_tx, struct ifobject *ifobj
 	opterr = 0;
 
 	for (;;) {
-		c = getopt_long(argc, argv, "i:vbm:lt:", long_options, &option_index);
+		c = getopt_long(argc, argv, "i:vbm:lt:D", long_options,
+				&option_index);
 		if (c == -1)
 			break;
 
@@ -244,6 +242,9 @@ static void parse_command_line(struct ifobject *ifobj_tx, struct ifobject *ifobj
 		case 'l':
 			opt_print_tests = true;
 			break;
+		case 'D':
+			opt_drv_layout = true;
+			break;
 		case 't':
 			errno = 0;
 			opt_run_test = strtol(optarg, NULL, 0);
@@ -255,6 +256,12 @@ static void parse_command_line(struct ifobject *ifobj_tx, struct ifobject *ifobj
 			print_usage(argv);
 		}
 	}
+
+	/* The device's buffer layout is a drv mode feature */
+	if (opt_drv_layout && opt_mode == TEST_MODE_ALL)
+		opt_mode = TEST_MODE_DRV;
+	else if (opt_drv_layout && opt_mode != TEST_MODE_DRV)
+		print_usage(argv);
 }
 
 static void xsk_unload_xdp_programs(struct ifobject *ifobj)
@@ -266,7 +273,13 @@ static void run_pkt_test(struct test_spec *test)
 {
 	int ret;
 
+	drv_rx_descs = 0;
+	drv_rx_shared = 0;
 	ret = test->test_func(test);
+	if (opt_drv_layout)
+		ksft_print_msg("drv layout: rx descs %llu, in a chunk shared within an RX batch %llu\n",
+			       (unsigned long long)drv_rx_descs,
+			       (unsigned long long)drv_rx_shared);
 
 	switch (ret) {
 	case TEST_PASS:

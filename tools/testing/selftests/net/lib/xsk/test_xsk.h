@@ -35,6 +35,9 @@
 #define SMP_CACHE_BYTES_PATH "/sys/devices/system/cpu/cpu0/cache/index0/coherency_line_size"
 
 extern bool opt_verbose;
+/* XDP_UMEM_DRV_LAYOUT: the device lays out RX buffers in UMEM chunks */
+extern bool opt_drv_layout;
+extern u64 drv_rx_descs, drv_rx_shared;
 #define print_verbose(x...) do { if (opt_verbose) ksft_print_msg(x); } while (0)
 
 
@@ -200,6 +203,7 @@ struct test_spec {
 	struct bpf_map *xskmap_tx;
 	test_func_t test_func;
 	int mtu;
+	u32 adjust_grow;
 	u16 total_steps;
 	u16 current_step;
 	u16 nb_sockets;
