@@ -689,6 +689,23 @@ int security_current_memcg_charge_task(const struct cred *cred)
 }
 
 /**
+ * security_current_memcg_charge_cgroup() - Check if charging memory to a cgroup is allowed
+ * @file: open file of the cgroup directory to charge
+ *
+ * Check whether the current process is allowed to charge memory to the
+ * cgroup referenced by @file. Called when userspace passes a cgroupfd to
+ * identify the charge target instead of a pidfd. @file is the file the
+ * cgroup was resolved from, so the check applies to the object that is
+ * actually charged. It must have been already validated by the caller.
+ *
+ * Return: Returns 0 if permission is granted.
+ */
+int security_current_memcg_charge_cgroup(const struct file *file)
+{
+	return call_int_hook(memcg_charge_cgroup, file);
+}
+
+/**
  * security_quotactl() - Check if a quotactl() syscall is allowed for this fs
  * @cmds: commands
  * @type: type
