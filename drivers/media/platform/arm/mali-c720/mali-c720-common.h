@@ -69,6 +69,30 @@ struct mali_c720_input {
 	struct mali_c720_slot_input slot_input;
 };
 
+enum mali_c720_isp_pads {
+	MALI_C720_ISP_PAD_SINK_VIDEO,
+	MALI_C720_ISP_PAD_SOURCE_HV,
+	MALI_C720_ISP_NUM_PADS,
+};
+
+struct mali_c720_isp {
+	struct mali_c720_subdev mdev;
+	struct media_pad pads[MALI_C720_ISP_NUM_PADS];
+	struct media_pad *remote_src;
+	bool enabled;
+};
+
+enum mali_c720_vision_pipe_pads {
+	MALI_C720_VISION_PIPE_PAD_SINK_VIDEO,
+	MALI_C720_VISION_PIPE_PAD_SOURCE_RGB,
+	MALI_C720_VISION_PIPE_NUM_PADS,
+};
+
+struct mali_c720_vision_pipe {
+	struct mali_c720_subdev mdev;
+	struct media_pad pads[MALI_C720_VISION_PIPE_NUM_PADS];
+};
+
 enum mali_c720_cap_devs {
 	MALI_C720_CAP_DEV_FR0_RGB,
 	MALI_C720_CAP_DEV_FR0_YUV,
@@ -126,6 +150,8 @@ struct mali_c720 {
 	struct v4l2_device v4l2_dev;
 
 	struct mali_c720_input input;
+	struct mali_c720_isp isp;
+	struct mali_c720_vision_pipe vision_pipe;
 
 	struct mali_c720_registers registers;
 	u8 *default_regs;
@@ -145,8 +171,20 @@ struct mali_c720 {
 	spinlock_t irq_lock;
 };
 
+/* ISP subdevice registration functions */
+
 int mali_c720_register_input(struct mali_c720 *mali_c720);
 void mali_c720_unregister_input(struct mali_c720 *mali_c720);
 void mali_c720_cleanup_input(struct mali_c720 *mali_c720);
+
+int mali_c720_register_isp(struct mali_c720 *mali_c720);
+void mali_c720_unregister_isp(struct mali_c720 *mali_c720);
+void mali_c720_cleanup_isp(struct mali_c720 *mali_c720);
+
+int mali_c720_register_vision_pipe(struct mali_c720 *mali_c720);
+void mali_c720_unregister_vision_pipe(struct mali_c720 *mali_c720);
+void mali_c720_cleanup_vision_pipe(struct mali_c720 *mali_c720);
+
+void mali_c720_isp_queue_event_sof(struct mali_c720 *mali_c720, u32 sequence);
 
 #endif /* MALI_C720_COMMON_H */

@@ -156,6 +156,8 @@ static void mali_c720_handle_input_frame_start(struct mali_c720 *mali_c720,
 	entry->sequence = sequence;
 	entry->timestamp = timestamp;
 	entry->valid = true;
+
+	mali_c720_isp_queue_event_sof(mali_c720, sequence);
 }
 
 static void mali_c720_update_frame_timestamp(struct mali_c720_context *ctx)
