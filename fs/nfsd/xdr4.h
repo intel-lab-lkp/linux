@@ -377,6 +377,9 @@ struct nfsd4_setattr {
 	struct xdr_netobj sa_label;
 	struct posix_acl *sa_dpacl;
 	struct posix_acl *sa_pacl;
+	struct timespec64 sa_deleg_atime;   /* request */
+	struct timespec64 sa_deleg_mtime;   /* request */
+	u32		sa_attrsset[3];     /* response */
 };
 
 struct nfsd4_setclientid {

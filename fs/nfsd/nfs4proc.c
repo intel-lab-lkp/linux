@@ -1361,33 +1361,62 @@ nfsd4_secinfo_no_name_release(union nfsd4_op_u *u)
 		exp_put(u->secinfo_no_name.sin_exp);
 }
 
+#define NFSD4_DELEG_TIME_BITS	(FATTR4_WORD2_TIME_DELEG_ACCESS | \
+				 FATTR4_WORD2_TIME_DELEG_MODIFY)
+
 /*
- * Validate that the requested timestamps are within the acceptable range. If
- * timestamp appears to be in the future, then it will be clamped to
- * current_time().
+ * Apply a delegation holder's times in a times-only setattr. The stateid,
+ * not file ownership, grants the authority to set them, hence ATTR_FORCE.
+ * ATTR_DELEG isn't needed: nfsd_breaker_owns_lease() keeps the holder's
+ * own lease intact, and any other lease is broken.
  */
-static void
-vet_deleg_attrs(struct nfsd4_setattr *setattr, struct nfs4_delegation *dp)
+static __be32
+nfsd4_deleg_set_times(struct svc_rqst *rqstp, struct svc_fh *fhp,
+		      struct nfsd4_setattr *setattr, struct nfs4_delegation *dp)
 {
-	struct timespec64 now = current_time(dp->dl_stid.sc_file->fi_inode);
-	struct iattr *iattr = &setattr->sa_iattr;
+	struct iattr iattr = { };
+	struct timespec64 now;
+	struct inode *inode;
+	bool deleg_mtime = false;
+	__be32 status;
+	int host_err;
 
-	if ((setattr->sa_bmval[2] & FATTR4_WORD2_TIME_DELEG_ACCESS) &&
-	    !nfsd4_vet_deleg_time(&iattr->ia_atime, &dp->dl_atime, &now))
-		iattr->ia_valid &= ~(ATTR_ATIME | ATTR_ATIME_SET);
+	/* nfsd4_setattr() skips nfsd_setattr() for a times-only request */
+	status = fh_verify(rqstp, fhp, 0, NFSD_MAY_SATTR);
+	if (status)
+		return status;
+	inode = d_inode(fhp->fh_dentry);
 
+	now = current_time(inode);
+	if (setattr->sa_bmval[2] & FATTR4_WORD2_TIME_DELEG_ACCESS) {
+		iattr.ia_atime = setattr->sa_deleg_atime;
+		if (nfsd4_vet_deleg_time(&iattr.ia_atime, &dp->dl_atime, &now))
+			iattr.ia_valid |= ATTR_ATIME | ATTR_ATIME_SET;
+	}
 	if (setattr->sa_bmval[2] & FATTR4_WORD2_TIME_DELEG_MODIFY) {
-		if (nfsd4_vet_deleg_time(&iattr->ia_mtime, &dp->dl_mtime, &now)) {
-			/* ctime moves too, so DELEGRETURN needn't restamp */
-			dp->dl_setattr = true;
-			iattr->ia_ctime = iattr->ia_mtime;
-			if (!nfsd4_vet_deleg_time(&iattr->ia_ctime, &dp->dl_ctime, &now))
-				iattr->ia_valid &= ~(ATTR_CTIME | ATTR_CTIME_SET);
-		} else {
-			iattr->ia_valid &= ~(ATTR_CTIME | ATTR_CTIME_SET |
-					     ATTR_MTIME | ATTR_MTIME_SET);
+		iattr.ia_mtime = setattr->sa_deleg_mtime;
+		if (nfsd4_vet_deleg_time(&iattr.ia_mtime, &dp->dl_mtime, &now)) {
+			iattr.ia_valid |= ATTR_MTIME | ATTR_MTIME_SET | ATTR_CTIME;
+			deleg_mtime = true;
+			iattr.ia_ctime = iattr.ia_mtime;
+			if (nfsd4_vet_deleg_time(&iattr.ia_ctime, &dp->dl_ctime, &now))
+				iattr.ia_valid |= ATTR_CTIME_SET;
 		}
 	}
+	if (!iattr.ia_valid)
+		return nfs_ok;
+
+	iattr.ia_valid |= ATTR_FORCE;
+	inode_lock(inode);
+	host_err = notify_change(&nop_mnt_idmap, fhp->fh_dentry, &iattr, NULL);
+	inode_unlock(inode);
+	if (host_err)
+		return nfserrno(host_err);
+	/* ctime moved too, so DELEGRETURN needn't restamp */
+	if (deleg_mtime)
+		dp->dl_setattr = true;
+	host_err = commit_metadata(fhp);
+	return nfserrno(host_err);
 }
 
 static __be32
@@ -1401,16 +1430,34 @@ nfsd4_setattr(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 		.na_pacl	= posix_acl_dup(setattr->sa_pacl),
 		.na_dpacl	= posix_acl_dup(setattr->sa_dpacl),
 	};
-	bool save_no_wcc, deleg_attrs;
+	struct nfs4_delegation *dp = NULL;
+	u32 *bmval = setattr->sa_bmval;
 	struct nfs4_stid *st = NULL;
-	struct inode *inode;
+	u32 deleg_bits, other_bits;
 	__be32 status = nfs_ok;
+	struct inode *inode;
+	bool save_no_wcc;
 	int err;
 
-	deleg_attrs = setattr->sa_bmval[2] & (FATTR4_WORD2_TIME_DELEG_ACCESS |
-					      FATTR4_WORD2_TIME_DELEG_MODIFY);
+	deleg_bits = bmval[2] & NFSD4_DELEG_TIME_BITS;
+	other_bits = bmval[0] | bmval[1] | (bmval[2] & ~NFSD4_DELEG_TIME_BITS);
 
-	if (deleg_attrs || (setattr->sa_iattr.ia_valid & ATTR_SIZE)) {
+	/* The checks below assume the minor version supports every attribute */
+	if (!nfsd_attrs_supported(cstate->minorversion, bmval)) {
+		status = nfserr_attrnotsupp;
+		goto out_err;
+	}
+
+	/* Setting both forms of the same time is ambiguous */
+	if (((deleg_bits & FATTR4_WORD2_TIME_DELEG_ACCESS) &&
+	     (bmval[1] & FATTR4_WORD1_TIME_ACCESS_SET)) ||
+	    ((deleg_bits & FATTR4_WORD2_TIME_DELEG_MODIFY) &&
+	     (bmval[1] & FATTR4_WORD1_TIME_MODIFY_SET))) {
+		status = nfserr_inval;
+		goto out_err;
+	}
+
+	if (deleg_bits || (setattr->sa_iattr.ia_valid & ATTR_SIZE)) {
 		int flags = WR_STATE;
 
 		/*
@@ -1431,20 +1478,15 @@ nfsd4_setattr(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 			goto out_err;
 	}
 
-	if (deleg_attrs) {
+	if (deleg_bits) {
 		status = nfserr_bad_stateid;
-		if (st && (st->sc_type & SC_TYPE_DELEG)) {
-			struct nfs4_delegation *dp = delegstateid(st);
-
-			/* Only for *_ATTRS_DELEG flavors */
-			if (deleg_attrs_deleg(dp->dl_type)) {
-				vet_deleg_attrs(setattr, dp);
-				status = nfs_ok;
-			}
+		/* Only an *_ATTRS_DELEG delegation may set delegated times */
+		if (st && (st->sc_type & SC_TYPE_DELEG) &&
+		    deleg_attrs_deleg(delegstateid(st)->dl_type)) {
+			dp = delegstateid(st);
+			status = nfs_ok;
 		}
 	}
-	if (st)
-		nfs4_put_stid(st);
 	if (status)
 		goto out_err;
 
@@ -1453,36 +1495,55 @@ nfsd4_setattr(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 		status = nfserrno(err);
 		goto out_err;
 	}
-	status = nfs_ok;
 
 	status = check_attr_support(cstate, setattr->sa_bmval, nfsd_attrmask);
 	if (status)
 		goto out;
 
-	if (setattr->sa_acl && (attrs.na_dpacl || attrs.na_pacl)) {
-		status = nfserr_inval;
-		goto out;
+	if (!deleg_bits || other_bits) {
+		if (setattr->sa_acl && (attrs.na_dpacl || attrs.na_pacl)) {
+			status = nfserr_inval;
+			goto out;
+		}
+
+		inode = cstate->current_fh.fh_dentry->d_inode;
+		status = nfsd4_acl_to_attr(S_ISDIR(inode->i_mode) ? NF4DIR : NF4REG,
+					   setattr->sa_acl, &attrs);
+		if (status)
+			goto out;
+		save_no_wcc = cstate->current_fh.fh_no_wcc;
+		cstate->current_fh.fh_no_wcc = true;
+		status = nfsd_setattr(rqstp, &cstate->current_fh, &attrs, NULL);
+		cstate->current_fh.fh_no_wcc = save_no_wcc;
+		if (!status)
+			status = nfserrno(attrs.na_labelerr);
+		if (!status)
+			status = nfserrno(attrs.na_dpaclerr);
+		if (!status)
+			status = nfserrno(attrs.na_paclerr);
+		if (status)
+			goto out;
+		/*
+		 * A failure inside nfsd_setattr() may follow a partial
+		 * update. nfsd_setattr() can't report which parts were
+		 * applied, so attrsset is filled in only on success.
+		 */
+		setattr->sa_attrsset[0] = bmval[0];
+		setattr->sa_attrsset[1] = bmval[1];
+		setattr->sa_attrsset[2] = bmval[2] & ~NFSD4_DELEG_TIME_BITS;
 	}
 
-	inode = cstate->current_fh.fh_dentry->d_inode;
-	status = nfsd4_acl_to_attr(S_ISDIR(inode->i_mode) ? NF4DIR : NF4REG,
-				   setattr->sa_acl, &attrs);
-
-	if (status)
-		goto out;
-	save_no_wcc = cstate->current_fh.fh_no_wcc;
-	cstate->current_fh.fh_no_wcc = true;
-	status = nfsd_setattr(rqstp, &cstate->current_fh, &attrs, NULL);
-	cstate->current_fh.fh_no_wcc = save_no_wcc;
-	if (!status)
-		status = nfserrno(attrs.na_labelerr);
-	if (!status)
-		status = nfserrno(attrs.na_dpaclerr);
-	if (!status)
-		status = nfserrno(attrs.na_paclerr);
+	if (deleg_bits) {
+		status = nfsd4_deleg_set_times(rqstp, &cstate->current_fh,
+					       setattr, dp);
+		if (!status)
+			setattr->sa_attrsset[2] |= deleg_bits;
+	}
 out:
 	fh_drop_write(&cstate->current_fh);
 out_err:
+	if (st)
+		nfs4_put_stid(st);
 	nfsd_attrs_free(&attrs);
 	return status;
 }

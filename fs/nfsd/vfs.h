@@ -166,6 +166,7 @@ __be32		nfsd_lookup_dentry(struct svc_rqst *rqstp, struct svc_fh *fhp,
 				   const char *name, unsigned int len,
 				   struct svc_export **exp_ret,
 				   struct dentry **dentry_ret, int access);
+int		commit_metadata(struct svc_fh *fhp);
 __be32		nfsd_setattr(struct svc_rqst *, struct svc_fh *,
 			     struct nfsd_attrs *, const struct timespec64 *);
 int nfsd_mountpoint(struct dentry *, struct svc_export *);

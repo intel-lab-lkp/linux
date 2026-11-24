@@ -409,7 +409,7 @@ commit_inode_metadata(struct inode *inode)
 	return sync_inode_metadata(inode, 1);
 }
 
-static int
+int
 commit_metadata(struct svc_fh *fhp)
 {
 	struct inode *inode = d_inode(fhp->fh_dentry);
@@ -507,20 +507,10 @@ static int __nfsd_setattr(struct dentry *dentry, struct iattr *iap)
 			return 0;
 	}
 
-	if ((iap->ia_valid & ~ATTR_DELEG) == 0)
+	if (iap->ia_valid == 0)
 		return 0;
 
-	/*
-	 * If ATTR_DELEG is set, then this is an update from a client that
-	 * holds a delegation. If this is an update for only the atime, the
-	 * ctime should not be changed. Any other attribute change, such as
-	 * a mode or owner change sent along with a delegated atime, must
-	 * update the ctime.
-	 */
-	if (!(iap->ia_valid & ATTR_DELEG) ||
-	    (iap->ia_valid & ~(ATTR_DELEG | ATTR_ATIME | ATTR_ATIME_SET)))
-		iap->ia_valid |= ATTR_CTIME;
-
+	iap->ia_valid |= ATTR_CTIME;
 	return notify_change(&nop_mnt_idmap, dentry, iap, NULL);
 }
 

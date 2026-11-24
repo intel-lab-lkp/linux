@@ -510,7 +510,9 @@ static __be32
 nfsd4_decode_fattr4(struct nfsd4_compoundargs *argp, u32 *bmval, u32 bmlen,
 		    struct iattr *iattr, struct nfs4_acl **acl,
 		    struct xdr_netobj *label, int *umask,
-		    struct posix_acl **dpaclp, struct posix_acl **paclp)
+		    struct posix_acl **dpaclp, struct posix_acl **paclp,
+		    struct timespec64 *deleg_atime,
+		    struct timespec64 *deleg_mtime)
 {
 	unsigned int starting_pos;
 	u32 attrlist4_count;
@@ -528,6 +530,16 @@ nfsd4_decode_fattr4(struct nfsd4_compoundargs *argp, u32 *bmval, u32 bmlen,
 			return nfserr_inval;
 		return nfserr_attrnotsupp;
 	}
+
+	/*
+	 * RFC 9754 section 5 permits delegated times only in SETATTR. A
+	 * minor version without delegated times gets NFS4ERR_ATTRNOTSUPP
+	 * instead of NFS4ERR_INVAL.
+	 */
+	if ((bmval[2] & FATTR4_WORD2_TIME_DELEG_ACCESS && !deleg_atime) ||
+	    (bmval[2] & FATTR4_WORD2_TIME_DELEG_MODIFY && !deleg_mtime))
+		return nfsd_attrs_supported(argp->minorversion, bmval) ?
+				nfserr_inval : nfserr_attrnotsupp;
 
 	if (xdr_stream_decode_u32(argp->xdr, &attrlist4_count) < 0)
 		return nfserr_bad_xdr;
@@ -658,9 +670,8 @@ nfsd4_decode_fattr4(struct nfsd4_compoundargs *argp, u32 *bmval, u32 bmlen,
 			return nfserr_bad_xdr;
 		if (access.nseconds >= NSEC_PER_SEC)
 			return nfserr_inval;
-		iattr->ia_atime.tv_sec = access.seconds;
-		iattr->ia_atime.tv_nsec = access.nseconds;
-		iattr->ia_valid |= ATTR_ATIME | ATTR_ATIME_SET | ATTR_DELEG;
+		deleg_atime->tv_sec = access.seconds;
+		deleg_atime->tv_nsec = access.nseconds;
 	}
 	if (bmval[2] & FATTR4_WORD2_TIME_DELEG_MODIFY) {
 		fattr4_time_deleg_modify modify;
@@ -669,12 +680,8 @@ nfsd4_decode_fattr4(struct nfsd4_compoundargs *argp, u32 *bmval, u32 bmlen,
 			return nfserr_bad_xdr;
 		if (modify.nseconds >= NSEC_PER_SEC)
 			return nfserr_inval;
-		iattr->ia_mtime.tv_sec = modify.seconds;
-		iattr->ia_mtime.tv_nsec = modify.nseconds;
-		iattr->ia_ctime.tv_sec = modify.seconds;
-		iattr->ia_ctime.tv_nsec = modify.nseconds;
-		iattr->ia_valid |= ATTR_CTIME | ATTR_CTIME_SET |
-				   ATTR_MTIME | ATTR_MTIME_SET | ATTR_DELEG;
+		deleg_mtime->tv_sec = modify.seconds;
+		deleg_mtime->tv_nsec = modify.nseconds;
 	}
 
 	*dpaclp = NULL;
@@ -1014,7 +1021,8 @@ nfsd4_decode_create(struct nfsd4_compoundargs *argp, union nfsd4_op_u *u)
 				    ARRAY_SIZE(create->cr_bmval),
 				    &create->cr_iattr, &create->cr_acl,
 				    &create->cr_label, &create->cr_umask,
-				    &create->cr_dpacl, &create->cr_pacl);
+				    &create->cr_dpacl, &create->cr_pacl,
+				    NULL, NULL);
 	if (status)
 		return status;
 
@@ -1166,7 +1174,8 @@ nfsd4_decode_createhow4(struct nfsd4_compoundargs *argp, struct nfsd4_open *open
 					     ARRAY_SIZE(open->op_bmval),
 					     &open->op_iattr, &open->op_acl,
 					     &open->op_label, &open->op_umask,
-					     &open->op_dpacl, &open->op_pacl);
+					     &open->op_dpacl, &open->op_pacl,
+					     NULL, NULL);
 		if (status)
 			return status;
 		break;
@@ -1185,7 +1194,8 @@ nfsd4_decode_createhow4(struct nfsd4_compoundargs *argp, struct nfsd4_open *open
 					     ARRAY_SIZE(open->op_bmval),
 					     &open->op_iattr, &open->op_acl,
 					     &open->op_label, &open->op_umask,
-					     &open->op_dpacl, &open->op_pacl);
+					     &open->op_dpacl, &open->op_pacl,
+					     NULL, NULL);
 		if (status)
 			return status;
 		break;
@@ -1513,7 +1523,8 @@ nfsd4_decode_setattr(struct nfsd4_compoundargs *argp, union nfsd4_op_u *u)
 				   ARRAY_SIZE(setattr->sa_bmval),
 				   &setattr->sa_iattr, &setattr->sa_acl,
 				   &setattr->sa_label, NULL, &setattr->sa_dpacl,
-				   &setattr->sa_pacl);
+				   &setattr->sa_pacl, &setattr->sa_deleg_atime,
+				   &setattr->sa_deleg_mtime);
 }
 
 static __be32
@@ -5755,17 +5766,10 @@ nfsd4_encode_setattr(struct nfsd4_compoundres *resp, __be32 nfserr,
 	struct nfsd4_setattr *setattr = &u->setattr;
 	__be32 status;
 
-	switch (nfserr) {
-	case nfs_ok:
-		/* attrsset */
-		status = nfsd4_encode_bitmap4(resp->xdr, setattr->sa_bmval[0],
-					      setattr->sa_bmval[1],
-					      setattr->sa_bmval[2]);
-		break;
-	default:
-		/* attrsset */
-		status = nfsd4_encode_bitmap4(resp->xdr, 0, 0, 0);
-	}
+	/* attrsset: also reported on failure (RFC 8881 section 18.30.3) */
+	status = nfsd4_encode_bitmap4(resp->xdr, setattr->sa_attrsset[0],
+				      setattr->sa_attrsset[1],
+				      setattr->sa_attrsset[2]);
 	return status != nfs_ok ? status : nfserr;
 }
 
