@@ -126,9 +126,10 @@ The driver has up to six V4L2 subdevices:
 - ``mali-c720 hv pipe``: Human vision pipeline.
 - ``mali-c720 fr 0 pipe``: Full-resolution crop/scale pipeline.
 
-The driver has two V4L2 video devices:
+The driver has three V4L2 video devices:
 
 - ``mali-c720 fr0-rgb`` and ``mali-c720 fr0-yuv``: FR capture devices.
+- ``mali-c720 3a stats``: 3A statistics capture device.
 
 Input formats
 -------------
@@ -314,6 +315,39 @@ then configure a capture format like NV12:
     media-ctl -l "'mali-c720 fr 0 pipe':2->'mali-c720 fr0-yuv':0[1]"
     yavta -f NV12 -s 1920x1080 -c10 /dev/video1
 
+.. _mali-c720-3a-stats:
+
+Capturing ISP Statistics
+========================
+
+The ISP is capable of producing statistics for consumption by image processing
+algorithms running in userspace. These statistics can be captured by queueing
+buffers to the `mali-c720 3a stats` V4L2 device whilst the ISP is streaming.
+
+Each successfully captured statistics buffer carries the processed frame's
+sequence number in its :c:type:`v4l2_buffer` ``sequence`` field. This matches
+the sequence number of image buffers produced from the same frame.
+
+Only the :ref:`V4L2_META_FMT_MALI_C720_STATS <v4l2-meta-fmt-mali-c720-stats>`
+format is supported, so no format-setting need be done:
+
+.. code-block:: none
+
+    # We assume the media graph has been configured to support RGB24 capture
+    # from the mali-c720 fr0-rgb V4L2 Device, which is at /dev/video0. The
+    # statistics V4L2 device is at /dev/video2. Run the capture processes
+    # concurrently so that both video devices start streaming:
+
+    media-ctl -l "'mali-c720 isp':2->'mali-c720 3a stats':0[1]"
+    yavta -f RGB24 -s 1920x1080 -c10 /dev/video0
+    yavta -c10 -F /dev/video2
+
+As our hardware is configurable, the modules present can vary depending upon
+its configuration. This means that certain statistics may only be present if
+their respective pipelines are present. We expose a V4L2 control
+:ref:`V4L2_CID_MALI_C720_STATS_CAPABILITIES <mali-c720-controls>` which allows
+the userspace to query the statistics produced by the ISP.
+
 .. _mali-c720-frame-scheduling:
 
 Frame scheduling and Media Requests
@@ -325,12 +359,13 @@ direct buffer queuing or Media Requests. Use of Media Requests is optional.
 Direct mode
 -----------
 
-When all streaming image capture queues use direct buffer queuing through
-:ref:`VIDIOC_QBUF`, the driver schedules frames in free-running mode.
-Scheduling starts only when at least one image output buffer is ready.
-Once started, it continues scheduling frames using the available buffers.
-Empty image capture queues disable their respective capture for the
-scheduled frame.
+When all streaming statistics and image capture queues use direct buffer
+queuing through :ref:`VIDIOC_QBUF`, the driver schedules frames in
+free-running mode. Scheduling starts only when at least one image or
+statistics output buffer is ready. Once started, it continues scheduling
+frames using the available buffers.
+Empty statistics or image capture queues disable their respective capture
+for the scheduled frame.
 
 Request mode
 ------------
@@ -341,7 +376,7 @@ request.
 
 Applications allocate a request using :ref:`MEDIA_IOC_REQUEST_ALLOC` on the
 media device.
-Image buffers are associated with it through
+Statistics and image buffers are associated with it through
 :ref:`VIDIOC_QBUF`, setting ``V4L2_BUF_FLAG_REQUEST_FD`` and ``request_fd``.
 The request is then submitted using :ref:`MEDIA_REQUEST_IOC_QUEUE` on the
 request file descriptor.
@@ -354,7 +389,9 @@ Queues without a buffer will be disabled for the scheduled frame.
 
 All buffers associated with the request are usually applied on the same
 frame, but a request could span multiple frames if multiple buffers are
-queued for the same buffer queue. Completed buffers are returned to userspace through
+queued for the same buffer queue.
+The statistics and image buffers are filled with the results from that
+frame. Completed buffers are returned to userspace through
 :ref:`VIDIOC_DQBUF <VIDIOC_QBUF>`.
 
 It is permitted to queue buffers directly in other VB2 queues alongside

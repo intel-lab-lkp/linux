@@ -6,8 +6,9 @@ digraph board {
         n00000003:port0 -> n00000009:port1 [style=dashed]
         n00000009 [label="{{<port1> 1} | mali-c720 input\n/dev/v4l-subdev2 | {<port0> 0}}", shape=Mrecord, style=filled, fillcolor=green]
         n00000009:port0 -> n0000000c:port0
-        n0000000c [label="{{<port0> 0} | mali-c720 isp\n/dev/v4l-subdev3 | {<port1> 1}}", shape=Mrecord, style=filled, fillcolor=green]
+        n0000000c [label="{{<port0> 0} | mali-c720 isp\n/dev/v4l-subdev3 | {<port1> 1 | <port2> 2}}", shape=Mrecord, style=filled, fillcolor=green]
         n0000000c:port1 -> n00000014:port0
+        n0000000c:port2 -> n0000006c [style=dashed]
         n00000014 [label="{{<port0> 0} | mali-c720 hv pipe\n/dev/v4l-subdev4 | {<port1> 1}}", shape=Mrecord, style=filled, fillcolor=green]
         n00000014:port1 -> n0000001c:port0
         n0000001c [label="{{<port0> 0} | mali-c720 fr 0 pipe\n/dev/v4l-subdev5 | {<port1> 1 | <port2> 2}}", shape=Mrecord, style=filled, fillcolor=green]
@@ -15,6 +16,7 @@ digraph board {
         n0000001c:port2 -> n0000003c [style=dashed]
         n00000038 [label="mali-c720 fr0-rgb\n/dev/video0", shape=box, style=filled, fillcolor=yellow]
         n0000003c [label="mali-c720 fr0-yuv\n/dev/video1", shape=box, style=filled, fillcolor=yellow]
+        n0000006c [label="mali-c720 3a stats\n/dev/video2", shape=box, style=filled, fillcolor=yellow]
         n00000074 [label="{{<port0> 0} | csi2-rx\n/dev/v4l-subdev6 | {<port1> 1}}", shape=Mrecord, style=filled, fillcolor=green]
         n00000074:port1 -> n00000009:port1
         n00000079 [label="{{} | imx415 1-001a\n/dev/v4l-subdev7 | {<port0> 0}}", shape=Mrecord, style=filled, fillcolor=green]

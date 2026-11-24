@@ -34,6 +34,7 @@ For more details see the file COPYING in the source distribution of Linux.
 	dw100
 	imx-uapi
 	mali-c55
+	mali-c720
 	max2175
 	npcm-video
 	omap3isp-uapi

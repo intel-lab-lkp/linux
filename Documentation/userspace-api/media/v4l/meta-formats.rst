@@ -14,6 +14,7 @@ These formats are used for the :ref:`metadata` interface only.
     :maxdepth: 1
 
     metafmt-arm-mali-c55
+    metafmt-arm-mali-c720
     metafmt-c3-isp
     metafmt-d4xx
     metafmt-generic
