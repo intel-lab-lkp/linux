@@ -30,6 +30,7 @@
 #include <linux/overflow.h>
 #include <linux/perf_event.h>
 #include <linux/fs.h>
+#include <linux/fs_context.h>
 #include <net/flow.h>
 #include <net/sock.h>
 
@@ -890,11 +891,23 @@ int security_fs_context_submount(struct fs_context *fc, struct super_block *refe
  * initialised to NULL by the caller.  @fc indicates the new filesystem context.
  * @src_fc indicates the original filesystem context.
  *
+ * Do the duplication here rather than leave it to the modules.
+ * The infrastructure owns the blob.
+ *
  * Return: Returns 0 on success or a negative error code on failure.
  */
 int security_fs_context_dup(struct fs_context *fc, struct fs_context *src_fc)
 {
-	return call_int_hook(fs_context_dup, fc, src_fc);
+	const void *src = src_fc->security;
+
+	if (!src)
+		return 0;
+
+	fc->security = kmemdup(src, blob_sizes.lbs_mnt_opts, GFP_KERNEL);
+	if (!fc->security)
+		return -ENOMEM;
+
+	return 0;
 }
 
 /**
@@ -975,6 +988,19 @@ void security_sb_free(struct super_block *sb)
 }
 
 /**
+ * lsm_mnt_opts_alloc - allocate a mnt_opts blob
+ * @opts: pointer to options
+ *
+ * Allocate a mount options blob.
+ *
+ * Returns 0, or -ENOMEM if memory isn't available.
+ */
+int lsm_mnt_opts_alloc(void **opts)
+{
+	return lsm_blob_alloc(opts, blob_sizes.lbs_mnt_opts, GFP_KERNEL);
+}
+
+/**
  * security_free_mnt_opts() - Free memory associated with mount options
  * @mnt_opts: LSM processed mount options
  *
@@ -985,6 +1011,7 @@ void security_free_mnt_opts(void **mnt_opts)
 	if (!*mnt_opts)
 		return;
 	call_void_hook(sb_free_mnt_opts, *mnt_opts);
+	kfree(*mnt_opts);
 	*mnt_opts = NULL;
 }
 EXPORT_SYMBOL(security_free_mnt_opts);

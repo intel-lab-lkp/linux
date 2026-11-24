@@ -276,6 +276,14 @@ selinux_perf_event(void *perf_event)
 	return perf_event + selinux_blob_sizes.lbs_perf_event;
 }
 
+static inline struct selinux_mnt_opts *selinux_mnt_opts(void *opts)
+{
+	if (!opts)
+		return NULL;
+
+	return opts + selinux_blob_sizes.lbs_mnt_opts;
+}
+
 #ifdef CONFIG_BPF_SYSCALL
 static inline struct bpf_security_struct *
 selinux_bpf_map_security(struct bpf_map *map)

@@ -43,6 +43,7 @@
 #include <linux/fs_parser.h>
 #include <linux/watch_queue.h>
 #include <linux/io_uring/cmd.h>
+#include <linux/lsm_hooks.h>
 #include <uapi/linux/lsm.h>
 #include "smack.h"
 
@@ -560,24 +561,22 @@ struct smack_mnt_opts {
 	const char *fstransmute;
 };
 
-static void smack_free_mnt_opts(void *mnt_opts)
-{
-	kfree(mnt_opts);
-}
-
 static int smack_add_opt(int token, const char *s, void **mnt_opts)
 {
-	struct smack_mnt_opts *opts = *mnt_opts;
+	struct smack_mnt_opts *opts;
 	struct smack_known *skp;
 
-	if (!opts) {
-		opts = kzalloc_obj(struct smack_mnt_opts);
-		if (!opts)
-			return -ENOMEM;
-		*mnt_opts = opts;
-	}
 	if (!s)
-		return -ENOMEM;
+		return -EINVAL;
+
+	if (!*mnt_opts) {
+		int rc;
+
+		rc = lsm_mnt_opts_alloc(mnt_opts);
+		if (rc)
+			return -ENOMEM;
+	}
+	opts = smack_mnt_opts(*mnt_opts);
 
 	skp = smk_import_entry(s, 0);
 	if (IS_ERR(skp))
@@ -625,22 +624,27 @@ out_opt_err:
  * Returns 0 on success or -ENOMEM on error.
  */
 static int smack_fs_context_submount(struct fs_context *fc,
-				 struct super_block *reference)
+				     struct super_block *reference)
 {
 	struct superblock_smack *sbsp;
 	struct smack_mnt_opts *ctx;
 	struct inode_smack *isp;
 
-	ctx = kzalloc_obj(*ctx);
-	if (!ctx)
-		return -ENOMEM;
-	fc->security = ctx;
+	if (!fc->security) {
+		int rc;
+
+		rc = lsm_mnt_opts_alloc(&fc->security);
+		if (rc)
+			return rc;
+	}
+	ctx = smack_mnt_opts(fc->security);
 
 	sbsp = smack_superblock(reference);
 	isp = smack_inode(reference->s_root->d_inode);
 
 	if (sbsp->smk_default) {
-		ctx->fsdefault = kstrdup(sbsp->smk_default->smk_known, GFP_KERNEL);
+		ctx->fsdefault = kstrdup(sbsp->smk_default->smk_known,
+					 GFP_KERNEL);
 		if (!ctx->fsdefault)
 			return -ENOMEM;
 	}
@@ -659,40 +663,12 @@ static int smack_fs_context_submount(struct fs_context *fc,
 
 	if (isp->smk_flags & SMK_INODE_TRANSMUTE) {
 		if (sbsp->smk_root) {
-			ctx->fstransmute = kstrdup(sbsp->smk_root->smk_known, GFP_KERNEL);
+			ctx->fstransmute = kstrdup(sbsp->smk_root->smk_known,
+						   GFP_KERNEL);
 			if (!ctx->fstransmute)
 				return -ENOMEM;
 		}
 	}
-	return 0;
-}
-
-/**
- * smack_fs_context_dup - Duplicate the security data on fs_context duplication
- * @fc: The new filesystem context.
- * @src_fc: The source filesystem context being duplicated.
- *
- * Returns 0 on success or -ENOMEM on error.
- */
-static int smack_fs_context_dup(struct fs_context *fc,
-				struct fs_context *src_fc)
-{
-	struct smack_mnt_opts *dst, *src = src_fc->security;
-
-	if (!src)
-		return 0;
-
-	fc->security = kzalloc_obj(struct smack_mnt_opts);
-	if (!fc->security)
-		return -ENOMEM;
-
-	dst = fc->security;
-	dst->fsdefault = src->fsdefault;
-	dst->fsfloor = src->fsfloor;
-	dst->fshat = src->fshat;
-	dst->fsroot = src->fsroot;
-	dst->fstransmute = src->fstransmute;
-
 	return 0;
 }
 
@@ -750,12 +726,8 @@ static int smack_sb_eat_lsm_opts(char *options, void **mnt_opts)
 			arg = kmemdup_nul(arg, from + len - arg, GFP_KERNEL);
 			rc = smack_add_opt(token, arg, mnt_opts);
 			kfree(arg);
-			if (unlikely(rc)) {
-				if (*mnt_opts)
-					smack_free_mnt_opts(*mnt_opts);
-				*mnt_opts = NULL;
+			if (unlikely(rc))
 				return rc;
-			}
 		} else {
 			if (!first) {	// copy with preceding comma
 				from--;
@@ -801,6 +773,11 @@ static int smack_set_mnt_opts(struct super_block *sb,
 
 	if (sp->smk_flags & SMK_SB_INITIALIZED)
 		return 0;
+
+	if (mnt_opts)
+		opts = smack_mnt_opts(mnt_opts);
+	else
+		opts = NULL;
 
 	if (!smack_privileged(CAP_MAC_ADMIN)) {
 		/*
@@ -5152,6 +5129,7 @@ struct lsm_blob_sizes smack_blob_sizes __ro_after_init = {
 	.lbs_sock = sizeof(struct socket_smack),
 	.lbs_superblock = sizeof(struct superblock_smack),
 	.lbs_xattr_count = SMACK_INODE_INIT_XATTRS,
+	.lbs_mnt_opts = sizeof(struct smack_mnt_opts),
 };
 
 static const struct lsm_id smack_lsmid = {
@@ -5165,11 +5143,9 @@ static struct security_hook_list smack_hooks[] __ro_after_init = {
 	LSM_HOOK_INIT(syslog, smack_syslog),
 
 	LSM_HOOK_INIT(fs_context_submount, smack_fs_context_submount),
-	LSM_HOOK_INIT(fs_context_dup, smack_fs_context_dup),
 	LSM_HOOK_INIT(fs_context_parse_param, smack_fs_context_parse_param),
 
 	LSM_HOOK_INIT(sb_alloc_security, smack_sb_alloc_security),
-	LSM_HOOK_INIT(sb_free_mnt_opts, smack_free_mnt_opts),
 	LSM_HOOK_INIT(sb_eat_lsm_opts, smack_sb_eat_lsm_opts),
 	LSM_HOOK_INIT(sb_statfs, smack_sb_statfs),
 	LSM_HOOK_INIT(sb_set_mnt_opts, smack_set_mnt_opts),

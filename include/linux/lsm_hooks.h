@@ -121,6 +121,7 @@ struct lsm_blob_sizes {
 	unsigned int lbs_bpf_map;
 	unsigned int lbs_bpf_prog;
 	unsigned int lbs_bpf_token;
+	unsigned int lbs_mnt_opts;
 };
 
 /*
@@ -218,5 +219,7 @@ static inline struct xattr *lsm_get_xattr_slot(struct xattr *xattrs,
 		return NULL;
 	return &xattrs[(*xattr_count)++];
 }
+
+int lsm_mnt_opts_alloc(void **opts);
 
 #endif /* ! __LINUX_LSM_HOOKS_H */

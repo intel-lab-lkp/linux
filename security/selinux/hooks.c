@@ -385,6 +385,7 @@ static void inode_free_security(struct inode *inode)
 }
 
 struct selinux_mnt_opts {
+	bool initialized;
 	u32 fscontext_sid;
 	u32 context_sid;
 	u32 rootcontext_sid;
@@ -393,7 +394,12 @@ struct selinux_mnt_opts {
 
 static void selinux_free_mnt_opts(void *mnt_opts)
 {
-	kfree(mnt_opts);
+	struct selinux_mnt_opts *opts;
+
+	if (mnt_opts) {
+		opts = selinux_mnt_opts(mnt_opts);
+		opts->initialized = false;
+	}
 }
 
 enum {
@@ -650,7 +656,7 @@ static int selinux_set_mnt_opts(struct super_block *sb,
 	const struct cred *cred = current_cred();
 	struct superblock_security_struct *sbsec = selinux_superblock(sb);
 	struct dentry *root = sb->s_root;
-	struct selinux_mnt_opts *opts = mnt_opts;
+	struct selinux_mnt_opts *opts;
 	struct inode_security_struct *root_isec;
 	u32 fscontext_sid = 0, context_sid = 0, rootcontext_sid = 0;
 	u32 defcontext_sid = 0;
@@ -663,10 +669,15 @@ static int selinux_set_mnt_opts(struct super_block *sb,
 	if (kern_flags && !set_kern_flags)
 		return -EINVAL;
 
+	if (mnt_opts)
+		opts = selinux_mnt_opts(mnt_opts);
+	else
+		opts = NULL;
+
 	mutex_lock(&sbsec->lock);
 
 	if (!selinux_initialized()) {
-		if (!opts) {
+		if (!opts || !opts->initialized) {
 			/* Defer initialization until selinux_complete_init,
 			   after the initial policy is loaded and the security
 			   server is ready to handle calls. */
@@ -694,7 +705,7 @@ static int selinux_set_mnt_opts(struct super_block *sb,
 	 * will be used for both mounts)
 	 */
 	if ((sbsec->flags & SE_SBINITIALIZED) && (sb->s_type->fs_flags & FS_BINARY_MOUNTDATA)
-		&& !opts) {
+		&& !(opts && opts->initialized)) {
 		if ((kern_flags & SECURITY_LSM_NATIVE_LABELS) &&
 		    sbsec->behavior == SECURITY_FS_USE_NATIVE)
 			*set_kern_flags |= SECURITY_LSM_NATIVE_LABELS;
@@ -708,7 +719,7 @@ static int selinux_set_mnt_opts(struct super_block *sb,
 	 * also check if someone is trying to mount the same sb more
 	 * than once with different security options.
 	 */
-	if (opts) {
+	if (opts && opts->initialized) {
 		if (opts->fscontext_sid) {
 			fscontext_sid = opts->fscontext_sid;
 			if (bad_option(sbsec, FSCONTEXT_MNT, sbsec->sid,
@@ -741,7 +752,7 @@ static int selinux_set_mnt_opts(struct super_block *sb,
 
 	if (sbsec->flags & SE_SBINITIALIZED) {
 		/* previously mounted with options, but not on this attempt? */
-		if ((sbsec->flags & SE_MNTMASK) && !opts)
+		if ((sbsec->flags & SE_MNTMASK) && !(opts && opts->initialized))
 			goto out_double_mount;
 		if ((kern_flags & SECURITY_LSM_NATIVE_LABELS) &&
 		    sbsec->behavior == SECURITY_FS_USE_NATIVE)
@@ -1027,7 +1038,7 @@ out:
  */
 static int selinux_add_opt(int token, const char *s, void **mnt_opts)
 {
-	struct selinux_mnt_opts *opts = *mnt_opts;
+	struct selinux_mnt_opts *opts;
 	u32 *dst_sid;
 	int rc;
 
@@ -1042,12 +1053,13 @@ static int selinux_add_opt(int token, const char *s, void **mnt_opts)
 		return -EINVAL;
 	}
 
-	if (!opts) {
-		opts = kzalloc_obj(*opts);
-		if (!opts)
+	if (!*mnt_opts) {
+		rc = lsm_mnt_opts_alloc(mnt_opts);
+		if (rc)
 			return -ENOMEM;
-		*mnt_opts = opts;
 	}
+	opts = selinux_mnt_opts(*mnt_opts);
+	opts->initialized = true;
 
 	switch (token) {
 	case Opt_context:
@@ -2707,18 +2719,20 @@ static int selinux_sb_eat_lsm_opts(char *options, void **mnt_opts)
 	return 0;
 
 free_opt:
-	if (*mnt_opts) {
-		selinux_free_mnt_opts(*mnt_opts);
-		*mnt_opts = NULL;
-	}
+	selinux_free_mnt_opts(*mnt_opts);
+
 	return rc;
 }
 
 static int selinux_sb_mnt_opts_compat(struct super_block *sb, void *mnt_opts)
 {
-	struct selinux_mnt_opts *opts = mnt_opts;
+	struct selinux_mnt_opts *opts;
 	struct superblock_security_struct *sbsec = selinux_superblock(sb);
 
+	if (mnt_opts)
+		opts = selinux_mnt_opts(mnt_opts);
+	else
+		opts = NULL;
 	/*
 	 * Superblock not initialized (i.e. no options) - reject if any
 	 * options specified, otherwise accept.
@@ -2730,7 +2744,7 @@ static int selinux_sb_mnt_opts_compat(struct super_block *sb, void *mnt_opts)
 	 * Superblock initialized and no options specified - reject if
 	 * superblock has any options set, otherwise accept.
 	 */
-	if (!opts)
+	if (!opts || !opts->initialized)
 		return (sbsec->flags & SE_MNTMASK) ? 1 : 0;
 
 	if (opts->fscontext_sid) {
@@ -2761,13 +2775,18 @@ static int selinux_sb_mnt_opts_compat(struct super_block *sb, void *mnt_opts)
 
 static int selinux_sb_remount(struct super_block *sb, void *mnt_opts)
 {
-	struct selinux_mnt_opts *opts = mnt_opts;
+	struct selinux_mnt_opts *opts;
 	struct superblock_security_struct *sbsec = selinux_superblock(sb);
+
+	if (mnt_opts)
+		opts = selinux_mnt_opts(mnt_opts);
+	else
+		opts = NULL;
 
 	if (!(sbsec->flags & SE_SBINITIALIZED))
 		return 0;
 
-	if (!opts)
+	if (!opts || !opts->initialized)
 		return 0;
 
 	if (opts->fscontext_sid) {
@@ -2865,9 +2884,15 @@ static int selinux_fs_context_submount(struct fs_context *fc,
 	if (!(sbsec->flags & (FSCONTEXT_MNT|CONTEXT_MNT|DEFCONTEXT_MNT)))
 		return 0;
 
-	opts = kzalloc_obj(*opts);
-	if (!opts)
-		return -ENOMEM;
+	if (!fc->security) {
+		int rc;
+
+		rc = lsm_mnt_opts_alloc(&fc->security);
+		if (rc)
+			return rc;
+		opts = selinux_mnt_opts(fc->security);
+		opts->initialized = true;
+	}
 
 	if (sbsec->flags & FSCONTEXT_MNT)
 		opts->fscontext_sid = sbsec->sid;
@@ -2875,20 +2900,8 @@ static int selinux_fs_context_submount(struct fs_context *fc,
 		opts->context_sid = sbsec->mntpoint_sid;
 	if (sbsec->flags & DEFCONTEXT_MNT)
 		opts->defcontext_sid = sbsec->def_sid;
-	fc->security = opts;
+	opts->initialized = true;
 	return 0;
-}
-
-static int selinux_fs_context_dup(struct fs_context *fc,
-				  struct fs_context *src_fc)
-{
-	const struct selinux_mnt_opts *src = src_fc->security;
-
-	if (!src)
-		return 0;
-
-	fc->security = kmemdup(src, sizeof(*src), GFP_KERNEL);
-	return fc->security ? 0 : -ENOMEM;
 }
 
 static const struct fs_parameter_spec selinux_fs_parameters[] = {
@@ -7665,6 +7678,7 @@ struct lsm_blob_sizes selinux_blob_sizes __ro_after_init = {
 	.lbs_bpf_map = sizeof(struct bpf_security_struct),
 	.lbs_bpf_prog = sizeof(struct bpf_security_struct),
 	.lbs_bpf_token = sizeof(struct bpf_security_struct),
+	.lbs_mnt_opts = sizeof(struct selinux_mnt_opts),
 };
 
 /*
@@ -7922,7 +7936,6 @@ static struct security_hook_list selinux_hooks[] __ro_after_init = {
 	 * PUT "CLONING" (ACCESSING + ALLOCATING) HOOKS HERE
 	 */
 	LSM_HOOK_INIT(fs_context_submount, selinux_fs_context_submount),
-	LSM_HOOK_INIT(fs_context_dup, selinux_fs_context_dup),
 	LSM_HOOK_INIT(fs_context_parse_param, selinux_fs_context_parse_param),
 	LSM_HOOK_INIT(sb_eat_lsm_opts, selinux_sb_eat_lsm_opts),
 #ifdef CONFIG_SECURITY_NETWORK_XFRM
