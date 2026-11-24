@@ -1526,6 +1526,7 @@ svc_process_common(struct svc_rqst *rqstp)
 	/* Will be turned off only when NFSv4 Sessions are used */
 	set_bit(RQ_USEDEFERRAL, &rqstp->rq_flags);
 	clear_bit(RQ_DROPME, &rqstp->rq_flags);
+	clear_bit(RQ_TLS_PROBE, &rqstp->rq_flags);
 
 	/* Construct the first words of the reply: */
 	svcxdr_init_encode(rqstp);

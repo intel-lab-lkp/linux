@@ -1161,7 +1161,8 @@ svcauth_tls_accept(struct svc_rqst *rqstp)
 		*p++ = cpu_to_be32(8);
 		memcpy(p, "STARTTLS", 8);
 
-		set_bit(XPT_HANDSHAKE, &xprt->xpt_flags);
+		if (!test_and_set_bit(XPT_HANDSHAKE, &xprt->xpt_flags))
+			set_bit(RQ_TLS_PROBE, &rqstp->rq_flags);
 		svc_xprt_enqueue(xprt);
 	} else {
 		trace_svc_tls_unavailable(xprt);
