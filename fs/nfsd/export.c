@@ -1985,20 +1985,20 @@ static struct svc_export *exp_find(struct cache_detail *cd,
  */
 __be32 check_xprtsec_policy(struct svc_export *exp, struct svc_rqst *rqstp)
 {
-	struct svc_xprt *xprt = rqstp->rq_xprt;
+	/* A TLS handshake can complete between receipt and this check. */
+	bool tls = test_bit(RQ_TLS_SESSION, &rqstp->rq_flags);
+	bool peer_auth = test_bit(RQ_PEER_AUTH, &rqstp->rq_flags);
 
 	if (exp->ex_xprtsec_modes & NFSEXP_XPRTSEC_NONE) {
-		if (!test_bit(XPT_TLS_SESSION, &xprt->xpt_flags))
+		if (!tls)
 			return nfs_ok;
 	}
 	if (exp->ex_xprtsec_modes & NFSEXP_XPRTSEC_TLS) {
-		if (test_bit(XPT_TLS_SESSION, &xprt->xpt_flags) &&
-		    !test_bit(XPT_PEER_AUTH, &xprt->xpt_flags))
+		if (tls && !peer_auth)
 			return nfs_ok;
 	}
 	if (exp->ex_xprtsec_modes & NFSEXP_XPRTSEC_MTLS) {
-		if (test_bit(XPT_TLS_SESSION, &xprt->xpt_flags) &&
-		    test_bit(XPT_PEER_AUTH, &xprt->xpt_flags))
+		if (tls && peer_auth)
 			return nfs_ok;
 	}
 	return nfserr_wrongsec;
