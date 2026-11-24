@@ -5624,6 +5624,15 @@ static void igb_watchdog(struct timer_list *t)
 	schedule_work(&adapter->watchdog_task);
 }
 
+/* A device that can't wake up wouldn't notice the link coming back while
+ * runtime suspended
+ */
+static void igb_schedule_runtime_suspend(struct igb_adapter *adapter)
+{
+	if (pci_dev_run_wake(adapter->pdev))
+		pm_schedule_suspend(&adapter->pdev->dev, MSEC_PER_SEC * 5);
+}
+
 static void igb_watchdog_task(struct work_struct *work)
 {
 	struct igb_adapter *adapter = container_of(work,
@@ -5776,8 +5785,7 @@ no_wait:
 					return;
 				}
 			}
-			pm_schedule_suspend(netdev->dev.parent,
-					    MSEC_PER_SEC * 5);
+			igb_schedule_runtime_suspend(adapter);
 
 		/* also check for alternate media here */
 		} else if (!netif_carrier_ok(netdev) &&
@@ -9740,7 +9748,7 @@ static int igb_runtime_idle(struct device *dev)
 	struct igb_adapter *adapter = netdev_priv(netdev);
 
 	if (!igb_has_link(adapter))
-		pm_schedule_suspend(dev, MSEC_PER_SEC * 5);
+		igb_schedule_runtime_suspend(adapter);
 
 	return -EBUSY;
 }
