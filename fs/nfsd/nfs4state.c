@@ -2921,6 +2921,38 @@ void nfsd4_put_client(struct nfs4_client *clp)
 	kref_put(&clp->cl_nfsdfs.cl_ref, __free_client);
 }
 
+/*
+ * Reference a delegation found through its lease, for use after flc_lock
+ * is dropped. A delegation reference alone doesn't keep the client.
+ * __destroy_client() doesn't wait for stateid references, yet
+ * nfs4_put_stid() uses the client, so pin the client as well. Caller
+ * holds flc_lock with @dp's lease on the inode. Client teardown removes
+ * the lease before free_client() drops the client's initial reference,
+ * so the initial reference is still held here.
+ */
+static bool nfsd4_get_leased_deleg(struct nfs4_delegation *dp)
+{
+	if (!refcount_inc_not_zero(&dp->dl_stid.sc_count))
+		return false;
+	nfsd4_get_client(dp->dl_stid.sc_client);
+	return true;
+}
+
+/**
+ * nfsd4_put_leased_deleg - release a delegation found through its lease
+ * @dp: delegation to release
+ *
+ * Drops the delegation and client references that the lease walk took.
+ * May free the client, so the caller must be able to sleep.
+ */
+void nfsd4_put_leased_deleg(struct nfs4_delegation *dp)
+{
+	struct nfs4_client *clp = dp->dl_stid.sc_client;
+
+	nfs4_put_stid(&dp->dl_stid);
+	nfsd4_put_client(clp);
+}
+
 static void
 free_client(struct nfs4_client *clp)
 {
@@ -10889,7 +10921,7 @@ static int cb_getattr_update_times(struct dentry *dentry, struct nfs4_delegation
  *
  * Returns 0 if there is no conflict; otherwise an nfs_stat
  * code is returned. If @pdp is set to a non-NULL value, then the
- * caller must put the reference.
+ * caller must release it with nfsd4_put_leased_deleg().
  */
 __be32
 nfsd4_deleg_getattr_conflict(struct svc_rqst *rqstp, struct dentry *dentry,
@@ -10934,7 +10966,10 @@ nfsd4_deleg_getattr_conflict(struct svc_rqst *rqstp, struct dentry *dentry,
 		return 0;
 	}
 
-	refcount_inc(&dp->dl_stid.sc_count);
+	if (!nfsd4_get_leased_deleg(dp)) {
+		spin_unlock(&ctx->flc_lock);
+		return nfserr_jukebox;
+	}
 	ncf = &dp->dl_cb_fattr;
 	nfs4_cb_getattr(&dp->dl_cb_fattr);
 	spin_unlock(&ctx->flc_lock);
@@ -10975,7 +11010,7 @@ nfsd4_deleg_getattr_conflict(struct svc_rqst *rqstp, struct dentry *dentry,
 	}
 	status = nfs_ok;
 out_status:
-	nfs4_put_stid(&dp->dl_stid);
+	nfsd4_put_leased_deleg(dp);
 	return status;
 }
 

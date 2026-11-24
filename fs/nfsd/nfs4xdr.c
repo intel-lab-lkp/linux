@@ -4106,7 +4106,7 @@ nfsd4_encode_fattr4(struct svc_rqst *rqstp, struct xdr_stream *xdr,
 		if (!timespec64_is_epoch(&ncf->ncf_cb_atime))
 			args.stat.atime = ncf->ncf_cb_atime;
 
-		nfs4_put_stid(&dp->dl_stid);
+		nfsd4_put_leased_deleg(dp);
 	} else {
 		args.change_attr = nfsd4_change_attribute(&args.stat);
 	}
