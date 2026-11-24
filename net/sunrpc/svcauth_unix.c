@@ -6,6 +6,7 @@
 #include <linux/sunrpc/xdr.h>
 #include <linux/sunrpc/svcsock.h>
 #include <linux/sunrpc/svcauth.h>
+#include <linux/sunrpc/bc_xprt.h>
 #include <linux/sunrpc/gss_api.h>
 #include <linux/sunrpc/addr.h>
 #include <linux/err.h>
@@ -1116,6 +1117,12 @@ svcauth_tls_accept(struct svc_rqst *rqstp)
 	void *body;
 	__be32 *p;
 
+	/* A backchannel cannot start a TLS session (RFC 9289 Section 5.1.1) */
+	if (svc_is_backchannel(rqstp)) {
+		rqstp->rq_auth_stat = rpc_autherr_badcred;
+		return SVC_DENIED;
+	}
+
 	/* Length of Call's credential body field: */
 	if (xdr_stream_decode_u32(xdr, &len) < 0)
 		return SVC_GARBAGE;
@@ -1134,12 +1141,6 @@ svcauth_tls_accept(struct svc_rqst *rqstp)
 
 	/* AUTH_TLS is not valid on non-NULL procedures */
 	if (rqstp->rq_proc != 0) {
-		rqstp->rq_auth_stat = rpc_autherr_badcred;
-		return SVC_DENIED;
-	}
-
-	/* AUTH_TLS is not valid on backchannel (rq_xprt is NULL) */
-	if (!xprt) {
 		rqstp->rq_auth_stat = rpc_autherr_badcred;
 		return SVC_DENIED;
 	}
