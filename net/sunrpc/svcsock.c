@@ -1119,6 +1119,17 @@ fault:
 	return consumed;
 }
 
+static bool svc_tcp_is_tls_probe(const struct svc_rqst *rqstp)
+{
+	const struct kvec *head = &rqstp->rq_arg.head[0];
+	const __be32 *p = head->iov_base;
+
+	/* p[5] is the procedure, p[6] the credential flavor. */
+	if (head->iov_len < 7 * XDR_UNIT)
+		return false;
+	return p[5] == xdr_zero && p[6] == rpc_auth_tls;
+}
+
 static bool svc_tcp_at_urg_mark(struct sock *sk)
 {
 	const struct tcp_sock *tp = tcp_sk(sk);
@@ -1155,6 +1166,7 @@ static int svc_tcp_recvfrom(struct svc_rqst *rqstp)
 		.count		= serv->sv_max_mesg + sizeof(rpc_fraghdr),
 	};
 	struct socket *sock = svsk->sk_sock;
+	bool spurious = false;
 	ssize_t len;
 	__be32 *p;
 	__be32 calldir;
@@ -1241,13 +1253,30 @@ static int svc_tcp_recvfrom(struct svc_rqst *rqstp)
 
 	p = (__be32 *)rqstp->rq_arg.head[0].iov_base;
 	calldir = p[1];
-	if (calldir)
+	if (calldir) {
 		len = receive_cb_reply(svsk, rqstp);
+	} else if (!test_bit(XPT_TLS_SESSION, &svsk->sk_xprt.xpt_flags)) {
+		/* RFC 9289 Section 5.1.1 requires discarding plaintext Calls
+		 * that follow an AUTH_TLS probe. Only the receive path sees
+		 * records in order.
+		 */
+		if (test_bit(XPT_TLS_PROBE, &svsk->sk_xprt.xpt_flags)) {
+			spurious = true;
+		} else if (svc_tcp_is_tls_probe(rqstp)) {
+			set_bit(XPT_TLS_PROBE, &svsk->sk_xprt.xpt_flags);
+			set_bit(RQ_TLS_PROBE_RECV, &rqstp->rq_flags);
+		}
+	}
 
 	/* Reset TCP read info */
 	svsk->sk_datalen = 0;
 	svc_tcp_fragment_received(svsk);
 
+	if (spurious) {
+		trace_svc_tls_spurious(&svsk->sk_xprt);
+		svc_xprt_deferred_close(&svsk->sk_xprt);
+		goto err_noclose;
+	}
 	if (len < 0)
 		goto error;
 
@@ -1361,6 +1390,12 @@ static int svc_tcp_sendto(struct svc_rqst *rqstp)
 	     (xpt_flags & BIT(XPT_HANDSHAKE) &&
 	      !test_bit(RQ_TLS_PROBE, &rqstp->rq_flags))))
 		goto out_spurious;
+	/* Clear XPT_TLS_PROBE before sending a reply without STARTTLS. The
+	 * client can send plaintext Calls as soon as the reply arrives.
+	 */
+	if (test_bit(RQ_TLS_PROBE_RECV, &rqstp->rq_flags) &&
+	    !test_bit(RQ_TLS_PROBE, &rqstp->rq_flags))
+		clear_bit(XPT_TLS_PROBE, &xprt->xpt_flags);
 	sent = count;
 	if (count >= 0)
 		sent = svc_tcp_sendmsg(svsk, rqstp, marker, count);
