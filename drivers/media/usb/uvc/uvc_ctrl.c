@@ -1463,7 +1463,7 @@ static int uvc_ctrl_populate_cache(struct uvc_video_chain *chain,
 	return 0;
 }
 
-static int __uvc_ctrl_load_cur(struct uvc_video_chain *chain,
+static int __uvc_ctrl_load_cur(struct uvc_device *dev,
 			       struct uvc_control *ctrl)
 {
 	u8 *data;
@@ -1482,13 +1482,12 @@ static int __uvc_ctrl_load_cur(struct uvc_video_chain *chain,
 	}
 
 	if (ctrl->entity->get_cur)
-		ret = ctrl->entity->get_cur(chain->dev, ctrl->entity,
+		ret = ctrl->entity->get_cur(dev, ctrl->entity,
 					    ctrl->info.selector, data,
 					    ctrl->info.size);
 	else
-		ret = uvc_query_ctrl(chain->dev, UVC_GET_CUR,
-				     ctrl->entity->id, chain->dev->intfnum,
-				     ctrl->info.selector, data,
+		ret = uvc_query_ctrl(dev, UVC_GET_CUR, ctrl->entity->id,
+				     dev->intfnum, ctrl->info.selector, data,
 				     ctrl->info.size);
 
 	if (ret < 0)
@@ -1509,7 +1508,7 @@ static int __uvc_ctrl_get(struct uvc_video_chain *chain,
 	if ((ctrl->info.flags & UVC_CTRL_FLAG_GET_CUR) == 0)
 		return -EACCES;
 
-	ret = __uvc_ctrl_load_cur(chain, ctrl);
+	ret = __uvc_ctrl_load_cur(chain->dev, ctrl);
 	if (ret < 0)
 		return ret;
 
@@ -2572,7 +2571,7 @@ static int uvc_mapping_get_xctrl_compound(struct uvc_video_chain *chain,
 		return -ENOMEM;
 
 	if (which == V4L2_CTRL_WHICH_CUR_VAL)
-		ret = __uvc_ctrl_load_cur(chain, ctrl);
+		ret = __uvc_ctrl_load_cur(chain->dev, ctrl);
 	else
 		ret = uvc_ctrl_populate_cache(chain, ctrl);
 
@@ -2816,7 +2815,7 @@ int uvc_ctrl_set(struct uvc_fh *handle, struct v4l2_ext_control *xctrl)
 	 * operation.
 	 */
 	if ((ctrl->info.size * 8) != mapping->size) {
-		ret = __uvc_ctrl_load_cur(chain, ctrl);
+		ret = __uvc_ctrl_load_cur(chain->dev, ctrl);
 		if (ret < 0)
 			return ret;
 	}
@@ -3228,42 +3227,143 @@ static void uvc_ctrl_restore_error(struct uvc_device *dev,
 }
 
 /*
+ * Return true if the control is a master control, i.e. one of its mappings
+ * has slave controls.
+ */
+static bool uvc_ctrl_is_master(const struct uvc_control *ctrl)
+{
+	const struct uvc_control_mapping *mapping;
+	unsigned int i;
+
+	list_for_each_entry(mapping, &ctrl->info.mappings, list) {
+		for (i = 0; i < ARRAY_SIZE(mapping->slave_ids); ++i) {
+			if (mapping->slave_ids[i])
+				return true;
+		}
+	}
+
+	return false;
+}
+
+/*
+ * Return true if the control is currently inactive, i.e. it is a slave
+ * control whose master is not in manual mode.
+ *
+ * The master value is read from the driver's cache when available, or queried
+ * from the device via GET_CUR if the master was neither restored in the first
+ * pass nor loaded yet. If the master control cannot be found in the same
+ * entity, is write-only, or fails GET_CUR, the control is considered active,
+ * matching uvc_ctrl_is_accessible().
+ */
+static bool uvc_ctrl_is_inactive(struct uvc_device *dev,
+				 struct uvc_entity *entity,
+				 struct uvc_control *ctrl)
+{
+	struct uvc_control_mapping *mapping;
+
+	list_for_each_entry(mapping, &ctrl->info.mappings, list) {
+		struct uvc_control_mapping *master_map = NULL;
+		struct uvc_control *master_ctrl = NULL;
+		s32 val;
+
+		if (!mapping->master_id)
+			continue;
+
+		__uvc_find_control(entity, mapping->master_id, &master_map,
+				   &master_ctrl, 0, 0);
+
+		if (!master_ctrl || uvc_ctrl_mapping_is_compound(master_map))
+			continue;
+
+		if (!(master_ctrl->modified &&
+		      (master_ctrl->info.flags & UVC_CTRL_FLAG_RESTORE)) &&
+		    !master_ctrl->loaded) {
+			if (!(master_ctrl->info.flags &
+			      UVC_CTRL_FLAG_GET_CUR) ||
+			    __uvc_ctrl_load_cur(dev, master_ctrl) < 0)
+				continue;
+		}
+
+		val = uvc_mapping_get_s32(master_map, UVC_GET_CUR,
+					  uvc_ctrl_data(master_ctrl,
+							UVC_CTRL_DATA_CURRENT));
+		if (val != mapping->master_manual)
+			return true;
+	}
+
+	return false;
+}
+
+/*
  * Restore control values after resume, skipping controls that haven't been
  * changed.
  *
+ * The controls of each entity are restored in two passes: first the master
+ * controls (the auto modes), then the remaining controls. This way a master
+ * is set to its final state before its slaves are restored.
+ *
+ * Slave controls that are currently inactive, because their master is not
+ * in manual mode, are not restored: devices reject SET_CUR requests for
+ * them and some firmwares misbehave when written in auto mode. The manual
+ * value only takes effect once the master is switched back to manual mode.
+ *
  * TODO
  * - Don't restore modified controls that are back to their default value.
- * - Handle restore order (Auto-Exposure Mode should be restored before
- *   Exposure Time).
  */
 int uvc_ctrl_restore_values(struct uvc_device *dev)
 {
 	struct uvc_control *err_ctrl;
 	struct uvc_control *ctrl;
 	struct uvc_entity *entity;
-	unsigned int i;
+	unsigned int i, pass;
 	int ret;
 
 	/* Walk the entities list and restore controls when possible. */
 	list_for_each_entry(entity, &dev->entities, list) {
+		for (pass = 0; pass < 2; ++pass) {
+			bool master_pass = pass == 0;
+			bool dirty = false;
 
-		for (i = 0; i < entity->ncontrols; ++i) {
-			ctrl = &entity->controls[i];
+			for (i = 0; i < entity->ncontrols; ++i) {
+				ctrl = &entity->controls[i];
 
-			if (!ctrl->initialized || !ctrl->modified ||
-			    (ctrl->info.flags & UVC_CTRL_FLAG_RESTORE) == 0)
+				if (!ctrl->initialized || !ctrl->modified ||
+				    !(ctrl->info.flags & UVC_CTRL_FLAG_RESTORE))
+					continue;
+
+				if (uvc_ctrl_is_master(ctrl) != master_pass)
+					continue;
+
+				if (!master_pass &&
+				    uvc_ctrl_is_inactive(dev, entity, ctrl)) {
+					uvc_dbg(dev, CONTROL,
+						"skipping restore of inactive control %pUl/%u/%u\n",
+						ctrl->info.entity,
+						ctrl->info.index,
+						ctrl->info.selector);
+					ctrl->loaded = 0;
+					continue;
+				}
+
+				uvc_dbg(dev, CONTROL,
+					"restoring control %pUl/%u/%u\n",
+					ctrl->info.entity, ctrl->info.index,
+					ctrl->info.selector);
+				ctrl->dirty = 1;
+				dirty = true;
+			}
+
+			if (master_pass && !dirty)
 				continue;
-			uvc_dbg(dev, CONTROL, "restoring control %pUl/%u/%u\n",
-				ctrl->info.entity, ctrl->info.index,
-				ctrl->info.selector);
-			ctrl->dirty = 1;
-		}
 
-		err_ctrl = NULL;
-		ret = uvc_ctrl_commit_entity(dev, NULL, entity, 0, &err_ctrl);
-		if (ret < 0) {
-			uvc_ctrl_restore_error(dev, entity, err_ctrl, ret);
-			return ret;
+			err_ctrl = NULL;
+			ret = uvc_ctrl_commit_entity(dev, NULL, entity, 0,
+						     &err_ctrl);
+			if (ret < 0) {
+				uvc_ctrl_restore_error(dev, entity, err_ctrl,
+						       ret);
+				return ret;
+			}
 		}
 	}
 
