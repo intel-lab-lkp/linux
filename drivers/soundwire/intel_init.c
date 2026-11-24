@@ -89,6 +89,8 @@ static struct sdw_intel_link_dev *intel_link_dev_register(struct sdw_intel_res *
 
 	link->hbus = res->hbus;
 
+	link->irq = ctx->irq;
+
 	/* now follow the two-step init/add sequence */
 	ret = auxiliary_device_init(auxdev);
 	if (ret < 0) {
@@ -139,18 +141,6 @@ static int sdw_intel_cleanup(struct sdw_intel_ctx *ctx)
 
 	return 0;
 }
-
-irqreturn_t sdw_intel_thread(int irq, void *dev_id)
-{
-	struct sdw_intel_ctx *ctx = dev_id;
-	struct sdw_intel_link_res *link;
-
-	list_for_each_entry(link, &ctx->link_list, list)
-		sdw_cdns_irq(irq, link->cdns);
-
-	return IRQ_HANDLED;
-}
-EXPORT_SYMBOL_NS(sdw_intel_thread, "SOUNDWIRE_INTEL_INIT");
 
 static struct sdw_intel_ctx
 *sdw_intel_probe_controller(struct sdw_intel_res *res)
@@ -214,6 +204,8 @@ static struct sdw_intel_ctx
 	link_mask = ctx->link_mask;
 
 	INIT_LIST_HEAD(&ctx->link_list);
+
+	ctx->irq = res->irq;
 
 	for (i = 0; i < count; i++) {
 		if (!(link_mask & BIT(i)))

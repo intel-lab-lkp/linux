@@ -46,6 +46,22 @@
 /* platform specific devices */
 #include "shim.h"
 
+static int hda_irq_map(struct irq_domain *h, unsigned int virq, irq_hw_number_t hw)
+{
+	struct sof_intel_hda_dev *hdev = h->host_data;
+
+	irq_set_chip_data(virq, hdev);
+	irq_set_chip(virq, &hdev->irq_chip);
+	irq_set_nested_thread(virq, 1);
+	irq_set_noprobe(virq);
+
+	return 0;
+}
+
+static const struct irq_domain_ops hda_domain_ops = {
+	.map = hda_irq_map,
+};
+
 #if IS_ENABLED(CONFIG_SND_SOC_SOF_INTEL_SOUNDWIRE)
 
 /*
@@ -198,7 +214,7 @@ static int hda_sdw_probe(struct snd_sof_dev *sdev)
 		if (chip->hw_ip_version >= SOF_INTEL_ACE_3_0)
 			res.mic_privacy = true;
 	}
-	res.irq = sdev->ipc_irq;
+	res.irq = irq_create_mapping(hdev->domain, HDA_IRQ_SDW);
 	res.handle = hdev->info.handle;
 	res.parent = sdev->dev;
 
@@ -260,6 +276,8 @@ static int hda_sdw_exit(struct snd_sof_dev *sdev)
 		sdw_intel_exit(hdev->sdw);
 	hdev->sdw = NULL;
 
+	irq_dispose_mapping(irq_find_mapping(hdev->domain, HDA_IRQ_SDW));
+
 	hda_sdw_int_enable(sdev, false);
 
 	return 0;
@@ -307,9 +325,9 @@ static bool hda_dsp_check_sdw_irq(struct snd_sof_dev *sdev)
 	return false;
 }
 
-static irqreturn_t hda_dsp_sdw_thread(int irq, void *context)
+static void hda_dsp_sdw_thread(struct sof_intel_hda_dev *hdev)
 {
-	return sdw_intel_thread(irq, context);
+	handle_nested_irq(irq_find_mapping(hdev->domain, HDA_IRQ_SDW));
 }
 
 bool hda_sdw_check_wakeen_irq_common(struct snd_sof_dev *sdev)
@@ -399,9 +417,8 @@ static inline bool hda_dsp_check_sdw_irq(struct snd_sof_dev *sdev)
 	return false;
 }
 
-static inline irqreturn_t hda_dsp_sdw_thread(int irq, void *context)
+static inline void hda_dsp_sdw_thread(struct sof_intel_hda_dev *hdev)
 {
-	return IRQ_HANDLED;
 }
 
 static inline bool hda_sdw_check_wakeen_irq(struct snd_sof_dev *sdev)
@@ -727,7 +744,7 @@ static irqreturn_t hda_dsp_interrupt_thread(int irq, void *context)
 	if (hda_dsp_check_sdw_irq(sdev)) {
 		trace_sof_intel_hda_irq(sdev, "sdw");
 
-		hda_dsp_sdw_thread(irq, hdev->sdw);
+		hda_dsp_sdw_thread(hdev);
 
 		if (hda_dsp_sdw_check_mic_privacy_irq(sdev)) {
 			trace_sof_intel_hda_irq(sdev, "mic privacy");
@@ -883,6 +900,14 @@ skip_dsp_setup:
 		sdev->ipc_irq = pci->irq;
 	}
 
+	hdev->irq_chip.name = dev_name(sdev->dev);
+	hdev->domain = irq_domain_create_linear(NULL, HDA_IRQ_COUNT,
+						&hda_domain_ops, hdev);
+	if (!hdev->domain) {
+		dev_err(sdev->dev, "failed to create IRQ domain\n");
+		goto remove_irq_domain;
+	}
+
 	dev_dbg(sdev->dev, "using IPC IRQ %d\n", sdev->ipc_irq);
 	ret = request_threaded_irq(sdev->ipc_irq, hda_dsp_interrupt_handler,
 				   hda_dsp_interrupt_thread,
@@ -941,6 +966,8 @@ disable_pp_cap:
 free_ipc_irq:
 	hda_dsp_ctrl_stop_chip(sdev);
 	free_irq(sdev->ipc_irq, sdev);
+remove_irq_domain:
+	irq_domain_remove(hdev->domain);
 free_irq_vector:
 	if (sdev->msi_enabled)
 		pci_free_irq_vectors(pci);
@@ -1011,6 +1038,9 @@ skip_disable_dsp:
 	hda_dsp_ctrl_stop_chip(sdev);
 
 	free_irq(sdev->ipc_irq, sdev);
+
+	irq_domain_remove(hda->domain);
+
 	if (sdev->msi_enabled)
 		pci_free_irq_vectors(pci);
 

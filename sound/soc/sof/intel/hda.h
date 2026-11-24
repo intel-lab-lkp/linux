@@ -466,6 +466,10 @@ struct sof_intel_dsp_bdl {
 	__le32 ioc;
 } __attribute((packed));
 
+/* HDA IRQs */
+#define HDA_IRQ_SDW	0
+#define HDA_IRQ_COUNT	1
+
 #define SOF_HDA_PLAYBACK_STREAMS	16
 #define SOF_HDA_CAPTURE_STREAMS		16
 #define SOF_HDA_PLAYBACK		0
@@ -580,6 +584,10 @@ struct sof_intel_hda_dev {
 	 * is received from the DSP for the previous message)
 	 */
 	struct snd_sof_ipc_msg *delayed_ipc_tx_msg;
+
+	/* Used to distribute IRQs */
+	struct irq_domain *domain;
+	struct irq_chip irq_chip;
 };
 
 static inline struct hdac_bus *sof_to_bus(struct snd_sof_dev *s)

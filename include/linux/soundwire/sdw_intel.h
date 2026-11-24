@@ -5,6 +5,8 @@
 #define __SDW_INTEL_H
 
 #include <linux/acpi.h>
+#include <linux/irq.h>
+#include <linux/irqdomain.h>
 #include <linux/irqreturn.h>
 #include <linux/soundwire/sdw.h>
 
@@ -299,6 +301,7 @@ struct hdac_bus;
  * @shim_base: sdw shim base.
  * @alh_base: sdw alh base.
  * @peripherals: array representing Peripherals exposed across all enabled links
+ * @irq: Interrupt line for the SoundWire
  */
 struct sdw_intel_ctx {
 	int count;
@@ -312,6 +315,7 @@ struct sdw_intel_ctx {
 	u32 shim_base;
 	u32 alh_base;
 	struct sdw_peripherals *peripherals;
+	int irq;
 };
 
 /**
@@ -381,8 +385,6 @@ sdw_intel_probe(struct sdw_intel_res *res);
 int sdw_intel_startup(struct sdw_intel_ctx *ctx);
 
 void sdw_intel_exit(struct sdw_intel_ctx *ctx);
-
-irqreturn_t sdw_intel_thread(int irq, void *dev_id);
 
 #define SDW_INTEL_QUIRK_MASK_BUS_DISABLE      BIT(1)
 

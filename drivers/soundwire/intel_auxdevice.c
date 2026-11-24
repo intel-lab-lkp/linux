@@ -366,6 +366,14 @@ static int intel_link_probe(struct auxiliary_device *auxdev,
 	/* use generic bandwidth allocation algorithm */
 	sdw->cdns.bus.compute_params = sdw_compute_params;
 
+	ret = request_threaded_irq(sdw->link_res->irq, NULL, sdw_cdns_irq,
+				   IRQF_SHARED | IRQF_ONESHOT, dev_name(dev),
+				   cdns);
+	if (ret) {
+		dev_err(dev, "failed to request IRQ: %d\n", ret);
+		return ret;
+	}
+
 	ret = sdw_bus_master_add(bus, dev, dev->fwnode);
 	if (ret) {
 		dev_err(dev, "sdw_bus_master_add fail: %d\n", ret);
@@ -502,6 +510,8 @@ static void intel_link_remove(struct auxiliary_device *auxdev)
 	struct sdw_cdns *cdns = auxiliary_get_drvdata(auxdev);
 	struct sdw_intel *sdw = cdns_to_intel(cdns);
 	struct sdw_bus *bus = &cdns->bus;
+
+	free_irq(sdw->link_res->irq, cdns);
 
 	/*
 	 * Since pm_runtime is already disabled, we don't decrease
