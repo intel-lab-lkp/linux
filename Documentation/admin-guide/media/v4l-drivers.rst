@@ -21,6 +21,7 @@ Video4Linux (V4L) driver-specific documentation
 	ipu6-isys
 	ivtv
 	mali-c55
+	mali-c720
 	mgb4
 	omap3isp
 	philips
