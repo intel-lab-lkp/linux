@@ -5,15 +5,19 @@
 Arm Mali-C720 ISP driver
 ========================
 
-The Arm Mali-C720 ISP driver implements the following driver-specific control:
+The Arm Mali-C720 ISP driver implements two driver-specific controls:
+
+``V4L2_CID_MALI_C720_PARAM_CAPABILITIES (__u16 array)``
+    Lists the parameter block types accepted by the ISP. Each element is a
+    value from :c:type:`mali_c720_param_block_type`.
 
 ``V4L2_CID_MALI_C720_STATS_CAPABILITIES (__u16 array)``
     Lists the statistics block types supported by the ISP. Each element is a
     value from :c:type:`mali_c720_stats_type`.
 
-The Mali-C720 ISP can be configured to include or exclude statistics blocks.
-This control allows the driver to communicate to userspace which statistics
-block types are supported by the driver and present in the hardware.
+The Mali-C720 ISP can be configured to include or exclude processing and
+statistics blocks. These controls allow the driver to communicate to userspace
+which block types are supported by the driver and present in the hardware.
 
 Format enumeration
 ------------------
@@ -31,6 +35,8 @@ Buffer alignment
 
 Image capture buffers require DMA base addresses aligned to 32 bytes.
 Statistics capture buffers require DMA base addresses aligned to 16 bytes.
+Parameter buffers have no additional hardware DMA address alignment
+requirement.
 
 Buffers allocated by the driver using MMAP satisfy these requirements
 automatically. Imported DMA-BUFs must provide suitable alignment.

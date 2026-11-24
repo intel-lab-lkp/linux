@@ -126,10 +126,11 @@ The driver has up to six V4L2 subdevices:
 - ``mali-c720 hv pipe``: Human vision pipeline.
 - ``mali-c720 fr 0 pipe``: Full-resolution crop/scale pipeline.
 
-The driver has three V4L2 video devices:
+The driver has four V4L2 video devices:
 
 - ``mali-c720 fr0-rgb`` and ``mali-c720 fr0-yuv``: FR capture devices.
 - ``mali-c720 3a stats``: 3A statistics capture device.
+- ``mali-c720 3a params``: 3A parameters output device.
 
 Input formats
 -------------
@@ -348,6 +349,32 @@ their respective pipelines are present. We expose a V4L2 control
 :ref:`V4L2_CID_MALI_C720_STATS_CAPABILITIES <mali-c720-controls>` which allows
 the userspace to query the statistics produced by the ISP.
 
+.. _mali-c720-3a-params:
+
+Programming ISP Parameters
+==========================
+
+The ISP can be programmed with various parameters from userspace to apply to
+the hardware before and during video streaming. This allows userspace to
+dynamically change values such as black level, white balance, digital gain
+and so on.
+
+Enable the parameters link before starting capture:
+
+.. code-block:: none
+
+    media-ctl -l "'mali-c720 3a params':0->'mali-c720 isp':3[1]"
+
+The buffer format and how to populate it are described by the
+:ref:`V4L2_META_FMT_MALI_C720_PARAMS <v4l2-meta-fmt-mali-c720-params>` format,
+which should be set as the data format for the `mali-c720 3a params` video node.
+
+Similar to statistics, our configurable hardware means that the modules present
+in the ISP can vary depending on its configuration. As such, we expose a V4L2
+control :ref:`V4L2_CID_MALI_C720_PARAM_CAPABILITIES <mali-c720-controls>`
+which allows the userspace to query the supported parameter blocks. The
+parameter buffer will be invalidated if any provided blocks are not present.
+
 .. _mali-c720-frame-scheduling:
 
 Frame scheduling and Media Requests
@@ -359,13 +386,14 @@ direct buffer queuing or Media Requests. Use of Media Requests is optional.
 Direct mode
 -----------
 
-When all streaming statistics and image capture queues use direct buffer
-queuing through :ref:`VIDIOC_QBUF`, the driver schedules frames in
+When all streaming parameter, statistics and image capture queues use direct
+buffer queuing through :ref:`VIDIOC_QBUF`, the driver schedules frames in
 free-running mode. Scheduling starts only when at least one image or
 statistics output buffer is ready. Once started, it continues scheduling
-frames using the available buffers.
+frames using the available buffers and the latest applied parameters.
 Empty statistics or image capture queues disable their respective capture
-for the scheduled frame.
+for the scheduled frame, and an empty parameters queue leaves the ISP
+configuration unchanged.
 
 Request mode
 ------------
@@ -376,7 +404,7 @@ request.
 
 Applications allocate a request using :ref:`MEDIA_IOC_REQUEST_ALLOC` on the
 media device.
-Statistics and image buffers are associated with it through
+Parameter, statistics and image buffers are associated with it through
 :ref:`VIDIOC_QBUF`, setting ``V4L2_BUF_FLAG_REQUEST_FD`` and ``request_fd``.
 The request is then submitted using :ref:`MEDIA_REQUEST_IOC_QUEUE` on the
 request file descriptor.
@@ -389,9 +417,9 @@ Queues without a buffer will be disabled for the scheduled frame.
 
 All buffers associated with the request are usually applied on the same
 frame, but a request could span multiple frames if multiple buffers are
-queued for the same buffer queue.
-The statistics and image buffers are filled with the results from that
-frame. Completed buffers are returned to userspace through
+queued for the same buffer queue. The parameters are applied before
+processing, and the statistics and image buffers are filled with the results
+from that frame. Completed buffers are returned to userspace through
 :ref:`VIDIOC_DQBUF <VIDIOC_QBUF>`.
 
 It is permitted to queue buffers directly in other VB2 queues alongside
