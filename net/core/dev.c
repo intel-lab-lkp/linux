@@ -10860,6 +10860,11 @@ static int dev_xdp_attach(struct net_device *dev, struct netlink_ext_ack *extack
 		NL_SET_ERR_MSG(extack, "Active program does not match expected");
 		return -EEXIST;
 	}
+	if (cur_prog && !new_prog && !link && mode == XDP_MODE_DRV &&
+	    dev_has_xdp_only_mp(dev)) {
+		NL_SET_ERR_MSG(extack, "An XDP-only memory provider needs the program");
+		return -EBUSY;
+	}
 
 	/* put effective new program into new_prog */
 	if (link)
@@ -11157,6 +11162,31 @@ bool dev_mp_blocks_xdp(const struct net_device *dev)
 	for (i = 0; i < dev->real_num_rx_queues; i++) {
 		ops = dev->_rx[i].mp_params.mp_ops;
 		if (ops && !(ops->flags & MP_XDP_ONLY))
+			return true;
+	}
+
+	return false;
+}
+
+/* A native program is attached, and dev_xdp_attach() keeps it while an
+ * AF_XDP socket receives in the buffer layout of @dev. A BPF link could go
+ * without asking, and so could a program that an upper device propagated.
+ */
+bool dev_xdp_drv_prog_held(struct net_device *dev)
+{
+	return dev_xdp_prog_id(dev, XDP_MODE_DRV) &&
+	       !dev_xdp_link(dev, XDP_MODE_DRV) && !dev->xdp_from_upper;
+}
+
+/* A queue of @dev has an XDP-only memory provider */
+bool dev_has_xdp_only_mp(const struct net_device *dev)
+{
+	const struct memory_provider_ops *ops;
+	unsigned int i;
+
+	for (i = 0; i < dev->real_num_rx_queues; i++) {
+		ops = dev->_rx[i].mp_params.mp_ops;
+		if (ops && ops->flags & MP_XDP_ONLY)
 			return true;
 	}
 

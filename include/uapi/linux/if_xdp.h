@@ -45,6 +45,13 @@
  */
 #define XDP_UMEM_TX_METADATA_LEN	(1 << 2)
 
+/* RX buffers follow the device's layout: a page-sized chunk may hold
+ * several of them, a packet may span chunks, and the device picks the
+ * offsets. A FILL entry lends a chunk to the kernel. Needs aligned
+ * page-sized chunks and no headroom.
+ */
+#define XDP_UMEM_DRV_LAYOUT		(1 << 4)
+
 struct sockaddr_xdp {
 	__u16 sxdp_family;
 	__u16 sxdp_flags;

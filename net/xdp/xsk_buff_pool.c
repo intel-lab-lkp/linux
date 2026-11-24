@@ -7,6 +7,7 @@
 #include <net/xdp_sock_drv.h>
 
 #include "xsk_queue.h"
+#include "xsk_sink.h"
 #include "xdp_umem.h"
 #include "xsk.h"
 
@@ -69,9 +70,14 @@ struct xsk_buff_pool *xp_create_and_assign_umem(struct xdp_sock *xs,
 	if (!pool)
 		goto out;
 
-	pool->heads = kvzalloc_objs(*pool->heads, umem->chunks);
-	if (!pool->heads)
-		goto out;
+	/* Receiving in the device's buffer layout and copy TX take none */
+	if (!(umem->flags & XDP_UMEM_DRV_LAYOUT)) {
+		pool->heads = kvzalloc_objs(*pool->heads, umem->chunks);
+		if (!pool->heads)
+			goto out;
+		pool->heads_cnt = umem->chunks;
+		pool->free_heads_cnt = umem->chunks;
+	}
 
 	if (xs->tx)
 		if (xp_alloc_tx_descs(pool, xs, max_segs))
@@ -79,8 +85,6 @@ struct xsk_buff_pool *xp_create_and_assign_umem(struct xdp_sock *xs,
 
 	pool->chunk_mask = ~((u64)umem->chunk_size - 1);
 	pool->addrs_cnt = umem->size;
-	pool->heads_cnt = umem->chunks;
-	pool->free_heads_cnt = umem->chunks;
 	pool->headroom = umem->headroom;
 	pool->chunk_size = umem->chunk_size;
 	pool->chunk_shift = ffs(umem->chunk_size) - 1;
@@ -211,6 +215,13 @@ int xp_assign_dev(struct xsk_buff_pool *pool,
 	 */
 	hlist_add_head(&pool->dev_node, &netdev->xsk_pools);
 
+	if (pool->umem->flags & XDP_UMEM_DRV_LAYOUT) {
+		err = xsk_sink_bind(pool, netdev, queue_id, flags);
+		if (err)
+			goto err_unbind;
+		return 0;
+	}
+
 	if (force_copy)
 		/* For copy-mode, we are done. */
 		return 0;
@@ -268,6 +279,7 @@ err_unreg_xsk:
 err_unreg_pool:
 	if (!force_zc)
 		err = 0; /* fallback to copy mode */
+err_unbind:
 	if (err) {
 		pool->umem->flags = umem_flags;
 		xsk_clear_pool_at_qid(netdev, queue_id);
@@ -285,6 +297,9 @@ int xp_assign_dev_shared(struct xsk_buff_pool *pool, struct xdp_sock *umem_xs,
 	struct xdp_umem *umem = umem_xs->umem;
 
 	flags = umem->zc ? XDP_ZEROCOPY : XDP_COPY;
+	/* The device layout has no copy mode */
+	if (umem->flags & XDP_UMEM_DRV_LAYOUT)
+		flags = 0;
 
 	if (umem->flags & XDP_UMEM_SG_FLAG)
 		flags |= XDP_USE_SG;
@@ -300,7 +315,10 @@ static void __xp_clear_dev(struct xsk_buff_pool *pool)
 	struct net_device *netdev = pool->netdev;
 
 	netdev_assert_locked_ops_compat(netdev);
-	xp_disable_drv_zc(pool);
+	if (pool->sink)
+		xsk_sink_unbind(pool);
+	else
+		xp_disable_drv_zc(pool);
 	xsk_clear_pool_at_qid(netdev, pool->queue_id);
 	hlist_del(&pool->dev_node);
 	pool->netdev = NULL;
