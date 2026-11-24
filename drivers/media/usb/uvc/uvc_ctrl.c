@@ -3199,31 +3199,44 @@ done:
  */
 
 /*
- * Report a failure to restore the controls of an entity. @err_ctrl points to
- * the control that failed, or is NULL if the failing control is not known.
+ * Report a failure to restore a control.
  */
 static void uvc_ctrl_restore_error(struct uvc_device *dev,
-				   const struct uvc_entity *entity,
-				   struct uvc_control *err_ctrl, int ret)
+				   struct uvc_control *ctrl, int ret)
 {
 	const struct uvc_control_mapping *mapping;
 	const char *name = "Unknown Control";
 
-	if (!err_ctrl) {
-		dev_warn_ratelimited(&dev->intf->dev,
-				     "Failed to restore controls on unit %u: %d\n",
-				     entity->id, ret);
-		return;
-	}
-
-	mapping = list_first_entry_or_null(&err_ctrl->info.mappings,
+	mapping = list_first_entry_or_null(&ctrl->info.mappings,
 					   struct uvc_control_mapping, list);
 	if (mapping)
 		name = uvc_map_get_name(mapping);
 
 	dev_warn_ratelimited(&dev->intf->dev,
 			     "Failed to restore control %s (selector %u on unit %u): %d\n",
-			     name, err_ctrl->info.selector, entity->id, ret);
+			     name, ctrl->info.selector, ctrl->entity->id, ret);
+}
+
+static int uvc_ctrl_restore_ctrl(struct uvc_device *dev,
+				 struct uvc_control *ctrl)
+{
+	int ret;
+
+	uvc_dbg(dev, CONTROL, "restoring control %pUl/%u/%u\n",
+		ctrl->info.entity, ctrl->info.index, ctrl->info.selector);
+
+	ret = uvc_query_ctrl(dev, UVC_SET_CUR, ctrl->entity->id, dev->intfnum,
+			     ctrl->info.selector,
+			     uvc_ctrl_data(ctrl, UVC_CTRL_DATA_CURRENT),
+			     ctrl->info.size);
+	if (ret < 0) {
+		ctrl->loaded = 0;
+		uvc_ctrl_restore_error(dev, ctrl, ret);
+		return ret;
+	}
+
+	ctrl->loaded = 1;
+	return 0;
 }
 
 /*
@@ -3247,7 +3260,8 @@ static bool uvc_ctrl_is_master(const struct uvc_control *ctrl)
 
 /*
  * Return true if the control is currently inactive, i.e. it is a slave
- * control whose master is not in manual mode.
+ * control whose master is not in manual mode, or whose master failed to
+ * restore in the first pass.
  *
  * The master value is read from the driver's cache when available, or queried
  * from the device via GET_CUR if the master was neither restored in the first
@@ -3275,9 +3289,11 @@ static bool uvc_ctrl_is_inactive(struct uvc_device *dev,
 		if (!master_ctrl || uvc_ctrl_mapping_is_compound(master_map))
 			continue;
 
-		if (!(master_ctrl->modified &&
-		      (master_ctrl->info.flags & UVC_CTRL_FLAG_RESTORE)) &&
-		    !master_ctrl->loaded) {
+		if (!master_ctrl->loaded) {
+			if (master_ctrl->modified &&
+			    (master_ctrl->info.flags & UVC_CTRL_FLAG_RESTORE))
+				return true;
+
 			if (!(master_ctrl->info.flags &
 			      UVC_CTRL_FLAG_GET_CUR) ||
 			    __uvc_ctrl_load_cur(dev, master_ctrl) < 0)
@@ -3312,17 +3328,16 @@ static bool uvc_ctrl_is_inactive(struct uvc_device *dev,
  */
 int uvc_ctrl_restore_values(struct uvc_device *dev)
 {
-	struct uvc_control *err_ctrl;
 	struct uvc_control *ctrl;
 	struct uvc_entity *entity;
 	unsigned int i, pass;
+	int first_err = 0;
 	int ret;
 
 	/* Walk the entities list and restore controls when possible. */
 	list_for_each_entry(entity, &dev->entities, list) {
 		for (pass = 0; pass < 2; ++pass) {
 			bool master_pass = pass == 0;
-			bool dirty = false;
 
 			for (i = 0; i < entity->ncontrols; ++i) {
 				ctrl = &entity->controls[i];
@@ -3345,29 +3360,24 @@ int uvc_ctrl_restore_values(struct uvc_device *dev)
 					continue;
 				}
 
-				uvc_dbg(dev, CONTROL,
-					"restoring control %pUl/%u/%u\n",
-					ctrl->info.entity, ctrl->info.index,
-					ctrl->info.selector);
-				ctrl->dirty = 1;
-				dirty = true;
+				ret = uvc_ctrl_restore_ctrl(dev, ctrl);
+				if (ret < 0 && !first_err)
+					first_err = ret;
 			}
+		}
 
-			if (master_pass && !dirty)
+		for (i = 0; i < entity->ncontrols; ++i) {
+			ctrl = &entity->controls[i];
+			if (!ctrl->initialized)
 				continue;
 
-			err_ctrl = NULL;
-			ret = uvc_ctrl_commit_entity(dev, NULL, entity, 0,
-						     &err_ctrl);
-			if (ret < 0) {
-				uvc_ctrl_restore_error(dev, entity, err_ctrl,
-						       ret);
-				return ret;
-			}
+			if ((ctrl->info.flags & UVC_CTRL_FLAG_AUTO_UPDATE) ||
+			    !(ctrl->info.flags & UVC_CTRL_FLAG_GET_CUR))
+				ctrl->loaded = 0;
 		}
 	}
 
-	return 0;
+	return first_err;
 }
 
 /* --------------------------------------------------------------------------

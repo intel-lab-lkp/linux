@@ -2414,13 +2414,29 @@ static int __uvc_resume(struct usb_interface *intf, int reset)
 
 	if (intf->cur_altsetting->desc.bInterfaceSubClass ==
 	    UVC_SC_VIDEOCONTROL) {
+		int status;
+
 		if (reset) {
+			/*
+			 * Restoring the controls is best effort: the USB core
+			 * only logs the error returned by a reset_resume()
+			 * handler (see usb_resume_interface() and
+			 * usb_resume_both()), it does not unbind the driver,
+			 * so keep resuming the rest of the interface.
+			 */
 			ret = uvc_ctrl_restore_values(dev);
-			if (ret < 0)
-				return ret;
 		}
 
-		return uvc_status_resume(dev);
+		/*
+		 * The status endpoint must be resumed even if restoring
+		 * controls failed. Prioritize status resume errors over
+		 * already-logged best-effort control restore errors.
+		 */
+		status = uvc_status_resume(dev);
+		if (status < 0)
+			return status;
+
+		return ret;
 	}
 
 	list_for_each_entry(stream, &dev->streams, list) {
