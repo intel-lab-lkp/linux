@@ -482,11 +482,24 @@ static const struct kernel_param_ops vmentry_l1d_flush_ops = {
 };
 module_param_cb(vmentry_l1d_flush, &vmentry_l1d_flush_ops, NULL, 0644);
 
-static __always_inline void vmx_disable_fb_clear(struct vcpu_vmx *vmx)
+/*
+ * VERW doesn't overwrite the fill buffers if FB_CLEAR_DIS is set, so leave
+ * FB_CLEAR enabled for a VM-Enter that does the MMIO Stale Data VERW.  The
+ * unconditional VERW is already handled by vmx_update_fb_clear_dis().
+ */
+static __always_inline bool vmx_should_disable_fb_clear(struct vcpu_vmx *vmx,
+							unsigned int flags)
+{
+	return vmx->disable_fb_clear &&
+	       !(flags & KVM_ENTER_CLEAR_CPU_BUFFERS_FOR_MMIO);
+}
+
+static __always_inline void vmx_disable_fb_clear(struct vcpu_vmx *vmx,
+						 unsigned int flags)
 {
 	u64 msr;
 
-	if (!vmx->disable_fb_clear)
+	if (!vmx_should_disable_fb_clear(vmx, flags))
 		return;
 
 	msr = native_rdmsrq(MSR_IA32_MCU_OPT_CTRL);
@@ -496,9 +509,10 @@ static __always_inline void vmx_disable_fb_clear(struct vcpu_vmx *vmx)
 	vmx->msr_ia32_mcu_opt_ctrl = msr;
 }
 
-static __always_inline void vmx_enable_fb_clear(struct vcpu_vmx *vmx)
+static __always_inline void vmx_enable_fb_clear(struct vcpu_vmx *vmx,
+						unsigned int flags)
 {
-	if (!vmx->disable_fb_clear)
+	if (!vmx_should_disable_fb_clear(vmx, flags))
 		return;
 
 	vmx->msr_ia32_mcu_opt_ctrl &= ~FB_CLEAR_DIS;
@@ -7323,7 +7337,7 @@ static noinstr void vmx_vcpu_enter_exit(struct kvm_vcpu *vcpu,
 
 	vmx_l1d_flush(vcpu);
 
-	vmx_disable_fb_clear(vmx);
+	vmx_disable_fb_clear(vmx, flags);
 
 	if (vcpu->arch.cr2 != native_read_cr2())
 		native_write_cr2(vcpu->arch.cr2);
@@ -7335,7 +7349,7 @@ static noinstr void vmx_vcpu_enter_exit(struct kvm_vcpu *vcpu,
 
 	vmx->idt_vectoring_info = 0;
 
-	vmx_enable_fb_clear(vmx);
+	vmx_enable_fb_clear(vmx, flags);
 
 	if (unlikely(vmx->fail)) {
 		vmx->vt.exit_reason.full = EXIT_REASON_UNDEFINED;
