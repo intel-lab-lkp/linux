@@ -94,6 +94,31 @@ bool netif_rxq_has_unreadable_mp(struct net_device *dev, unsigned int rxq_idx)
 }
 EXPORT_SYMBOL(netif_rxq_has_unreadable_mp);
 
+/**
+ * netif_rxq_has_xdp_only_mp() - whether an XDP-only provider backs an RX queue
+ * @dev: device of the queue
+ * @rxq_idx: RX queue of @dev itself, not of a lease
+ *
+ * The page pools of the queue that allow it take the provider, see
+ * %PP_FLAG_ALLOW_XDP_ONLY_NETMEM. They are created under the instance lock,
+ * which the caller holds, so they agree with the answer.
+ *
+ * Return: true if the queue has a provider with %MP_XDP_ONLY.
+ */
+bool netif_rxq_has_xdp_only_mp(struct net_device *dev, unsigned int rxq_idx)
+{
+	const struct memory_provider_ops *ops;
+
+	netdev_assert_locked(dev);
+
+	if (rxq_idx >= dev->real_num_rx_queues)
+		return false;
+
+	ops = __netif_get_rx_queue(dev, rxq_idx)->mp_params.mp_ops;
+	return ops && ops->flags & MP_XDP_ONLY;
+}
+EXPORT_SYMBOL(netif_rxq_has_xdp_only_mp);
+
 bool netif_rxq_has_mp(struct net_device *dev, unsigned int rxq_idx)
 {
 	if (rxq_idx < dev->real_num_rx_queues)
