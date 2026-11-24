@@ -549,6 +549,12 @@ static void do_acct_process(struct bsd_acct_struct *acct)
 	current->signal->rlim[RLIMIT_FSIZE].rlim_cur = flim;
 }
 
+/* The size of the mm in kB. */
+static unsigned long acct_vsize(struct mm_struct *mm)
+{
+	return READ_ONCE(mm->total_vm) << (PAGE_SHIFT - 10);
+}
+
 /**
  * acct_collect - collect accounting information into pacct_struct
  * @exitcode: task exit code
@@ -560,20 +566,12 @@ void acct_collect(long exitcode, int group_dead)
 	u64 utime, stime;
 	unsigned long vsize = 0;
 
-	if (group_dead && current->mm) {
-		struct mm_struct *mm = current->mm;
-		VMA_ITERATOR(vmi, mm, 0);
-		struct vm_area_struct *vma;
-
-		mmap_read_lock(mm);
-		for_each_vma(vmi, vma)
-			vsize += vma->vm_end - vma->vm_start;
-		mmap_read_unlock(mm);
-	}
+	if (group_dead && current->mm)
+		vsize = acct_vsize(current->mm);
 
 	spin_lock_irq(&current->sighand->siglock);
 	if (group_dead)
-		pacct->ac_mem = vsize / 1024;
+		pacct->ac_mem = vsize;
 	if (thread_group_leader(current)) {
 		pacct->ac_exitcode = exitcode;
 		if (current->flags & PF_FORKNOEXEC)
