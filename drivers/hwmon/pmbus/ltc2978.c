@@ -565,7 +565,9 @@ static int ltc2978_write_word_data(struct i2c_client *client, int page,
 
 static const struct i2c_device_id ltc2978_id[] = {
 	{ .name = "lt7170", .driver_data = lt7170 },
+	{ .name = "lt7170l", .driver_data = lt7170 },
 	{ .name = "lt7171", .driver_data = lt7171 },
+	{ .name = "lt7171l", .driver_data = lt7171 },
 	{ .name = "lt7175", .driver_data = lt7175 },
 	{ .name = "lt7176p", .driver_data = lt7176p },
 	{ .name = "ltc2972", .driver_data = ltc2972 },
@@ -1001,7 +1003,9 @@ static int ltc2978_probe(struct i2c_client *client)
 #ifdef CONFIG_OF
 static const struct of_device_id ltc2978_of_match[] = {
 	{ .compatible = "lltc,lt7170" },
+	{ .compatible = "lltc,lt7170l" },
 	{ .compatible = "lltc,lt7171" },
+	{ .compatible = "lltc,lt7171l" },
 	{ .compatible = "lltc,lt7175" },
 	{ .compatible = "lltc,lt7176p" },
 	{ .compatible = "lltc,ltc2972" },
