@@ -8,6 +8,7 @@
 #include <time.h>
 #include <sched.h>
 #include <pthread.h>
+#include <linux/bitmap.h>
 #include <linux/kernel.h>
 #include <asm/kvm.h>
 #ifdef __riscv
@@ -29,11 +30,17 @@ static u64 guest_stolen_time[NR_VCPUS];
 
 static struct kvm_vm *vm_create_steal_time(u32 nr_vcpus, void *guest_code,
 					   struct kvm_vcpu *vcpus[]);
+static long force_steal_time(void);
 
 #if defined(__x86_64__)
 
 /* steal_time must have 64-byte alignment */
 #define STEAL_TIME_SIZE		((sizeof(struct kvm_steal_time) + 63) & ~63)
+#define NR_LIFECYCLE_TESTS	0
+
+static void check_steal_time_lifecycle(void)
+{
+}
 
 static void check_status(struct kvm_steal_time *st)
 {
@@ -115,6 +122,11 @@ static void check_steal_time_uapi(void)
 
 /* PV_TIME_ST must have 64-byte alignment */
 #define STEAL_TIME_SIZE		((sizeof(struct st_time) + 63) & ~63)
+#define NR_LIFECYCLE_TESTS	0
+
+static void check_steal_time_lifecycle(void)
+{
+}
 
 #define SMCCC_ARCH_FEATURES	0x80000001
 #define PV_TIME_FEATURES	0xc5000020
@@ -239,6 +251,7 @@ static void check_steal_time_uapi(void)
 
 /* SBI STA shmem must have 64-byte alignment */
 #define STEAL_TIME_SIZE		((sizeof(struct sta_struct) + 63) & ~63)
+#define NR_LIFECYCLE_TESTS	3
 
 static gpa_t st_gpa[NR_VCPUS];
 
@@ -329,6 +342,129 @@ static void steal_time_dump(struct kvm_vm *vm, u32 vcpu_idx)
 	pr_info("\n");
 }
 
+static gpa_t lifecycle_second_gpa;
+
+static void sta_lifecycle_guest(void)
+{
+	sta_set_shmem(ST_GPA_BASE, 0);
+	GUEST_SYNC(0);
+	GUEST_SYNC(1);
+
+	sta_set_shmem(INVALID_GPA, 0);
+	GUEST_SYNC(2);
+	GUEST_SYNC(3);
+
+	/* Re-enable the same area, as the guest CPU online callback does. */
+	sta_set_shmem(ST_GPA_BASE, 0);
+	GUEST_SYNC(4);
+	GUEST_SYNC(5);
+
+	/* Replace the active registration without disabling it first. */
+	sta_set_shmem(lifecycle_second_gpa, 0);
+	GUEST_SYNC(6);
+	GUEST_SYNC(7);
+	sta_set_shmem(INVALID_GPA, 0);
+	GUEST_DONE();
+}
+
+static void sta_lifecycle_run(struct kvm_vcpu *vcpu, unsigned int stage)
+{
+	struct ucall uc;
+
+	vcpu_run(vcpu);
+	switch (get_ucall(vcpu, &uc)) {
+	case UCALL_SYNC:
+		TEST_ASSERT_EQ(uc.args[1], stage);
+		break;
+	case UCALL_DONE:
+		TEST_ASSERT_EQ(stage, 8);
+		break;
+	case UCALL_ABORT:
+		REPORT_GUEST_ASSERT(uc);
+	default:
+		TEST_FAIL("Unexpected STA lifecycle exit at stage %u", stage);
+	}
+}
+
+static void check_sta_page(struct sta_struct *st, struct sta_struct *before)
+{
+	TEST_ASSERT(st->sequence != before->sequence && !(st->sequence & 1),
+		    "Expected a completed STA update, sequence=%u", st->sequence);
+	TEST_ASSERT(st->steal > before->steal, "STA stolen time did not advance");
+	TEST_ASSERT_EQ(st->flags, 0);
+	TEST_ASSERT_EQ(st->preempted, 0);
+}
+
+static void check_steal_time_lifecycle(void)
+{
+	struct sta_struct snapshot, before, *first, *second;
+	size_t host_page_size = getpagesize();
+	unsigned long dirty = 0;
+	unsigned int gpages;
+	struct kvm_vcpu *vcpu;
+	struct kvm_vm *vm;
+
+	vm = vm_create_with_one_vcpu(&vcpu, sta_lifecycle_guest);
+	gpages = vm_calc_num_guest_pages(VM_MODE_DEFAULT, 2 * host_page_size);
+	vm_userspace_mem_region_add(vm, VM_MEM_SRC_ANONYMOUS, ST_GPA_BASE,
+				    1, gpages, KVM_MEM_LOG_DIRTY_PAGES);
+	/* Also exercise an STA structure ending at a host page boundary. */
+	WRITE_AND_SYNC_TO_GUEST(vm, lifecycle_second_gpa,
+				ST_GPA_BASE + 2 * host_page_size - sizeof(struct sta_struct));
+	first = addr_gpa2hva(vm, ST_GPA_BASE);
+	second = addr_gpa2hva(vm, lifecycle_second_gpa);
+
+	/* Establish active updates on the first page before testing disable. */
+	sta_lifecycle_run(vcpu, 0);
+	before = *first;
+	/* Registration writes zeroes and dirties the page independently. */
+	kvm_vm_get_dirty_log(vm, 1, &dirty);
+	force_steal_time();
+	sta_lifecycle_run(vcpu, 1);
+	check_sta_page(first, &before);
+	kvm_vm_get_dirty_log(vm, 1, &dirty);
+	TEST_ASSERT_EQ(dirty, BIT(0));
+
+	sta_lifecycle_run(vcpu, 2);
+	snapshot = *first;
+	/* Entry before the disable call may have updated the old area. */
+	kvm_vm_get_dirty_log(vm, 1, &dirty);
+	force_steal_time();
+	sta_lifecycle_run(vcpu, 3);
+	TEST_ASSERT(!memcmp(first, &snapshot, sizeof(snapshot)),
+		    "Disabled STA shared page was modified");
+	kvm_vm_get_dirty_log(vm, 1, &dirty);
+	TEST_ASSERT_EQ(dirty, 0);
+	ksft_test_result_pass("STA disable stops shared page updates\n");
+
+	sta_lifecycle_run(vcpu, 4);
+	before = *first;
+	kvm_vm_get_dirty_log(vm, 1, &dirty);
+	force_steal_time();
+	sta_lifecycle_run(vcpu, 5);
+	check_sta_page(first, &before);
+	kvm_vm_get_dirty_log(vm, 1, &dirty);
+	TEST_ASSERT_EQ(dirty, BIT(0));
+	ksft_test_result_pass("STA re-enable resumes shared page updates\n");
+
+	sta_lifecycle_run(vcpu, 6);
+	/* Snapshot after the last entry that could still update the old area. */
+	snapshot = *first;
+	before = *second;
+	kvm_vm_get_dirty_log(vm, 1, &dirty);
+	force_steal_time();
+	sta_lifecycle_run(vcpu, 7);
+	check_sta_page(second, &before);
+	TEST_ASSERT(!memcmp(first, &snapshot, sizeof(snapshot)),
+		    "Old STA shared page was modified after replacement");
+	kvm_vm_get_dirty_log(vm, 1, &dirty);
+	TEST_ASSERT_EQ(dirty, BIT(1));
+	ksft_test_result_pass("STA active replacement updates only the new page\n");
+
+	sta_lifecycle_run(vcpu, 8);
+	kvm_vm_free(vm);
+}
+
 static void check_steal_time_uapi(void)
 {
 	struct kvm_vm *vm;
@@ -368,7 +504,12 @@ static void check_steal_time_uapi(void)
 
 /* steal_time must have 64-byte alignment */
 #define STEAL_TIME_SIZE		((sizeof(struct kvm_steal_time) + 63) & ~63)
+#define NR_LIFECYCLE_TESTS	0
 #define KVM_STEAL_PHYS_VALID	BIT_ULL(0)
+
+static void check_steal_time_lifecycle(void)
+{
+}
 
 struct kvm_steal_time {
 	__u64 steal;
@@ -466,20 +607,56 @@ static void check_steal_time_uapi(void)
 }
 #endif
 
+struct steal_time_worker {
+	bool stop;
+	struct timespec deadline;
+};
+
 static void *do_steal_time(void *arg)
 {
-	struct timespec ts, stop;
+	struct steal_time_worker *worker = arg;
+	struct timespec ts;
 
-	clock_gettime(CLOCK_MONOTONIC, &ts);
-	stop = timespec_add_ns(ts, MIN_RUN_DELAY_NS);
-
-	while (1) {
+	while (!READ_ONCE(worker->stop)) {
 		clock_gettime(CLOCK_MONOTONIC, &ts);
-		if (timespec_to_ns(timespec_sub(ts, stop)) >= 0)
+		if (timespec_to_ns(timespec_sub(ts, worker->deadline)) >= 0)
 			break;
 	}
 
 	return NULL;
+}
+
+/* The caller is pinned; its worker inherits the same CPU affinity. */
+static long force_steal_time(void)
+{
+	struct steal_time_worker worker = {};
+	struct timespec ts;
+	pthread_t thread;
+	cpu_set_t cpuset;
+	long start, delay;
+	int cpu = sched_getcpu();
+
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	worker.deadline = timespec_add_ns(ts, 5 * NSEC_PER_SEC);
+	start = get_run_delay();
+	kvm_pthread_create(&thread, NULL, do_steal_time, &worker);
+	kvm_pthread_getaffinity(thread, &cpuset);
+	TEST_ASSERT(CPU_COUNT(&cpuset) == 1 && CPU_ISSET(cpu, &cpuset),
+		    "Worker failed to inherit parent's CPU affinity");
+
+	do {
+		sched_yield();
+		delay = get_run_delay() - start;
+		clock_gettime(CLOCK_MONOTONIC, &ts);
+	} while (delay < MIN_RUN_DELAY_NS &&
+		 timespec_to_ns(timespec_sub(ts, worker.deadline)) < 0);
+
+	WRITE_ONCE(worker.stop, true);
+	kvm_pthread_join(thread, NULL);
+	TEST_ASSERT(delay >= MIN_RUN_DELAY_NS,
+		    "Timed out waiting for runnable delay: expected >= %lu ns, got %ld",
+		    MIN_RUN_DELAY_NS, delay);
+	return delay;
 }
 
 static void run_vcpu(struct kvm_vcpu *vcpu)
@@ -509,7 +686,8 @@ static struct kvm_vm *vm_create_steal_time(u32 nr_vcpus, void *guest_code,
 	/* Create a VM and an identity mapped memslot for the steal time structure */
 	vm = vm_create_with_vcpus(nr_vcpus, guest_code, vcpus);
 	gpages = vm_calc_num_guest_pages(VM_MODE_DEFAULT, STEAL_TIME_SIZE * nr_vcpus);
-	vm_userspace_mem_region_add(vm, VM_MEM_SRC_ANONYMOUS, ST_GPA_BASE, 1, gpages, 0);
+	vm_userspace_mem_region_add(vm, VM_MEM_SRC_ANONYMOUS, ST_GPA_BASE,
+				    1, gpages, KVM_MEM_LOG_DIRTY_PAGES);
 	virt_map(vm, ST_GPA_BASE, ST_GPA_BASE, gpages);
 
 	return vm;
@@ -518,26 +696,31 @@ static struct kvm_vm *vm_create_steal_time(u32 nr_vcpus, void *guest_code,
 int main(int ac, char **av)
 {
 	struct kvm_vcpu *vcpus[NR_VCPUS];
+	unsigned long *dirty_log;
+	unsigned int dirty_npages, page;
 	struct kvm_vm *vm;
-	pthread_t thread;
-	cpu_set_t cpuset;
 	long stolen_time;
 	long run_delay;
 	bool verbose;
-	int i, cpu;
+	int i;
 
 	verbose = ac > 1 && (!strncmp(av[1], "-v", 3) || !strncmp(av[1], "--verbose", 10));
 
 	/* Set CPU affinity so we can force preemption of the VCPU */
-	cpu = pin_self_to_any_cpu();
+	pin_self_to_any_cpu();
 
 	vm = vm_create_steal_time(NR_VCPUS, guest_code, vcpus);
 
 	ksft_print_header();
 	TEST_REQUIRE(is_steal_time_supported(vcpus[0]));
-	ksft_set_plan(NR_VCPUS);
+	TEST_REQUIRE(!access("/proc/self/schedstat", R_OK));
+	ksft_set_plan(2 * NR_VCPUS + NR_LIFECYCLE_TESTS);
+	dirty_npages = memslot2region(vm, 1)->region.memory_size / getpagesize();
+	dirty_log = bitmap_zalloc(dirty_npages);
+	TEST_ASSERT(dirty_log, "Failed to allocate dirty log");
 
 	check_steal_time_uapi();
+	check_steal_time_lifecycle();
 
 	/* Run test on each VCPU */
 	for (i = 0; i < NR_VCPUS; ++i) {
@@ -547,30 +730,24 @@ int main(int ac, char **av)
 
 		/* First VCPU run initializes steal-time */
 		run_vcpu(vcpus[i]);
+		/* Exclude initialization writes from the accounting dirty log. */
+		kvm_vm_get_dirty_log(vm, 1, dirty_log);
+		force_steal_time();
 
 		/* Second VCPU run, expect guest stolen time to be <= run_delay */
 		run_vcpu(vcpus[i]);
+		kvm_vm_get_dirty_log(vm, 1, dirty_log);
+		for (page = 0; page < dirty_npages; page++)
+			TEST_ASSERT_EQ(!!test_bit(page, dirty_log),
+				       page == i * STEAL_TIME_SIZE / getpagesize());
+		ksft_test_result_pass("vcpu%d shared page update is marked dirty\n", i);
 		stolen_time = SYNC_FROM_GUEST_AND_READ(vm, guest_stolen_time[i]);
 		run_delay = get_run_delay();
 		TEST_ASSERT(stolen_time <= run_delay,
 			    "Expected stolen time <= %ld, got %ld",
 			    run_delay, stolen_time);
 
-		/* Steal time from the VCPU. The steal time thread has the same CPU affinity as the VCPUs. */
-		run_delay = get_run_delay();
-		kvm_pthread_create(&thread, NULL, do_steal_time, NULL);
-		kvm_pthread_getaffinity(thread, &cpuset);
-		TEST_ASSERT(CPU_COUNT(&cpuset) == 1 && CPU_ISSET(cpu, &cpuset),
-			    "Worker failed to inherit parent's CPU affinity");
-
-		do
-			sched_yield();
-		while (get_run_delay() - run_delay < MIN_RUN_DELAY_NS);
-		kvm_pthread_join(thread, NULL);
-		run_delay = get_run_delay() - run_delay;
-		TEST_ASSERT(run_delay >= MIN_RUN_DELAY_NS,
-			    "Expected run_delay >= %ld, got %ld",
-			    MIN_RUN_DELAY_NS, run_delay);
+		run_delay = force_steal_time();
 
 		/* Run VCPU again to confirm stolen time is consistent with run_delay */
 		run_vcpu(vcpus[i]);
@@ -588,6 +765,8 @@ int main(int ac, char **av)
 		}
 		ksft_test_result_pass("vcpu%d\n", i);
 	}
+	free(dirty_log);
+	kvm_vm_free(vm);
 
 	/* Print results and exit() accordingly */
 	ksft_finished();
