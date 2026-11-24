@@ -1740,8 +1740,8 @@ static int hub_configure(struct usb_hub *hub,
 	for (i = 0; i < maxchild; i++) {
 		ret = usb_hub_create_port_device(hub, i + 1);
 		if (ret < 0) {
-			dev_err(hub->intfdev,
-				"couldn't create port%d device.\n", i + 1);
+			message = "couldn't create port device";
+			dev_err(hub->intfdev, "%s %d.\n", message, i + 1);
 			break;
 		}
 	}
