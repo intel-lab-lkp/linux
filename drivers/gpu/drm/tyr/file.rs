@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0 or MIT
 
 use kernel::{
+    device::pm::PMProfile,
     drm::{
         self,
         Registered, //
@@ -37,10 +38,12 @@ impl TyrDrmFileData {
         devquery: &mut uapi::drm_panthor_dev_query,
         _file: &TyrDrmFile,
     ) -> Result<u32> {
+        // Runtime suspend called when pm_scope gets dropped
+        let _pm_scope = reg_data.pm.get(PMProfile::new())?;
         if devquery.pointer == 0 {
             match devquery.type_ {
                 uapi::drm_panthor_dev_query_type_DRM_PANTHOR_DEV_QUERY_GPU_INFO => {
-                    devquery.size = core::mem::size_of_val(&reg_data.gpu_info) as u32;
+                    devquery.size = core::mem::size_of_val(&reg_data.with_hw(|hw| hw.gpu_info)) as u32;
                     Ok(0)
                 }
                 _ => Err(EINVAL),
@@ -54,7 +57,7 @@ impl TyrDrmFileData {
                     )
                     .writer();
 
-                    writer.write(&reg_data.gpu_info)?;
+                    writer.write(&reg_data.with_hw(|hw| hw.gpu_info))?;
 
                     Ok(0)
                 }
