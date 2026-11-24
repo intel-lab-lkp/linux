@@ -3200,6 +3200,34 @@ done:
  */
 
 /*
+ * Report a failure to restore the controls of an entity. @err_ctrl points to
+ * the control that failed, or is NULL if the failing control is not known.
+ */
+static void uvc_ctrl_restore_error(struct uvc_device *dev,
+				   const struct uvc_entity *entity,
+				   struct uvc_control *err_ctrl, int ret)
+{
+	const struct uvc_control_mapping *mapping;
+	const char *name = "Unknown Control";
+
+	if (!err_ctrl) {
+		dev_warn_ratelimited(&dev->intf->dev,
+				     "Failed to restore controls on unit %u: %d\n",
+				     entity->id, ret);
+		return;
+	}
+
+	mapping = list_first_entry_or_null(&err_ctrl->info.mappings,
+					   struct uvc_control_mapping, list);
+	if (mapping)
+		name = uvc_map_get_name(mapping);
+
+	dev_warn_ratelimited(&dev->intf->dev,
+			     "Failed to restore control %s (selector %u on unit %u): %d\n",
+			     name, err_ctrl->info.selector, entity->id, ret);
+}
+
+/*
  * Restore control values after resume, skipping controls that haven't been
  * changed.
  *
@@ -3210,6 +3238,7 @@ done:
  */
 int uvc_ctrl_restore_values(struct uvc_device *dev)
 {
+	struct uvc_control *err_ctrl;
 	struct uvc_control *ctrl;
 	struct uvc_entity *entity;
 	unsigned int i;
@@ -3230,9 +3259,12 @@ int uvc_ctrl_restore_values(struct uvc_device *dev)
 			ctrl->dirty = 1;
 		}
 
-		ret = uvc_ctrl_commit_entity(dev, NULL, entity, 0, NULL);
-		if (ret < 0)
+		err_ctrl = NULL;
+		ret = uvc_ctrl_commit_entity(dev, NULL, entity, 0, &err_ctrl);
+		if (ret < 0) {
+			uvc_ctrl_restore_error(dev, entity, err_ctrl, ret);
 			return ret;
+		}
 	}
 
 	return 0;

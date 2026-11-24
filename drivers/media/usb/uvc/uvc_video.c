@@ -68,6 +68,32 @@ static const char *uvc_query_name(u8 query)
 	}
 }
 
+static const char *uvc_error_code_name(u8 error)
+{
+	switch (error) {
+	case 0:
+		return "No error";
+	case 1:
+		return "Not ready";
+	case 2:
+		return "Wrong state";
+	case 3:
+		return "Power";
+	case 4:
+		return "Out of range";
+	case 5:
+		return "Invalid unit";
+	case 6:
+		return "Invalid control";
+	case 7:
+		return "Invalid request";
+	case 8:
+		return "Invalid value within range";
+	default:
+		return "Unknown";
+	}
+}
+
 int uvc_query_ctrl(struct uvc_device *dev, u8 query, u8 unit,
 			u8 intfnum, u8 cs, void *data, u16 size)
 {
@@ -125,7 +151,10 @@ int uvc_query_ctrl(struct uvc_device *dev, u8 query, u8 unit,
 		return ret < 0 ? ret : -EPIPE;
 	}
 
-	uvc_dbg(dev, CONTROL, "Control error %u\n", error);
+	uvc_dbg(dev, CONTROL,
+		"Control error %u (%s) for %s control %u on unit %u\n",
+		error, uvc_error_code_name(error), uvc_query_name(query), cs,
+		unit);
 
 	switch (error) {
 	case 0:
