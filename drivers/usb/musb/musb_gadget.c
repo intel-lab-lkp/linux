@@ -145,7 +145,10 @@ __acquires(ep->musb->lock)
 		unmap_dma_buffer(req, musb);
 
 	trace_musb_req_gb(req);
+	/* no MUSB interrupt during complete(), even if it enables IRQs */
+	disable_irq_nosync(musb->nIrq);
 	usb_gadget_giveback_request(&req->ep->end_point, &req->request);
+	enable_irq(musb->nIrq);
 	spin_lock(&musb->lock);
 	ep->busy = busy;
 }
