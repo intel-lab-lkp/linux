@@ -7867,12 +7867,6 @@ sub process {
 		exit(0);
 	}
 
-	# In mailback mode only produce a report in the negative, for
-	# things that appear to be patches.
-	if ($mailback && ($clean == 1 || !$is_patch)) {
-		exit(0);
-	}
-
 	# This is not a patch, and we are in 'no-patch' mode so
 	# just keep quiet.
 	if (!$chk_patch && !$is_patch) {
@@ -7921,6 +7915,12 @@ sub process {
 				     "From:/Signed-off-by: email subaddress mismatch: $sob_msg\n");
 			}
 		}
+	}
+
+	# In mailback mode only produce a report in the negative, for
+	# things that appear to be patches.
+	if ($mailback && ($clean == 1 || !$is_patch)) {
+		exit(0);
 	}
 
 	print report_dump();
