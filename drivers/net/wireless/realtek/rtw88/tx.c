@@ -405,6 +405,38 @@ out:
 	}
 }
 
+static void rtw_tx_injected_pkt_info_update(struct rtw_dev *rtwdev,
+					    struct rtw_tx_pkt_info *pkt_info,
+					    struct ieee80211_tx_info *info)
+{
+	struct ieee80211_tx_rate *rate = &info->control.rates[0];
+	u8 nss, mcs;
+
+	if (!(info->control.flags & IEEE80211_TX_CTRL_RATE_INJECT))
+		return;
+
+	if (rate->flags & IEEE80211_TX_RC_VHT_MCS) {
+		nss = ieee80211_rate_get_vht_nss(rate);
+		mcs = ieee80211_rate_get_vht_mcs(rate);
+		pkt_info->rate = DESC_RATEVHT1SS_MCS0 + (nss - 1) * 10 + mcs;
+	} else if (rate->flags & IEEE80211_TX_RC_MCS) {
+		pkt_info->rate = DESC_RATEMCS0 + rate->idx;
+	} else {
+		pkt_info->rate = ieee80211_get_tx_rate(rtwdev->hw, info)->hw_value;
+	}
+
+	if (rate->flags & IEEE80211_TX_RC_80_MHZ_WIDTH)
+		pkt_info->bw = RTW_CHANNEL_WIDTH_80;
+	else if (rate->flags & IEEE80211_TX_RC_40_MHZ_WIDTH)
+		pkt_info->bw = RTW_CHANNEL_WIDTH_40;
+	else
+		pkt_info->bw = RTW_CHANNEL_WIDTH_20;
+
+	pkt_info->short_gi = rate->flags & IEEE80211_TX_RC_SHORT_GI;
+	pkt_info->use_rate = true;
+	pkt_info->dis_rate_fallback = true;
+}
+
 void rtw_tx_pkt_info_update(struct rtw_dev *rtwdev,
 			    struct rtw_tx_pkt_info *pkt_info,
 			    struct ieee80211_sta *sta,
@@ -431,6 +463,9 @@ void rtw_tx_pkt_info_update(struct rtw_dev *rtwdev,
 		rtw_tx_mgmt_pkt_info_update(rtwdev, pkt_info, sta, skb);
 	else if (ieee80211_is_data(fc))
 		rtw_tx_data_pkt_info_update(rtwdev, pkt_info, sta, skb);
+
+	if (unlikely(info->flags & IEEE80211_TX_CTL_INJECTED))
+		rtw_tx_injected_pkt_info_update(rtwdev, pkt_info, info);
 
 	bmc = is_broadcast_ether_addr(hdr->addr1) ||
 	      is_multicast_ether_addr(hdr->addr1);
