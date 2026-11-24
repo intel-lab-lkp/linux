@@ -6,6 +6,7 @@
 #ifndef __LINUX_CLK_TEGRA_H_
 #define __LINUX_CLK_TEGRA_H_
 
+#include <linux/errno.h>
 #include <linux/types.h>
 #include <linux/bug.h>
 
@@ -192,6 +193,21 @@ static inline int
 tegra20_clk_prepare_emc_mc_same_freq(struct clk *emc_clk, bool same)
 {
 	return 0;
+}
+#endif
+
+#ifdef CONFIG_ARCH_TEGRA_2x_SOC
+int tegra20_clk_watchdog_enable(bool enable);
+bool tegra20_clk_watchdog_is_enabled(void);
+#else
+static inline int tegra20_clk_watchdog_enable(bool enable)
+{
+	return -ENODEV;
+}
+
+static inline bool tegra20_clk_watchdog_is_enabled(void)
+{
+	return false;
 }
 #endif
 

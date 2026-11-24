@@ -17,6 +17,13 @@
 #include "clk.h"
 #include "clk-id.h"
 
+#define RST_SOURCE 0x0
+#define RST_SOURCE_WDT_EN BIT(5)
+#define RST_SOURCE_WDT_SEL_TMR2 BIT(4)
+#define RST_SOURCE_WDT_SYS_RST_EN BIT(2)
+#define RST_SOURCE_WDT_MASK (RST_SOURCE_WDT_EN | RST_SOURCE_WDT_SEL_TMR2 | \
+			     RST_SOURCE_WDT_SYS_RST_EN)
+
 #define MISC_CLK_ENB 0x48
 
 #define OSC_CTRL 0x50
@@ -131,6 +138,8 @@ static struct cpu_clk_suspend_context {
 
 static void __iomem *clk_base;
 static void __iomem *pmc_base;
+
+static DEFINE_SPINLOCK(rst_source_lock);
 
 #define TEGRA_INIT_DATA_MUX(_name, _parents, _offset,	\
 			    _clk_num, _gate_flags, _clk_id)	\
@@ -1163,6 +1172,57 @@ static void __init tegra20_clock_init(struct device_node *np)
 	tegra_cpu_car_ops = &tegra20_cpu_car_ops;
 }
 CLK_OF_DECLARE_DRIVER(tegra20, "nvidia,tegra20-car", tegra20_clock_init);
+
+/**
+ * tegra20_clk_watchdog_enable() - enable or disable the watchdog reset
+ * @enable: whether to enable the reset
+ *
+ * Tegra20 has no watchdog block. Instead, the clock and reset controller can
+ * reset the system when the interrupt of timer 1 or 2 fires while the previous
+ * one is still pending, which is enabled through the RST_SOURCE register. This
+ * enables it with timer 1.
+ *
+ * Return: 0 on success, or -ENODEV if the clock and reset controller isn't
+ * Tegra20's.
+ */
+int tegra20_clk_watchdog_enable(bool enable)
+{
+	unsigned long flags;
+	u32 val;
+
+	if (!clk_base)
+		return -ENODEV;
+
+	spin_lock_irqsave(&rst_source_lock, flags);
+
+	val = readl(clk_base + RST_SOURCE);
+	val &= ~RST_SOURCE_WDT_MASK;
+	if (enable)
+		val |= RST_SOURCE_WDT_EN | RST_SOURCE_WDT_SYS_RST_EN;
+	writel(val, clk_base + RST_SOURCE);
+
+	spin_unlock_irqrestore(&rst_source_lock, flags);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(tegra20_clk_watchdog_enable);
+
+/**
+ * tegra20_clk_watchdog_is_enabled() - check whether the watchdog reset is enabled
+ *
+ * A bootloader may leave the watchdog reset enabled for the kernel to take it
+ * over.
+ *
+ * Return: true if the watchdog reset is enabled, false otherwise.
+ */
+bool tegra20_clk_watchdog_is_enabled(void)
+{
+	if (!clk_base)
+		return false;
+
+	return readl(clk_base + RST_SOURCE) & RST_SOURCE_WDT_EN;
+}
+EXPORT_SYMBOL_GPL(tegra20_clk_watchdog_is_enabled);
 
 /*
  * Clocks that use runtime PM can't be created at the tegra20_clock_init
