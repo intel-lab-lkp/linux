@@ -612,11 +612,11 @@ bool nfs_acl2_secattr_decode_begin(struct xdrgen_aggregate_cursor *c)
 			argp->invalid = true;
 			return true;
 		}
-		if (!dfacl && !c->count) {
-			argp->invalid = true;
-			return true;
-		}
-		/* An empty default list publishes NULL: default ACL removal. */
+		/*
+		 * An empty list publishes NULL, which set_posix_acl() takes
+		 * as removal: of the default ACL, or of the access ACL,
+		 * leaving only the mode bits.
+		 */
 		if (c->count) {
 			*pacl = posix_acl_alloc(c->count, GFP_KERNEL);
 			if (!*pacl)
