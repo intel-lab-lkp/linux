@@ -14,6 +14,7 @@
 #include <linux/spinlock.h>
 #include <linux/videodev2.h>
 
+#include "mali-c720-discovery.h"
 #include "mali-c720-formats.h"
 #include "mali-c720-id.h"
 #include "mali-c720-register-access.h"
@@ -50,6 +51,7 @@ struct mali_c720 {
 
 	struct mali_c720_registers registers;
 
+	struct mali_c720_discovery discovery;
 	const struct mali_c720_hw_version *hw_version;
 };
 
