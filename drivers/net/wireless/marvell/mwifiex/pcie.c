@@ -437,8 +437,14 @@ static void mwifiex_pcie_remove(struct pci_dev *pdev)
 	wait_for_completion(&card->fw_done);
 
 	adapter = card->adapter;
-	if (!adapter || !adapter->priv_num)
+	if (!adapter || !adapter->priv_num) {
+		/* The adapter is gone, but a failed reset or probe can have
+		 * queued the work again, and the card it runs on is freed
+		 * when remove() returns.
+		 */
+		disable_work_sync(&card->work);
 		return;
+	}
 
 	reg = card->pcie.reg;
 	if (reg)
@@ -455,6 +461,13 @@ static void mwifiex_pcie_remove(struct pci_dev *pdev)
 
 		mwifiex_init_shutdown_fw(priv, MWIFIEX_FUNC_SHUTDOWN);
 	}
+
+	/* A timeout of the commands above queues a firmware dump and a card
+	 * reset on card->work. Wait for it and keep it from being queued
+	 * again before the teardown clears card->adapter and frees the
+	 * interfaces the dump reads.
+	 */
+	disable_work_sync(&card->work);
 
 	mwifiex_remove_card(adapter);
 }
