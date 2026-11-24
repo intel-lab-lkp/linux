@@ -65,6 +65,11 @@ struct xdp_rxq_info {
 	u32 reg_state;
 	struct xdp_mem_info mem;
 	u32 frag_size;
+	/* Shared info of buffers with %XDP_FLAGS_SINFO_EXT, in kernel
+	 * memory, see xdp_rxq_info_reg_ext_sinfo(). The queue builds one
+	 * such buffer at a time.
+	 */
+	struct skb_shared_info *ext_sinfo;
 } ____cacheline_aligned; /* perf critical, avoid false-sharing */
 
 struct xdp_txq_info {
@@ -81,6 +86,15 @@ enum xdp_buff_flags {
 	 * XDP program is not attached.
 	 */
 	XDP_FLAGS_FRAGS_UNREADABLE	= BIT(2),
+	/* The shared info lives in &xdp_rxq_info.ext_sinfo, in kernel memory,
+	 * not at the end of the frame. For memory that someone outside the
+	 * kernel may write. Whoever prepares the buffer sets it before adding
+	 * fragments, on a queue that has ext_sinfo. The queue NAPI builds one
+	 * such buffer at a time: its shared info is valid until the buffer
+	 * is redirected, dropped or copied. The data may reach the end of the
+	 * frame, see xdp_data_hard_end(): the frame must hold nothing else.
+	 */
+	XDP_FLAGS_SINFO_EXT		= BIT(3),
 };
 
 struct xdp_buff {
@@ -212,17 +226,27 @@ xdp_prepare_buff(struct xdp_buff *xdp, unsigned char *hard_start,
 
 /* Reserve memory area at end-of data area.
  *
- * This macro reserves tailroom in the XDP buffer by limiting the
- * XDP/BPF data access to data_hard_end.  Notice same area (and size)
- * is used for XDP_PASS, when constructing the SKB via build_skb().
+ * This reserves tailroom in the XDP buffer by limiting the XDP/BPF data
+ * access to data_hard_end.  Notice same area (and size) is used for
+ * XDP_PASS, when constructing the SKB via build_skb(). Buffers with
+ * %XDP_FLAGS_SINFO_EXT keep the shared info elsewhere and reserve none.
  */
-#define xdp_data_hard_end(xdp)				\
-	((xdp)->data_hard_start + (xdp)->frame_sz -	\
-	 SKB_DATA_ALIGN(sizeof(struct skb_shared_info)))
+static __always_inline void *xdp_data_hard_end(const struct xdp_buff *xdp)
+{
+	u32 tailroom = SKB_DATA_ALIGN(sizeof(struct skb_shared_info));
+
+	if (xdp->flags & XDP_FLAGS_SINFO_EXT)
+		tailroom = 0;
+	return xdp->data_hard_start + xdp->frame_sz - tailroom;
+}
 
 static inline struct skb_shared_info *
 xdp_get_shared_info_from_buff(const struct xdp_buff *xdp)
 {
+	/* Kernel structures stay out of memory that userspace may write */
+	if (unlikely(xdp->flags & XDP_FLAGS_SINFO_EXT))
+		return xdp->rxq->ext_sinfo;
+
 	return (struct skb_shared_info *)xdp_data_hard_end(xdp);
 }
 
@@ -454,6 +478,10 @@ int xdp_update_frame_from_buff(const struct xdp_buff *xdp,
 		return -ENOSPC;
 	}
 
+	/* A frame keeps its shared info in the buffer */
+	if (unlikely(xdp->flags & XDP_FLAGS_SINFO_EXT))
+		return -EFAULT;
+
 	xdp_frame->data = xdp->data;
 	xdp_frame->len  = xdp->data_end - xdp->data;
 	xdp_frame->headroom = headroom - sizeof(*xdp_frame);
@@ -533,6 +561,7 @@ bool xdp_rxq_info_is_reg(struct xdp_rxq_info *xdp_rxq);
 int xdp_rxq_info_reg_mem_model(struct xdp_rxq_info *xdp_rxq,
 			       enum xdp_mem_type type, void *allocator);
 void xdp_rxq_info_unreg_mem_model(struct xdp_rxq_info *xdp_rxq);
+int xdp_rxq_info_reg_ext_sinfo(struct xdp_rxq_info *xdp_rxq);
 int xdp_reg_mem_model(struct xdp_mem_info *mem,
 		      enum xdp_mem_type type, void *allocator);
 void xdp_unreg_mem_model(struct xdp_mem_info *mem);

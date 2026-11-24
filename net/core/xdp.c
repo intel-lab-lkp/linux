@@ -142,6 +142,8 @@ void xdp_rxq_info_unreg_mem_model(struct xdp_rxq_info *xdp_rxq)
 	}
 
 	xdp_unreg_mem_model(&xdp_rxq->mem);
+	kfree(xdp_rxq->ext_sinfo);
+	xdp_rxq->ext_sinfo = NULL;
 }
 EXPORT_SYMBOL_GPL(xdp_rxq_info_unreg_mem_model);
 
@@ -367,6 +369,30 @@ int xdp_rxq_info_reg_mem_model(struct xdp_rxq_info *xdp_rxq,
 }
 
 EXPORT_SYMBOL_GPL(xdp_rxq_info_reg_mem_model);
+
+/**
+ * xdp_rxq_info_reg_ext_sinfo - keep the shared info of buffers in the queue
+ * @xdp_rxq: registered RX queue
+ *
+ * For buffers in memory that someone outside the kernel may write: those
+ * with %XDP_FLAGS_SINFO_EXT keep their shared info in kernel memory of
+ * @xdp_rxq instead of at the end of their frame.
+ * xdp_rxq_info_unreg_mem_model() frees it.
+ *
+ * Return: 0 on success, or a negative errno.
+ */
+int xdp_rxq_info_reg_ext_sinfo(struct xdp_rxq_info *xdp_rxq)
+{
+	if (xdp_rxq->reg_state != REG_STATE_REGISTERED) {
+		WARN(1, "Missing register, driver bug");
+		return -EFAULT;
+	}
+
+	if (!xdp_rxq->ext_sinfo)
+		xdp_rxq->ext_sinfo = kzalloc_obj(*xdp_rxq->ext_sinfo);
+	return xdp_rxq->ext_sinfo ? 0 : -ENOMEM;
+}
+EXPORT_SYMBOL_GPL(xdp_rxq_info_reg_ext_sinfo);
 
 /**
  * xdp_reg_page_pool - register &page_pool as a memory provider for XDP
@@ -637,6 +663,10 @@ struct sk_buff *xdp_build_skb_from_buff(const struct xdp_buff *xdp)
 	struct sk_buff *skb;
 	u32 nr_frags = 0;
 	int metalen;
+
+	/* An skb keeps its shared info in the buffer */
+	if (unlikely(xdp->flags & XDP_FLAGS_SINFO_EXT))
+		return NULL;
 
 	if (unlikely(xdp_buff_has_frags(xdp))) {
 		sinfo = xdp_get_shared_info_from_buff(xdp);
