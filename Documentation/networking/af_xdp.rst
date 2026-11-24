@@ -429,7 +429,9 @@ There is also an option to set the headroom of each single buffer in
 the UMEM. If you set this to N bytes, it means that the packet will
 start N bytes into the buffer leaving the first N bytes for the
 application to use. The final option is the flags field, but it will
-be dealt with in separate sections for each UMEM flag.
+be dealt with in separate sections for each UMEM flag. With the
+XDP_UMEM_DRV_LAYOUT flag, chunks are pages that the device fills in
+its own layout, see the "Device Buffer Layout" section.
 
 SO_BINDTODEVICE setsockopt
 --------------------------
@@ -760,6 +762,116 @@ Zero-copy drivers usually use the batched APIs for Rx and Tx
 processing. Note that the Tx batch API guarantees that it will provide
 a batch of Tx descriptors that ends with full packet at the end. This
 to facilitate extending a zero-copy driver with multi-buffer support.
+
+Device Buffer Layout
+====================
+
+In zero-copy mode, the driver fills one UMEM frame per buffer, at the
+UMEM headroom, and needs a receive path of its own for AF_XDP. With
+the XDP_UMEM_DRV_LAYOUT UMEM flag, the device places buffers in UMEM
+chunks as it places them in the pages of its page pool: several
+buffers may share a chunk, a packet may span chunks, and the device
+picks the offsets. The XDP program reads and writes packets in place,
+in the UMEM, but the kernel stores none of its own structures in the
+chunks.
+
+The UMEM backs the page pools of the bound queue through a memory
+provider, so the driver needs no AF_XDP code. A driver supports the
+mode if it runs native XDP with XDP_REDIRECT, takes its receive
+buffers from a page pool of netmem that allows such providers, and
+can restart a queue.
+
+Setting up
+----------
+
+* Register the UMEM with XDP_UMEM_DRV_LAYOUT, aligned chunks of
+  PAGE_SIZE, and no headroom. The UMEM must hold more chunks than the
+  queue keeps posted to the device and in its page pool cache, 128
+  chunks with 4K pages, or the bind fails with ENOSPC. The first
+  number depends on the driver, the ring size and the MTU.
+
+* Attach a native XDP program to the device itself through netlink,
+  not through a BPF link or an upper device such as a bond, before the
+  bind. The bind fails with ENOENT without one. The program cannot be
+  detached while the UMEM backs the queue (EBUSY).
+
+* Put chunks on the FILL ring before the bind. The bind starts the
+  queue with the chunks it finds there, and the queue drops packets
+  while it has none.
+
+* Bind with XDP_USE_NEED_WAKEUP, as only a wakeup restarts a queue
+  that used up the FILL ring, and with XDP_USE_SG to receive packets
+  that span chunks. A bind without XDP_USE_NEED_WAKEUP fails with
+  EINVAL. XDP_COPY fails with EOPNOTSUPP, as does a device
+  without native XDP_REDIRECT or queue management. One socket per
+  queue receives: a second socket with an RX ring gets EBUSY, and so
+  does any socket with an RX ring once the receiving socket is gone.
+  Sockets that share the UMEM with XDP_SHARED_UMEM may transmit.
+
+The XDP program
+---------------
+
+The program works on the packet in place, in the UMEM: direct packet
+access, bpf_xdp_load_bytes(), bpf_xdp_store_bytes(), dynptrs,
+bpf_xdp_adjust_head(), bpf_xdp_adjust_tail(), bpf_xdp_adjust_meta()
+and the RX metadata kfuncs work as with pages, on every buffer of the
+packet. What the program writes is in the UMEM for the application to
+see. The kernel keeps its own data, such as the fragment list of a
+packet that spans buffers, in kernel memory, so the application cannot
+change what the kernel relies on. The application may still change
+the packet at any time, also while the program runs: two reads of the
+same bytes may differ.
+
+Buffers of the bound queue may only go to its receiving socket. Every
+verdict but XDP_REDIRECT drops the packet, XDP_PASS included, and
+redirects to anything but the receiving socket fail.
+
+Redirect through an XSKMAP entry that holds the receiving socket.
+
+Receiving
+---------
+
+A FILL entry lends a whole chunk to the kernel, by its address. Each
+buffer of a packet becomes one RX descriptor that points at the data,
+anywhere in a chunk, and XDP_PKT_CONTD chains the buffers of a packet
+as described in the multi-buffer section. Metadata that the program
+wrote is in front of the first buffer, where the program put it; a
+packet whose metadata does not fit in front of its first buffer, in
+the same chunk, is dropped.
+
+The kernel gives a chunk back with XDP_RX_CHUNK_FREE in the options of
+an RX descriptor:
+
+* On a descriptor with data, the flag means that the kernel is done
+  with the chunk of that descriptor. The application owns the whole
+  chunk again.
+
+* A descriptor with length zero, at the address of a chunk, only gives
+  that chunk back. The kernel posts one when the device let go of the
+  chunk after its last buffer reached the socket. Such a descriptor is
+  never part of a packet.
+
+A chunk may go on the FILL ring again once it came back and the
+application is done with all its buffers. The kernel never gives back
+single buffers, so a packet that the application holds keeps its
+chunk. Chunks whose buffers all stayed in the kernel, as for dropped
+packets, stay lent.
+
+The kernel asks for a wakeup on the FILL ring only while it has run
+out of FILL entries; recvmsg() or poll() then restarts the queue. With
+preferred busy polling, the application's poll runs the queue's NAPI.
+
+Devices that need DMA syncs work as they do with page pools: the
+kernel syncs a chunk for the device when the FILL ring lends it, and
+the driver syncs each buffer for the CPU before the program runs.
+
+Transmitting
+------------
+
+Sockets in this mode transmit in copy mode. A buffer that the
+application received may go on the TX ring. Its chunk may go on the
+FILL ring only once the chunk came back and every TX descriptor that
+points into it is on the COMPLETION ring.
 
 Sample application
 ==================
