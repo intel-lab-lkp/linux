@@ -3885,6 +3885,13 @@ nfsd4_cb_getattr_done(struct nfsd4_callback *cb, struct rpc_task *task)
 
 	trace_nfsd_cb_getattr_done(&dp->dl_stid.sc_stateid, task);
 	ncf->ncf_cb_status = task->tk_status;
+	/*
+	 * A reply without SIZE leaves ncf_cb_fsize at zero, which the
+	 * waiter would report as the file's size. Fail the callback, so
+	 * the waiter recalls the delegation instead.
+	 */
+	if (!task->tk_status && !(ncf->ncf_cb_bitmap0 & FATTR4_WORD0_SIZE))
+		ncf->ncf_cb_status = NFS4ERR_IO;
 	switch (task->tk_status) {
 	case -NFS4ERR_DELAY:
 		rpc_delay(task, 2 * HZ);
@@ -4132,6 +4139,7 @@ static void nfs4_cb_getattr(struct nfs4_cb_fattr *ncf)
 
 	/* set to proper status when nfsd4_cb_getattr_done runs */
 	ncf->ncf_cb_status = NFS4ERR_IO;
+	ncf->ncf_cb_bitmap0 = 0;
 
 	/* ensure that wake_bit is done when RUNNING is cleared */
 	set_bit(NFSD4_CALLBACK_WAKE, &ncf->ncf_getattr.cb_flags);

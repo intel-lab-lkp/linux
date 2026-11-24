@@ -737,6 +737,7 @@ static int nfs4_xdr_dec_cb_getattr(struct rpc_rqst *rqstp,
 		return status;
 	if (xdr_stream_decode_uint32_array(xdr, bitmap, 3) < 0)
 		return -EIO;
+	ncf->ncf_cb_bitmap0 = bitmap[0];
 	if (xdr_stream_decode_u32(xdr, &attrlen) < 0)
 		return -EIO;
 	maxlen = sizeof(ncf->ncf_cb_change) + sizeof(ncf->ncf_cb_fsize);
