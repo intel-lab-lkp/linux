@@ -594,8 +594,8 @@ static int svs_sync_bank_volts_from_opp(struct svs_bank *svsb)
 						 svsb->opp_dfreq[i],
 						 true);
 		if (IS_ERR(opp)) {
-			dev_err(svsb->dev, "cannot find freq = %u (%ld)\n",
-				svsb->opp_dfreq[i], PTR_ERR(opp));
+			dev_err(svsb->dev, "cannot find freq = %u (%pe)\n",
+				svsb->opp_dfreq[i], opp);
 			return PTR_ERR(opp);
 		}
 
@@ -833,9 +833,8 @@ static int svs_status_debug_show(struct seq_file *m, void *v)
 		opp = dev_pm_opp_find_freq_exact(svsb->opp_dev,
 						 svsb->opp_dfreq[i], true);
 		if (IS_ERR(opp)) {
-			seq_printf(m, "%s: cannot find freq = %u (%ld)\n",
-				   svsb->name, svsb->opp_dfreq[i],
-				   PTR_ERR(opp));
+			seq_printf(m, "%s: cannot find freq = %u (%pe)\n",
+				   svsb->name, svsb->opp_dfreq[i], opp);
 			return PTR_ERR(opp);
 		}
 
@@ -1840,8 +1839,8 @@ static int svs_bank_resource_setup(struct svs_platform *svsp)
 		for (i = 0, freq = ULONG_MAX; i < bdata->opp_count; i++, freq--) {
 			opp = dev_pm_opp_find_freq_floor(svsb->opp_dev, &freq);
 			if (IS_ERR(opp)) {
-				dev_err(svsb->dev, "cannot find freq = %ld\n",
-					PTR_ERR(opp));
+				dev_err(svsb->dev, "cannot find freq = %pe\n",
+					opp);
 				return PTR_ERR(opp);
 			}
 
@@ -1864,8 +1863,8 @@ static int svs_get_efuse_data(struct svs_platform *svsp,
 
 	cell = nvmem_cell_get(svsp->dev, nvmem_cell_name);
 	if (IS_ERR(cell)) {
-		dev_err(svsp->dev, "no \"%s\"? %ld\n",
-			nvmem_cell_name, PTR_ERR(cell));
+		dev_err(svsp->dev, "no \"%s\"? %pe\n",
+			nvmem_cell_name, cell);
 		return PTR_ERR(cell);
 	}
 
