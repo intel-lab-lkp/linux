@@ -2842,13 +2842,24 @@ static void mwifiex_pcie_work(struct work_struct *work)
 {
 	struct pcie_service_card *card =
 		container_of(work, struct pcie_service_card, work);
+	struct mwifiex_adapter *adapter = READ_ONCE(card->adapter);
+
+	/* The adapter is gone if a failed reset or probe has torn it
+	 * down.
+	 */
+	if (!adapter)
+		return;
 
 	if (test_and_clear_bit(MWIFIEX_IFACE_WORK_DEVICE_DUMP,
 			       &card->work_flags))
-		mwifiex_pcie_device_dump_work(card->adapter);
+		mwifiex_pcie_device_dump_work(adapter);
+	/* A teardown that started during the dump has cleared
+	 * card->adapter. Skip the reset, which would run into that
+	 * teardown.
+	 */
 	if (test_and_clear_bit(MWIFIEX_IFACE_WORK_CARD_RESET,
-			       &card->work_flags))
-		mwifiex_pcie_card_reset_work(card->adapter);
+			       &card->work_flags) && READ_ONCE(card->adapter))
+		mwifiex_pcie_card_reset_work(adapter);
 }
 
 /* This function dumps FW information */
@@ -3171,7 +3182,7 @@ static int mwifiex_register_dev(struct mwifiex_adapter *adapter)
 	struct pcie_service_card *card = adapter->card;
 
 	/* save adapter pointer in card */
-	card->adapter = adapter;
+	WRITE_ONCE(card->adapter, adapter);
 
 	if (mwifiex_pcie_request_irq(adapter))
 		return -1;
@@ -3215,7 +3226,7 @@ static void mwifiex_unregister_dev(struct mwifiex_adapter *adapter)
 		if (card->msi_enable)
 			pci_disable_msi(pdev);
 	}
-	card->adapter = NULL;
+	WRITE_ONCE(card->adapter, NULL);
 }
 
 /*
