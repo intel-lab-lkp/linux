@@ -19,6 +19,7 @@ use core::{
     ptr, //
 };
 
+pub mod pm;
 pub mod property;
 
 /// The core representation of a device in the kernel's driver model.

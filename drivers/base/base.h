@@ -105,6 +105,7 @@ struct driver_private {
  *			   dev_err_probe() for later retrieval via debugfs
  * @device: pointer back to the struct device that this structure is
  *	    associated with.
+ * @rust_private: private data used exclusively by the Rust driver core
  * @dead: This device is currently either in the process of or has been
  *	  removed from the system. Any asynchronous events scheduled for this
  *	  device should exit without taking any action.
@@ -121,6 +122,11 @@ struct device_private {
 	const struct device_driver *async_driver;
 	char *deferred_probe_reason;
 	struct device *device;
+#ifdef CONFIG_RUST
+	struct {
+		void *pm_registration_data;
+	}rust;
+#endif
 	u8 dead:1;
 };
 #define to_device_private_parent(obj)	\
