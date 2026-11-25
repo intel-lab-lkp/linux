@@ -24,6 +24,9 @@
 	width = <1440>;
 	height = <2960>;
 	stride = <(1440 * 4)>;
+
+	vddi-supply = <&vreg_l14a_1p8>;
+	vci-supply = <&vreg_l28a_3p0>;
 };
 
 &mdss {
