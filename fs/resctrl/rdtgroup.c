@@ -4502,10 +4502,10 @@ static void domain_destroy_l3_mon_state(struct rdt_l3_mon_domain *d)
 {
 	int idx;
 
-	kfree(d->cntr_cfg);
+	kvfree(d->cntr_cfg);
 	bitmap_free(d->rmid_busy_llc);
 	for_each_mbm_idx(idx) {
-		kfree(d->mbm_states[idx]);
+		kvfree(d->mbm_states[idx]);
 		d->mbm_states[idx] = NULL;
 	}
 }
@@ -4620,7 +4620,6 @@ out_unlock:
 static int domain_setup_l3_mon_state(struct rdt_resource *r, struct rdt_l3_mon_domain *d)
 {
 	u32 idx_limit = resctrl_arch_system_num_rmid_idx();
-	size_t tsize = sizeof(*d->mbm_states[0]);
 	enum resctrl_event_id eventid;
 	int idx;
 
@@ -4634,14 +4633,13 @@ static int domain_setup_l3_mon_state(struct rdt_resource *r, struct rdt_l3_mon_d
 		if (!resctrl_is_mon_event_enabled(eventid))
 			continue;
 		idx = MBM_STATE_IDX(eventid);
-		d->mbm_states[idx] = kcalloc(idx_limit, tsize, GFP_KERNEL);
+		d->mbm_states[idx] = kvzalloc_objs(struct mbm_state, idx_limit);
 		if (!d->mbm_states[idx])
 			goto cleanup;
 	}
 
 	if (resctrl_is_mbm_enabled() && r->mon.mbm_cntr_assignable) {
-		tsize = sizeof(*d->cntr_cfg);
-		d->cntr_cfg = kcalloc(r->mon.num_mbm_cntrs, tsize, GFP_KERNEL);
+		d->cntr_cfg = kvzalloc_objs(struct mbm_cntr_cfg, r->mon.num_mbm_cntrs);
 		if (!d->cntr_cfg)
 			goto cleanup;
 	}
@@ -4650,7 +4648,7 @@ static int domain_setup_l3_mon_state(struct rdt_resource *r, struct rdt_l3_mon_d
 cleanup:
 	bitmap_free(d->rmid_busy_llc);
 	for_each_mbm_idx(idx) {
-		kfree(d->mbm_states[idx]);
+		kvfree(d->mbm_states[idx]);
 		d->mbm_states[idx] = NULL;
 	}
 
