@@ -4503,7 +4503,7 @@ static void domain_destroy_l3_mon_state(struct rdt_l3_mon_domain *d)
 	int idx;
 
 	kvfree(d->cntr_cfg);
-	bitmap_free(d->rmid_busy_llc);
+	kvfree(d->rmid_busy_llc);
 	for_each_mbm_idx(idx) {
 		kvfree(d->mbm_states[idx]);
 		d->mbm_states[idx] = NULL;
@@ -4624,7 +4624,7 @@ static int domain_setup_l3_mon_state(struct rdt_resource *r, struct rdt_l3_mon_d
 	int idx;
 
 	if (resctrl_is_mon_event_enabled(QOS_L3_OCCUP_EVENT_ID)) {
-		d->rmid_busy_llc = bitmap_zalloc(idx_limit, GFP_KERNEL);
+		d->rmid_busy_llc = kvzalloc_objs(unsigned long, BITS_TO_LONGS(idx_limit));
 		if (!d->rmid_busy_llc)
 			return -ENOMEM;
 	}
@@ -4646,7 +4646,7 @@ static int domain_setup_l3_mon_state(struct rdt_resource *r, struct rdt_l3_mon_d
 
 	return 0;
 cleanup:
-	bitmap_free(d->rmid_busy_llc);
+	kvfree(d->rmid_busy_llc);
 	for_each_mbm_idx(idx) {
 		kvfree(d->mbm_states[idx]);
 		d->mbm_states[idx] = NULL;
