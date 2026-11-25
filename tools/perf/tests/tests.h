@@ -153,6 +153,7 @@ DECLARE_SUITE(sample_parsing);
 DECLARE_SUITE(keep_tracking);
 DECLARE_SUITE(parse_no_sample_id_all);
 DECLARE_SUITE(dwarf_unwind);
+DECLARE_SUITE(annotate_ops);
 DECLARE_SUITE(expr);
 DECLARE_SUITE(hists_filter);
 DECLARE_SUITE(mmap_thread_lookup);
