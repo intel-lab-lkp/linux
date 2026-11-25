@@ -419,6 +419,7 @@ static int rockchip_dp_bind(struct device *dev, struct device *master,
 	if (IS_ERR(connector)) {
 		ret = PTR_ERR(connector);
 		dev_err(dp->dev, "Failed to initialize bridge_connector\n");
+		analogix_dp_unbind(dp->adp);
 		goto err_cleanup_encoder;
 	}
 
