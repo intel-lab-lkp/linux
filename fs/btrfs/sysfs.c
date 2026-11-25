@@ -1928,6 +1928,8 @@ static ssize_t btrfs_devinfo_scrub_speed_max_store(struct kobject *kobj,
 	if (*endptr != 0)
 		return -EINVAL;
 	WRITE_ONCE(device->scrub_speed_max, limit);
+	/* A throttled scrub sleeps on this under the old limit. */
+	wake_up(&device->fs_info->scrub_pause_wait);
 	return len;
 }
 BTRFS_ATTR_RW(devid, scrub_speed_max, btrfs_devinfo_scrub_speed_max_show,

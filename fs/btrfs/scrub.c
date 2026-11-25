@@ -57,6 +57,9 @@ struct scrub_ctx;
 
 #define SCRUB_TOTAL_STRIPES		(SCRUB_GROUPS_PER_SCTX * SCRUB_STRIPES_PER_GROUP)
 
+/* Length of a burst of throttled scrub IO, see scrub_throttle_dev_io(). */
+#define SCRUB_THROTTLE_BURST_MS		10
+
 /* Represent one sector and its needed info to verify the content. */
 struct scrub_sector_verification {
 	union {
@@ -195,9 +198,8 @@ struct scrub_ctx {
 	atomic_t		cancel_req;
 	int			readonly;
 
-	/* State of IO submission throttling affecting the associated device */
-	ktime_t			throttle_deadline;
-	u64			throttle_sent;
+	/* Earliest time the next read may be submitted under scrub_speed_max. */
+	ktime_t			throttle_next;
 
 	bool			is_dev_replace;
 	u64			write_pointer;
@@ -451,16 +453,19 @@ static void scrub_blocked_if_needed(struct scrub_ctx *sctx)
 /*
  * Pause the scrub, and sleep for the throttle duration. Pausing allows the
  * commit to proceed unblocked.
- * Scrub cancel interrupts the sleep.
+ * Scrub cancel or a change of the limit the sleep was computed under
+ * interrupts the sleep.
  */
-static void scrub_throttle_sleep(struct scrub_ctx *sctx, ktime_t timeout)
+static void scrub_throttle_sleep(struct scrub_ctx *sctx, struct btrfs_device *device,
+				 u64 bwlimit, ktime_t timeout)
 {
 	struct btrfs_fs_info *fs_info = sctx->fs_info;
 
 	scrub_pause_on(sctx);
 	wait_event_interruptible_hrtimeout(fs_info->scrub_pause_wait,
 					   atomic_read(&fs_info->scrub_cancel_req) ||
-					   atomic_read(&sctx->cancel_req),
+					   atomic_read(&sctx->cancel_req) ||
+					   READ_ONCE(device->scrub_speed_max) != bwlimit,
 					   timeout);
 	scrub_pause_off(fs_info);
 }
@@ -514,7 +519,7 @@ static noinline_for_stack struct scrub_ctx *scrub_setup_ctx(
 	atomic_set(&sctx->cancel_req, 0);
 
 	spin_lock_init(&sctx->stat_lock);
-	sctx->throttle_deadline = 0;
+	sctx->throttle_next = 0;
 
 	mutex_init(&sctx->wr_lock);
 	if (is_dev_replace) {
@@ -1409,54 +1414,34 @@ static void scrub_write_sectors(struct scrub_ctx *sctx, struct scrub_stripe *str
 }
 
 /*
- * Throttling of IO submission, bandwidth-limit based, the timeslice is 1
- * second.  Limit can be set via /sys/fs/UUID/devinfo/devid/scrub_speed_max.
+ * Throttling of IO submission, bandwidth-limit based. Limit can be set via
+ * /sys/fs/UUID/devinfo/devid/scrub_speed_max.
  */
 static void scrub_throttle_dev_io(struct scrub_ctx *sctx, struct btrfs_device *device,
 				  unsigned int bio_size)
 {
-	const int time_slice = 1000;
-	s64 delta;
+	const u64 bwlimit = READ_ONCE(device->scrub_speed_max);
 	ktime_t now;
-	u32 div;
-	u64 bwlimit;
+	ktime_t ahead;
 
-	bwlimit = READ_ONCE(device->scrub_speed_max);
 	if (bwlimit == 0)
 		return;
 
-	/*
-	 * Slice is divided into intervals when the IO is submitted, adjust by
-	 * bwlimit and maximum of 64 intervals.
-	 */
-	div = clamp(bwlimit / (16 * 1024 * 1024), 1, 64);
-
-	/* Start new epoch, set deadline */
 	now = ktime_get();
-	if (sctx->throttle_deadline == 0) {
-		sctx->throttle_deadline = ktime_add_ms(now, time_slice / div);
-		sctx->throttle_sent = 0;
-	}
-
-	/* Still in the time to send? */
-	if (ktime_before(now, sctx->throttle_deadline)) {
-		/* If current bio is within the limit, send it */
-		sctx->throttle_sent += bio_size;
-		if (sctx->throttle_sent <= div_u64(bwlimit, div))
+	ahead = ktime_sub(sctx->throttle_next, now);
+	if (ahead < 0) {
+		sctx->throttle_next = now;
+	} else if (ahead > SCRUB_THROTTLE_BURST_MS * NSEC_PER_MSEC) {
+		scrub_throttle_sleep(sctx, device, bwlimit, ahead);
+		/* Woken by a limit change: the debt was accrued at the old limit. */
+		if (READ_ONCE(device->scrub_speed_max) != bwlimit) {
+			sctx->throttle_next = ktime_get();
 			return;
-
-		/* We're over the limit, sleep until the rest of the slice */
-		delta = ktime_ms_delta(sctx->throttle_deadline, now);
-	} else {
-		/* New request after deadline, start new epoch */
-		delta = 0;
+		}
 	}
-
-	if (delta)
-		scrub_throttle_sleep(sctx, ms_to_ktime(delta));
-
-	/* Next call will start the deadline period */
-	sctx->throttle_deadline = 0;
+	/* (bytes * (nsec / sec)) / (bytes / sec) ==> nsec */
+	sctx->throttle_next = ktime_add_ns(sctx->throttle_next,
+				div64_u64((u64)bio_size * NSEC_PER_SEC, bwlimit));
 }
 
 /*
