@@ -4351,7 +4351,7 @@ static void lru_gen_age_node(struct pglist_data *pgdat, struct scan_control *sc)
 {
 	struct mem_cgroup *memcg;
 	unsigned long min_ttl = READ_ONCE(lru_gen_min_ttl);
-	bool reclaimable = !min_ttl;
+	bool reclaimable = !min_ttl || sc->order;
 
 	VM_WARN_ON_ONCE(!current_is_kswapd());
 
@@ -4371,6 +4371,9 @@ static void lru_gen_age_node(struct pglist_data *pgdat, struct scan_control *sc)
 	 * The main goal is to OOM kill if every generation from all memcgs is
 	 * younger than min_ttl. However, another possibility is all memcgs are
 	 * either too small or below min.
+	 *
+	 * OOM killing for fragmentation is not desired. So skip this when
+	 * sc->order != 0.
 	 */
 	if (!reclaimable && mutex_trylock(&oom_lock)) {
 		struct oom_control oc = {
