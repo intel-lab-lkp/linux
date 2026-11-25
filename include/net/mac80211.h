@@ -5886,7 +5886,8 @@ struct ieee80211_ema_beacons {
  * This function follows the same rules as ieee80211_beacon_get_template()
  * but allocates and returns a pointer to list of all beacon templates required
  * to cover all profiles in the multiple BSSID set. Each template includes only
- * one multiple BSSID element.
+ * one multiple BSSID element. If no MBSSID elements are present, this function
+ * will return the single default template.
  *
  * Driver must call ieee80211_beacon_free_ema_list() to free the memory.
  *
