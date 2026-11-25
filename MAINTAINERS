@@ -7431,6 +7431,24 @@ T:	git git://linuxtv.org/media.git
 F:	Documentation/devicetree/bindings/media/allwinner,sun8i-h3-deinterlace.yaml
 F:	drivers/media/platform/sunxi/sun8i-di/
 
+DELAY, SLEEP, TIMEKEEPING, TIMERS [RUST]
+M:	Andreas Hindborg <a.hindborg@kernel.org>
+R:	Boqun Feng <boqun@kernel.org>
+R:	FUJITA Tomonori <fujita.tomonori@gmail.com>
+R:	Frederic Weisbecker <frederic@kernel.org>
+R:	Lyude Paul <lyude@redhat.com>
+R:	Thomas Gleixner <tglx@kernel.org>
+R:	Anna-Maria Behnsen <anna-maria@linutronix.de>
+R:	John Stultz <jstultz@google.com>
+R:	Stephen Boyd <sboyd@kernel.org>
+L:	rust-for-linux@vger.kernel.org
+S:	Supported
+W:	https://rust-for-linux.com
+B:	https://github.com/Rust-for-Linux/linux/issues
+T:	git https://github.com/Rust-for-Linux/linux.git timekeeping-next
+F:	rust/kernel/time.rs
+F:	rust/kernel/time/
+
 DELL LAPTOP DRIVER
 M:	Matthew Garrett <mjg59@srcf.ucam.org>
 M:	Pali Rohár <pali@kernel.org>
@@ -11958,24 +11976,6 @@ L:	linux-hwmon@vger.kernel.org
 S:	Maintained
 F:	Documentation/hwmon/hac300s.rst
 F:	drivers/hwmon/pmbus/hac300s.c
-
-DELAY, SLEEP, TIMEKEEPING, TIMERS [RUST]
-M:	Andreas Hindborg <a.hindborg@kernel.org>
-R:	Boqun Feng <boqun@kernel.org>
-R:	FUJITA Tomonori <fujita.tomonori@gmail.com>
-R:	Frederic Weisbecker <frederic@kernel.org>
-R:	Lyude Paul <lyude@redhat.com>
-R:	Thomas Gleixner <tglx@kernel.org>
-R:	Anna-Maria Behnsen <anna-maria@linutronix.de>
-R:	John Stultz <jstultz@google.com>
-R:	Stephen Boyd <sboyd@kernel.org>
-L:	rust-for-linux@vger.kernel.org
-S:	Supported
-W:	https://rust-for-linux.com
-B:	https://github.com/Rust-for-Linux/linux/issues
-T:	git https://github.com/Rust-for-Linux/linux.git timekeeping-next
-F:	rust/kernel/time.rs
-F:	rust/kernel/time/
 
 HIGHPOINT ROCKETRAID 3xxx RAID DRIVER
 M:	HighPoint Linux Team <linux@highpoint-tech.com>
