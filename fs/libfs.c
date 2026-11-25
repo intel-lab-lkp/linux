@@ -754,8 +754,8 @@ int simple_link(struct dentry *old_dentry, struct inode *dir, struct dentry *den
 {
 	struct inode *inode = d_inode(old_dentry);
 
-	inode_set_mtime_to_ts(dir,
-			      inode_set_ctime_to_ts(dir, inode_set_ctime_current(inode)));
+	inode_set_mtime_to_ts(dir, inode_set_ctime_current(dir));
+	inode_set_ctime_current(inode);
 	inc_nlink(inode);
 	ihold(inode);
 	d_make_persistent(dentry, inode);
@@ -788,8 +788,8 @@ void __simple_unlink(struct inode *dir, struct dentry *dentry)
 {
 	struct inode *inode = d_inode(dentry);
 
-	inode_set_mtime_to_ts(dir,
-			      inode_set_ctime_to_ts(dir, inode_set_ctime_current(inode)));
+	inode_set_mtime_to_ts(dir, inode_set_ctime_current(dir));
+	inode_set_ctime_current(inode);
 	drop_nlink(inode);
 }
 EXPORT_SYMBOL(__simple_unlink);
