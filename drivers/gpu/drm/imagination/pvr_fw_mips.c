@@ -35,11 +35,11 @@ pvr_mips_fw_process(struct pvr_device *pvr_dev, const u8 *fw,
 		    u32 core_code_alloc_size)
 {
 	struct pvr_fw_device *fw_dev = &pvr_dev->fw_dev;
-	struct pvr_fw_mips_data *mips_data = fw_dev->processor_data.mips_data;
-	const struct pvr_fw_layout_entry *boot_code_entry;
-	const struct pvr_fw_layout_entry *boot_data_entry;
-	const struct pvr_fw_layout_entry *exception_code_entry;
-	const struct pvr_fw_layout_entry *stack_entry;
+	struct pvr_fw_mips_data *fw_data = fw_dev->processor_data.mips_data;
+	const struct pvr_fw_section_desc *boot_code_entry;
+	const struct pvr_fw_section_desc *boot_data_entry;
+	const struct pvr_fw_section_desc *exception_code_entry;
+	const struct pvr_fw_section_desc *stack_entry;
 	struct rogue_mipsfw_boot_data *boot_data;
 	dma_addr_t dma_addr;
 	int err;
@@ -49,21 +49,21 @@ pvr_mips_fw_process(struct pvr_device *pvr_dev, const u8 *fw,
 	if (err)
 		return err;
 
-	boot_code_entry = pvr_fw_find_layout_entry(pvr_dev, MIPS_BOOT_CODE);
-	boot_data_entry = pvr_fw_find_layout_entry(pvr_dev, MIPS_BOOT_DATA);
-	exception_code_entry = pvr_fw_find_layout_entry(pvr_dev, MIPS_EXCEPTIONS_CODE);
+	boot_code_entry = pvr_fw_get_section_desc(pvr_dev, PVR_FW_SECTION_BOOT_CODE);
+	boot_data_entry = pvr_fw_get_section_desc(pvr_dev, PVR_FW_SECTION_BOOT_DATA);
+	exception_code_entry = pvr_fw_get_section_desc(pvr_dev, PVR_FW_SECTION_EXCEPTIONS_CODE);
 	if (!boot_code_entry || !boot_data_entry || !exception_code_entry)
 		return -EINVAL;
 
 	WARN_ON(pvr_gem_get_dma_addr(fw_dev->mem.code_obj->gem, boot_code_entry->alloc_offset,
-				     &mips_data->boot_code_dma_addr));
+				     &fw_data->boot_code_dma_addr));
 	WARN_ON(pvr_gem_get_dma_addr(fw_dev->mem.data_obj->gem, boot_data_entry->alloc_offset,
-				     &mips_data->boot_data_dma_addr));
+				     &fw_data->boot_data_dma_addr));
 	WARN_ON(pvr_gem_get_dma_addr(fw_dev->mem.code_obj->gem,
 				     exception_code_entry->alloc_offset,
-				     &mips_data->exception_code_dma_addr));
+				     &fw_data->exception_code_dma_addr));
 
-	stack_entry = pvr_fw_find_layout_entry(pvr_dev, MIPS_STACK);
+	stack_entry = pvr_fw_get_section_desc(pvr_dev, PVR_FW_SECTION_STACK);
 	if (!stack_entry)
 		return -EINVAL;
 
@@ -81,7 +81,7 @@ pvr_mips_fw_process(struct pvr_device *pvr_dev, const u8 *fw,
 		u32 src_page_nr = (page_nr * ROGUE_MIPSFW_PAGE_SIZE_4K) >> PAGE_SHIFT;
 		u32 page_offset = (page_nr * ROGUE_MIPSFW_PAGE_SIZE_4K) & ~PAGE_MASK;
 
-		boot_data->pt_phys_addr[page_nr] = mips_data->pt_dma_addr[src_page_nr] +
+		boot_data->pt_phys_addr[page_nr] = fw_data->pt_dma_addr[src_page_nr] +
 						   page_offset;
 	}
 

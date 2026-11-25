@@ -33,9 +33,6 @@
 /* Forward declaration from <linux/clk.h>. */
 struct clk;
 
-/* Forward declaration from <linux/firmware.h>. */
-struct firmware;
-
 /* Forward declaration from <linux/pwrseq/consumer.h> */
 struct pwrseq_desc;
 
@@ -51,15 +48,6 @@ struct pwrseq_desc;
  */
 struct pvr_gpu_id {
 	u16 b, v, n, c;
-};
-
-/**
- * struct pvr_fw_version - Firmware version information
- * @major: Major version number.
- * @minor: Minor version number.
- */
-struct pvr_fw_version {
-	u16 major, minor;
 };
 
 /**
@@ -107,9 +95,6 @@ struct pvr_device {
 	 * PVR_HAS_ENHANCEMENT().
 	 */
 	struct pvr_device_enhancements enhancements;
-
-	/** @fw_version: Firmware version detected at runtime. */
-	struct pvr_fw_version fw_version;
 
 	/** @device_data: Pointer to platform-specific data. */
 	const struct pvr_device_data *device_data;

@@ -693,7 +693,7 @@ pvr_device_info_validate(struct pvr_device *pvr_dev)
  *  * 0 on success,
  *  * -%ENODEV if the GPU is not supported,
  *  * Any error returned by pvr_request_firmware(),
- *  * Any error returned by pvr_fw_validate_init_device_info(),
+ *  * Any error returned by pvr_fw_load_metadata_and_device_info(),
  *  * Any error returned by pvr_device_info_validate(),
  *  * Any error returned by pvr_set_dma_info(), or
  *  * Any error returned by pvr_fw_init().
@@ -711,7 +711,7 @@ pvr_device_gpu_init(struct pvr_device *pvr_dev)
 	if (err)
 		return err;
 
-	err = pvr_fw_validate_init_device_info(pvr_dev);
+	err = pvr_fw_load_metadata_and_device_info(pvr_dev);
 	if (err)
 		return err;
 
@@ -745,6 +745,7 @@ static void
 pvr_device_gpu_fini(struct pvr_device *pvr_dev)
 {
 	pvr_fw_fini(pvr_dev);
+	pvr_fw_free_metadata_and_device_info(pvr_dev);
 }
 
 /**

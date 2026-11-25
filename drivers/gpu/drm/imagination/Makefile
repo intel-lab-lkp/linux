@@ -11,6 +11,7 @@ powervr-y := \
 	pvr_dump.o \
 	pvr_free_list.o \
 	pvr_fw.o \
+	pvr_fw_info.o \
 	pvr_fw_meta.o \
 	pvr_fw_mips.o \
 	pvr_fw_riscv.o \

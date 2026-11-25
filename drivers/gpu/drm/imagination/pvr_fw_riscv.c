@@ -3,7 +3,6 @@
 
 #include "pvr_device.h"
 #include "pvr_fw.h"
-#include "pvr_fw_info.h"
 #include "pvr_fw_mips.h"
 #include "pvr_gem.h"
 #include "pvr_rogue_cr_defs.h"

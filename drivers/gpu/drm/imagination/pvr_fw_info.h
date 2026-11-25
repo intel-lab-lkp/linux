@@ -17,6 +17,12 @@
 /* Maximum number of entries in firmware layout table. */
 #define PVR_FW_INFO_MAX_NUM_ENTRIES 8
 
+#define PVR_GPU_ID_FORMAT "%u.%u.%u.%u"
+#define PVR_GPU_ID_ARG_B 48
+#define PVR_GPU_ID_ARG_V 32
+#define PVR_GPU_ID_ARG_N 16
+#define PVR_GPU_ID_ARG_C 0
+
 enum pvr_fw_section_id {
 	META_CODE = 0,
 	META_PRIVATE_DATA,

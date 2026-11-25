@@ -4,7 +4,6 @@
 #ifndef PVR_FW_H
 #define PVR_FW_H
 
-#include "pvr_fw_info.h"
 #include "pvr_fw_trace.h"
 #include "pvr_gem.h"
 
@@ -22,6 +21,30 @@ struct pvr_vm_context;
 #define ROGUE_FWIF_FWCCB_NUMCMDS_LOG2 5
 
 #define ROGUE_FWIF_KCCB_NUMCMDS_LOG2_DEFAULT 7
+
+extern bool pvr_exp_fw_support;
+
+/**
+ * struct pvr_fw_version - Firmware version information
+ * @major: Major version number.
+ * @minor: Minor version number.
+ * @build: Build number. This is informative only.
+ * @open_source: Whether this firmware was built with open-source driver
+ *               compatibility enabled.
+ */
+struct pvr_fw_version {
+	u16 major;
+	u16 minor;
+	u32 build;
+	bool open_source;
+};
+
+#define PVR_FW_VERSION_FMT "v%u.%u (build %u%s)"
+#define PVR_FW_VERSION_FMT_ARGS(fw_version) \
+	(fw_version)->major, (fw_version)->minor, (fw_version)->build, \
+	(fw_version)->open_source ? " OS" : ""
+
+#define PVR_FW_MAX_SUPPORTED_MAJOR_VERSION 1
 
 /**
  * struct pvr_fw_object - container for firmware memory allocations
@@ -57,6 +80,57 @@ struct pvr_fw_object {
 
 	/** @node: Node for firmware object list. */
 	struct list_head node;
+};
+
+enum pvr_fw_section_name {
+	PVR_FW_SECTION_CODE = 0,
+	PVR_FW_SECTION_PRIVATE_DATA,
+	PVR_FW_SECTION_RODATA,
+	PVR_FW_SECTION_COREMEM_CODE,
+	PVR_FW_SECTION_COREMEM_DATA,
+	PVR_FW_SECTION_EXCEPTIONS_CODE,
+	PVR_FW_SECTION_BOOT_CODE,
+	PVR_FW_SECTION_BOOT_DATA,
+	PVR_FW_SECTION_STACK,
+	PVR_FW_SECTION_UNCACHED_CODE,
+	PVR_FW_SECTION_CACHED_CODE,
+
+	PVR_FW_SECTION_COUNT,
+	PVR_FW_SECTION_INVALID = -1,
+};
+
+enum pvr_fw_segment_name {
+	PVR_FW_SEGMENT_CODE = 0,
+	PVR_FW_SEGMENT_DATA,
+	PVR_FW_SEGMENT_CORE_CODE,
+	PVR_FW_SEGMENT_CORE_DATA,
+
+	PVR_FW_SEGMENT_COUNT,
+	PVR_FW_SEGMENT_INVALID = -1,
+};
+
+struct pvr_fw_section_desc {
+	enum pvr_fw_section_name name;
+	enum pvr_fw_segment_name segment;
+	u32 base_addr;
+	u32 size;
+	u32 alloc_offset;
+};
+
+#define pvr_for_each_fw_section_desc(fw_metadata, name) \
+	for (const struct pvr_fw_section_desc *name = (fw_metadata)->sections; \
+	     name < (fw_metadata)->sections + (fw_metadata)->num_sections; \
+	     name++)
+
+struct pvr_fw_metadata {
+	/** @version: Version of the loaded firmware file. */
+	struct pvr_fw_version version;
+
+	/** @num_sections: Number of section descriptors in @sections. */
+	u32 num_sections;
+
+	/** @sections: Section descriptors loaded from firmware header. */
+	struct pvr_fw_section_desc sections[] __counted_by(num_sections);
 };
 
 /**
@@ -286,11 +360,8 @@ struct pvr_fw_device {
 	/** @firmware: Handle to the firmware loaded into the device. */
 	const struct firmware *firmware;
 
-	/** @header: Pointer to firmware header. */
-	const struct pvr_fw_info_header *header;
-
-	/** @layout_entries: Pointer to firmware layout. */
-	const struct pvr_fw_layout_entry *layout_entries;
+	/** @metadata: Metadata loaded from firmware headers. */
+	const struct pvr_fw_metadata *metadata;
 
 	/** @mem: Structure containing objects representing firmware memory allocations. */
 	struct pvr_fw_mem mem;
@@ -385,7 +456,6 @@ extern const struct pvr_fw_defs pvr_fw_defs_meta;
 extern const struct pvr_fw_defs pvr_fw_defs_mips;
 extern const struct pvr_fw_defs pvr_fw_defs_riscv;
 
-int pvr_fw_validate_init_device_info(struct pvr_device *pvr_dev);
 int pvr_fw_init(struct pvr_device *pvr_dev);
 void pvr_fw_fini(struct pvr_device *pvr_dev);
 
@@ -399,8 +469,8 @@ void pvr_fw_mts_schedule(struct pvr_device *pvr_dev, u32 val);
 void
 pvr_fw_heap_info_init(struct pvr_device *pvr_dev, u32 log2_size, u32 reserved_size);
 
-const struct pvr_fw_layout_entry *
-pvr_fw_find_layout_entry(struct pvr_device *pvr_dev, enum pvr_fw_section_id id);
+const struct pvr_fw_section_desc *
+pvr_fw_get_section_desc(struct pvr_device *pvr_dev, enum pvr_fw_section_name section);
 int
 pvr_fw_find_mmu_segment(struct pvr_device *pvr_dev, u32 addr, u32 size, void *fw_code_ptr,
 			void *fw_data_ptr, void *fw_core_code_ptr, void *fw_core_data_ptr,
@@ -484,6 +554,14 @@ pvr_fw_obj_get_object_size(struct pvr_fw_object *fw_obj)
 {
 	return pvr_gem_object_size(fw_obj->gem);
 }
+
+/*
+ * Declared in pvr_fw_info.c, these functions represent the entire bridge
+ * between the types defined above (and in pvr_device_info.h) and the ABI types
+ * defined in pvr_fw_info.h.
+ */
+int pvr_fw_load_metadata_and_device_info(struct pvr_device *pvr_dev);
+void pvr_fw_free_metadata_and_device_info(struct pvr_device *pvr_dev);
 
 /* Util functions defined in pvr_fw_util.c. These are intended for use in pvr_fw_<arch>.c files. */
 int
