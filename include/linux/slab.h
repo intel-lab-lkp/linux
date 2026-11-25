@@ -369,7 +369,9 @@ struct kmem_cache_args {
 	 *
 	 * The sheaves do not enforce NUMA placement of objects, so allocations
 	 * via kmem_cache_alloc_node() with a node specified other than
-	 * NUMA_NO_NODE will bypass them.
+	 * NUMA_NO_NODE or the local node will bypass them. When the local node
+	 * is specified, an object from the sheaves is used only if it is from
+	 * that node.
 	 *
 	 * Bulk allocation and free operations also try to use the cpu sheaves
 	 * and barn, but fallback to using slab pages directly.
