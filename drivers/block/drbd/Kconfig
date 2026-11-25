@@ -99,3 +99,7 @@ config BLK_DEV_DRBD_TCP_TLS
 	  https://github.com/oracle/ktls-utils.
 
 	  If unsure, say N.
+
+config DRBD_DAX
+	def_bool y
+	depends on BLK_DEV_DRBD && FS_DAX && ARCH_HAS_PMEM_API
