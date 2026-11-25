@@ -318,6 +318,8 @@ properties:
       - startek,kd070wvfpa
         # Team Source Display Technology TST043015CMHX 4.3" WQVGA TFT LCD panel
       - team-source-display,tst043015cmhx
+        # Guangxi Techshine Electronics Co., Ltd. TS-P0700031A 1024x600 LVDS TFT LCD panel
+      - techshine,ts-p0700031a
         # Tianma Micro-electronics P0700WXF1MBAA 7.0" WXGA (1280x800) LVDS TFT LCD panel
       - tianma,p0700wxf1mbaa
         # Tianma Micro-electronics TM050RDH03 5.0" WVGA TFT LCD panel
