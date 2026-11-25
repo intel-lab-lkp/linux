@@ -1680,9 +1680,12 @@ static int gadget_bind_driver(struct device *dev)
 	}
 	usb_gadget_enable_async_callbacks(udc);
 	udc->allow_connect = true;
-	ret = usb_udc_connect_control_locked(udc);
-	if (ret)
-		goto err_connect_control;
+	/* Without a pullup callback the core cannot control the pullup */
+	if (gadget->ops->pullup) {
+		ret = usb_udc_connect_control_locked(udc);
+		if (ret)
+			goto err_connect_control;
+	}
 
 	mutex_unlock(&udc->connect_lock);
 
