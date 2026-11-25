@@ -115,13 +115,7 @@ static int __init tsm_init(void)
 {
 	return class_register(&tsm_class);
 }
-module_init(tsm_init)
-
-static void __exit tsm_exit(void)
-{
-	class_unregister(&tsm_class);
-}
-module_exit(tsm_exit)
+subsys_initcall(tsm_init)
 
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("TEE Security Manager Class Device");
