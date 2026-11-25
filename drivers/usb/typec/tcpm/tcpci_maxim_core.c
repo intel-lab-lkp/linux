@@ -5,6 +5,7 @@
  * MAXIM TCPCI based TCPC driver
  */
 
+#include <linux/bitfield.h>
 #include <linux/interrupt.h>
 #include <linux/i2c.h>
 #include <linux/kernel.h>
@@ -55,6 +56,29 @@ static const struct regmap_config max_tcpci_regmap_config = {
 static struct max_tcpci_chip *tdata_to_max_tcpci(struct tcpci_data *tdata)
 {
 	return container_of(tdata, struct max_tcpci_chip, data);
+}
+
+static int max_tcpci_get_current_limit(struct tcpci *tcpci,
+				       struct tcpci_data *tdata)
+{
+	struct max_tcpci_chip *chip = tdata_to_max_tcpci(tdata);
+	u8 status;
+	int ret;
+
+	/* Relies on CHGDETEN being set; returns 0 until detection finishes. */
+	ret = max_tcpci_read8(chip, TCPC_VENDOR_BC_STATUS1, &status);
+	if (ret < 0)
+		return 0;
+
+	switch (FIELD_GET(CHGTYP, status)) {
+	case CHGTYP_SDP:
+		return 500;
+	case CHGTYP_CDP:
+	case CHGTYP_DCP:
+		return 1500;
+	default:
+		return 0;
+	}
 }
 
 static void max_tcpci_init_regs(struct max_tcpci_chip *chip)
@@ -523,6 +547,7 @@ static int max_tcpci_probe(struct i2c_client *client)
 	chip->data.check_contaminant = max_tcpci_check_contaminant;
 	chip->data.cable_comm_capable = true;
 	chip->data.attempt_vconn_swap_discovery = max_tcpci_attempt_vconn_swap_discovery;
+	chip->data.get_current_limit = max_tcpci_get_current_limit;
 
 	max_tcpci_init_regs(chip);
 	chip->tcpci = tcpci_register_port(chip->dev, &chip->data);

@@ -10,6 +10,14 @@
 #define VENDOR_CC_STATUS2                       0x85
 #define CC1_VUFP_RD0P5                          BIT(1)
 #define CC2_VUFP_RD0P5                          BIT(5)
+
+#define TCPC_VENDOR_BC_STATUS1                  0x87
+#define CHGTYP                                  GENMASK(1, 0)
+#define CHGTYP_NOT_ATTACHED                     0
+#define CHGTYP_SDP                              1
+#define CHGTYP_CDP                              2
+#define CHGTYP_DCP                              3
+
 #define TCPC_VENDOR_FLADC_STATUS                0x89
 
 #define TCPC_VENDOR_CC_CTRL1                    0x8c
