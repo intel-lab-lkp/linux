@@ -1,15 +1,20 @@
 // SPDX-License-Identifier: GPL-2.0-only
-//
-// Generated with linux-mdss-dsi-panel-driver-generator from vendor device tree:
-//	Copyright (c) 2013, The Linux Foundation. All rights reserved.
-// Copyright (c) 2024 Dzmitry Sankouski <dsankouski@gmail.com>
+/*
+ * Generated with linux-mdss-dsi-panel-driver-generator from vendor device tree:
+ *	Copyright (c) 2013, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2024 Dzmitry Sankouski <dsankouski@gmail.com>
+ * Copyright David Heidelberg
+ */
 
+#include <linux/backlight.h>
 #include <linux/delay.h>
 #include <linux/gpio/consumer.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/property.h>
 #include <linux/regulator/consumer.h>
+
+#include <video/mipi_display.h>
 
 #include <drm/display/drm_dsc.h>
 #include <drm/display/drm_dsc_helper.h>
@@ -26,6 +31,7 @@ struct s6e3ha8_desc {
 	const struct regulator_bulk_data *supplies;
 	unsigned int num_supplies;
 	bool broken_reset_polarity;
+	bool has_backlight;
 };
 
 struct s6e3ha8 {
@@ -41,6 +47,13 @@ static const struct regulator_bulk_data s6e3ha8_vddr_supplies[] = {
 	{ .supply = "vdd3" },
 	{ .supply = "vci" },
 	{ .supply = "vddr" },
+};
+
+static const struct regulator_bulk_data s6e3ha8_boost_supplies[] = {
+	{ .supply = "vdd3" },
+	{ .supply = "vci" },
+	{ .supply = "vddpos" },
+	{ .supply = "vddneg" },
 };
 
 static inline struct s6e3ha8 *to_s6e3ha8(struct drm_panel *panel)
@@ -73,6 +86,16 @@ static void s6e3ha8_amb577px01_wqhd_reset(struct s6e3ha8 *priv)
 	usleep_range(5000, 6000);
 	gpiod_set_value_cansleep(priv->reset_gpio, 1);
 	usleep_range(5000, 6000);
+	gpiod_set_value_cansleep(priv->reset_gpio, 0);
+	usleep_range(5000, 6000);
+}
+
+static void s6e3ha8_amb630qy01_reset(struct s6e3ha8 *priv)
+{
+	gpiod_set_value_cansleep(priv->reset_gpio, 0);
+	usleep_range(10000, 11000);
+	gpiod_set_value_cansleep(priv->reset_gpio, 1);
+	usleep_range(1000, 2000);
 	gpiod_set_value_cansleep(priv->reset_gpio, 0);
 	usleep_range(5000, 6000);
 }
@@ -271,6 +294,136 @@ static const struct s6e3ha8_desc s6e3ha8_amb577px01_wqhd_desc = {
 	.num_supplies = ARRAY_SIZE(s6e3ha8_vddr_supplies),
 };
 
+static int s6e3ha8_amb630qy01_prepare(struct drm_panel *panel)
+{
+	struct s6e3ha8 *priv = to_s6e3ha8(panel);
+	struct mipi_dsi_multi_context ctx = { .dsi = priv->dsi };
+	struct drm_dsc_picture_parameter_set pps;
+	int ret;
+
+	ret = regulator_bulk_enable(priv->desc->num_supplies, priv->supplies);
+	if (ret < 0)
+		return ret;
+
+	s6e3ha8_amb630qy01_reset(priv);
+
+	mipi_dsi_compression_mode_multi(&ctx, true);
+
+	mipi_dsi_dcs_exit_sleep_mode_multi(&ctx);
+	mipi_dsi_msleep(&ctx, 120);
+
+	mipi_dsi_dcs_write_seq_multi(&ctx, MIPI_DCS_WRITE_CONTROL_DISPLAY, 0x20);
+	mipi_dsi_dcs_set_tear_on_multi(&ctx, MIPI_DSI_DCS_TEAR_MODE_VBLANK);
+
+	/*
+	 * Unlike the downstream DSI host, the kernel one never sends the
+	 * column/page addresses, so set the RAM window explicitly.
+	 */
+	mipi_dsi_dcs_set_column_address_multi(&ctx, 0, 1440 - 1);
+	mipi_dsi_dcs_set_page_address_multi(&ctx, 0, 2960 - 1);
+
+	samsung_dsi_test_key_on_lvl2(&ctx);
+	mipi_dsi_dcs_write_seq_multi(&ctx, 0xb9,
+				     0x01, 0xb0, 0x81, 0x09, 0x00, 0x00, 0x00,
+				     0x11, 0x03); /* TSP HSYNC Setting */
+	samsung_dsi_test_key_off_lvl2(&ctx);
+
+	drm_dsc_pps_payload_pack(&pps, &priv->dsc);
+	mipi_dsi_picture_parameter_set_multi(&ctx, &pps);
+
+	if (ctx.accum_err) {
+		gpiod_set_value_cansleep(priv->reset_gpio, 1);
+		regulator_bulk_disable(priv->desc->num_supplies, priv->supplies);
+	}
+
+	return ctx.accum_err;
+}
+
+static int s6e3ha8_amb630qy01_enable(struct drm_panel *panel)
+{
+	struct s6e3ha8 *priv = to_s6e3ha8(panel);
+	struct mipi_dsi_multi_context ctx = { .dsi = priv->dsi };
+
+	mipi_dsi_dcs_set_display_on_multi(&ctx);
+
+	return ctx.accum_err;
+}
+
+static int s6e3ha8_amb630qy01_disable(struct drm_panel *panel)
+{
+	struct s6e3ha8 *priv = to_s6e3ha8(panel);
+	struct mipi_dsi_multi_context ctx = { .dsi = priv->dsi };
+
+	mipi_dsi_dcs_set_display_off_multi(&ctx);
+	mipi_dsi_msleep(&ctx, 10);
+	mipi_dsi_dcs_enter_sleep_mode_multi(&ctx);
+	mipi_dsi_msleep(&ctx, 120);
+
+	return ctx.accum_err;
+}
+
+static const struct drm_display_mode s6e3ha8_amb630qy01_mode = {
+	.clock = (1440 + 116 + 44 + 116) * (2960 + 124 + 120 + 80) * 60 / 1000,
+	.hdisplay = 1440,
+	.hsync_start = 1440 + 116,
+	.hsync_end = 1440 + 116 + 44,
+	.htotal = 1440 + 116 + 44 + 116,
+	.vdisplay = 2960,
+	.vsync_start = 2960 + 124,
+	.vsync_end = 2960 + 124 + 120,
+	.vtotal = 2960 + 124 + 120 + 80,
+	.width_mm = 70,
+	.height_mm = 144,
+};
+
+static const struct drm_panel_funcs s6e3ha8_amb630qy01_panel_funcs = {
+	.prepare = s6e3ha8_amb630qy01_prepare,
+	.unprepare = s6e3ha8_unprepare,
+	.get_modes = s6e3ha8_get_modes,
+	.enable = s6e3ha8_amb630qy01_enable,
+	.disable = s6e3ha8_amb630qy01_disable,
+};
+
+static const struct s6e3ha8_desc s6e3ha8_amb630qy01_desc = {
+	.funcs = &s6e3ha8_amb630qy01_panel_funcs,
+	.mode = &s6e3ha8_amb630qy01_mode,
+	.mode_flags = MIPI_DSI_MODE_LPM | MIPI_DSI_CLOCK_NON_CONTINUOUS |
+		      MIPI_DSI_MODE_NO_EOT_PACKET,
+	.supplies = s6e3ha8_boost_supplies,
+	.num_supplies = ARRAY_SIZE(s6e3ha8_boost_supplies),
+	.has_backlight = true,
+};
+
+static int s6e3ha8_bl_update_status(struct backlight_device *bl)
+{
+	struct mipi_dsi_device *dsi = bl_get_data(bl);
+	u16 brightness = backlight_get_brightness(bl);
+
+	return mipi_dsi_dcs_set_display_brightness_large(dsi, brightness);
+}
+
+/*
+ * No .get_brightness: DCS reads wedge the DSI host command engine and
+ * take the whole display pipeline down with it.
+ */
+static const struct backlight_ops s6e3ha8_bl_ops = {
+	.update_status = s6e3ha8_bl_update_status,
+};
+
+static struct backlight_device *
+s6e3ha8_create_backlight(struct mipi_dsi_device *dsi)
+{
+	struct device *dev = &dsi->dev;
+	const struct backlight_properties props = {
+		.type = BACKLIGHT_RAW,
+		.brightness = 512,
+		.max_brightness = 1023,
+	};
+
+	return devm_backlight_device_register(dev, dev_name(dev), dev, dsi,
+					      &s6e3ha8_bl_ops, &props);
+}
+
 static int s6e3ha8_probe(struct mipi_dsi_device *dsi)
 {
 	struct device *dev = &dsi->dev;
@@ -313,6 +466,13 @@ static int s6e3ha8_probe(struct mipi_dsi_device *dsi)
 
 	priv->panel.prepare_prev_first = true;
 
+	if (priv->desc->has_backlight) {
+		priv->panel.backlight = s6e3ha8_create_backlight(dsi);
+		if (IS_ERR(priv->panel.backlight))
+			return dev_err_probe(dev, PTR_ERR(priv->panel.backlight),
+					     "Failed to create backlight\n");
+	}
+
 	ret = devm_drm_panel_add(dev, &priv->panel);
 	if (ret)
 		return ret;
@@ -348,6 +508,9 @@ static const struct of_device_id s6e3ha8_of_match[] = {
 	}, {
 		.compatible = "samsung,s6e3ha8-amb577px01",
 		.data = &s6e3ha8_amb577px01_wqhd_desc,
+	}, {
+		.compatible = "samsung,s6e3ha8-amb630qy01",
+		.data = &s6e3ha8_amb630qy01_desc,
 	},
 	{ /* sentinel */ }
 };
