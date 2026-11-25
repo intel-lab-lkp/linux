@@ -146,13 +146,19 @@ static inline unsigned long irbar_read(void) {return 0;}
 static bool __init try_split_region(phys_addr_t base, phys_addr_t size, struct region *region)
 {
 	unsigned long  subreg, bslots, sslots;
-	phys_addr_t abase = base & ~(size - 1);
-	phys_addr_t asize = base + size - abase;
-	phys_addr_t p2size = 1 << __fls(asize);
-	phys_addr_t bdiff, sdiff;
+	phys_addr_t p2size = 1 << __fls(size);
+	phys_addr_t abase, asize, bdiff, sdiff;
 
-	if (p2size != asize)
+	/* The base must be aligned to the region size */
+	for (;;) {
+		abase = base & ~(p2size - 1);
+		asize = base + size - abase;
+		if (asize <= p2size)
+			break;
 		p2size *= 2;
+		if (!p2size)
+			return false;	/* would need a 4GB region */
+	}
 
 	bdiff = base - abase;
 	sdiff = p2size - asize;
