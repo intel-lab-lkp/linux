@@ -41,19 +41,11 @@ static const struct pci_tsm_ops *to_pci_tsm_ops(struct pci_tsm *tsm)
 
 struct tsm_dev *pci_tsm_get_device(struct pci_dev *pdev)
 {
-	const struct pci_tsm_ops *ops;
-	struct tsm_dev *tsm_dev;
-
 	guard(rwsem_read)(&pci_tsm_rwsem);
 	if (!pdev->tsm)
 		return NULL;
 
-	tsm_dev = pdev->tsm->tsm_dev;
-	ops = tsm_dev->pci_ops;
-	if (!try_module_get(ops->owner))
-		return ERR_PTR(-ENODEV);
-	get_device(&tsm_dev->dev);
-	return tsm_dev;
+	return tsm_get(pdev->tsm->tsm_dev);
 }
 EXPORT_SYMBOL_GPL(pci_tsm_get_device);
 
@@ -205,16 +197,16 @@ static int probe_fn(struct pci_dev *pdev, void *dsm)
 	return 0;
 }
 
-static int pci_tsm_connect(struct pci_dev *pdev, struct tsm_dev *tsm_dev)
+static int __pci_tsm_connect(struct pci_dev *pdev, struct tsm_dev *tsm_dev)
 {
 	int rc;
 	struct pci_tsm_pf0 *tsm_pf0;
 	const struct pci_tsm_ops *ops = tsm_dev->pci_ops;
-	struct pci_tsm *pci_tsm __free(tsm_remove) = ops->probe(tsm_dev, pdev);
 
 	/* connect() mutually exclusive with subfunction pci_tsm_init() */
 	lockdep_assert_held_write(&pci_tsm_rwsem);
 
+	struct pci_tsm *pci_tsm __free(tsm_remove) = ops->probe(tsm_dev, pdev);
 	if (!pci_tsm)
 		return -ENXIO;
 
@@ -247,6 +239,18 @@ static int pci_tsm_connect(struct pci_dev *pdev, struct tsm_dev *tsm_dev)
 	if (has_tee(pdev))
 		pci_tsm_walk_fns(pdev, probe_fn, pdev);
 	return 0;
+}
+
+static int pci_tsm_connect(struct pci_dev *pdev, struct tsm_dev *tsm_dev)
+{
+	int rc;
+
+	if (!tsm_trylock_registration(tsm_dev))
+		return -ENODEV;
+
+	rc = __pci_tsm_connect(pdev, tsm_dev);
+	tsm_unlock_registration(tsm_dev);
+	return rc;
 }
 
 static ssize_t connect_show(struct device *dev, struct device_attribute *attr,
@@ -323,31 +327,49 @@ static int remove_fn(struct pci_dev *pdev, void *data)
  * Each successful call requires a matching pci_tsm_context_put() for @pdev.
  * The caller must prevent removal of @pdev until that put, for example by
  * keeping the VFIO device open.
+ * The caller must also retain its tsm_get_device() reference until that put.
  *
  * Return: 0 on success, or a negative error code on failure.
  */
 int pci_tsm_context_get(struct pci_dev *pdev, struct tsm_dev *tsm_dev)
 {
 	struct pci_tsm_pf0 *pf0;
+	int rc = 0;
 
-	guard(rwsem_read)(&pci_tsm_rwsem);
-	if (!pdev->tsm || !is_link_tsm(pdev->tsm->tsm_dev))
-		return -EOPNOTSUPP;
+	down_read(&pci_tsm_rwsem);
+	if (!pdev->tsm || !is_link_tsm(pdev->tsm->tsm_dev)) {
+		rc = -EOPNOTSUPP;
+		goto out_unlock;
+	}
 
 	/* The device must be connected to the TSM requested by the caller. */
-	if (pdev->tsm->tsm_dev != tsm_dev)
-		return -EXDEV;
+	if (pdev->tsm->tsm_dev != tsm_dev) {
+		rc = -EXDEV;
+		goto out_unlock;
+	}
+
+	if (!tsm_trylock_registration(tsm_dev)) {
+		rc = -ENODEV;
+		goto out_unlock;
+	}
 
 	pf0 = to_pci_tsm_pf0(pdev->tsm);
-	guard(mutex)(&pf0->lock);
-	if (pf0->removing)
-		return -ENODEV;
+	mutex_lock(&pf0->lock);
+	if (pf0->removing) {
+		rc = -ENODEV;
+		goto out_unlock_mutex;
+	}
 
 	if (!pf0->dsm_context_users)
 		reinit_completion(&pf0->dsm_context_drain_complete);
 
 	pf0->dsm_context_users++;
-	return 0;
+out_unlock_mutex:
+	mutex_unlock(&pf0->lock);
+	tsm_unlock_registration(tsm_dev);
+out_unlock:
+	up_read(&pci_tsm_rwsem);
+	return rc;
 }
 EXPORT_SYMBOL_GPL(pci_tsm_context_get);
 
@@ -728,52 +750,93 @@ static void __pci_tsm_destroy(struct pci_dev *pdev, struct tsm_dev *tsm_dev)
 
 void pci_tsm_destroy(struct pci_dev *pdev)
 {
-	struct pci_tsm_pf0 *pf0 = NULL;
-	struct completion *drained;
-	bool interrupted = false;
-	long rc;
+	struct tsm_dev *tsm_dev = NULL;
+	bool registration_locked = false;
 
 	down_write(&pci_tsm_rwsem);
-	if (pdev->tsm &&
-	    is_link_tsm(pdev->tsm->tsm_dev) && is_pci_tsm_pf0(pdev)) {
-		pf0 = to_pci_tsm_pf0(pdev->tsm);
-		drained = &pf0->dsm_context_drain_complete;
+	if (pdev->tsm && is_link_tsm(pdev->tsm->tsm_dev) &&
+	    is_pci_tsm_pf0(pdev)) {
+		struct pci_tsm_pf0 *pf0 = to_pci_tsm_pf0(pdev->tsm);
+
 		mutex_lock(&pf0->lock);
 		pf0->removing = true;
-
 		mutex_unlock(&pf0->lock);
-		/* An unused DSM may never have completed dsm_context_drain_complete. */
-		if (pf0->dsm_context_users)
-			rc = try_wait_for_completion(drained);
-		else
-			rc = 1;
 
-		/* Context release needs the read side of pci_tsm_rwsem. */
-		up_write(&pci_tsm_rwsem);
-		while (rc <= 0) {
-			if (interrupted) {
-				rc = wait_for_completion_timeout(drained, HZ * 10);
+		if (pf0->dsm_context_users) {
+			struct completion *drain_complete;
+			const char *users;
+			bool interrupted = false;
+			long rc;
+
+			tsm_dev = pdev->tsm->tsm_dev;
+			/*
+			 * Retain tsm_dev and its users_drain_complete while waiting
+			 * without the TSM registration lock.
+			 */
+			get_device(&tsm_dev->dev);
+			registration_locked = tsm_trylock_registration(tsm_dev);
+			if (registration_locked) {
+				/* The TSM registration lock prevents freeing PF0 here. */
+				drain_complete = &pf0->dsm_context_drain_complete;
+				users = "IOMMUFD device assignment contexts";
 			} else {
-				rc = wait_for_completion_interruptible_timeout(drained,
-									       HZ * 10);
-				if (rc < 0) {
-					interrupted = true;
-					pci_warn(pdev, "Task \"%s\" (%d) blocked until vdevices are released\n",
-						 current->comm, task_pid_nr(current));
-				}
+				/*
+				 * The DSM completion is embedded in PF0.
+				 * If unregister runs while pci_tsm_rwsem
+				 * is dropped, it may free PF0 after the
+				 * last context signals the completion but
+				 * before this waiter finishes accessing
+				 * it.
+				 *
+				 * Without the registration lock, wait on
+				 * the TSM's users_drain_complete completion
+				 * instead. The device reference keeps that
+				 * completion allocated even if unregister
+				 * finishes before this waiter resumes.
+				 */
+
+				drain_complete = &tsm_dev->users_drain_complete;
+				users = "virtual IOMMUs and other TSM users";
 			}
-			if (!rc)
-				pci_warn(pdev, "TSM connection is in use, waiting for vdevices\n");
+
+			/* Context release needs the read side of pci_tsm_rwsem. */
+			up_write(&pci_tsm_rwsem);
+			rc = try_wait_for_completion(drain_complete);
+			while (rc <= 0) {
+				if (interrupted) {
+					rc = wait_for_completion_timeout(drain_complete, HZ * 10);
+				} else {
+					rc = wait_for_completion_interruptible_timeout(
+						drain_complete, HZ * 10);
+					if (rc < 0) {
+						interrupted = true;
+						pci_warn(pdev, "Task \"%s\" (%d) removing Device Security Manager; waiting for %s\n",
+							 current->comm, task_pid_nr(current),
+							 users);
+					}
+				}
+
+				if (!rc)
+					pci_warn(pdev, "Device Security Manager removal blocked; waiting for %s\n",
+						 users);
+			}
+
+			down_write(&pci_tsm_rwsem);
 		}
-		down_write(&pci_tsm_rwsem);
 	}
+
 	__pci_tsm_destroy(pdev, NULL);
 	up_write(&pci_tsm_rwsem);
+	if (registration_locked)
+		tsm_unlock_registration(tsm_dev);
+
+	if (tsm_dev)
+		put_device(&tsm_dev->dev);
 }
 
 void pci_tsm_init(struct pci_dev *pdev)
 {
-	guard(rwsem_read)(&pci_tsm_rwsem);
+	down_read(&pci_tsm_rwsem);
 
 	/*
 	 * Subfunctions are either probed synchronous with connect() or later
@@ -781,27 +844,36 @@ void pci_tsm_init(struct pci_dev *pdev)
 	 * connect() raced initial bus scanning.
 	 */
 	if (pdev->tsm)
-		return;
+		goto out_unlock;
 
 	if (pci_tsm_link_count) {
 		struct pci_dev *dsm = find_dsm_dev(pdev);
+		struct tsm_dev *tsm_dev;
 
 		if (!dsm)
-			return;
+			goto out_unlock;
 
 		/*
 		 * The only path to init a Device Security Manager capable
 		 * device is via connect().
 		 */
 		if (!dsm->tsm)
-			return;
+			goto out_unlock;
+
+		tsm_dev = dsm->tsm->tsm_dev;
+		if (!tsm_trylock_registration(tsm_dev))
+			goto out_unlock;
 
 		if (is_link_tsm(dsm->tsm->tsm_dev) &&
 		    to_pci_tsm_pf0(dsm->tsm)->removing)
-			return;
+			goto out_unlock_registration;
 
 		probe_fn(pdev, dsm);
+out_unlock_registration:
+		tsm_unlock_registration(tsm_dev);
 	}
+out_unlock:
+	up_read(&pci_tsm_rwsem);
 }
 
 void pci_tsm_unregister(struct tsm_dev *tsm_dev)
