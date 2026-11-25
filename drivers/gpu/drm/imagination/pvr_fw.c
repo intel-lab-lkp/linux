@@ -60,35 +60,17 @@ layout_get_sizes(struct pvr_device *pvr_dev)
 {
 	struct pvr_fw_mem *fw_mem = &pvr_dev->fw_dev.mem;
 
-	fw_mem->code_alloc_size = 0;
-	fw_mem->data_alloc_size = 0;
-	fw_mem->core_code_alloc_size = 0;
-	fw_mem->core_data_alloc_size = 0;
+	for (int seg = 0; seg < PVR_FW_SEGMENT_COUNT; seg++)
+		fw_mem->segments[seg].size = 0;
 
 	/* Extract section sizes from FW layout table. */
-	pvr_for_each_fw_section_desc(pvr_dev->fw_dev.metadata, desc) {
-		switch (desc->segment) {
-		case PVR_FW_SEGMENT_CODE:
-			fw_mem->code_alloc_size += desc->size;
-			break;
-		case PVR_FW_SEGMENT_DATA:
-			fw_mem->data_alloc_size += desc->size;
-			break;
-		case PVR_FW_SEGMENT_CORE_CODE:
-			fw_mem->core_code_alloc_size += desc->size;
-			break;
-		case PVR_FW_SEGMENT_CORE_DATA:
-			fw_mem->core_data_alloc_size += desc->size;
-			break;
-		default:
-			break;
-		}
-	}
+	pvr_for_each_fw_section_desc(pvr_dev->fw_dev.metadata, desc)
+		fw_mem->segments[desc->segment].size += desc->size;
 }
 
 int
-pvr_fw_find_mmu_segment(struct pvr_device *pvr_dev, u32 addr, u32 size, void *fw_code_ptr,
-			void *fw_data_ptr, void *fw_core_code_ptr, void *fw_core_data_ptr,
+pvr_fw_find_mmu_segment(struct pvr_device *pvr_dev, u32 addr, u32 size,
+			const struct pvr_fw_segment segments[static PVR_FW_SEGMENT_COUNT],
 			void **host_addr_out)
 {
 	u32 end_addr;
@@ -103,26 +85,8 @@ pvr_fw_find_mmu_segment(struct pvr_device *pvr_dev, u32 addr, u32 size, void *fw
 
 		if (addr >= entry_start_addr && addr < entry_end_addr &&
 		    end_addr > entry_start_addr && end_addr <= entry_end_addr) {
-			switch (desc->segment) {
-			case PVR_FW_SEGMENT_CODE:
-				*host_addr_out = fw_code_ptr;
-				break;
+			*host_addr_out = segments[desc->segment].host_copy;
 
-			case PVR_FW_SEGMENT_DATA:
-				*host_addr_out = fw_data_ptr;
-				break;
-
-			case PVR_FW_SEGMENT_CORE_CODE:
-				*host_addr_out = fw_core_code_ptr;
-				break;
-
-			case PVR_FW_SEGMENT_CORE_DATA:
-				*host_addr_out = fw_core_data_ptr;
-				break;
-
-			default:
-				return -EINVAL;
-			}
 			/* Direct Mem write to mapped memory */
 			addr -= desc->base_addr;
 			addr += desc->alloc_offset;
@@ -211,8 +175,8 @@ fw_sysinit_init(void *cpu_ptr, void *priv)
 	pvr_fw_object_get_fw_addr(fw_mem->sysdata_obj, &fwif_sysinit->fw_sys_data_fw_addr);
 	pvr_fw_object_get_fw_addr(fw_mem->gpu_util_fwcb_obj,
 				  &fwif_sysinit->gpu_util_fw_cb_ctl_fw_addr);
-	if (fw_mem->core_data_obj) {
-		pvr_fw_object_get_fw_addr(fw_mem->core_data_obj,
+	if (fw_mem->segments[PVR_FW_SEGMENT_CORE_DATA].obj) {
+		pvr_fw_object_get_fw_addr(fw_mem->segments[PVR_FW_SEGMENT_CORE_DATA].obj,
 					  &fwif_sysinit->coremem_data_store.fw_addr);
 	}
 
@@ -462,6 +426,76 @@ pvr_fw_destroy_structures(struct pvr_device *pvr_dev)
 	pvr_fw_object_destroy(fw_mem->fwif_connection_ctl_obj);
 }
 
+static void *
+pvr_fw_segment_map_standard(struct pvr_device *pvr_dev, struct pvr_fw_segment *segment,
+			    __always_unused u32 fixed_data_addr)
+{
+	return pvr_fw_object_create_and_map(pvr_dev, segment->size,
+					    PVR_BO_FW_FLAGS_DEVICE_UNCACHED,
+					    NULL, NULL,
+					    &segment->obj);
+}
+
+static void *
+pvr_fw_segment_map_code(struct pvr_device *pvr_dev, struct pvr_fw_segment *segment,
+			__always_unused u32 fixed_data_addr)
+{
+	/*
+	 * Code allocation must be at the start of the firmware heap, otherwise
+	 * firmware processor will be unable to boot.
+	 *
+	 * This has the useful side-effect that for every other object in the
+	 * driver, a firmware address of 0 is invalid.
+	 */
+	return pvr_fw_object_create_and_map_offset(pvr_dev, 0, segment->size,
+						   PVR_BO_FW_FLAGS_DEVICE_UNCACHED,
+						   NULL, NULL,
+						   &segment->obj);
+}
+
+static void *
+pvr_fw_segment_map_data(struct pvr_device *pvr_dev, struct pvr_fw_segment *segment,
+			u32 fixed_data_addr)
+{
+	if (pvr_dev->fw_dev.defs->has_fixed_data_addr) {
+		u32 base_addr = fixed_data_addr & pvr_dev->fw_dev.fw_heap_info.offset_mask;
+
+		return pvr_fw_object_create_and_map_offset(pvr_dev, base_addr,
+							   segment->size,
+							   PVR_BO_FW_FLAGS_DEVICE_UNCACHED,
+							   NULL, NULL,
+							   &segment->obj);
+	}
+
+	return pvr_fw_segment_map_standard(pvr_dev, segment, fixed_data_addr);
+}
+
+const struct pvr_fw_segment_desc pvr_fw_segment_descs[PVR_FW_SEGMENT_COUNT] = {
+	[PVR_FW_SEGMENT_CODE] = { .name = "code", .required = true,
+				  .create_and_map = pvr_fw_segment_map_code },
+	[PVR_FW_SEGMENT_DATA] = { .name = "data", .required = true,
+				  .create_and_map = pvr_fw_segment_map_data },
+	[PVR_FW_SEGMENT_CORE_CODE] = { .name = "core_code", .required = false,
+				       .create_and_map = pvr_fw_segment_map_standard },
+	[PVR_FW_SEGMENT_CORE_DATA] = { .name = "core_data", .required = false,
+				       .create_and_map = pvr_fw_segment_map_standard },
+};
+
+static void
+pvr_fw_destroy_segments(struct pvr_fw_segment segments[static PVR_FW_SEGMENT_COUNT])
+{
+	for (int i = PVR_FW_SEGMENT_COUNT - 1; i >= 0; i--) {
+		struct pvr_fw_segment *segment = &segments[i];
+
+		if (segment->obj)
+			pvr_fw_object_destroy(segment->obj);
+		segment->obj = NULL;
+
+		kfree(segment->host_copy);
+		segment->host_copy = NULL;
+	}
+}
+
 /**
  * pvr_fw_process() - Process firmware image, allocate FW memory and create boot
  *                    arguments
@@ -478,12 +512,12 @@ pvr_fw_process(struct pvr_device *pvr_dev, const struct firmware *firmware)
 {
 	struct drm_device *drm_dev = from_pvr_device(pvr_dev);
 	struct pvr_fw_mem *fw_mem = &pvr_dev->fw_dev.mem;
+	void *host_ptrs[PVR_FW_SEGMENT_COUNT] = { NULL };
 	const struct pvr_fw_section_desc *private_data;
-	u8 *fw_code_ptr;
-	u8 *fw_data_ptr;
-	u8 *fw_core_code_ptr;
-	u8 *fw_core_data_ptr;
 	int err;
+
+	for (int seg = 0; seg < PVR_FW_SEGMENT_COUNT; seg++)
+		fw_mem->segments[seg].id = seg;
 
 	layout_get_sizes(pvr_dev);
 
@@ -492,142 +526,58 @@ pvr_fw_process(struct pvr_device *pvr_dev, const struct firmware *firmware)
 		return -EINVAL;
 
 	/* Allocate and map memory for firmware sections. */
+	for (int seg = 0; seg < PVR_FW_SEGMENT_COUNT; seg++) {
+		const struct pvr_fw_segment_desc *desc = &pvr_fw_segment_descs[seg];
+		struct pvr_fw_segment *segment = &fw_mem->segments[seg];
+		void *host_ptr;
 
-	/*
-	 * Code allocation must be at the start of the firmware heap, otherwise
-	 * firmware processor will be unable to boot.
-	 *
-	 * This has the useful side-effect that for every other object in the
-	 * driver, a firmware address of 0 is invalid.
-	 */
-	fw_code_ptr = pvr_fw_object_create_and_map_offset(pvr_dev, 0, fw_mem->code_alloc_size,
-							  PVR_BO_FW_FLAGS_DEVICE_UNCACHED,
-							  NULL, NULL, &fw_mem->code_obj);
-	if (IS_ERR(fw_code_ptr)) {
-		drm_err(drm_dev, "Unable to allocate FW code memory\n");
-		return PTR_ERR(fw_code_ptr);
-	}
+		if (!segment->size) {
+			if (desc->required) {
+				drm_err(drm_dev, "Required FW segment '%s' is empty\n", desc->name);
+				err = -EINVAL;
+				goto err_out;
+			}
 
-	if (pvr_dev->fw_dev.defs->has_fixed_data_addr) {
-		u32 base_addr = private_data->base_addr & pvr_dev->fw_dev.fw_heap_info.offset_mask;
-
-		fw_data_ptr =
-			pvr_fw_object_create_and_map_offset(pvr_dev, base_addr,
-							    fw_mem->data_alloc_size,
-							    PVR_BO_FW_FLAGS_DEVICE_UNCACHED,
-							    NULL, NULL, &fw_mem->data_obj);
-	} else {
-		fw_data_ptr = pvr_fw_object_create_and_map(pvr_dev, fw_mem->data_alloc_size,
-							   PVR_BO_FW_FLAGS_DEVICE_UNCACHED,
-							   NULL, NULL, &fw_mem->data_obj);
-	}
-	if (IS_ERR(fw_data_ptr)) {
-		drm_err(drm_dev, "Unable to allocate FW data memory\n");
-		err = PTR_ERR(fw_data_ptr);
-		goto err_free_fw_code_obj;
-	}
-
-	/* Core code and data sections are optional. */
-	if (fw_mem->core_code_alloc_size) {
-		fw_core_code_ptr =
-			pvr_fw_object_create_and_map(pvr_dev, fw_mem->core_code_alloc_size,
-						     PVR_BO_FW_FLAGS_DEVICE_UNCACHED,
-						     NULL, NULL, &fw_mem->core_code_obj);
-		if (IS_ERR(fw_core_code_ptr)) {
-			drm_err(drm_dev,
-				"Unable to allocate FW core code memory\n");
-			err = PTR_ERR(fw_core_code_ptr);
-			goto err_free_fw_data_obj;
+			continue;
 		}
-	} else {
-		fw_core_code_ptr = NULL;
-	}
 
-	if (fw_mem->core_data_alloc_size) {
-		fw_core_data_ptr =
-			pvr_fw_object_create_and_map(pvr_dev, fw_mem->core_data_alloc_size,
-						     PVR_BO_FW_FLAGS_DEVICE_UNCACHED,
-						     NULL, NULL, &fw_mem->core_data_obj);
-		if (IS_ERR(fw_core_data_ptr)) {
-			drm_err(drm_dev,
-				"Unable to allocate FW core data memory\n");
-			err = PTR_ERR(fw_core_data_ptr);
-			goto err_free_fw_core_code_obj;
+		segment->host_copy = kzalloc(segment->size, GFP_KERNEL);
+		if (!segment->host_copy) {
+			err = -ENOMEM;
+			goto err_out;
 		}
-	} else {
-		fw_core_data_ptr = NULL;
+
+		host_ptr = desc->create_and_map(pvr_dev, segment, private_data->base_addr);
+		if (IS_ERR(host_ptr)) {
+			drm_err(drm_dev, "Failed to allocate FW memory for segment '%s'\n",
+				desc->name);
+			err = PTR_ERR(host_ptr);
+			goto err_out;
+		}
+
+		host_ptrs[seg] = host_ptr;
 	}
 
-	fw_mem->code = kzalloc(fw_mem->code_alloc_size, GFP_KERNEL);
-	fw_mem->data = kzalloc(fw_mem->data_alloc_size, GFP_KERNEL);
-	if (fw_mem->core_code_alloc_size)
-		fw_mem->core_code = kzalloc(fw_mem->core_code_alloc_size, GFP_KERNEL);
-	if (fw_mem->core_data_alloc_size)
-		fw_mem->core_data = kzalloc(fw_mem->core_data_alloc_size, GFP_KERNEL);
-
-	if (!fw_mem->code || !fw_mem->data ||
-	    (!fw_mem->core_code && fw_mem->core_code_alloc_size) ||
-	    (!fw_mem->core_data && fw_mem->core_data_alloc_size)) {
-		err = -ENOMEM;
-		goto err_free_kdata;
-	}
-
-	err = pvr_dev->fw_dev.defs->fw_process(pvr_dev, firmware,
-					       fw_mem->code, fw_mem->data, fw_mem->core_code,
-					       fw_mem->core_data, fw_mem->core_code_alloc_size);
-
+	err = pvr_dev->fw_dev.defs->fw_process(pvr_dev, firmware, fw_mem->segments);
 	if (err)
-		goto err_free_kdata;
+		goto err_out;
 
-	memcpy(fw_code_ptr, fw_mem->code, fw_mem->code_alloc_size);
-	memcpy(fw_data_ptr, fw_mem->data, fw_mem->data_alloc_size);
-	if (fw_mem->core_code)
-		memcpy(fw_core_code_ptr, fw_mem->core_code, fw_mem->core_code_alloc_size);
-	if (fw_mem->core_data)
-		memcpy(fw_core_data_ptr, fw_mem->core_data, fw_mem->core_data_alloc_size);
+	for (int seg = 0; seg < PVR_FW_SEGMENT_COUNT; seg++) {
+		const struct pvr_fw_segment *segment = &fw_mem->segments[seg];
 
-	/* We're finished with the firmware section memory on the CPU, unmap. */
-	if (fw_core_data_ptr) {
-		pvr_fw_object_vunmap(fw_mem->core_data_obj);
-		fw_core_data_ptr = NULL;
+		if (!segment->obj)
+			continue;
+
+		memcpy(host_ptrs[seg], segment->host_copy, segment->size);
+
+		host_ptrs[seg] = NULL;
+		pvr_fw_object_vunmap(segment->obj);
 	}
-	if (fw_core_code_ptr) {
-		pvr_fw_object_vunmap(fw_mem->core_code_obj);
-		fw_core_code_ptr = NULL;
-	}
-	pvr_fw_object_vunmap(fw_mem->data_obj);
-	fw_data_ptr = NULL;
-	pvr_fw_object_vunmap(fw_mem->code_obj);
-	fw_code_ptr = NULL;
 
 	return 0;
 
-err_free_kdata:
-	kfree(fw_mem->core_data);
-	kfree(fw_mem->core_code);
-	kfree(fw_mem->data);
-	kfree(fw_mem->code);
-
-	if (fw_core_data_ptr)
-		pvr_fw_object_vunmap(fw_mem->core_data_obj);
-	if (fw_mem->core_data_obj)
-		pvr_fw_object_destroy(fw_mem->core_data_obj);
-
-err_free_fw_core_code_obj:
-	if (fw_core_code_ptr)
-		pvr_fw_object_vunmap(fw_mem->core_code_obj);
-	if (fw_mem->core_code_obj)
-		pvr_fw_object_destroy(fw_mem->core_code_obj);
-
-err_free_fw_data_obj:
-	if (fw_data_ptr)
-		pvr_fw_object_vunmap(fw_mem->data_obj);
-	pvr_fw_object_destroy(fw_mem->data_obj);
-
-err_free_fw_code_obj:
-	if (fw_code_ptr)
-		pvr_fw_object_vunmap(fw_mem->code_obj);
-	pvr_fw_object_destroy(fw_mem->code_obj);
+err_out:
+	pvr_fw_destroy_segments(fw_mem->segments);
 
 	return err;
 }
@@ -653,24 +603,13 @@ pvr_fw_reinit_code_data(struct pvr_device *pvr_dev)
 	struct pvr_fw_mem *fw_mem = &pvr_dev->fw_dev.mem;
 	int err;
 
-	err = pvr_copy_to_fw(fw_mem->code_obj, fw_mem->code, fw_mem->code_alloc_size);
-	if (err)
-		return err;
+	for (int seg = 0; seg < PVR_FW_SEGMENT_COUNT; seg++) {
+		auto segment = &fw_mem->segments[seg];
 
-	err = pvr_copy_to_fw(fw_mem->data_obj, fw_mem->data, fw_mem->data_alloc_size);
-	if (err)
-		return err;
+		if (!segment->obj)
+			continue;
 
-	if (fw_mem->core_code) {
-		err = pvr_copy_to_fw(fw_mem->core_code_obj, fw_mem->core_code,
-				     fw_mem->core_code_alloc_size);
-		if (err)
-			return err;
-	}
-
-	if (fw_mem->core_data) {
-		err = pvr_copy_to_fw(fw_mem->core_data_obj, fw_mem->core_data,
-				     fw_mem->core_data_alloc_size);
+		err = pvr_copy_to_fw(segment->obj, segment->host_copy, segment->size);
 		if (err)
 			return err;
 	}
@@ -681,19 +620,7 @@ pvr_fw_reinit_code_data(struct pvr_device *pvr_dev)
 static void
 pvr_fw_cleanup(struct pvr_device *pvr_dev)
 {
-	struct pvr_fw_mem *fw_mem = &pvr_dev->fw_dev.mem;
-
-	kfree(fw_mem->core_data);
-	kfree(fw_mem->core_code);
-	kfree(fw_mem->data);
-	kfree(fw_mem->code);
-
-	if (fw_mem->core_code_obj)
-		pvr_fw_object_destroy(fw_mem->core_code_obj);
-	if (fw_mem->core_data_obj)
-		pvr_fw_object_destroy(fw_mem->core_data_obj);
-	pvr_fw_object_destroy(fw_mem->code_obj);
-	pvr_fw_object_destroy(fw_mem->data_obj);
+	pvr_fw_destroy_segments(pvr_dev->fw_dev.mem.segments);
 }
 
 /**

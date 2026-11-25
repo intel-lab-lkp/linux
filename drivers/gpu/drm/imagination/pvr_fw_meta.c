@@ -105,8 +105,9 @@ add_boot_arg(u32 **boot_conf, u32 param, u32 data)
 
 static int
 meta_ldr_cmd_loadmem(struct drm_device *drm_dev, const u8 *fw,
-		     struct rogue_meta_ldr_l1_data_blk *l1_data, u32 coremem_size, u8 *fw_code_ptr,
-		     u8 *fw_data_ptr, u8 *fw_core_code_ptr, u8 *fw_core_data_ptr, const u32 fw_size)
+		     struct rogue_meta_ldr_l1_data_blk *l1_data, u32 coremem_size,
+		     const struct pvr_fw_segment segments[static PVR_FW_SEGMENT_COUNT],
+		     const u32 fw_size)
 {
 	struct rogue_meta_ldr_l2_data_blk *l2_block =
 		(struct rogue_meta_ldr_l2_data_blk *)(fw +
@@ -134,8 +135,7 @@ meta_ldr_cmd_loadmem(struct drm_device *drm_dev, const u8 *fw,
 		offset &= ~META_MEM_GLOBAL_RANGE_BIT;
 	}
 
-	err = pvr_fw_find_mmu_segment(pvr_dev, offset, data_size, fw_code_ptr, fw_data_ptr,
-				      fw_core_code_ptr, fw_core_data_ptr, &write_addr);
+	err = pvr_fw_find_mmu_segment(pvr_dev, offset, data_size, segments, &write_addr);
 	if (err) {
 		drm_err(drm_dev,
 			"Addr 0x%x (size: %d) not found in any firmware segment",
@@ -151,7 +151,7 @@ meta_ldr_cmd_loadmem(struct drm_device *drm_dev, const u8 *fw,
 static int
 meta_ldr_cmd_zeromem(struct drm_device *drm_dev,
 		     struct rogue_meta_ldr_l1_data_blk *l1_data, u32 coremem_size,
-		     u8 *fw_code_ptr, u8 *fw_data_ptr, u8 *fw_core_code_ptr, u8 *fw_core_data_ptr)
+		     const struct pvr_fw_segment segments[static PVR_FW_SEGMENT_COUNT])
 {
 	struct pvr_device *pvr_dev = to_pvr_device(drm_dev);
 	u32 offset = l1_data->cmd_data[0];
@@ -167,8 +167,7 @@ meta_ldr_cmd_zeromem(struct drm_device *drm_dev,
 	/* Global range is aliased to local range */
 	offset &= ~META_MEM_GLOBAL_RANGE_BIT;
 
-	err = pvr_fw_find_mmu_segment(pvr_dev, offset, byte_count, fw_code_ptr, fw_data_ptr,
-				      fw_core_code_ptr, fw_core_data_ptr, &write_addr);
+	err = pvr_fw_find_mmu_segment(pvr_dev, offset, byte_count, segments, &write_addr);
 	if (err) {
 		drm_err(drm_dev,
 			"Addr 0x%x (size: %d) not found in any firmware segment",
@@ -240,10 +239,8 @@ meta_ldr_cmd_config(struct drm_device *drm_dev, const u8 *fw,
  *                                firmware sections
  * @pvr_dev: Device pointer.
  * @firmware: Pointer to firmware image.
- * @fw_code_ptr: Pointer to FW code section.
- * @fw_data_ptr: Pointer to FW data section.
- * @fw_core_code_ptr: Pointer to FW coremem code section.
- * @fw_core_data_ptr: Pointer to FW coremem data section.
+ * @segments: Firmware segments, includes host pointers for populating and
+ * firmware objects for reference.
  * @boot_conf_ptr: Pointer to boot config argument pointer.
  *
  * Returns :
@@ -252,9 +249,9 @@ meta_ldr_cmd_config(struct drm_device *drm_dev, const u8 *fw,
  */
 static int
 process_ldr_command_stream(struct pvr_device *pvr_dev,
-			   const struct firmware *firmware, u8 *fw_code_ptr,
-			   u8 *fw_data_ptr, u8 *fw_core_code_ptr,
-			   u8 *fw_core_data_ptr, u32 **boot_conf_ptr)
+			   const struct firmware *firmware,
+			   const struct pvr_fw_segment segments[static PVR_FW_SEGMENT_COUNT],
+			   u32 **boot_conf_ptr)
 {
 	struct drm_device *drm_dev = from_pvr_device(pvr_dev);
 	const u8 *fw = firmware->data;
@@ -287,10 +284,8 @@ process_ldr_command_stream(struct pvr_device *pvr_dev,
 		switch (l1_data->cmd & ROGUE_META_LDR_CMD_MASK)
 		case ROGUE_META_LDR_CMD_LOADMEM: {
 			err = meta_ldr_cmd_loadmem(drm_dev, fw, l1_data,
-						   coremem_size,
-						   fw_code_ptr, fw_data_ptr,
-						   fw_core_code_ptr,
-						   fw_core_data_ptr, fw_size);
+						   coremem_size, segments,
+						   fw_size);
 			if (err)
 				return err;
 			break;
@@ -301,10 +296,7 @@ process_ldr_command_stream(struct pvr_device *pvr_dev,
 
 		case ROGUE_META_LDR_CMD_ZEROMEM:
 			err = meta_ldr_cmd_zeromem(drm_dev, l1_data,
-						   coremem_size,
-						   fw_code_ptr, fw_data_ptr,
-						   fw_core_code_ptr,
-						   fw_core_data_ptr);
+						   coremem_size, segments);
 			if (err)
 				return err;
 			break;
@@ -361,6 +353,8 @@ configure_seg_id(u64 seg_out_addr, u32 seg_base, u32 seg_limit, u32 seg_id,
 static void
 configure_seg_mmu(struct pvr_device *pvr_dev, u32 **boot_conf_ptr)
 {
+	u64 data_seg_gpu_addr =
+		pvr_fw_obj_get_gpu_addr(pvr_dev->fw_dev.mem.segments[PVR_FW_SEGMENT_DATA].obj);
 	u64 seg_out_addr_top =
 		ROGUE_FW_SEGMMU_OUTADDR_TOP_SLC(MMU_CONTEXT_MAPPING_FWPRIV,
 						ROGUE_FW_SEGMMU_META_BIFDM_ID);
@@ -373,7 +367,7 @@ configure_seg_mmu(struct pvr_device *pvr_dev, u32 **boot_conf_ptr)
 		 */
 		if (desc->segment == PVR_FW_SEGMENT_DATA) {
 			u32 seg_id = ROGUE_FW_SEGMMU_DATA_ID;
-			u64 seg_out_addr = pvr_fw_obj_get_gpu_addr(pvr_dev->fw_dev.mem.data_obj);
+			u64 seg_out_addr = data_seg_gpu_addr;
 
 			seg_out_addr += desc->alloc_offset;
 			seg_out_addr |= seg_out_addr_top;
@@ -441,14 +435,13 @@ configure_meta_caches(u32 **boot_conf_ptr)
 
 static int
 pvr_meta_fw_process(struct pvr_device *pvr_dev, const struct firmware *firmware,
-		    u8 *fw_code_ptr, u8 *fw_data_ptr, u8 *fw_core_code_ptr, u8 *fw_core_data_ptr,
-		    u32 core_code_alloc_size)
+		    const struct pvr_fw_segment segments[static PVR_FW_SEGMENT_COUNT])
 {
-	struct pvr_fw_device *fw_dev = &pvr_dev->fw_dev;
+	const struct pvr_fw_segment *core_code_seg;
 	u32 *boot_conf;
 	int err;
 
-	boot_conf = ((u32 *)fw_code_ptr) + ROGUE_FW_BOOTLDR_CONF_OFFSET;
+	boot_conf = (u32 *)segments[PVR_FW_SEGMENT_CODE].host_copy + ROGUE_FW_BOOTLDR_CONF_OFFSET;
 
 	/* Slave port and JTAG accesses are privileged. */
 	add_boot_arg(&boot_conf, META_CR_SYSC_JTAG_THREAD,
@@ -457,9 +450,7 @@ pvr_meta_fw_process(struct pvr_device *pvr_dev, const struct firmware *firmware,
 	configure_seg_mmu(pvr_dev, &boot_conf);
 
 	/* Populate FW sections from LDR image. */
-	err = process_ldr_command_stream(pvr_dev, firmware, fw_code_ptr,
-					 fw_data_ptr, fw_core_code_ptr,
-					 fw_core_data_ptr, &boot_conf);
+	err = process_ldr_command_stream(pvr_dev, firmware, segments, &boot_conf);
 	if (err)
 		return err;
 
@@ -468,11 +459,12 @@ pvr_meta_fw_process(struct pvr_device *pvr_dev, const struct firmware *firmware,
 	/* End argument list. */
 	add_boot_arg(&boot_conf, 0, 0);
 
-	if (fw_dev->mem.core_code_obj) {
+	core_code_seg = &segments[PVR_FW_SEGMENT_CORE_CODE];
+	if (core_code_seg->obj) {
 		u32 core_code_fw_addr;
 
-		pvr_fw_object_get_fw_addr(fw_dev->mem.core_code_obj, &core_code_fw_addr);
-		add_boot_arg(&boot_conf, core_code_fw_addr, core_code_alloc_size);
+		pvr_fw_object_get_fw_addr(core_code_seg->obj, &core_code_fw_addr);
+		add_boot_arg(&boot_conf, core_code_fw_addr, core_code_seg->size);
 	} else {
 		add_boot_arg(&boot_conf, 0, 0);
 	}

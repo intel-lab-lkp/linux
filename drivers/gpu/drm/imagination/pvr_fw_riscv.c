@@ -21,6 +21,8 @@
 static int
 pvr_riscv_wrapper_init(struct pvr_device *pvr_dev)
 {
+	struct pvr_fw_mem *fw_mem = &pvr_dev->fw_dev.mem;
+
 	const u64 common_opts =
 		((u64)(ROGUE_FW_HEAP_RISCV_SIZE
 		       >> ROGUE_CR_FWCORE_ADDR_REMAP_CONFIGx_SIZE_ALIGNSHIFT)
@@ -28,8 +30,8 @@ pvr_riscv_wrapper_init(struct pvr_device *pvr_dev)
 		((u64)MMU_CONTEXT_MAPPING_FWPRIV
 		 << ROGUE_CR_FWCORE_ADDR_REMAP_CONFIGx_CBASE_SHIFT);
 
-	u64 code_addr = pvr_fw_obj_get_gpu_addr(pvr_dev->fw_dev.mem.code_obj);
-	u64 data_addr = pvr_fw_obj_get_gpu_addr(pvr_dev->fw_dev.mem.data_obj);
+	u64 code_addr = pvr_fw_obj_get_gpu_addr(fw_mem->segments[PVR_FW_SEGMENT_CODE].obj);
+	u64 data_addr = pvr_fw_obj_get_gpu_addr(fw_mem->segments[PVR_FW_SEGMENT_DATA].obj);
 
 	/* This condition allows us to OR the addresses into the register directly. */
 	static_assert(ROGUE_CR_FWCORE_ADDR_REMAP_CONFIGx_DEVVADDR_SHIFT ==
@@ -70,37 +72,34 @@ struct rogue_riscv_fw_boot_data {
 
 static int
 pvr_riscv_fw_process(struct pvr_device *pvr_dev, const struct firmware *firmware,
-		     u8 *fw_code_ptr, u8 *fw_data_ptr, u8 *fw_core_code_ptr, u8 *fw_core_data_ptr,
-		     u32 core_code_alloc_size)
+		     const struct pvr_fw_segment segments[static PVR_FW_SEGMENT_COUNT])
 {
-	struct pvr_fw_device *fw_dev = &pvr_dev->fw_dev;
-	struct pvr_fw_mem *fw_mem = &fw_dev->mem;
 	struct rogue_riscv_fw_boot_data *boot_data;
+	struct pvr_fw_object *core_code_obj;
+	struct pvr_fw_object *core_data_obj;
 	int err;
 
-	err = pvr_fw_process_elf_command_stream(pvr_dev, firmware->data, fw_code_ptr, fw_data_ptr,
-						fw_core_code_ptr, fw_core_data_ptr);
+	err = pvr_fw_process_elf_command_stream(pvr_dev, firmware->data, segments);
 	if (err)
-		goto err_out;
+		return err;
 
-	boot_data = (struct rogue_riscv_fw_boot_data *)fw_data_ptr;
+	boot_data = segments[PVR_FW_SEGMENT_DATA].host_copy;
 
-	if (fw_mem->core_code_obj) {
-		boot_data->coremem_code_dev_vaddr = pvr_fw_obj_get_gpu_addr(fw_mem->core_code_obj);
-		pvr_fw_object_get_fw_addr(fw_mem->core_code_obj, &boot_data->coremem_code_fw_addr);
-		boot_data->coremem_code_size = pvr_fw_obj_get_object_size(fw_mem->core_code_obj);
+	core_code_obj = segments[PVR_FW_SEGMENT_CORE_CODE].obj;
+	if (core_code_obj) {
+		boot_data->coremem_code_dev_vaddr = pvr_fw_obj_get_gpu_addr(core_code_obj);
+		pvr_fw_object_get_fw_addr(core_code_obj, &boot_data->coremem_code_fw_addr);
+		boot_data->coremem_code_size = pvr_fw_obj_get_object_size(core_code_obj);
 	}
 
-	if (fw_mem->core_data_obj) {
-		boot_data->coremem_data_dev_vaddr = pvr_fw_obj_get_gpu_addr(fw_mem->core_data_obj);
-		pvr_fw_object_get_fw_addr(fw_mem->core_data_obj, &boot_data->coremem_data_fw_addr);
-		boot_data->coremem_data_size = pvr_fw_obj_get_object_size(fw_mem->core_data_obj);
+	core_data_obj = segments[PVR_FW_SEGMENT_CORE_DATA].obj;
+	if (core_data_obj) {
+		boot_data->coremem_data_dev_vaddr = pvr_fw_obj_get_gpu_addr(core_data_obj);
+		pvr_fw_object_get_fw_addr(core_data_obj, &boot_data->coremem_data_fw_addr);
+		boot_data->coremem_data_size = pvr_fw_obj_get_object_size(core_data_obj);
 	}
 
 	return 0;
-
-err_out:
-	return err;
 }
 
 static int

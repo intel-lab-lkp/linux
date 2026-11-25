@@ -9,6 +9,7 @@
 
 #include <drm/drm_mm.h>
 
+#include <linux/array_size.h>
 #include <linux/types.h>
 
 /* Forward declarations from "pvr_device.h". */
@@ -136,6 +137,23 @@ struct pvr_fw_metadata {
 	struct pvr_fw_section_desc sections[] __counted_by(num_sections);
 };
 
+struct pvr_fw_segment {
+	enum pvr_fw_segment_name id;
+	u32 size;
+	struct pvr_fw_object *obj;
+	void *host_copy;
+};
+
+struct pvr_fw_segment_desc {
+	const char *name;
+	bool required;
+	void *(*create_and_map)(struct pvr_device *pvr_dev,
+				struct pvr_fw_segment *segment,
+				u32 fixed_data_addr);
+};
+
+extern const struct pvr_fw_segment_desc pvr_fw_segment_descs[PVR_FW_SEGMENT_COUNT];
+
 /**
  * struct pvr_fw_defs - FW processor function table and static definitions
  */
@@ -173,11 +191,8 @@ struct pvr_fw_defs {
 	 * Load and process firmware image.
 	 * @pvr_dev: Target PowerVR device.
 	 * @firmware: Pointer to firmware image.
-	 * @fw_code_ptr: Pointer to firmware code section.
-	 * @fw_data_ptr: Pointer to firmware data section.
-	 * @fw_core_code_ptr: Pointer to firmware core code section. May be %NULL.
-	 * @fw_core_data_ptr: Pointer to firmware core data section. May be %NULL.
-	 * @core_code_alloc_size: Total allocation size of core code section.
+	 * @segments: Firmware segments, includes host pointers for populating
+	 * and firmware objects for reference.
 	 *
 	 * This function is mandatory.
 	 *
@@ -186,8 +201,7 @@ struct pvr_fw_defs {
 	 *  * Any appropriate error on failure.
 	 */
 	int (*fw_process)(struct pvr_device *pvr_dev, const struct firmware *firmware,
-			  u8 *fw_code_ptr, u8 *fw_data_ptr, u8 *fw_core_code_ptr,
-			  u8 *fw_core_data_ptr, u32 core_code_alloc_size);
+			  const struct pvr_fw_segment segments[static PVR_FW_SEGMENT_COUNT]);
 
 	/**
 	 * @vm_map:
@@ -274,53 +288,8 @@ struct pvr_fw_defs {
  * struct pvr_fw_mem - FW memory allocations
  */
 struct pvr_fw_mem {
-	/** @code_obj: Object representing firmware code. */
-	struct pvr_fw_object *code_obj;
-
-	/** @data_obj: Object representing firmware data. */
-	struct pvr_fw_object *data_obj;
-
-	/**
-	 * @core_code_obj: Object representing firmware core code. May be
-	 *                 %NULL if firmware does not contain this section.
-	 */
-	struct pvr_fw_object *core_code_obj;
-
-	/**
-	 * @core_data_obj: Object representing firmware core data. May be
-	 *                 %NULL if firmware does not contain this section.
-	 */
-	struct pvr_fw_object *core_data_obj;
-
-	/** @code: Driver-side copy of firmware code. */
-	u8 *code;
-
-	/** @data: Driver-side copy of firmware data. */
-	u8 *data;
-
-	/**
-	 * @core_code: Driver-side copy of firmware core code. May be %NULL if firmware does not
-	 *             contain this section.
-	 */
-	u8 *core_code;
-
-	/**
-	 * @core_data: Driver-side copy of firmware core data. May be %NULL if firmware does not
-	 *             contain this section.
-	 */
-	u8 *core_data;
-
-	/** @code_alloc_size: Allocation size of firmware code section. */
-	u32 code_alloc_size;
-
-	/** @data_alloc_size: Allocation size of firmware data section. */
-	u32 data_alloc_size;
-
-	/** @core_code_alloc_size: Allocation size of firmware core code section. */
-	u32 core_code_alloc_size;
-
-	/** @core_data_alloc_size: Allocation size of firmware core data section. */
-	u32 core_data_alloc_size;
+	/** @segments: Firmware segments loaded from file. */
+	struct pvr_fw_segment segments[PVR_FW_SEGMENT_COUNT];
 
 	/**
 	 * @fwif_connection_ctl_obj: Object representing FWIF connection control
@@ -472,8 +441,8 @@ pvr_fw_heap_info_init(struct pvr_device *pvr_dev, u32 log2_size, u32 reserved_si
 const struct pvr_fw_section_desc *
 pvr_fw_get_section_desc(struct pvr_device *pvr_dev, enum pvr_fw_section_name section);
 int
-pvr_fw_find_mmu_segment(struct pvr_device *pvr_dev, u32 addr, u32 size, void *fw_code_ptr,
-			void *fw_data_ptr, void *fw_core_code_ptr, void *fw_core_data_ptr,
+pvr_fw_find_mmu_segment(struct pvr_device *pvr_dev, u32 addr, u32 size,
+			const struct pvr_fw_segment segments[static PVR_FW_SEGMENT_COUNT],
 			void **host_addr_out);
 
 int
@@ -565,9 +534,9 @@ int pvr_fw_load_metadata_and_device_info(struct pvr_device *pvr_dev,
 void pvr_fw_free_metadata_and_device_info(struct pvr_device *pvr_dev);
 
 /* Util functions defined in pvr_fw_util.c. These are intended for use in pvr_fw_<arch>.c files. */
-int
-pvr_fw_process_elf_command_stream(struct pvr_device *pvr_dev, const u8 *fw, u8 *fw_code_ptr,
-				  u8 *fw_data_ptr, u8 *fw_core_code_ptr, u8 *fw_core_data_ptr);
+int pvr_fw_process_elf_command_stream(
+	struct pvr_device *pvr_dev, const u8 *fw,
+	const struct pvr_fw_segment segments[static PVR_FW_SEGMENT_COUNT]);
 
 int
 pvr_fw_info_get(const struct pvr_device *pvr_dev, struct drm_pvr_ioctl_dev_query_args *args);

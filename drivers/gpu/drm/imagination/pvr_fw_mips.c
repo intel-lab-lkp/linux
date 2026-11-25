@@ -32,11 +32,11 @@ pvr_mips_fini(struct pvr_device *pvr_dev)
 
 static int
 pvr_mips_fw_process(struct pvr_device *pvr_dev, const struct firmware *firmware,
-		    u8 *fw_code_ptr, u8 *fw_data_ptr, u8 *fw_core_code_ptr, u8 *fw_core_data_ptr,
-		    u32 core_code_alloc_size)
+		    const struct pvr_fw_segment segments[static PVR_FW_SEGMENT_COUNT])
 {
-	struct pvr_fw_device *fw_dev = &pvr_dev->fw_dev;
-	struct pvr_fw_mips_data *fw_data = fw_dev->processor_data.mips_data;
+	struct pvr_fw_mips_data *fw_data = pvr_dev->fw_dev.processor_data.mips_data;
+	struct pvr_fw_object *code_obj = segments[PVR_FW_SEGMENT_CODE].obj;
+	struct pvr_fw_object *data_obj = segments[PVR_FW_SEGMENT_DATA].obj;
 	const struct pvr_fw_section_desc *boot_code_entry;
 	const struct pvr_fw_section_desc *boot_data_entry;
 	const struct pvr_fw_section_desc *exception_code_entry;
@@ -45,8 +45,7 @@ pvr_mips_fw_process(struct pvr_device *pvr_dev, const struct firmware *firmware,
 	dma_addr_t dma_addr;
 	int err;
 
-	err = pvr_fw_process_elf_command_stream(pvr_dev, firmware->data, fw_code_ptr, fw_data_ptr,
-						fw_core_code_ptr, fw_core_data_ptr);
+	err = pvr_fw_process_elf_command_stream(pvr_dev, firmware->data, segments);
 	if (err)
 		return err;
 
@@ -56,22 +55,22 @@ pvr_mips_fw_process(struct pvr_device *pvr_dev, const struct firmware *firmware,
 	if (!boot_code_entry || !boot_data_entry || !exception_code_entry)
 		return -EINVAL;
 
-	WARN_ON(pvr_gem_get_dma_addr(fw_dev->mem.code_obj->gem, boot_code_entry->alloc_offset,
+	WARN_ON(pvr_gem_get_dma_addr(code_obj->gem, boot_code_entry->alloc_offset,
 				     &fw_data->boot_code_dma_addr));
-	WARN_ON(pvr_gem_get_dma_addr(fw_dev->mem.data_obj->gem, boot_data_entry->alloc_offset,
+	WARN_ON(pvr_gem_get_dma_addr(data_obj->gem, boot_data_entry->alloc_offset,
 				     &fw_data->boot_data_dma_addr));
-	WARN_ON(pvr_gem_get_dma_addr(fw_dev->mem.code_obj->gem,
-				     exception_code_entry->alloc_offset,
+	WARN_ON(pvr_gem_get_dma_addr(code_obj->gem, exception_code_entry->alloc_offset,
 				     &fw_data->exception_code_dma_addr));
 
 	stack_entry = pvr_fw_get_section_desc(pvr_dev, PVR_FW_SECTION_STACK);
 	if (!stack_entry)
 		return -EINVAL;
 
-	boot_data = (struct rogue_mipsfw_boot_data *)(fw_data_ptr + boot_data_entry->alloc_offset +
+	boot_data = (struct rogue_mipsfw_boot_data *)(segments[PVR_FW_SEGMENT_DATA].host_copy +
+						      boot_data_entry->alloc_offset +
 						      ROGUE_MIPSFW_BOOTLDR_CONF_OFFSET);
 
-	WARN_ON(pvr_fw_object_get_dma_addr(fw_dev->mem.data_obj, stack_entry->alloc_offset,
+	WARN_ON(pvr_fw_object_get_dma_addr(data_obj, stack_entry->alloc_offset,
 					   &dma_addr));
 	boot_data->stack_phys_addr = dma_addr;
 

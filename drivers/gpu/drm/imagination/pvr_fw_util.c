@@ -16,19 +16,16 @@
  *                                       firmware sections
  * @pvr_dev: Device pointer.
  * @fw: Pointer to firmware image.
- * @fw_code_ptr: Pointer to FW code section.
- * @fw_data_ptr: Pointer to FW data section.
- * @fw_core_code_ptr: Pointer to FW coremem code section.
- * @fw_core_data_ptr: Pointer to FW coremem data section.
+ * @segments: Firmware segments, includes host pointers for populating and
+ * firmware objects for reference.
  *
- * Returns :
+ * Returns:
  *  * 0 on success, or
- *  * -EINVAL on any error in ELF command stream.
+ *  * -%EINVAL on any error in ELF command stream.
  */
 int
 pvr_fw_process_elf_command_stream(struct pvr_device *pvr_dev, const u8 *fw,
-				  u8 *fw_code_ptr, u8 *fw_data_ptr,
-				  u8 *fw_core_code_ptr, u8 *fw_core_data_ptr)
+				  const struct pvr_fw_segment segments[static PVR_FW_SEGMENT_COUNT])
 {
 	struct elf32_hdr *header = (struct elf32_hdr *)fw;
 	struct elf32_phdr *program_header = (struct elf32_phdr *)(fw + header->e_phoff);
@@ -43,8 +40,8 @@ pvr_fw_process_elf_command_stream(struct pvr_device *pvr_dev, const u8 *fw,
 			continue;
 
 		err = pvr_fw_find_mmu_segment(pvr_dev, program_header->p_vaddr,
-					      program_header->p_memsz, fw_code_ptr, fw_data_ptr,
-					      fw_core_code_ptr, fw_core_data_ptr, &write_addr);
+					      program_header->p_memsz, segments,
+					      &write_addr);
 		if (err) {
 			drm_err(drm_dev,
 				"Addr 0x%x (size: %d) not found in any firmware segment",
