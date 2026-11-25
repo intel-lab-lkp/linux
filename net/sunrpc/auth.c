@@ -269,15 +269,17 @@ rpcauth_unhash_cred_locked(struct rpc_cred *cred)
 static bool
 rpcauth_unhash_cred(struct rpc_cred *cred)
 {
-	spinlock_t *cache_lock;
+	struct rpc_cred_cache *cache;
 	bool ret;
 
 	if (!test_bit(RPCAUTH_CRED_HASHED, &cred->cr_flags))
 		return false;
-	cache_lock = &cred->cr_auth->au_credcache->lock;
-	spin_lock(cache_lock);
+	cache = READ_ONCE(cred->cr_auth->au_credcache);
+	if (!cache)
+		return false;
+	spin_lock(&cache->lock);
 	ret = rpcauth_unhash_cred_locked(cred);
-	spin_unlock(cache_lock);
+	spin_unlock(&cache->lock);
 	return ret;
 }
 
@@ -409,7 +411,7 @@ rpcauth_destroy_credcache(struct rpc_auth *auth)
 	struct rpc_cred_cache *cache = auth->au_credcache;
 
 	if (cache) {
-		auth->au_credcache = NULL;
+		WRITE_ONCE(auth->au_credcache, NULL);
 		rpcauth_clear_credcache(cache);
 		kfree(cache->hashtable);
 		kfree(cache);
