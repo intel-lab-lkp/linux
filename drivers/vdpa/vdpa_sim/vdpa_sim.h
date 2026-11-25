@@ -45,6 +45,7 @@ struct vdpasim_dev_attr {
 	u32 nas;
 
 	void (*work_fn)(struct vdpasim *vdpasim);
+	int (*validate_features)(u64 features);
 	void (*get_config)(struct vdpasim *vdpasim, void *config);
 	void (*set_config)(struct vdpasim *vdpasim, const void *config);
 	int (*get_stats)(struct vdpasim *vdpasim, u16 idx,

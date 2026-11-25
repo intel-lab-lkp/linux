@@ -32,7 +32,9 @@
 				 (1ULL << VIRTIO_BLK_F_TOPOLOGY) | \
 				 (1ULL << VIRTIO_BLK_F_MQ)       | \
 				 (1ULL << VIRTIO_BLK_F_DISCARD)  | \
-				 (1ULL << VIRTIO_BLK_F_WRITE_ZEROES))
+				 (1ULL << VIRTIO_BLK_F_WRITE_ZEROES)  | \
+				 (1ULL << VIRTIO_BLK_F_REQ_FLAGS)  | \
+				 (1ULL << VIRTIO_BLK_F_REQ_FLAGS_OUT_FUA))
 
 #define VDPASIM_BLK_CAPACITY	0x40000
 #define VDPASIM_BLK_SIZE_MAX	0x1000
@@ -371,6 +373,15 @@ out:
 		vdpasim_schedule_work(vdpasim);
 }
 
+static int vdpasim_blk_validate_features(u64 features)
+{
+	if ((features & BIT_ULL(VIRTIO_BLK_F_REQ_FLAGS_OUT_FUA)) &&
+	    !(features & BIT_ULL(VIRTIO_BLK_F_REQ_FLAGS)))
+		return -EINVAL;
+
+	return 0;
+}
+
 static void vdpasim_blk_get_config(struct vdpasim *vdpasim, void *config)
 {
 	struct virtio_blk_config *blk_config = config;
@@ -424,6 +435,7 @@ static int vdpasim_blk_dev_add(struct vdpa_mgmt_dev *mdev, const char *name,
 	dev_attr.nas = VDPASIM_BLK_AS_NUM;
 	dev_attr.alloc_size = sizeof(struct vdpasim_blk);
 	dev_attr.config_size = sizeof(struct virtio_blk_config);
+	dev_attr.validate_features = vdpasim_blk_validate_features;
 	dev_attr.get_config = vdpasim_blk_get_config;
 	dev_attr.work_fn = vdpasim_blk_work;
 	dev_attr.free = vdpasim_blk_free;
