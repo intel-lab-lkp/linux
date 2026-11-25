@@ -306,6 +306,13 @@ iommufd_viommu_alloc_hwpt_nested(struct iommufd_viommu *viommu, u32 flags,
 		return ERR_PTR(-EOPNOTSUPP);
 	if (!user_data->len)
 		return ERR_PTR(-EOPNOTSUPP);
+
+	if (!viommu->hwpt)
+		return ERR_PTR(-EOPNOTSUPP);
+
+	if (viommu->backing != IOMMUFD_VIOMMU_BACKING_IOMMU)
+		return ERR_PTR(-EOPNOTSUPP);
+
 	if (!viommu->ops || !viommu->ops->alloc_domain_nested)
 		return ERR_PTR(-EOPNOTSUPP);
 
