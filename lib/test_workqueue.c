@@ -142,7 +142,7 @@ static int __init run_bench(int n_threads, const char *scope, const char *label)
 	struct thread_ctx *ctxs;
 	u64 *all_latencies;
 	ktime_t start, end;
-	int cpu, i, j, ret;
+	int cpu, i, ret;
 	s64 elapsed_us;
 
 	ret = set_affn_scope(scope);
@@ -159,26 +159,12 @@ static int __init run_bench(int n_threads, const char *scope, const char *label)
 		return -ENOMEM;
 	}
 
-	total_items = (unsigned long)n_threads * wq_items;
+	total_items = size_mul(n_threads, wq_items);
 	all_latencies = kvmalloc_array(total_items, sizeof(u64), GFP_KERNEL);
 	if (!all_latencies) {
 		kfree(tasks);
 		kfree(ctxs);
 		return -ENOMEM;
-	}
-
-	/* Allocate per-thread latency arrays */
-	for (i = 0; i < n_threads; i++) {
-		ctxs[i].latencies = kvmalloc_array(wq_items, sizeof(u64),
-						   GFP_KERNEL);
-		if (!ctxs[i].latencies) {
-			while (--i >= 0)
-				kvfree(ctxs[i].latencies);
-			kvfree(all_latencies);
-			kfree(tasks);
-			kfree(ctxs);
-			return -ENOMEM;
-		}
 	}
 
 	atomic_set(&threads_done, n_threads);
@@ -193,6 +179,8 @@ static int __init run_bench(int n_threads, const char *scope, const char *label)
 
 		ctxs[i].cpu = cpu;
 		ctxs[i].items = wq_items;
+		/* Each thread fills its own slice for the final in-place sort. */
+		ctxs[i].latencies = &all_latencies[(size_t)i * wq_items];
 		init_completion(&ctxs[i].work_done);
 
 		tasks[i] = kthread_create(bench_kthread_fn, &ctxs[i],
@@ -230,14 +218,6 @@ static int __init run_bench(int n_threads, const char *scope, const char *label)
 	end = ktime_get();
 	elapsed_us = ktime_us_delta(end, start);
 
-	/* Merge all per-thread latencies and sort for percentile calculation */
-	j = 0;
-	for (i = 0; i < n_threads; i++) {
-		memcpy(&all_latencies[j], ctxs[i].latencies,
-		       wq_items * sizeof(u64));
-		j += wq_items;
-	}
-
 	sort(all_latencies, total_items, sizeof(u64), cmp_u64, NULL);
 
 	pr_info("test_workqueue:   %-16s %llu items/sec\tp50=%llu\tp90=%llu\tp95=%llu ns\n",
@@ -249,8 +229,6 @@ static int __init run_bench(int n_threads, const char *scope, const char *label)
 
 	ret = 0;
 out_free:
-	for (i = 0; i < n_threads; i++)
-		kvfree(ctxs[i].latencies);
 	kvfree(all_latencies);
 	kfree(tasks);
 	kfree(ctxs);
