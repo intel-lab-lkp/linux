@@ -403,11 +403,6 @@ static void hists__find_annotations(struct hists *hists,
 	struct rb_node *nd = rb_first_cached(&hists->entries), *next;
 	int key = K_RIGHT;
 
-	if (ann->type_stat)
-		print_annotate_data_stat(&ann_data_stat);
-	if (ann->insn_stat)
-		print_annotate_item_stat(&ann_insn_stat, "Instruction");
-
 	while (nd) {
 		struct hist_entry *he = rb_entry(nd, struct hist_entry, rb_node);
 		struct annotation *notes;
@@ -541,12 +536,25 @@ find_next:
 	}
 }
 
+static void print_annotation_stats(struct perf_annotate *ann)
+{
+	/* pr_warning reaches the terminal: the browser mode has exited. */
+	if (ann->type_stat && !ann->data_type)
+		pr_warning("Warning: --type-stat needs --data-type\n");
+
+	if (ann->data_type && ann->type_stat)
+		print_annotate_data_stat(&ann_data_stat);
+	if (ann->insn_stat)
+		print_annotate_item_stat(&ann_insn_stat, "Instruction");
+}
+
 static int __cmd_annotate(struct perf_annotate *ann)
 {
 	int ret;
 	struct perf_session *session = ann->session;
 	struct evsel *pos;
 	u64 total_nr_samples;
+	bool stats_first;
 
 	if (ann->cpu_list) {
 		ret = perf_session__cpu_bitmap(session, ann->cpu_list,
@@ -608,24 +616,43 @@ static int __cmd_annotate(struct perf_annotate *ann)
 			 * An event group needs to display other events too.
 			 * Let's delay printing until other events are processed.
 			 */
-			if (symbol_conf.event_group) {
-				if (!evsel__is_group_leader(pos)) {
-					struct hists *leader_hists;
+			if (symbol_conf.event_group &&
+			    !evsel__is_group_leader(pos)) {
+				struct hists *leader_hists;
 
-					leader_hists = evsel__hists(evsel__leader(pos));
-					hists__match(leader_hists, hists);
-					hists__link(leader_hists, hists);
-				}
-				continue;
+				leader_hists = evsel__hists(evsel__leader(pos));
+				hists__match(leader_hists, hists);
+				hists__link(leader_hists, hists);
 			}
-
-			hists__find_annotations(hists, pos, ann);
 		}
 	}
 
 	if (total_nr_samples == 0) {
 		ui__error("The %s data has no samples!\n", session->data->path);
 		goto out;
+	}
+
+	/*
+	 * The data type pass resolves the samples while the histograms are
+	 * being resorted, so with nothing left to resolve during the
+	 * annotation print the stats are complete here: show them before
+	 * the annotations, where judging quality needs no scrolling.  With
+	 * --code-with-type and in a browser the types are resolved while
+	 * printing, there the stats go after the annotations, once the
+	 * totals are final.
+	 */
+	stats_first = use_browser == 0 && !annotate_opts.code_with_type;
+	if (stats_first)
+		print_annotation_stats(ann);
+
+	/* Standalone events, group leaders are printed together below */
+	evlist__for_each_entry(session->evlist, pos) {
+		struct hists *hists = evsel__hists(pos);
+
+		if (symbol_conf.event_group || hists->stats.nr_samples == 0)
+			continue;
+
+		hists__find_annotations(hists, pos, ann);
 	}
 
 	/* Display group events together */
@@ -650,6 +677,15 @@ static int __cmd_annotate(struct perf_annotate *ann)
 		ui_progress__finish();
 
 		hists__find_annotations(hists, pos, ann);
+	}
+
+	if (!stats_first && (ann->insn_stat || ann->type_stat)) {
+		if (use_browser == 1) {
+			/* Leave the alternate screen before printing to the terminal. */
+			ui__exit(false);
+			use_browser = 0;
+		}
+		print_annotation_stats(ann);
 	}
 
 	if (use_browser == 2) {
