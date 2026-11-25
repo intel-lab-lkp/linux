@@ -1423,11 +1423,11 @@ iwl_mld_set_netdetect_info(struct iwl_mld *mld,
 			   struct iwl_mld_netdetect_res *netdetect_res,
 			   unsigned long matched_profiles)
 {
-	int i;
+	int i, n_matches = 0;
 
 	for_each_set_bit(i, &matched_profiles, netdetect_cfg->n_match_sets) {
 		struct cfg80211_wowlan_nd_match *match;
-		int idx, j, n_channels = 0;
+		int idx, j, n_channels = 0, n_set = 0;
 		struct iwl_scan_offload_profile_match *matches =
 			(void *)netdetect_res->matches;
 
@@ -1436,10 +1436,9 @@ iwl_mld_set_netdetect_info(struct iwl_mld *mld,
 				hweight8(matches[i].matching_channels[k]);
 		match = kzalloc_flex(*match, channels, n_channels);
 		if (!match)
-			return;
+			break;
 
-		netdetect_info->matches[netdetect_info->n_matches] = match;
-		netdetect_info->n_matches++;
+		netdetect_info->matches[n_matches++] = match;
 
 		/* We inverted the order of the SSIDs in the scan
 		 * request, so invert the index here.
@@ -1451,17 +1450,21 @@ iwl_mld_set_netdetect_info(struct iwl_mld *mld,
 		       netdetect_cfg->match_sets[idx].ssid.ssid,
 		       match->ssid.ssid_len);
 
-		if (netdetect_cfg->n_channels < n_channels)
+		if (netdetect_cfg->n_channels < n_channels) {
+			match->n_channels = 0;
 			continue;
+		}
 
 		for_each_set_bit(j,
 				 (unsigned long *)&matches[i].matching_channels[0],
 				 sizeof(matches[i].matching_channels)) {
-			match->channels[match->n_channels] =
+			match->channels[n_set++] =
 				netdetect_cfg->channels[j]->center_freq;
-			match->n_channels++;
 		}
+		match->n_channels = n_set;
 	}
+
+	netdetect_info->n_matches = n_matches;
 }
 
 static void
