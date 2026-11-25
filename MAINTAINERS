@@ -6875,6 +6875,18 @@ F:	tools/testing/selftests/cgroup/test_hugetlb_memcg.c
 F:	tools/testing/selftests/cgroup/test_kmem.c
 F:	tools/testing/selftests/cgroup/test_memcontrol.c
 
+CORE DRIVER FOR NVIDIA GPUS [RUST]
+M:	Danilo Krummrich <dakr@kernel.org>
+M:	Alexandre Courbot <acourbot@nvidia.com>
+L:	nova-gpu@lists.linux.dev
+S:	Supported
+W:	https://rust-for-linux.com/nova-gpu-driver
+B:	https://gitlab.freedesktop.org/drm/nova/-/issues
+C:	irc://irc.oftc.net/nouveau
+T:	git https://gitlab.freedesktop.org/drm/rust/kernel.git drm-rust-next
+F:	Documentation/gpu/nova/
+F:	drivers/gpu/nova-core/
+
 COREBOOT CFR FIRMWARE ATTRIBUTES DRIVER
 M:	Sean Rhodes <sean@starlabs.systems>
 L:	chrome-platform@lists.linux.dev
@@ -8577,18 +8589,6 @@ C:	irc://irc.oftc.net/nouveau
 T:	git https://gitlab.freedesktop.org/drm/misc/kernel.git
 F:	drivers/gpu/drm/nouveau/
 F:	include/uapi/drm/nouveau_drm.h
-
-CORE DRIVER FOR NVIDIA GPUS [RUST]
-M:	Danilo Krummrich <dakr@kernel.org>
-M:	Alexandre Courbot <acourbot@nvidia.com>
-L:	nova-gpu@lists.linux.dev
-S:	Supported
-W:	https://rust-for-linux.com/nova-gpu-driver
-B:	https://gitlab.freedesktop.org/drm/nova/-/issues
-C:	irc://irc.oftc.net/nouveau
-T:	git https://gitlab.freedesktop.org/drm/rust/kernel.git drm-rust-next
-F:	Documentation/gpu/nova/
-F:	drivers/gpu/nova-core/
 
 DRM DRIVER FOR NVIDIA GPUS [RUST]
 M:	Danilo Krummrich <dakr@kernel.org>
