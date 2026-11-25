@@ -9,6 +9,7 @@
 #include "pvr_vm_mips.h"
 
 #include <linux/err.h>
+#include <linux/firmware.h>
 #include <linux/types.h>
 
 #define ROGUE_FW_HEAP_MIPS_BASE 0xC0000000
@@ -30,7 +31,7 @@ pvr_mips_fini(struct pvr_device *pvr_dev)
 }
 
 static int
-pvr_mips_fw_process(struct pvr_device *pvr_dev, const u8 *fw,
+pvr_mips_fw_process(struct pvr_device *pvr_dev, const struct firmware *firmware,
 		    u8 *fw_code_ptr, u8 *fw_data_ptr, u8 *fw_core_code_ptr, u8 *fw_core_data_ptr,
 		    u32 core_code_alloc_size)
 {
@@ -44,7 +45,7 @@ pvr_mips_fw_process(struct pvr_device *pvr_dev, const u8 *fw,
 	dma_addr_t dma_addr;
 	int err;
 
-	err = pvr_fw_process_elf_command_stream(pvr_dev, fw, fw_code_ptr, fw_data_ptr,
+	err = pvr_fw_process_elf_command_stream(pvr_dev, firmware->data, fw_code_ptr, fw_data_ptr,
 						fw_core_code_ptr, fw_core_data_ptr);
 	if (err)
 		return err;

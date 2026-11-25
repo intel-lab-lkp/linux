@@ -229,9 +229,9 @@ pvr_fw_info_header_validate(struct pvr_device *pvr_dev,
 }
 
 static const struct pvr_fw_metadata *
-pvr_fw_load_metadata(struct pvr_device *pvr_dev, ptrdiff_t *device_info_offset_out)
+pvr_fw_load_metadata(struct pvr_device *pvr_dev, const struct firmware *firmware,
+		     ptrdiff_t *device_info_offset_out)
 {
-	const struct firmware *firmware = pvr_dev->fw_dev.firmware;
 	struct drm_device *drm_dev = from_pvr_device(pvr_dev);
 	const struct pvr_fw_layout_entry *layout_entries;
 	const struct pvr_fw_info_header *header;
@@ -307,6 +307,7 @@ pvr_fw_get_device_info(struct pvr_device *pvr_dev, const void *device_info_ptr)
  * pvr_fw_load_metadata_and_device_info() - Load firmware metadata and
  * initialise device information
  * @pvr_dev: Target PowerVR device.
+ * @firmware: Firmware to load from.
  *
  * This function must be called before querying device information.
  *
@@ -315,13 +316,13 @@ pvr_fw_get_device_info(struct pvr_device *pvr_dev, const void *device_info_ptr)
  *  * -%EINVAL if firmware validation fails.
  */
 int
-pvr_fw_load_metadata_and_device_info(struct pvr_device *pvr_dev)
+pvr_fw_load_metadata_and_device_info(struct pvr_device *pvr_dev,
+				     const struct firmware *firmware)
 {
-	const struct firmware *firmware = pvr_dev->fw_dev.firmware;
 	const struct pvr_fw_metadata *metadata;
 	ptrdiff_t device_info_offset = 0;
 
-	metadata = pvr_fw_load_metadata(pvr_dev, &device_info_offset);
+	metadata = pvr_fw_load_metadata(pvr_dev, firmware, &device_info_offset);
 	if (IS_ERR(metadata))
 		return PTR_ERR(metadata);
 

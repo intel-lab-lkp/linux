@@ -350,14 +350,6 @@ pvr_build_firmware_filename(struct pvr_device *pvr_dev, const char *base,
 			 gpu_id->v, gpu_id->n, gpu_id->c, major);
 }
 
-static void
-pvr_release_firmware(void *data)
-{
-	struct pvr_device *pvr_dev = data;
-
-	release_firmware(pvr_dev->fw_dev.firmware);
-}
-
 /**
  * pvr_request_firmware() - Load firmware for a PowerVR device
  * @pvr_dev: Target PowerVR device.
@@ -365,11 +357,11 @@ pvr_release_firmware(void *data)
  * See pvr_build_firmware_filename() for details on firmware file naming.
  *
  * Return:
- *  * 0 on success,
+ *  * A pointer to the loaded firmware on success,
  *  * Any error returned by pvr_build_firmware_filename(), or
  *  * Any error returned by request_firmware().
  */
-static int
+static const struct firmware *
 pvr_request_firmware(struct pvr_device *pvr_dev)
 {
 	struct drm_device *drm_dev = &pvr_dev->base;
@@ -380,7 +372,7 @@ pvr_request_firmware(struct pvr_device *pvr_dev)
 	filename = pvr_build_firmware_filename(pvr_dev, "powervr/rogue",
 					       PVR_FW_VERSION_MAJOR);
 	if (!filename)
-		return -ENOMEM;
+		return ERR_PTR(-ENOMEM);
 
 	/*
 	 * This function takes a copy of &filename, meaning we can free our
@@ -396,14 +388,12 @@ pvr_request_firmware(struct pvr_device *pvr_dev)
 	drm_info(drm_dev, "loaded firmware %s\n", filename);
 	kfree(filename);
 
-	pvr_dev->fw_dev.firmware = fw;
-
-	return devm_add_action_or_reset(drm_dev->dev, pvr_release_firmware, pvr_dev);
+	return fw;
 
 err_free_filename:
 	kfree(filename);
 
-	return err;
+	return ERR_PTR(err);
 }
 
 /**
@@ -701,40 +691,52 @@ pvr_device_info_validate(struct pvr_device *pvr_dev)
 static int
 pvr_device_gpu_init(struct pvr_device *pvr_dev)
 {
+	const struct firmware *firmware;
 	int err;
 
 	err = pvr_load_gpu_id(pvr_dev);
 	if (err)
 		return err;
 
-	err = pvr_request_firmware(pvr_dev);
-	if (err)
-		return err;
+	firmware = pvr_request_firmware(pvr_dev);
+	if (IS_ERR(firmware))
+		return PTR_ERR(firmware);
 
-	err = pvr_fw_load_metadata_and_device_info(pvr_dev);
+	err = pvr_fw_load_metadata_and_device_info(pvr_dev, firmware);
 	if (err)
-		return err;
+		goto out_release_firmware;
 
-	if (PVR_HAS_FEATURE(pvr_dev, meta))
+	if (PVR_HAS_FEATURE(pvr_dev, meta)) {
 		pvr_dev->fw_dev.processor_type = PVR_FW_PROCESSOR_TYPE_META;
-	else if (PVR_HAS_FEATURE(pvr_dev, mips))
+	} else if (PVR_HAS_FEATURE(pvr_dev, mips)) {
 		pvr_dev->fw_dev.processor_type = PVR_FW_PROCESSOR_TYPE_MIPS;
-	else if (PVR_HAS_FEATURE(pvr_dev, riscv_fw_processor))
+	} else if (PVR_HAS_FEATURE(pvr_dev, riscv_fw_processor)) {
 		pvr_dev->fw_dev.processor_type = PVR_FW_PROCESSOR_TYPE_RISCV;
-	else
-		return -EINVAL;
+	} else {
+		err = -EINVAL;
+		goto out_release_firmware;
+	}
 
 	err = pvr_device_info_validate(pvr_dev);
 	if (err)
-		return err;
+		goto out_release_firmware;
 
 	pvr_stream_create_musthave_masks(pvr_dev);
 
 	err = pvr_set_dma_info(pvr_dev);
 	if (err)
-		return err;
+		goto out_release_firmware;
 
-	return pvr_fw_init(pvr_dev);
+	err = pvr_fw_init(pvr_dev, firmware);
+	if (err)
+		goto out_release_firmware;
+
+	err = 0;
+
+out_release_firmware:
+	release_firmware(firmware);
+
+	return err;
 }
 
 /**

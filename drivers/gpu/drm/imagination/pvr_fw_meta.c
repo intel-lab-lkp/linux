@@ -239,7 +239,7 @@ meta_ldr_cmd_config(struct drm_device *drm_dev, const u8 *fw,
  * process_ldr_command_stream() - Process LDR firmware image and populate
  *                                firmware sections
  * @pvr_dev: Device pointer.
- * @fw: Pointer to firmware image.
+ * @firmware: Pointer to firmware image.
  * @fw_code_ptr: Pointer to FW code section.
  * @fw_data_ptr: Pointer to FW data section.
  * @fw_core_code_ptr: Pointer to FW coremem code section.
@@ -251,16 +251,18 @@ meta_ldr_cmd_config(struct drm_device *drm_dev, const u8 *fw,
  *  * -EINVAL on any error in LDR command stream.
  */
 static int
-process_ldr_command_stream(struct pvr_device *pvr_dev, const u8 *fw, u8 *fw_code_ptr,
+process_ldr_command_stream(struct pvr_device *pvr_dev,
+			   const struct firmware *firmware, u8 *fw_code_ptr,
 			   u8 *fw_data_ptr, u8 *fw_core_code_ptr,
 			   u8 *fw_core_data_ptr, u32 **boot_conf_ptr)
 {
 	struct drm_device *drm_dev = from_pvr_device(pvr_dev);
+	const u8 *fw = firmware->data;
 	struct rogue_meta_ldr_block_hdr *ldr_header =
 		(struct rogue_meta_ldr_block_hdr *)fw;
 	struct rogue_meta_ldr_l1_data_blk *l1_data =
 		(struct rogue_meta_ldr_l1_data_blk *)(fw + ldr_header->sl_data);
-	const u32 fw_size = pvr_dev->fw_dev.firmware->size;
+	const u32 fw_size = firmware->size;
 	int err;
 
 	u32 *boot_conf = boot_conf_ptr ? *boot_conf_ptr : NULL;
@@ -438,7 +440,7 @@ configure_meta_caches(u32 **boot_conf_ptr)
 }
 
 static int
-pvr_meta_fw_process(struct pvr_device *pvr_dev, const u8 *fw,
+pvr_meta_fw_process(struct pvr_device *pvr_dev, const struct firmware *firmware,
 		    u8 *fw_code_ptr, u8 *fw_data_ptr, u8 *fw_core_code_ptr, u8 *fw_core_data_ptr,
 		    u32 core_code_alloc_size)
 {
@@ -455,7 +457,8 @@ pvr_meta_fw_process(struct pvr_device *pvr_dev, const u8 *fw,
 	configure_seg_mmu(pvr_dev, &boot_conf);
 
 	/* Populate FW sections from LDR image. */
-	err = process_ldr_command_stream(pvr_dev, fw, fw_code_ptr, fw_data_ptr, fw_core_code_ptr,
+	err = process_ldr_command_stream(pvr_dev, firmware, fw_code_ptr,
+					 fw_data_ptr, fw_core_code_ptr,
 					 fw_core_data_ptr, &boot_conf);
 	if (err)
 		return err;

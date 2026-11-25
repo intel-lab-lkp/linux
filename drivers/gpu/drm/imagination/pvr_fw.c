@@ -466,6 +466,7 @@ pvr_fw_destroy_structures(struct pvr_device *pvr_dev)
  * pvr_fw_process() - Process firmware image, allocate FW memory and create boot
  *                    arguments
  * @pvr_dev: Device pointer.
+ * @firmware: Firmware to process
  *
  * Returns:
  *  * 0 on success, or
@@ -473,11 +474,10 @@ pvr_fw_destroy_structures(struct pvr_device *pvr_dev)
  *  * Any error returned by pvr_fw_object_create_and_map().
  */
 static int
-pvr_fw_process(struct pvr_device *pvr_dev)
+pvr_fw_process(struct pvr_device *pvr_dev, const struct firmware *firmware)
 {
 	struct drm_device *drm_dev = from_pvr_device(pvr_dev);
 	struct pvr_fw_mem *fw_mem = &pvr_dev->fw_dev.mem;
-	const u8 *fw = pvr_dev->fw_dev.firmware->data;
 	const struct pvr_fw_section_desc *private_data;
 	u8 *fw_code_ptr;
 	u8 *fw_data_ptr;
@@ -572,7 +572,7 @@ pvr_fw_process(struct pvr_device *pvr_dev)
 		goto err_free_kdata;
 	}
 
-	err = pvr_dev->fw_dev.defs->fw_process(pvr_dev, fw,
+	err = pvr_dev->fw_dev.defs->fw_process(pvr_dev, firmware,
 					       fw_mem->code, fw_mem->data, fw_mem->core_code,
 					       fw_mem->core_data, fw_mem->core_code_alloc_size);
 
@@ -743,6 +743,7 @@ pvr_fw_heap_info_init(struct pvr_device *pvr_dev, u32 log2_size, u32 reserved_si
 /**
  * pvr_fw_init() - Initialise and boot firmware
  * @pvr_dev: Target PowerVR device
+ * @firmware: Firmware to load
  *
  * On successful completion of the function the PowerVR device will be
  * initialised and ready to use.
@@ -754,7 +755,7 @@ pvr_fw_heap_info_init(struct pvr_device *pvr_dev, u32 log2_size, u32 reserved_si
  *  * -%ETIMEDOUT if firmware processor fails to boot or on register poll timeout.
  */
 int
-pvr_fw_init(struct pvr_device *pvr_dev)
+pvr_fw_init(struct pvr_device *pvr_dev, const struct firmware *firmware)
 {
 	static const struct pvr_fw_defs *fw_defs[PVR_FW_PROCESSOR_TYPE_COUNT] = {
 		[PVR_FW_PROCESSOR_TYPE_META] = &pvr_fw_defs_meta,
@@ -783,7 +784,7 @@ pvr_fw_init(struct pvr_device *pvr_dev)
 	if (err)
 		goto err_mm_takedown;
 
-	err = pvr_fw_process(pvr_dev);
+	err = pvr_fw_process(pvr_dev, firmware);
 	if (err)
 		goto err_mm_takedown;
 

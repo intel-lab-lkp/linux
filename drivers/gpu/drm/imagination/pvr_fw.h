@@ -18,6 +18,9 @@ struct pvr_file;
 /* Forward declaration from "pvr_vm.h". */
 struct pvr_vm_context;
 
+/* Forward declaration from <linux/firmware.h> */
+struct firmware;
+
 #define ROGUE_FWIF_FWCCB_NUMCMDS_LOG2 5
 
 #define ROGUE_FWIF_KCCB_NUMCMDS_LOG2_DEFAULT 7
@@ -169,7 +172,7 @@ struct pvr_fw_defs {
 	 *
 	 * Load and process firmware image.
 	 * @pvr_dev: Target PowerVR device.
-	 * @fw: Pointer to firmware image.
+	 * @firmware: Pointer to firmware image.
 	 * @fw_code_ptr: Pointer to firmware code section.
 	 * @fw_data_ptr: Pointer to firmware data section.
 	 * @fw_core_code_ptr: Pointer to firmware core code section. May be %NULL.
@@ -182,7 +185,7 @@ struct pvr_fw_defs {
 	 *  * 0 on success, or
 	 *  * Any appropriate error on failure.
 	 */
-	int (*fw_process)(struct pvr_device *pvr_dev, const u8 *fw,
+	int (*fw_process)(struct pvr_device *pvr_dev, const struct firmware *firmware,
 			  u8 *fw_code_ptr, u8 *fw_data_ptr, u8 *fw_core_code_ptr,
 			  u8 *fw_core_data_ptr, u32 core_code_alloc_size);
 
@@ -357,9 +360,6 @@ struct pvr_fw_mem {
 };
 
 struct pvr_fw_device {
-	/** @firmware: Handle to the firmware loaded into the device. */
-	const struct firmware *firmware;
-
 	/** @metadata: Metadata loaded from firmware headers. */
 	const struct pvr_fw_metadata *metadata;
 
@@ -456,7 +456,7 @@ extern const struct pvr_fw_defs pvr_fw_defs_meta;
 extern const struct pvr_fw_defs pvr_fw_defs_mips;
 extern const struct pvr_fw_defs pvr_fw_defs_riscv;
 
-int pvr_fw_init(struct pvr_device *pvr_dev);
+int pvr_fw_init(struct pvr_device *pvr_dev, const struct firmware *firmware);
 void pvr_fw_fini(struct pvr_device *pvr_dev);
 
 int pvr_wait_for_fw_boot(struct pvr_device *pvr_dev);
@@ -560,7 +560,8 @@ pvr_fw_obj_get_object_size(struct pvr_fw_object *fw_obj)
  * between the types defined above (and in pvr_device_info.h) and the ABI types
  * defined in pvr_fw_info.h.
  */
-int pvr_fw_load_metadata_and_device_info(struct pvr_device *pvr_dev);
+int pvr_fw_load_metadata_and_device_info(struct pvr_device *pvr_dev,
+					 const struct firmware *firmware);
 void pvr_fw_free_metadata_and_device_info(struct pvr_device *pvr_dev);
 
 /* Util functions defined in pvr_fw_util.c. These are intended for use in pvr_fw_<arch>.c files. */
