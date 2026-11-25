@@ -48,3 +48,13 @@ __rust_helper void rust_helper_vma_end_read(struct vm_area_struct *vma)
 {
 	vma_end_read(vma);
 }
+
+__rust_helper unsigned int rust_helper_memalloc_flags_save(unsigned int flags)
+{
+	return memalloc_flags_save(flags);
+}
+
+__rust_helper void rust_helper_memalloc_flags_restore(unsigned int flags)
+{
+	memalloc_flags_restore(flags);
+}
