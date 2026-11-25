@@ -418,8 +418,16 @@ static void __scrub_blocked_if_needed(struct btrfs_fs_info *fs_info)
 	}
 }
 
-static void scrub_pause_on(struct btrfs_fs_info *fs_info)
+static void scrub_pause_on(struct scrub_ctx *sctx)
 {
+	struct btrfs_fs_info *fs_info = sctx->fs_info;
+
+	/*
+	 * These paths are populated from the commit root without using
+	 * commit_root_sem so they are not valid across pauses.
+	 */
+	btrfs_release_path(&sctx->extent_path);
+	btrfs_release_path(&sctx->csum_path);
 	atomic_inc(&fs_info->scrubs_paused);
 	wake_up(&fs_info->scrub_pause_wait);
 }
@@ -434,10 +442,10 @@ static void scrub_pause_off(struct btrfs_fs_info *fs_info)
 	wake_up(&fs_info->scrub_pause_wait);
 }
 
-static void scrub_blocked_if_needed(struct btrfs_fs_info *fs_info)
+static void scrub_blocked_if_needed(struct scrub_ctx *sctx)
 {
-	scrub_pause_on(fs_info);
-	scrub_pause_off(fs_info);
+	scrub_pause_on(sctx);
+	scrub_pause_off(sctx->fs_info);
 }
 
 static noinline_for_stack void scrub_free_ctx(struct scrub_ctx *sctx)
@@ -2204,7 +2212,7 @@ static int scrub_raid56_parity_stripe(struct scrub_ctx *sctx,
 		return ret;
 
 	if (atomic_read(&fs_info->scrub_pause_req))
-		scrub_blocked_if_needed(fs_info);
+		scrub_blocked_if_needed(sctx);
 
 	spin_lock(&bg->lock);
 	if (test_bit(BLOCK_GROUP_FLAG_REMOVED, &bg->runtime_flags)) {
@@ -2350,7 +2358,7 @@ static int scrub_simple_mirror(struct scrub_ctx *sctx,
 			break;
 
 		if (atomic_read(&fs_info->scrub_pause_req))
-			scrub_blocked_if_needed(fs_info);
+			scrub_blocked_if_needed(sctx);
 
 		spin_lock(&bg->lock);
 		if (test_bit(BLOCK_GROUP_FLAG_REMOVED, &bg->runtime_flags)) {
@@ -2492,7 +2500,7 @@ static noinline_for_stack int scrub_stripe(struct scrub_ctx *sctx,
 	/* Extent_path should be released by now. */
 	ASSERT(sctx->extent_path.nodes[0] == NULL);
 
-	scrub_blocked_if_needed(fs_info);
+	scrub_blocked_if_needed(sctx);
 
 	if (sctx->is_dev_replace &&
 	    btrfs_dev_is_sequential(sctx->wr_tgtdev, physical)) {
@@ -2837,7 +2845,7 @@ int scrub_enumerate_chunks(struct scrub_ctx *sctx,
 		 * -> btrfs_commit_transaction()
 		 * -> btrfs_scrub_pause()
 		 */
-		scrub_pause_on(fs_info);
+		scrub_pause_on(sctx);
 
 		/*
 		 * Don't do chunk preallocation for scrub.
