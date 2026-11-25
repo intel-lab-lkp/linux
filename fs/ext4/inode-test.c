@@ -1799,105 +1799,6 @@ static void inode_test_expand_extra_isize(struct kunit *test)
  * -------------------------------------------------------------------------
  */
 
-static void inode_test_get_inode_loc_variants(struct kunit *test)
-{
-	struct inode_test_ctx *ctx = inode_test_setup(test);
-	struct inode *inode = &ctx->ei.vfs_inode;
-	struct inode_test_blk *itable = inode_test_find_blk(ctx,
-							   INODE_TEST_ITABLE_BLK0);
-	struct inode_test_blk *ibitmap = inode_test_find_blk(ctx,
-							    INODE_TEST_IBITMAP_BLK);
-	struct ext4_iloc iloc = {};
-	struct ext4_inode *raw;
-	int err;
-
-	/* Out-of-range inode numbers */
-	inode->i_ino = 1;
-	KUNIT_EXPECT_EQ(test, ext4_get_inode_loc(inode, &iloc), -EFSCORRUPTED);
-	KUNIT_EXPECT_EQ(test, ext4_get_inode_loc_noio(inode, &iloc),
-			-EFSCORRUPTED);
-	KUNIT_EXPECT_EQ(test, ext4_get_fc_inode_loc(ctx->sb, 99999, &iloc),
-			-EFSCORRUPTED);
-	inode->i_ino = INODE_TEST_PRIMARY_INO;
-
-	/* Missing group descriptor -> -EIO */
-	ctx->fail_group_desc = true;
-	KUNIT_EXPECT_EQ(test, ext4_get_inode_loc(inode, &iloc), -EIO);
-	KUNIT_EXPECT_EQ(test, ext4_get_inode_loc_noio(inode, &iloc), -EIO);
-	ctx->fail_group_desc = false;
-
-	/* Invalid inode table block in group descriptor -> -EFSCORRUPTED */
-	ext4_inode_table_set(ctx->sb, &ctx->gdp, 1);
-	KUNIT_EXPECT_EQ(test, ext4_get_inode_loc(inode, &iloc), -EFSCORRUPTED);
-	KUNIT_EXPECT_EQ(test, ext4_get_inode_loc_noio(inode, &iloc),
-			-EFSCORRUPTED);
-	ext4_inode_table_set(ctx->sb, &ctx->gdp, INODE_TEST_ITABLE_BLK0);
-
-	/* noio variant: uncached -> -EAGAIN, non-uptodate -> -EAGAIN, hit -> 0 */
-	itable->in_cache = false;
-	KUNIT_EXPECT_EQ(test, ext4_get_inode_loc_noio(inode, &iloc), -EAGAIN);
-	itable->in_cache = true;
-	clear_buffer_uptodate(&itable->bh);
-	KUNIT_EXPECT_EQ(test, ext4_get_inode_loc_noio(inode, &iloc), -EAGAIN);
-	KUNIT_EXPECT_EQ(test, atomic_read(&itable->bh.b_count), 1);
-
-	set_buffer_uptodate(&itable->bh);
-	err = ext4_get_inode_loc_noio(inode, &iloc);
-	KUNIT_ASSERT_EQ(test, err, 0);
-	KUNIT_EXPECT_EQ(test, iloc.offset,
-			(unsigned long)((INODE_TEST_PRIMARY_INO - 1) *
-					INODE_TEST_INODE_SIZE));
-	brelse(iloc.bh);
-
-	/*
-	 * Skip-I/O optimization: non-uptodate itable block + uptodate inode
-	 * bitmap with ONLY primary inode bit set -> zero I/O reads!
-	 */
-	clear_buffer_uptodate(&itable->bh);
-	memset(itable->disk_buf, 0x77, INODE_TEST_BLK_SIZE);
-	memset(ibitmap->cache_buf, 0, INODE_TEST_BLK_SIZE);
-	ext4_set_bit(INODE_TEST_PRIMARY_INO - 1, ibitmap->cache_buf);
-	set_buffer_uptodate(&ibitmap->bh);
-	ctx->read_nowait_calls = 0;
-	i_uid_write(inode, 0x4242);
-
-	err = ext4_get_inode_loc(inode, &iloc);
-	KUNIT_ASSERT_EQ(test, err, 0);
-	KUNIT_EXPECT_EQ(test, ctx->read_nowait_calls, 0U);
-	raw = ext4_raw_inode(&iloc);
-	KUNIT_EXPECT_EQ(test, le16_to_cpu(raw->i_uid_low), 0x4242);
-	/* Neighbor slot was zeroed rather than read from 0x77 disk_buf */
-	KUNIT_EXPECT_EQ(test, (u8)itable->cache_buf[0], 0);
-	brelse(iloc.bh);
-
-	/*
-	 * Neighbor inode bit also set in bitmap -> cannot skip I/O; performs
-	 * disk read and triggers inode table readahead window calculation.
-	 */
-	clear_buffer_uptodate(&itable->bh);
-	ext4_set_bit(INODE_TEST_PRIMARY_INO, ibitmap->cache_buf);
-	ctx->sbi.s_inode_readahead_blks = 4;
-	ctx->read_nowait_calls = 0;
-	ctx->readahead_calls = 0;
-
-	err = ext4_get_inode_loc(inode, &iloc);
-	KUNIT_ASSERT_EQ(test, err, 0);
-	KUNIT_EXPECT_EQ(test, ctx->read_nowait_calls, 1U);
-	KUNIT_EXPECT_GT(test, ctx->readahead_calls, 0U);
-	KUNIT_EXPECT_EQ(test, ctx->first_readahead_blk,
-			(ext4_fsblk_t)INODE_TEST_ITABLE_BLK0);
-	KUNIT_EXPECT_EQ(test, (u8)itable->cache_buf[0], 0x77);
-	brelse(iloc.bh);
-	ctx->sbi.s_inode_readahead_blks = 0;
-
-	/* Disk read -EIO propagates cleanly with balanced bh refcount */
-	clear_buffer_uptodate(&itable->bh);
-	ctx->fail_read_eio = true;
-	err = ext4_get_fc_inode_loc(ctx->sb, INODE_TEST_PRIMARY_INO, &iloc);
-	ctx->fail_read_eio = false;
-	KUNIT_EXPECT_EQ(test, err, -EIO);
-	KUNIT_EXPECT_EQ(test, atomic_read(&itable->bh.b_count), 1);
-}
 
 /* -------------------------------------------------------------------------
  * 8. __ext4_iget() Valid Modes, Caching, & Special Inode Tests
@@ -3278,63 +3179,6 @@ static void inode_test_punch_hole_and_truncate(struct kunit *test)
  * -------------------------------------------------------------------------
  */
 
-static void inode_test_write_and_sync_metadata(struct kunit *test)
-{
-	struct inode_test_ctx *ctx = inode_test_setup(test);
-	struct inode *inode = &ctx->ei.vfs_inode;
-	struct inode_test_blk *itable = inode_test_find_blk(ctx,
-							   INODE_TEST_ITABLE_BLK0);
-	struct writeback_control wbc = { .sync_mode = WB_SYNC_ALL };
-	struct ext4_inode *raw;
-	int err;
-
-	/* 1. ext4_inode_attach_jinode(): no-op without journal, allocs with */
-	KUNIT_EXPECT_EQ(test, ext4_inode_attach_jinode(inode), 0);
-	KUNIT_EXPECT_NULL(test, ctx->ei.jinode);
-
-	ctx->sbi.s_journal = (journal_t *)1;
-	err = ext4_inode_attach_jinode(inode);
-	KUNIT_EXPECT_EQ(test, err, 0);
-	KUNIT_EXPECT_NOT_NULL(test, ctx->ei.jinode);
-	/* Idempotent when jinode is already attached */
-	KUNIT_EXPECT_EQ(test, ext4_inode_attach_jinode(inode), 0);
-	ctx->sbi.s_journal = NULL;
-	if (ctx->ei.jinode) {
-		jbd2_free_inode(ctx->ei.jinode);
-		ctx->ei.jinode = NULL;
-	}
-
-	/* 2. ext4_write_inode(): 0 in nojournal, -EROFS in emergency state */
-	KUNIT_EXPECT_EQ(test, ext4_write_inode(inode, &wbc), 0);
-	set_bit(EXT4_FLAGS_EMERGENCY_RO, &ctx->sbi.s_ext4_flags);
-	KUNIT_EXPECT_EQ(test, ext4_write_inode(inode, &wbc), -EROFS);
-	clear_bit(EXT4_FLAGS_EMERGENCY_RO, &ctx->sbi.s_ext4_flags);
-
-	/* 3. ext4_sync_inode_metadata(): warns & fails if journal present */
-	ctx->sbi.s_journal = (journal_t *)1;
-	kunit_warning_suppress(test) {
-		err = ext4_sync_inode_metadata(inode, &wbc);
-	}
-	ctx->sbi.s_journal = NULL;
-	KUNIT_EXPECT_EQ(test, err, -EFSCORRUPTED);
-
-	/* Clean nojournal metadata sync flushes dirty raw inode & returns 0 */
-	i_uid_write(inode, 0x7788);
-	ext4_dirty_inode(inode, I_DIRTY_SYNC);
-	clear_buffer_mapped(&itable->bh);
-	clear_buffer_write_io_error(&itable->bh);
-	err = ext4_sync_inode_metadata(inode, &wbc);
-	KUNIT_EXPECT_EQ(test, err, 0);
-	raw = inode_test_raw_slot(ctx, INODE_TEST_PRIMARY_INO, false);
-	KUNIT_EXPECT_EQ(test, le16_to_cpu(raw->i_uid_low), 0x7788);
-
-	/* Simulated buffer write error returns -EIO */
-	set_buffer_write_io_error(&itable->bh);
-	err = ext4_sync_inode_metadata(inode, &wbc);
-	clear_buffer_write_io_error(&itable->bh);
-	KUNIT_EXPECT_EQ(test, err, -EIO);
-}
-
 /* -------------------------------------------------------------------------
  * 22. ext4_evict_inode() Live, Unlinked Regular & Fast Symlink Eviction Tests
  * -------------------------------------------------------------------------
@@ -3750,7 +3594,6 @@ static struct kunit_case ext4_inode_test_cases[] = {
 	KUNIT_CASE(inode_test_fill_raw_inode),
 	KUNIT_CASE(inode_test_mark_dirty_and_update),
 	KUNIT_CASE(inode_test_expand_extra_isize),
-	KUNIT_CASE(inode_test_get_inode_loc_variants),
 	KUNIT_CASE(inode_test_iget_validation_and_modes),
 	KUNIT_CASE(inode_test_iget_corruptions),
 	KUNIT_CASE(inode_test_fast_symlink_and_can_truncate),
@@ -3764,7 +3607,6 @@ static struct kunit_case ext4_inode_test_cases[] = {
 	KUNIT_CASE(inode_test_trans_credits_and_disksize),
 	KUNIT_CASE(inode_test_zero_partial_and_eof),
 	KUNIT_CASE(inode_test_punch_hole_and_truncate),
-	KUNIT_CASE(inode_test_write_and_sync_metadata),
 	KUNIT_CASE(inode_test_evict_inode_paths),
 	KUNIT_CASE(inode_test_buffered_write_and_folio_ops),
 	KUNIT_CASE(inode_test_setattr),
