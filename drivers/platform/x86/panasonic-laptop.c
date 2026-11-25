@@ -132,6 +132,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
+#include <linux/rfkill.h>
 #include <linux/seq_file.h>
 #include <linux/serio.h>
 #include <linux/slab.h>
@@ -157,6 +158,15 @@ MODULE_LICENSE("GPL");
 #define METHOD_HKEY_SSET	"SSET"
 #define METHOD_ECWR		"\\_SB.ECWR"
 #define HKEY_NOTIFY		0x80
+/*
+ * Hardware wireless switch (Let's Note models with a MAT0028 "WLSW" device,
+ * e.g. CF-SV7). Each flip queues hotkey index 0x50 and SINF[SINF_WIRELESS_SW]
+ * reports the position: bit 7 = switch present, bit 6 = radios on.
+ */
+#define PCC_WIRELESS_SW_HID	"MAT0028"
+#define PCC_WIRELESS_SW_KEY	0x50
+#define PCC_WIRELESS_SW_PRESENT	BIT(7)
+#define PCC_WIRELESS_SW_ON	BIT(6)
 #define ECO_MODE_OFF		0x00
 #define ECO_MODE_ON		0x80
 
@@ -178,6 +188,7 @@ enum SINF_BITS { SINF_NUM_BATTERIES = 0,
 		 SINF_MUTE,
 		 SINF_RESERVED,
 		 SINF_ECO_MODE = 0x0A,
+		 SINF_WIRELESS_SW = 0x0B,
 		 SINF_CUR_BRIGHT = 0x0D,
 		 SINF_STICKY_KEY = 0x80,
 	};
@@ -247,6 +258,8 @@ struct pcc_acpi {
 	int			ac_brightness;
 	int			dc_brightness;
 	int			current_brightness;
+	bool			has_wireless_sw;
+	struct rfkill		*wireless_sw_rfkill;
 	struct acpi_device	*device;
 	struct input_dev	*input_dev;
 	struct backlight_device	*backlight;
@@ -838,6 +851,85 @@ static const struct attribute_group pcc_attr_group = {
 
 /* hotkey input device driver */
 
+/* Returns 1 if the switch enables the radios, 0 if not, -errno on error. */
+static int acpi_pcc_wireless_sw_on(struct pcc_acpi *pcc)
+{
+	if (!acpi_pcc_retrieve_biosdata(pcc))
+		return -EIO;
+
+	return !!(pcc->sinf[SINF_WIRELESS_SW] & PCC_WIRELESS_SW_ON);
+}
+
+/*
+ * Report the switch position as the rfkill master switch (for rfkill-input)
+ * and as the hard block of a read-only rfkill device (for userspace that
+ * takes over rfkill handling, such as NetworkManager and GNOME). On the
+ * CF-SV7 the firmware does not cut the Wi-Fi radio itself.
+ */
+static void acpi_pcc_report_wireless_sw(struct pcc_acpi *pcc)
+{
+	int on;
+
+	if (!pcc->has_wireless_sw)
+		return;
+
+	on = acpi_pcc_wireless_sw_on(pcc);
+	if (on < 0)
+		return;
+
+	if (pcc->wireless_sw_rfkill)
+		rfkill_set_hw_state(pcc->wireless_sw_rfkill, !on);
+
+	input_report_switch(pcc->input_dev, SW_RFKILL_ALL, on);
+	input_sync(pcc->input_dev);
+}
+
+static int acpi_pcc_wireless_sw_set_block(void *data, bool blocked)
+{
+	/* the switch is read-only, it has no soft block */
+	return -EINVAL;
+}
+
+static const struct rfkill_ops acpi_pcc_wireless_sw_ops = {
+	.set_block = acpi_pcc_wireless_sw_set_block,
+};
+
+static void acpi_pcc_wireless_sw_rfkill_init(struct pcc_acpi *pcc)
+{
+	struct rfkill *rfkill;
+
+	if (!pcc->has_wireless_sw)
+		return;
+
+	/* the switch acts on all radios; rfkill has no "any" type, use WLAN */
+	rfkill = rfkill_alloc("panasonic-wireless-sw", &pcc->device->dev,
+			      RFKILL_TYPE_WLAN, &acpi_pcc_wireless_sw_ops, pcc);
+	if (IS_ERR_OR_NULL(rfkill))
+		return;
+
+	/* pcc->sinf was just read by probe */
+	rfkill_set_hw_state(rfkill,
+			    !(pcc->sinf[SINF_WIRELESS_SW] & PCC_WIRELESS_SW_ON));
+
+	if (rfkill_register(rfkill)) {
+		pr_warn("Couldn't register the wireless switch rfkill device\n");
+		rfkill_destroy(rfkill);
+		return;
+	}
+
+	pcc->wireless_sw_rfkill = rfkill;
+}
+
+static void acpi_pcc_wireless_sw_rfkill_exit(struct pcc_acpi *pcc)
+{
+	if (!pcc->wireless_sw_rfkill)
+		return;
+
+	rfkill_unregister(pcc->wireless_sw_rfkill);
+	rfkill_destroy(pcc->wireless_sw_rfkill);
+	pcc->wireless_sw_rfkill = NULL;
+}
+
 static int sleep_keydown_seen;
 static void acpi_pcc_generate_keyinput(struct pcc_acpi *pcc)
 {
@@ -856,6 +948,11 @@ static void acpi_pcc_generate_keyinput(struct pcc_acpi *pcc)
 
 	key = result & GENMASK(6, 0);
 	updown = result & BIT(7); /* 0x80 == key down; 0x00 = key up */
+
+	if (key == PCC_WIRELESS_SW_KEY && pcc->has_wireless_sw) {
+		acpi_pcc_report_wireless_sw(pcc);
+		return;
+	}
 
 	/* hack: some firmware sends no key down for sleep / hibernate */
 	if (key == 7 || key == 10) {
@@ -965,6 +1062,9 @@ static int acpi_pcc_init_input(struct pcc_acpi *pcc)
 		goto err_free_dev;
 	}
 
+	if (pcc->has_wireless_sw)
+		input_set_capability(input_dev, EV_SW, SW_RFKILL_ALL);
+
 	error = input_register_device(input_dev);
 	if (error) {
 		pr_err("Unable to register input device\n");
@@ -995,6 +1095,9 @@ static int acpi_pcc_hotkey_resume(struct device *dev)
 	acpi_pcc_write_sset(pcc, SINF_DC_CUR_BRIGHT, pcc->dc_brightness);
 	if (pcc->num_sifr > SINF_CUR_BRIGHT)
 		acpi_pcc_write_sset(pcc, SINF_CUR_BRIGHT, pcc->current_brightness);
+
+	/* the switch may have been flipped while suspended */
+	acpi_pcc_report_wireless_sw(pcc);
 
 	return 0;
 }
@@ -1039,17 +1142,24 @@ static int acpi_pcc_hotkey_probe(struct platform_device *pdev)
 	pcc->handle = device->handle;
 	device->driver_data = pcc;
 
+	/* read before the input device is set up: it decides the switch capability */
+	if (!acpi_pcc_retrieve_biosdata(pcc)) {
+		result = -EIO;
+		pr_err("Couldn't retrieve BIOS data\n");
+		goto out_hotkey;
+	}
+
+	pcc->has_wireless_sw = pcc->num_sifr > SINF_WIRELESS_SW &&
+			       (pcc->sinf[SINF_WIRELESS_SW] & PCC_WIRELESS_SW_PRESENT) &&
+			       acpi_dev_present(PCC_WIRELESS_SW_HID, NULL, -1);
+
 	result = acpi_pcc_init_input(pcc);
 	if (result) {
 		pr_err("Error installing keyinput handler\n");
 		goto out_hotkey;
 	}
 
-	if (!acpi_pcc_retrieve_biosdata(pcc)) {
-		result = -EIO;
-		pr_err("Couldn't retrieve BIOS data\n");
-		goto out_input;
-	}
+	acpi_pcc_report_wireless_sw(pcc);
 
 	if (acpi_video_get_backlight_type() == acpi_backlight_vendor) {
 		/* initialize backlight */
@@ -1110,6 +1220,9 @@ static int acpi_pcc_hotkey_probe(struct platform_device *pdev)
 	}
 
 	i8042_install_filter(panasonic_i8042_filter, NULL);
+
+	/* not fatal: the SW_RFKILL_ALL event still works without it */
+	acpi_pcc_wireless_sw_rfkill_init(pcc);
 	return 0;
 
 out_platform:
@@ -1145,6 +1258,9 @@ static void acpi_pcc_hotkey_remove(struct platform_device *pdev)
 
 	acpi_dev_remove_notify_handler(device, ACPI_DEVICE_NOTIFY,
 				       acpi_pcc_hotkey_notify);
+
+	/* after the notify handler is gone: switch events use the rfkill */
+	acpi_pcc_wireless_sw_rfkill_exit(pcc);
 
 	sysfs_remove_group(&device->dev.kobj, &pcc_attr_group);
 
