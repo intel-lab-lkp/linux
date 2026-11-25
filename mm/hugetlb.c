@@ -128,6 +128,9 @@ struct mutex *hugetlb_fault_mutex_table __ro_after_init;
 
 /* Forward declaration */
 static int hugetlb_acct_memory(struct hstate *h, long delta);
+static void collect_unused_surplus_pages(struct hstate *h,
+					 unsigned long unused_resv_pages,
+					 struct list_head *page_list);
 static unsigned int allowed_mems_nr(struct hstate *h);
 static void hugetlb_vma_lock_free(struct vm_area_struct *vma);
 static void hugetlb_vma_lock_alloc(struct vm_area_struct *vma);
@@ -166,7 +169,7 @@ static inline void unlock_or_release_subpool(struct hugepage_subpool *spool,
 	spin_unlock_irqrestore(&spool->lock, irq_flags);
 
 	if (free_subpool) {
-		if (spool->min_hpages != -1)
+		if (spool->min_hpages > 0)
 			hugetlb_acct_memory(spool->hstate,
 						-spool->min_hpages);
 		kfree(spool);
@@ -263,21 +266,17 @@ unlock_ret:
  * The return value may only be different than the passed value (delta)
  * in the case where a subpool minimum size must be maintained.
  */
-static long hugepage_subpool_put_pages(struct hugepage_subpool *spool,
-				       long delta)
+static long __hugepage_subpool_put_pages(struct hugepage_subpool *spool,
+					 long delta)
 {
 	long ret = delta;
-	unsigned long flags;
 
-	if (!spool)
-		return delta;
-
-	spin_lock_irqsave(&spool->lock, flags);
+	lockdep_assert_held(&spool->lock);
 
 	if (spool->max_hpages != -1)		/* maximum size accounting */
 		spool->used_hpages -= delta;
 
-	 /* minimum size accounting */
+	/* minimum size accounting */
 	if (spool->min_hpages != -1 && spool->used_hpages < spool->min_hpages) {
 		if (spool->rsv_hpages + delta <= spool->min_hpages)
 			ret = 0;
@@ -289,6 +288,20 @@ static long hugepage_subpool_put_pages(struct hugepage_subpool *spool,
 			spool->rsv_hpages = spool->min_hpages;
 	}
 
+	return ret;
+}
+
+static long hugepage_subpool_put_pages(struct hugepage_subpool *spool,
+				       long delta)
+{
+	long ret;
+	unsigned long flags;
+
+	if (!spool)
+		return delta;
+
+	spin_lock_irqsave(&spool->lock, flags);
+	ret = __hugepage_subpool_put_pages(spool, delta);
 	/*
 	 * If hugetlbfs_put_super couldn't free spool due to an outstanding
 	 * quota reference, free it now.
@@ -296,6 +309,28 @@ static long hugepage_subpool_put_pages(struct hugepage_subpool *spool,
 	unlock_or_release_subpool(spool, flags);
 
 	return ret;
+}
+
+/*
+ * Return with hugetlb_lock held.  Take it before dropping spool->lock so
+ * a refilled subpool reservation cannot be consumed
+ * before free_huge_folio() restores the global reservation.  Keep subpool
+ * accounting and waiting for spool->lock outside the global critical section.
+ * The caller owns final subpool release if *free_subpool is set.
+ */
+static bool hugepage_subpool_put_folio(struct hugepage_subpool *spool,
+				       unsigned long *flags, bool *free_subpool)
+{
+	bool restore_reserve;
+
+	lockdep_assert_not_held(&hugetlb_lock);
+	spin_lock_irqsave(&spool->lock, *flags);
+	restore_reserve = !__hugepage_subpool_put_pages(spool, 1);
+	*free_subpool = subpool_is_free(spool);
+	spin_lock(&hugetlb_lock);
+	spin_unlock(&spool->lock);
+
+	return restore_reserve;
 }
 
 static inline struct hugepage_subpool *subpool_vma(struct vm_area_struct *vma)
@@ -1761,6 +1796,9 @@ void free_huge_folio(struct folio *folio)
 	int nid = folio_nid(folio);
 	struct hugepage_subpool *spool = hugetlb_folio_subpool(folio);
 	bool restore_reserve;
+	bool free_subpool = false;
+	struct folio *free_folio, *tmp;
+	LIST_HEAD(page_list);
 	unsigned long flags;
 
 	VM_BUG_ON_FOLIO(folio_ref_count(folio), folio);
@@ -1781,18 +1819,22 @@ void free_huge_folio(struct folio *folio)
 	 * reservation, do not call hugepage_subpool_put_pages() as this will
 	 * remove the reserved page from the subpool.
 	 */
-	if (!restore_reserve) {
+	if (!restore_reserve && spool && spool->min_hpages > 0) {
 		/*
 		 * A return code of zero implies that the subpool will be
 		 * under its minimum size if the reservation is not restored
 		 * after page is free.  Therefore, force restore_reserve
 		 * operation.
 		 */
-		if (hugepage_subpool_put_pages(spool, 1) == 0)
-			restore_reserve = true;
+		restore_reserve = hugepage_subpool_put_folio(spool, &flags,
+							     &free_subpool);
+	} else {
+		if (!restore_reserve)
+			hugepage_subpool_put_pages(spool, 1);
+		spin_lock_irqsave(&hugetlb_lock, flags);
 	}
 
-	spin_lock_irqsave(&hugetlb_lock, flags);
+	lockdep_assert_held(&hugetlb_lock);
 	folio_clear_hugetlb_migratable(folio);
 	hugetlb_cgroup_uncharge_folio(hstate_index(h),
 				     pages_per_huge_page(h), folio);
@@ -1806,21 +1848,29 @@ void free_huge_folio(struct folio *folio)
 	if (folio_test_hugetlb_temporary(folio)) {
 		remove_hugetlb_folio(h, folio, false);
 		folio_clear_hugetlb_temporary(folio);
-		spin_unlock_irqrestore(&hugetlb_lock, flags);
-		update_and_free_hugetlb_folio(h, folio, true);
+		list_add(&folio->lru, &page_list);
 	} else if (h->surplus_huge_pages_node[nid] &&
 		   h->free_huge_pages >= h->resv_huge_pages) {
 		/* Free this surplus folio that is not required globally. */
 		remove_hugetlb_folio(h, folio, true);
-		spin_unlock_irqrestore(&hugetlb_lock, flags);
-		update_and_free_hugetlb_folio(h, folio, true);
+		list_add(&folio->lru, &page_list);
 	} else {
 		mod_node_page_state(folio_pgdat(folio), NR_HUGETLB,
 				    -(long)pages_per_huge_page(h));
 		arch_clear_hugetlb_flags(folio);
 		enqueue_hugetlb_folio(h, folio);
-		spin_unlock_irqrestore(&hugetlb_lock, flags);
 	}
+
+	if (free_subpool)
+		collect_unused_surplus_pages(h, spool->min_hpages, &page_list);
+	spin_unlock_irqrestore(&hugetlb_lock, flags);
+
+	list_for_each_entry_safe(free_folio, tmp, &page_list, lru) {
+		list_del(&free_folio->lru);
+		update_and_free_hugetlb_folio(h, free_folio, true);
+	}
+	if (free_subpool)
+		kfree(spool);
 }
 
 /*
@@ -2502,26 +2552,18 @@ free:
 	return ret;
 }
 
-/*
- * This routine has two main purposes:
- * 1) Decrement the reservation count (resv_huge_pages) by the value passed
- *    in unused_resv_pages.  This corresponds to the prior adjustments made
- *    to the associated reservation map.
- * 2) Free any unused surplus pages that may have been allocated to satisfy
- *    the reservation.  As many as unused_resv_pages may be freed.
- */
-static void return_unused_surplus_pages(struct hstate *h,
-					unsigned long unused_resv_pages)
+static void collect_unused_surplus_pages(struct hstate *h,
+					 unsigned long unused_resv_pages,
+					 struct list_head *page_list)
 {
 	unsigned long nr_pages;
-	LIST_HEAD(page_list);
 
 	lockdep_assert_held(&hugetlb_lock);
 	/* Uncommit the reservation */
 	h->resv_huge_pages -= unused_resv_pages;
 
 	if (hstate_is_gigantic_no_runtime(h))
-		goto out;
+		return;
 
 	/*
 	 * Part (or even all) of the reservation could have been backed
@@ -2543,12 +2585,27 @@ static void return_unused_surplus_pages(struct hstate *h,
 
 		folio = remove_pool_hugetlb_folio(h, &node_states[N_MEMORY], 1);
 		if (!folio)
-			goto out;
+			break;
 
-		list_add(&folio->lru, &page_list);
+		list_add(&folio->lru, page_list);
 	}
+}
 
-out:
+/*
+ * This routine has two main purposes:
+ * 1) Decrement the reservation count (resv_huge_pages) by the value passed
+ *    in unused_resv_pages.  This corresponds to the prior adjustments made
+ *    to the associated reservation map.
+ * 2) Free any unused surplus pages that may have been allocated to satisfy
+ *    the reservation.  As many as unused_resv_pages may be freed.
+ */
+static void return_unused_surplus_pages(struct hstate *h,
+					unsigned long unused_resv_pages)
+{
+	LIST_HEAD(page_list);
+
+	collect_unused_surplus_pages(h, unused_resv_pages, &page_list);
+
 	spin_unlock_irq(&hugetlb_lock);
 	update_and_free_pages_bulk(h, &page_list);
 	spin_lock_irq(&hugetlb_lock);
