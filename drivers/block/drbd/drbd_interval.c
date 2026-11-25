@@ -4,6 +4,7 @@
  */
 
 #include <asm/bug.h>
+#include <linux/kernel.h>
 #include <linux/rbtree_augmented.h>
 #include "drbd_interval.h"
 
@@ -14,13 +15,35 @@ static inline
 sector_t interval_end(struct rb_node *node)
 {
 	struct drbd_interval *this = rb_entry(node, struct drbd_interval, rb);
+
 	return this->end;
 }
 
 #define NODE_END(node) ((node)->sector + ((node)->size >> 9))
+RB_DECLARE_CALLBACKS_MAX(static, augment_callbacks, struct drbd_interval, rb,
+		sector_t, end, NODE_END);
 
-RB_DECLARE_CALLBACKS_MAX(static, augment_callbacks,
-			 struct drbd_interval, rb, sector_t, end, NODE_END);
+static const char * const drbd_interval_type_names[] = {
+	[INTERVAL_LOCAL_WRITE]    = "LocalWrite",
+	[INTERVAL_PEER_WRITE]     = "PeerWrite",
+	[INTERVAL_LOCAL_READ]     = "LocalRead",
+	[INTERVAL_PEER_READ]      = "PeerRead",
+	[INTERVAL_RESYNC_WRITE]   = "ResyncWrite",
+	[INTERVAL_RESYNC_READ]    = "ResyncRead",
+	[INTERVAL_OV_READ_SOURCE] = "VerifySource",
+	[INTERVAL_OV_READ_TARGET] = "VerifyTarget",
+	[INTERVAL_PEERS_IN_SYNC_LOCK] = "PeersInSync",
+};
+
+const char *drbd_interval_type_str(struct drbd_interval *i)
+{
+	enum drbd_interval_type type = i->type;
+	unsigned int size = ARRAY_SIZE(drbd_interval_type_names);
+
+	return (type < 0 || type >= size ||
+		!drbd_interval_type_names[type]) ?
+		       "?" : drbd_interval_type_names[type];
+}
 
 /*
  * drbd_insert_interval  -  insert a new interval into a tree
@@ -104,6 +127,18 @@ drbd_remove_interval(struct rb_root *root, struct drbd_interval *this)
 		return;
 
 	rb_erase_augmented(&this->rb, root, &augment_callbacks);
+}
+
+void drbd_update_interval_size(struct drbd_interval *this, unsigned int new_size)
+{
+	this->size = new_size;
+
+	/* The size is one of the inputs to calculate the tree node's
+	 * augmented value. When we change it we need to update the augmented
+	 * value in this node and maybe in some parent nodes. That might be
+	 * all the way up to the root. As this function is used for joining
+	 * intervals, usually it will propagate only to the parent node. */
+	augment_callbacks_propagate(&this->rb, NULL);
 }
 
 /**
