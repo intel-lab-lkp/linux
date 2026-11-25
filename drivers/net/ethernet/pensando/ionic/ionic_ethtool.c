@@ -438,18 +438,29 @@ static u32 ionic_fec_type_to_ethtool(u8 fec_type)
 	}
 }
 
+static u8 ionic_active_fec_type(const struct ionic_port_info *port_info,
+				u8 config_fec_type)
+{
+	if (READ_ONCE(port_info->config.an_enable))
+		return READ_ONCE(port_info->status.fec_type);
+
+	return config_fec_type;
+}
+
 static int ionic_get_fecparam(struct net_device *netdev,
 			      struct ethtool_fecparam *fec)
 {
 	struct ionic_port_info *port_info;
 	struct ionic_lif *lif;
 	u8 config_fec_type;
+	u8 active_fec_type;
 
 	lif = netdev_priv(netdev);
 	port_info = lif->ionic->idev.port_info;
-	config_fec_type = port_info->config.fec_type;
+	config_fec_type = READ_ONCE(port_info->config.fec_type);
+	active_fec_type = ionic_active_fec_type(port_info, config_fec_type);
 
-	fec->active_fec = ionic_fec_type_to_ethtool(config_fec_type);
+	fec->active_fec = ionic_fec_type_to_ethtool(active_fec_type);
 	fec->fec = ionic_fec_type_to_ethtool(config_fec_type);
 
 	return 0;
