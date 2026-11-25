@@ -13,6 +13,7 @@
 #include <linux/interrupt.h>
 #include <linux/iopoll.h>
 #include <linux/ioport.h>
+#include <linux/lockdep.h>
 #include <linux/of.h>
 #include <linux/of_reserved_mem.h>
 #include <linux/platform_device.h>
@@ -509,6 +510,8 @@ bool mali_c55_pipeline_ready(struct mali_c55 *mali_c55)
 	struct mali_c55_cap_dev *ds = &mali_c55->cap_devs[MALI_C55_CAP_DEV_DS];
 	struct mali_c55_params *params = &mali_c55->params;
 	struct mali_c55_stats *stats = &mali_c55->stats;
+
+	lockdep_assert_held(&mali_c55->isp.capture_lock);
 
 	/* Only wait for queues connected through enabled media links. */
 	return (!media_pad_remote_pad_first(&fr->pad) ||
