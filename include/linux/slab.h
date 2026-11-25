@@ -351,13 +351,12 @@ struct kmem_cache_args {
 	 */
 	void (*ctor)(void *);
 	/**
-	 * @sheaf_capacity: Enable sheaves of given capacity for the cache.
+	 * @sheaf_capacity: Minimum capacity of the sheaves of the cache.
 	 *
-	 * With a non-zero value, allocations from the cache go through caching
-	 * arrays called sheaves. Each cpu has a main sheaf that's always
-	 * present, and a spare sheaf that may be not present. When both become
-	 * empty, there's an attempt to replace an empty sheaf with a full sheaf
-	 * from the per-node barn.
+	 * Allocations from the cache go through caching arrays called sheaves.
+	 * Each cpu has a main sheaf that's always present, and a spare sheaf
+	 * that may be not present. When both become empty, there's an attempt
+	 * to replace an empty sheaf with a full sheaf from the per-node barn.
 	 *
 	 * When no full sheaf is available, and gfp flags allow blocking, a
 	 * sheaf is allocated and filled from slab(s) using bulk allocation.
@@ -375,10 +374,19 @@ struct kmem_cache_args {
 	 * Bulk allocation and free operations also try to use the cpu sheaves
 	 * and barn, but fallback to using slab pages directly.
 	 *
-	 * When slub_debug is enabled for the cache, the sheaf_capacity argument
-	 * is ignored.
+	 * The allocator selects a default capacity for the sheaves based on the
+	 * size of the objects in the cache, with larger objects giving a lower
+	 * capacity. With a non-zero value, the capacity is at least the given
+	 * value. Use this to match the expected maximum size passed to
+	 * kmem_cache_prefill_sheaf(), to avoid low-performance oversize
+	 * sheaves. A cache created with a non-zero value is not merged with
+	 * other caches.
 	 *
-	 * %0 means no sheaves will be created.
+	 * When slab_tiny is enabled, or when slab_debug is enabled for the
+	 * cache, no percpu sheaves are created and the requested capacity is
+	 * not used. A non-zero value still prevents merging of the cache.
+	 *
+	 * %0 means the calculated capacity is used.
 	 */
 	unsigned int sheaf_capacity;
 };
