@@ -1960,15 +1960,17 @@ static void qup_i2c_remove(struct platform_device *pdev)
 {
 	struct qup_i2c_dev *qup = platform_get_drvdata(pdev);
 
+	i2c_del_adapter(&qup->adap);
+	pm_runtime_disable(qup->dev);
+
 	if (qup->is_dma) {
 		dma_release_channel(qup->btx.dma);
 		dma_release_channel(qup->brx.dma);
 	}
 
 	disable_irq(qup->irq);
-	qup_i2c_disable_clocks(qup);
-	i2c_del_adapter(&qup->adap);
-	pm_runtime_disable(qup->dev);
+	if (!pm_runtime_status_suspended(qup->dev))
+		qup_i2c_disable_clocks(qup);
 	pm_runtime_set_suspended(qup->dev);
 }
 
