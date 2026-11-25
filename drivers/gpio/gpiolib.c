@@ -904,6 +904,24 @@ static void gpiochip_free_remaining_irqs(struct gpio_chip *gc)
 		gpiod_free_irqs(gc, desc);
 }
 
+static void gpiochip_numb_device(struct gpio_chip *gc)
+{
+	struct gpio_device *gdev = gc->gpiodev;
+
+	/* Numb the device, cancelling all outstanding operations */
+	rcu_assign_pointer(gdev->chip, NULL);
+	synchronize_srcu(&gdev->srcu);
+
+	/*
+	 * No new interrupts can be requested through the character device now.
+	 * Have it free the ones it holds, also on the shared proxies, before
+	 * forcibly freeing the rest and removing the irqchip.
+	 */
+	blocking_notifier_call_chain(&gdev->device_notifier, 0, NULL);
+	gpio_device_teardown_shared(gdev);
+	gpiochip_free_remaining_irqs(gc);
+}
+
 static void gpiodev_release(struct device *dev)
 {
 	struct gpio_device *gdev = to_gpio_device(dev);
@@ -1390,13 +1408,18 @@ int gpiochip_add_data_with_key(struct gpio_chip *gc, void *data,
 	if (gpiolib_initialized) {
 		ret = gpiochip_setup_dev(gc);
 		if (ret)
-			goto err_teardown_shared;
+			goto err_numb_device;
 	}
 
 	return 0;
 
-err_teardown_shared:
-	gpio_device_teardown_shared(gdev);
+err_numb_device:
+	/*
+	 * User space may hold lines by now. Free the hogs while the chip can
+	 * still free them; the gpiochip_free_hogs() below then finds none.
+	 */
+	gpiochip_free_hogs(gc);
+	gpiochip_numb_device(gc);
 err_remove_irqchip:
 	gpiochip_irqchip_remove(gc);
 err_remove_irqchip_mask:
@@ -1455,18 +1478,7 @@ void gpiochip_remove(struct gpio_chip *gc)
 		list_del_rcu(&gdev->list);
 	synchronize_srcu(&gpio_devices_srcu);
 
-	/* Numb the device, cancelling all outstanding operations */
-	rcu_assign_pointer(gdev->chip, NULL);
-	synchronize_srcu(&gdev->srcu);
-
-	/*
-	 * No new interrupts can be requested through the character device now.
-	 * Have it free the ones it holds, also on the shared proxies, before
-	 * forcibly freeing the rest and removing the irqchip.
-	 */
-	blocking_notifier_call_chain(&gdev->device_notifier, 0, NULL);
-	gpio_device_teardown_shared(gdev);
-	gpiochip_free_remaining_irqs(gc);
+	gpiochip_numb_device(gc);
 	gpiochip_irqchip_remove(gc);
 	acpi_gpiochip_remove(gc);
 	of_gpiochip_remove(gc);
