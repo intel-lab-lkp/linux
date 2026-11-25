@@ -198,7 +198,7 @@ struct vdpasim *vdpasim_create(struct vdpasim_dev_attr *dev_attr,
 	struct vdpa_device *vdpa;
 	struct vdpasim *vdpasim;
 	struct device *dev;
-	int i, ret = -ENOMEM;
+	int i, ret = -ENOMEM, ret2;
 
 	if (!dev_attr->alloc_size)
 		return ERR_PTR(-EINVAL);
@@ -209,6 +209,12 @@ struct vdpasim *vdpasim_create(struct vdpasim_dev_attr *dev_attr,
 		if (config->device_features &
 		    ~dev_attr->supported_features)
 			return ERR_PTR(-EINVAL);
+		if (dev_attr->validate_features) {
+			ret2 = dev_attr->validate_features(
+				config->device_features);
+			if (ret2)
+				return ERR_PTR(ret2);
+		}
 		dev_attr->supported_features =
 			config->device_features;
 	}
@@ -442,10 +448,17 @@ static u64 vdpasim_get_backend_features(const struct vdpa_device *vdpa)
 static int vdpasim_set_driver_features(struct vdpa_device *vdpa, u64 features)
 {
 	struct vdpasim *vdpasim = vdpa_to_sim(vdpa);
+	int ret;
 
 	/* DMA mapping must be done by driver */
 	if (!(features & (1ULL << VIRTIO_F_ACCESS_PLATFORM)))
 		return -EINVAL;
+
+	if (vdpasim->dev_attr.validate_features) {
+		ret = vdpasim->dev_attr.validate_features(features);
+		if (ret)
+			return ret;
+	}
 
 	vdpasim->features = features & vdpasim->dev_attr.supported_features;
 
