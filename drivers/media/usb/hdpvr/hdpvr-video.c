@@ -92,6 +92,8 @@ int hdpvr_cancel_queue(struct hdpvr_device *dev)
 	list_for_each_entry(buf, &dev->rec_buff_list, buff_list) {
 		usb_kill_urb(buf->urb);
 		buf->status = BUFSTAT_AVAILABLE;
+		/* the data is discarded, the next transfer starts at 0 */
+		buf->pos = 0;
 	}
 
 	list_splice_init(&dev->rec_buff_list, dev->free_buff_list.prev);
@@ -210,6 +212,7 @@ static int hdpvr_submit_buffers(struct hdpvr_device *dev)
 		urb = buf->urb;
 		urb->status = 0;
 		urb->actual_length = 0;
+		buf->pos = 0;
 		ret = usb_submit_urb(urb, GFP_KERNEL);
 		if (ret) {
 			v4l2_err(&dev->v4l2_dev,
@@ -420,6 +423,10 @@ static ssize_t hdpvr_read(struct file *file, char __user *buffer, size_t count,
 		return -ESPIPE;
 
 	mutex_lock(&dev->io_mutex);
+	if (dev->owner && file_to_v4l2_fh(file) != dev->owner) {
+		mutex_unlock(&dev->io_mutex);
+		return -EBUSY;
+	}
 	if (dev->status == STATUS_IDLE) {
 		if (hdpvr_start_streaming(dev)) {
 			v4l2_dbg(MSG_INFO, hdpvr_debug, &dev->v4l2_dev,
@@ -489,6 +496,14 @@ static ssize_t hdpvr_read(struct file *file, char __user *buffer, size_t count,
 		/* set remaining bytes to copy */
 		urb = buf->urb;
 		rem = urb->actual_length - buf->pos;
+		if (rem < 0) {
+			/*
+			 * A stream restart discarded the data this position
+			 * belongs to: start over at the beginning.
+			 */
+			buf->pos = 0;
+			continue;
+		}
 		cnt = rem > count ? count : rem;
 
 		if (copy_to_user(buffer, urb->transfer_buffer + buf->pos,
