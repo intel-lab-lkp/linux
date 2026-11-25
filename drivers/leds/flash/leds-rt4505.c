@@ -338,6 +338,11 @@ static void rt4505_init_flash_properties(struct rt4505_priv *priv,
 	flash->ops = &rt4505_flash_ops;
 }
 
+static void rt4505_child_put(void *data)
+{
+	fwnode_handle_put(data);
+}
+
 static int rt4505_probe(struct i2c_client *client)
 {
 	struct rt4505_priv *priv;
@@ -370,6 +375,11 @@ static int rt4505_probe(struct i2c_client *client)
 		dev_err(priv->dev, "Failed to get child node\n");
 		return -EINVAL;
 	}
+
+	ret = devm_add_action_or_reset(priv->dev, rt4505_child_put, child);
+	if (ret)
+		return ret;
+
 	init_data.fwnode = child;
 
 	rt4505_init_flash_properties(priv, child);
