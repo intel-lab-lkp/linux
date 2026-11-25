@@ -14,6 +14,18 @@
 #include <linux/stdarg.h>
 #include <uapi/linux/string.h>
 
+/**
+ * streq - strings equal
+ *
+ * @s1: string to compare
+ * @s2: string to compare
+ *
+ * Compare two strings for equality.
+ *
+ * Return: true iff the strings are equal
+ */
+#define streq(s1, s2)  (strcmp(s1, s2) == 0)
+
 extern char *strndup_user(const char __user *, long);
 extern void *memdup_user(const void __user *, size_t) __realloc_size(2);
 extern void *vmemdup_user(const void __user *, size_t) __realloc_size(2);
