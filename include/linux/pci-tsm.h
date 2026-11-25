@@ -110,11 +110,13 @@ struct pci_tsm {
  * struct pci_tsm_pf0 - Physical Function 0 TDISP link context
  * @base_tsm: generic core "tsm" context
  * @lock: mutual exclustion for pci_tsm_ops invocation
+ * @dsm_context_users: users preventing DSM disconnect
  * @doe_mb: PCIe Data Object Exchange mailbox
  */
 struct pci_tsm_pf0 {
 	struct pci_tsm base_tsm;
 	struct mutex lock;
+	unsigned int dsm_context_users;
 	struct pci_doe_mb *doe_mb;
 };
 
@@ -165,6 +167,8 @@ int pci_tsm_bind(struct pci_dev *pdev, struct kvm *kvm, u32 tdi_id);
 void pci_tsm_unbind(struct pci_dev *pdev);
 void pci_tsm_tdi_constructor(struct pci_dev *pdev, struct pci_tdi *tdi,
 			     struct kvm *kvm, u32 tdi_id);
+int pci_tsm_context_get(struct pci_dev *pdev, struct tsm_dev *tsm_dev);
+void pci_tsm_context_put(struct pci_dev *pdev);
 #else
 static inline int pci_tsm_register(struct tsm_dev *tsm_dev)
 {
@@ -180,5 +184,15 @@ static inline int pci_tsm_bind(struct pci_dev *pdev, struct kvm *kvm, u64 tdi_id
 static inline void pci_tsm_unbind(struct pci_dev *pdev)
 {
 }
+static inline int
+pci_tsm_context_get(struct pci_dev *pdev, struct tsm_dev *tsm_dev)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline void pci_tsm_context_put(struct pci_dev *pdev)
+{
+}
+
 #endif
 #endif /*__PCI_TSM_H */

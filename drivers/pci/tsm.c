@@ -292,6 +292,51 @@ static int remove_fn(struct pci_dev *pdev, void *data)
 	return 0;
 }
 
+/**
+ * pci_tsm_context_get() - Prevent disconnect of a device's PF0 TSM connection
+ * @pdev: PCI function whose PF0 TSM connection must remain active
+ * @tsm_dev: TSM that must manage the device's connection
+ *
+ * Verify that @pdev is connected to @tsm_dev and increment the DSM user count.
+ * Each successful call requires a matching pci_tsm_context_put() for @pdev.
+ * The caller must prevent removal of @pdev until that put, for example by
+ * keeping the VFIO device open.
+ *
+ * Return: 0 on success, or a negative error code on failure.
+ */
+int pci_tsm_context_get(struct pci_dev *pdev, struct tsm_dev *tsm_dev)
+{
+	struct pci_tsm_pf0 *pf0;
+
+	guard(rwsem_read)(&pci_tsm_rwsem);
+	if (!pdev->tsm || !is_link_tsm(pdev->tsm->tsm_dev))
+		return -EOPNOTSUPP;
+
+	/* The device must be connected to the TSM requested by the caller. */
+	if (pdev->tsm->tsm_dev != tsm_dev)
+		return -EXDEV;
+
+	pf0 = to_pci_tsm_pf0(pdev->tsm);
+	guard(mutex)(&pf0->lock);
+	pf0->dsm_context_users++;
+	return 0;
+}
+EXPORT_SYMBOL_GPL(pci_tsm_context_get);
+
+void pci_tsm_context_put(struct pci_dev *pdev)
+{
+	struct pci_tsm_pf0 *pf0;
+
+	down_read(&pci_tsm_rwsem);
+	pf0 = to_pci_tsm_pf0(pdev->tsm);
+	mutex_lock(&pf0->lock);
+	if (!WARN_ON(!pf0->dsm_context_users))
+		pf0->dsm_context_users--;
+	mutex_unlock(&pf0->lock);
+	up_read(&pci_tsm_rwsem);
+}
+EXPORT_SYMBOL_GPL(pci_tsm_context_put);
+
 /*
  * Note, this helper only returns an error code and takes an argument for
  * compatibility with the pci_walk_bus() callback prototype. pci_tsm_unbind()
@@ -381,7 +426,7 @@ static void pci_tsm_unbind_all(struct pci_dev *pdev)
 	__pci_tsm_unbind(pdev, NULL);
 }
 
-static void __pci_tsm_disconnect(struct pci_dev *pdev)
+static int __pci_tsm_disconnect(struct pci_dev *pdev)
 {
 	struct pci_tsm_pf0 *tsm_pf0 = to_pci_tsm_pf0(pdev->tsm);
 	const struct pci_tsm_ops *ops = to_pci_tsm_ops(pdev->tsm);
@@ -392,18 +437,29 @@ static void __pci_tsm_disconnect(struct pci_dev *pdev)
 	pci_tsm_unbind_all(pdev);
 
 	/*
-	 * disconnect() is uninterruptible as it may be called for device
-	 * teardown
+	 * Refuse to disconnect the link until all contexts have been released.
+	 *
+	 * disconnect() is uninterruptible as it may also be called for device
+	 * teardown.
 	 */
 	guard(mutex)(&tsm_pf0->lock);
+	if (tsm_pf0->dsm_context_users)
+		return -EBUSY;
+
 	pci_tsm_walk_fns_reverse(pdev, remove_fn, NULL);
 	ops->disconnect(pdev);
+	return 0;
 }
 
-static void pci_tsm_disconnect(struct pci_dev *pdev)
+static int pci_tsm_disconnect(struct pci_dev *pdev)
 {
-	__pci_tsm_disconnect(pdev);
+	int ret = __pci_tsm_disconnect(pdev);
+
+	if (ret)
+		return ret;
+
 	tsm_remove(pdev->tsm);
+	return 0;
 }
 
 static ssize_t disconnect_store(struct device *dev,
@@ -425,7 +481,10 @@ static ssize_t disconnect_store(struct device *dev,
 	if (!sysfs_streq(buf, dev_name(&tsm_dev->dev)))
 		return -EINVAL;
 
-	pci_tsm_disconnect(pdev);
+	rc = pci_tsm_disconnect(pdev);
+	if (rc)
+		return rc;
+
 	return len;
 }
 static DEVICE_ATTR_WO(disconnect);
@@ -768,10 +827,12 @@ static void __pci_tsm_destroy(struct pci_dev *pdev, struct tsm_dev *tsm_dev)
 	else if (tsm_dev != tsm->tsm_dev)
 		return;
 
-	if (is_link_tsm(tsm_dev) && is_pci_tsm_pf0(pdev))
-		pci_tsm_disconnect(pdev);
-	else
+	if (is_link_tsm(tsm_dev) && is_pci_tsm_pf0(pdev)) {
+		if (pci_tsm_disconnect(pdev))
+			pci_warn(pdev, "TSM connection is still in use\n");
+	} else {
 		pci_tsm_fn_exit(pdev);
+	}
 }
 
 void pci_tsm_destroy(struct pci_dev *pdev)
