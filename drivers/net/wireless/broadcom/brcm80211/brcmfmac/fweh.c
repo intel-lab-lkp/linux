@@ -326,11 +326,13 @@ static void brcmf_fweh_event_worker(struct work_struct *work)
 			ifp = drvr->iflist[0];
 		else
 			ifp = drvr->iflist[emsg.bsscfgidx];
-		/* The AWDL interface has no vif, its events are not for
-		 * the cfg80211 handlers
+		/* The AWDL interface has no vif, its events go to user
+		 * space and not to the cfg80211 handlers
 		 */
-		if (ifp && ifp->awdl)
+		if (ifp && ifp->awdl) {
+			brcmf_awdl_fweh_event(ifp, &emsg, event->data);
 			goto event_free;
+		}
 
 		err = brcmf_fweh_call_event_handler(drvr, ifp, event->code,
 						    &emsg, event->data);

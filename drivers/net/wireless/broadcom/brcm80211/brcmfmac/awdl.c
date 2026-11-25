@@ -711,17 +711,113 @@ static void brcmf_awdl_settle_work(struct wiphy *wiphy,
 		       sizeof(dwell_off));
 }
 
+/*
+ * ACTION_FRAME_RX and AWDL_EVENT put a header in front of a received frame.
+ * Its first 16 bits, high byte first, are the version: 1 is struct
+ * brcmf_rx_mgmt_data with 16 bytes, 2 has 24 bytes.
+ */
+#define BRCMF_AWDL_RX_HDR_V1_LEN	16
+#define BRCMF_AWDL_RX_HDR_V2_LEN	24
+
+/* AWDL action frame: vendor specific category, Apple OUI, type AWDL */
+static const u8 brcmf_awdl_af[] = { 0x7f, 0x00, 0x17, 0xf2, 0x08 };
+
+static struct sk_buff *brcmf_awdl_event_alloc(struct brcmf_pub *drvr,
+					      int event, int len)
+{
+	struct brcmf_if *pri = brcmf_get_ifp(drvr, 0);
+
+	return cfg80211_vendor_event_alloc(drvr->wiphy,
+					   pri && pri->vif ? &pri->vif->wdev :
+							     NULL,
+					   len, event, GFP_KERNEL);
+}
+
+/**
+ * brcmf_awdl_fweh_event() - pass a firmware event of the AWDL interface on.
+ *
+ * @ifp: interface of the event.
+ * @e: event message.
+ * @data: event data.
+ *
+ * Called from the firmware event worker for the events of the AWDL
+ * interface, which do not go to the cfg80211 handlers. Received AWDL action
+ * frames and role changes become vendor events, other events are dropped.
+ * AWDL_EVENT carries an AWDL action frame with some of its status values.
+ * Return: 0 or a negative error code.
+ */
+int brcmf_awdl_fweh_event(struct brcmf_if *ifp,
+			  const struct brcmf_event_msg *e, void *data)
+{
+	struct brcmf_pub *drvr = ifp->drvr;
+	struct sk_buff *skb;
+	u32 hdr;
+
+	if (!ifp->awdl)
+		return 0;
+
+	switch (e->event_code) {
+	case BRCMF_E_ACTION_FRAME_RX:
+	case BRCMF_E_AWDL_EVENT:
+		break;
+	case BRCMF_E_AWDL_ROLE:
+		skb = brcmf_awdl_event_alloc(drvr, BRCMF_VNDR_EVTS_AWDL_ROLE,
+					     NLMSG_DEFAULT_SIZE);
+		if (!skb) {
+			bphy_err(drvr, "AWDL role event dropped\n");
+			return -ENOMEM;
+		}
+		if (nla_put_u32(skb, BRCMF_AWDL_ATTR_ROLE, e->status)) {
+			bphy_err(drvr, "AWDL role event too large\n");
+			kfree_skb(skb);
+			return -EMSGSIZE;
+		}
+		cfg80211_vendor_event(skb, GFP_KERNEL);
+		return 0;
+	default:
+		return 0;
+	}
+
+	if (e->datalen < 2)
+		return 0;
+	switch (get_unaligned_be16(data)) {
+	case 1:
+		hdr = BRCMF_AWDL_RX_HDR_V1_LEN;
+		break;
+	case 2:
+		hdr = BRCMF_AWDL_RX_HDR_V2_LEN;
+		break;
+	default:
+		return 0;
+	}
+	if (e->datalen < hdr + sizeof(brcmf_awdl_af) ||
+	    memcmp((u8 *)data + hdr, brcmf_awdl_af, sizeof(brcmf_awdl_af)))
+		return 0;
+
+	skb = brcmf_awdl_event_alloc(drvr, BRCMF_VNDR_EVTS_AWDL_FRAME,
+				     e->datalen);
+	if (!skb) {
+		bphy_err(drvr, "AWDL frame from %pM dropped\n", e->addr);
+		return -ENOMEM;
+	}
+	if (nla_put(skb, BRCMF_AWDL_ATTR_ADDR, ETH_ALEN, e->addr) ||
+	    nla_put(skb, BRCMF_AWDL_ATTR_FRAME, e->datalen - hdr,
+		    (u8 *)data + hdr)) {
+		bphy_err(drvr, "AWDL frame from %pM too large\n", e->addr);
+		kfree_skb(skb);
+		return -EMSGSIZE;
+	}
+	cfg80211_vendor_event(skb, GFP_KERNEL);
+	return 0;
+}
+BRCMF_EXPORT_SYMBOL_GPL(brcmf_awdl_fweh_event);
+
 static void brcmf_awdl_send_result(struct brcmf_pub *drvr, int event,
 				   int status, struct net_device *ndev)
 {
-	struct brcmf_if *pri = brcmf_get_ifp(drvr, 0);
 	struct sk_buff *skb;
 
-	skb = cfg80211_vendor_event_alloc(drvr->wiphy,
-					  pri && pri->vif ? &pri->vif->wdev :
-							    NULL,
-					  NLMSG_DEFAULT_SIZE, event,
-					  GFP_KERNEL);
+	skb = brcmf_awdl_event_alloc(drvr, event, NLMSG_DEFAULT_SIZE);
 	if (!skb)
 		return;
 	if (nla_put_s32(skb, BRCMF_AWDL_ATTR_STATUS, status) ||
@@ -808,6 +904,8 @@ const struct nla_policy brcmf_awdl_vndr_policy[BRCMF_AWDL_ATTR_MAX + 1] = {
 	[BRCMF_AWDL_ATTR_IFINDEX] = { .type = NLA_REJECT },
 	[BRCMF_AWDL_ATTR_PEER_IES] = { .type = NLA_BINARY,
 				       .len = BRCMF_AWDL_PEER_IES_MAX },
+	[BRCMF_AWDL_ATTR_FRAME] = { .type = NLA_REJECT },
+	[BRCMF_AWDL_ATTR_ROLE] = { .type = NLA_REJECT },
 };
 
 /* The device of a vendor command and its parsed attributes */

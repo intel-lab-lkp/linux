@@ -18,6 +18,7 @@ struct brcmf_pub;
 struct brcmf_if;
 struct net_device;
 struct sk_buff;
+struct brcmf_event_msg;
 
 enum brcmf_awdl_op {
 	BRCMF_AWDL_OP_NONE,
@@ -91,6 +92,8 @@ int brcmf_awdl_add(struct brcmf_pub *drvr, const u8 *mac,
 		   struct net_device **ndev);
 int brcmf_awdl_del(struct brcmf_pub *drvr);
 void brcmf_awdl_suspend(struct brcmf_pub *drvr);
+int brcmf_awdl_fweh_event(struct brcmf_if *ifp,
+			  const struct brcmf_event_msg *e, void *data);
 bool brcmf_awdl_if_added(struct brcmf_pub *drvr, struct brcmf_if *ifp);
 bool brcmf_awdl_if_removed(struct brcmf_pub *drvr, struct brcmf_if *ifp);
 int brcmf_awdl_encap(struct brcmf_if *ifp, struct sk_buff *skb);
