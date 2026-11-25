@@ -208,6 +208,10 @@ struct tcpci;
  * @set_orientation:
  *		Optional; Enable setting the connector orientation
  *		CONFIG_STANDARD_OUTPUT (0x18) bit0.
+ * @get_current_limit:
+ *		Optional; Returns the current in mA the port may draw as a sink
+ *		when the partner advertises Rp-default, e.g. from BC1.2
+ *		detection in the TCPC. Must not return a negative value.
  */
 struct tcpci_data {
 	struct regmap *regmap;
@@ -223,6 +227,7 @@ struct tcpci_data {
 	int (*start_drp_toggling)(struct tcpci *tcpci, struct tcpci_data *data,
 				  enum typec_cc_status cc);
 	int (*set_vbus)(struct tcpci *tcpci, struct tcpci_data *data, bool source, bool sink);
+	int (*get_current_limit)(struct tcpci *tcpci, struct tcpci_data *data);
 	void (*frs_sourcing_vbus)(struct tcpci *tcpci, struct tcpci_data *data);
 	void (*set_partner_usb_comm_capable)(struct tcpci *tcpci, struct tcpci_data *data,
 					     bool capable);

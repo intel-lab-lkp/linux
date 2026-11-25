@@ -498,6 +498,15 @@ static int tcpci_set_pd_rx(struct tcpc_dev *tcpc, bool enable)
 	return 0;
 }
 
+static int tcpci_get_current_limit(struct tcpc_dev *tcpc)
+{
+	struct tcpci *tcpci = tcpc_to_tcpci(tcpc);
+	int ret;
+
+	ret = tcpci->data->get_current_limit(tcpci, tcpci->data);
+	return ret < 0 ? 0 : ret;
+}
+
 static int tcpci_get_vbus(struct tcpc_dev *tcpc)
 {
 	struct tcpci *tcpci = tcpc_to_tcpci(tcpc);
@@ -891,6 +900,9 @@ struct tcpci *tcpci_register_port(struct device *dev, struct tcpci_data *data)
 
 	if (tcpci->data->check_contaminant)
 		tcpci->tcpc.check_contaminant = tcpci_check_contaminant;
+
+	if (tcpci->data->get_current_limit)
+		tcpci->tcpc.get_current_limit = tcpci_get_current_limit;
 
 	if (tcpci->data->auto_discharge_disconnect) {
 		tcpci->tcpc.enable_auto_vbus_discharge = tcpci_enable_auto_vbus_discharge;
