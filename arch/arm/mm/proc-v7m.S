@@ -96,6 +96,16 @@ SYM_FUNC_END(cpu_cm7_proc_fin)
 
 	.section ".init.text", "ax"
 
+/* Cortex-M33: clear ACTLR.EXTEXCLALL so that exclusives use the local monitor */
+__v7m_cm33_setup:
+	ldr	r0, =V7M_SCS_ACTLR
+	ldr	r1, [r0]
+	bic	r1, r1, #V7M_SCS_ACTLR_CM33_EXTEXCLALL
+	str	r1, [r0]
+	dsb
+	isb
+	b	__v7m_setup
+
 __v7m_cm7_setup:
 	mov	r8, #(V7M_SCB_CCR_DC | V7M_SCB_CCR_IC| V7M_SCB_CCR_BP)
 	b	__v7m_setup_cont
@@ -216,7 +226,7 @@ __v7m_cm55_proc_info:
 __v7m_cm33_proc_info:
 	.long	0x410fd210		/* ARM Cortex-M33 0xD21 */
 	.long	0xff0ffff0		/* Mask off revision, patch release */
-	__v7m_proc __v7m_cm33_proc_info, __v7m_setup, hwcaps = HWCAP_EDSP
+	__v7m_proc __v7m_cm33_proc_info, __v7m_cm33_setup, hwcaps = HWCAP_EDSP
 	.size	__v7m_cm33_proc_info, . - __v7m_cm33_proc_info
 
 	/*
