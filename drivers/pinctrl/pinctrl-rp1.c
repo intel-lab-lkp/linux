@@ -8,6 +8,7 @@
  * pinctrl-bcm2835.c, please see original file for copyright information
  */
 
+#include <linux/array_size.h>
 #include <linux/gpio/driver.h>
 #include <linux/of_irq.h>
 #include <linux/pinctrl/pinconf.h>
@@ -338,9 +339,9 @@ static struct pinctrl_pin_desc rp1_gpio_pins[] = {
 };
 
 #define PIN_ARRAY(...) \
-	(const unsigned int []) {__VA_ARGS__}
+	((const unsigned int []) {__VA_ARGS__})
 #define PIN_ARRAY_SIZE(...) \
-	(sizeof((unsigned int[]) {__VA_ARGS__}) / sizeof(unsigned int))
+	ARRAY_SIZE(PIN_ARRAY(__VA_ARGS__))
 #define RP1_GROUP(name, ...) \
 	PINCTRL_PINGROUP(#name, PIN_ARRAY(__VA_ARGS__), \
 			 PIN_ARRAY_SIZE(__VA_ARGS__))
@@ -439,9 +440,9 @@ static const struct pingroup rp1_gpio_groups[] = {
 };
 
 #define GRP_ARRAY(...) \
-	(const char * []) {__VA_ARGS__}
+	((const char * []) {__VA_ARGS__})
 #define GRP_ARRAY_SIZE(...) \
-	(sizeof((char *[]) {__VA_ARGS__}) / sizeof(char *))
+	ARRAY_SIZE(GRP_ARRAY(__VA_ARGS__))
 #define RP1_FNC(f, ...) \
 	[func_##f] = PINCTRL_PINFUNCTION(#f, GRP_ARRAY(__VA_ARGS__), \
 					 GRP_ARRAY_SIZE(__VA_ARGS__))
