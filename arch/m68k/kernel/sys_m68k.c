@@ -37,9 +37,9 @@
 
 #include "../mm/fault.h"
 
-asmlinkage long sys_mmap2(unsigned long addr, unsigned long len,
-	unsigned long prot, unsigned long flags,
-	unsigned long fd, unsigned long pgoff)
+SYSCALL_DEFINE6(mmap2, unsigned long, addr, unsigned long, len,
+		unsigned long, prot, unsigned long, flags,
+		unsigned long, fd, unsigned long, pgoff)
 {
 	/*
 	 * This is wrong for sun3 - there PAGE_SIZE is 8Kb,
@@ -374,8 +374,8 @@ cache_flush_060 (unsigned long addr, int scope, int cache, unsigned long len)
 }
 
 /* sys_cacheflush -- flush (part of) the processor cache.  */
-asmlinkage int
-sys_cacheflush (unsigned long addr, int scope, int cache, unsigned long len)
+SYSCALL_DEFINE4(cacheflush, unsigned long, addr, int, scope, int, cache,
+		unsigned long, len)
 {
 	int ret = -EINVAL;
 
@@ -459,9 +459,8 @@ out:
 
 /* This syscall gets its arguments in A0 (mem), D2 (oldval) and
    D1 (newval).  */
-asmlinkage int
-sys_atomic_cmpxchg_32(unsigned long newval, int oldval, int d3, int d4, int d5,
-		      unsigned long __user * mem)
+SYSCALL_DEFINE6(atomic_cmpxchg_32, unsigned long, newval, int, oldval,
+		int, d3, int, d4, int, d5, unsigned long __user *, mem)
 {
 	/* This was borrowed from ARM's implementation.  */
 	for (;;) {
@@ -515,12 +514,8 @@ sys_atomic_cmpxchg_32(unsigned long newval, int oldval, int d3, int d4, int d5,
 		   Make the kernel do the necessary page stuff, then re-iterate.
 		   Simulate a write access fault to do that.  */
 		{
-			/* The first argument of the function corresponds to
-			   D1, which is the first field of struct pt_regs.  */
-			struct pt_regs *fp = (struct pt_regs *)&newval;
-
 			/* '3' is an RMW flag.  */
-			if (do_page_fault(fp, (unsigned long)mem, 3))
+			if (do_page_fault(current_pt_regs(), (unsigned long)mem, 3))
 				/* If the do_page_fault() failed, we don't
 				   have anything meaningful to return.
 				   There should be a SIGSEGV pending for
@@ -533,8 +528,8 @@ sys_atomic_cmpxchg_32(unsigned long newval, int oldval, int d3, int d4, int d5,
 #else
 
 /* sys_cacheflush -- flush (part of) the processor cache.  */
-asmlinkage int
-sys_cacheflush (unsigned long addr, int scope, int cache, unsigned long len)
+SYSCALL_DEFINE4(cacheflush, unsigned long, addr, int, scope, int, cache,
+		unsigned long, len)
 {
 	flush_cache_all();
 	return 0;
@@ -542,9 +537,8 @@ sys_cacheflush (unsigned long addr, int scope, int cache, unsigned long len)
 
 /* This syscall gets its arguments in A0 (mem), D2 (oldval) and
    D1 (newval).  */
-asmlinkage int
-sys_atomic_cmpxchg_32(unsigned long newval, int oldval, int d3, int d4, int d5,
-		      unsigned long __user * mem)
+SYSCALL_DEFINE6(atomic_cmpxchg_32, unsigned long, newval, int, oldval,
+		int, d3, int, d4, int, d5, unsigned long __user *, mem)
 {
 	struct mm_struct *mm = current->mm;
 	unsigned long mem_value;
@@ -561,23 +555,23 @@ sys_atomic_cmpxchg_32(unsigned long newval, int oldval, int d3, int d4, int d5,
 
 #endif /* CONFIG_MMU */
 
-asmlinkage int sys_getpagesize(void)
+SYSCALL_DEFINE0(getpagesize)
 {
 	return PAGE_SIZE;
 }
 
-asmlinkage unsigned long sys_get_thread_area(void)
+SYSCALL_DEFINE0(get_thread_area)
 {
 	return current_thread_info()->tp_value;
 }
 
-asmlinkage int sys_set_thread_area(unsigned long tp)
+SYSCALL_DEFINE1(set_thread_area, unsigned long, tp)
 {
 	current_thread_info()->tp_value = tp;
 	return 0;
 }
 
-asmlinkage int sys_atomic_barrier(void)
+SYSCALL_DEFINE0(atomic_barrier)
 {
 	/* no code needed for uniprocs */
 	return 0;
