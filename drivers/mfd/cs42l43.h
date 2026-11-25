@@ -9,7 +9,7 @@
 #ifndef CS42L43_CORE_INT_H
 #define CS42L43_CORE_INT_H
 
-#define CS42L43_N_DEFAULTS 189
+#define CS42L43_N_DEFAULTS 190
 
 struct dev_pm_ops;
 struct device;
