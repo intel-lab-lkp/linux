@@ -1,0 +1,129 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/*
+ * Copyright (C) 2025, LINBIT HA-Solutions GmbH.
+ */
+
+#ifndef __DRBD_LEGACY_84_H
+#define __DRBD_LEGACY_84_H
+
+#include "drbd_int.h"
+
+struct meta_data_on_disk_84;
+
+/*
+ *   drbd-8.4                      drbd-9 md.flags                   drbd-9 peer-md.flags
+ * MDF_CONSISTENT      1 << 0  MDF_CONSISTENT =        1 << 0,   MDF_PEER_CONNECTED =    1 << 0,
+ * MDF_PRIMARY_IND     1 << 1  MDF_PRIMARY_IND =       1 << 1,   MDF_PEER_OUTDATED =     1 << 1,
+ * MDF_CONNECTED_IND   1 << 2                                    MDF_PEER_FENCING =      1 << 2,
+ * MDF_FULL_SYNC       1 << 3                                    MDF_PEER_FULL_SYNC =    1 << 3,
+ * MDF_WAS_UP_TO_DATE  1 << 4  MDF_WAS_UP_TO_DATE =    1 << 4,   MDF_PEER_DEVICE_SEEN =  1 << 4,
+ * MDF_PEER_OUT_DATED  1 << 5                                    MDF_PEER_DIVERGENCE_BITMAP = 1 << 5
+ * MDF_CRASHED_PRIMARY 1 << 6  MDF_CRASHED_PRIMARY =   1 << 6,   MDF_PEER_BITMAP_AUTHORITATIVE
+ *                                                                                       = 1 << 6
+ * MDF_AL_CLEAN        1 << 7  MDF_AL_CLEAN =          1 << 7,
+ * MDF_AL_DISABLED     1 << 8  MDF_AL_DISABLED =       1 << 8,
+ *                             MDF_PRIMARY_LOST_QUORUM = 1 << 9,
+ *                             MDF_HAVE_QUORUM =       1 << 10,
+ *                                                                MDF_NODE_EXISTS =      1 << 16,
+ */
+
+#define MDF_84_MASK (MDF_CONSISTENT | MDF_PRIMARY_IND | MDF_WAS_UP_TO_DATE | \
+		     MDF_CRASHED_PRIMARY | MDF_AL_CLEAN | MDF_AL_DISABLED)
+#define MDF_84_PEER_MASK (MDF_PEER_FULL_SYNC)
+#define MDF_84_CONNECTED_IND (1<<2)
+#define MDF_84_PEER_OUTDATED (1<<5)
+
+/*
+ * Mask for the v1 DEVICE_STATISTICS dev_disk_flags and
+ * PEER_DEVICE_STATISTICS peer_dev_flags attributes. DRBD 9 keeps 8.4's
+ * bit positions for every bit 8.4 knows about, so masking off the newer
+ * bits is enough; nothing needs remapping.
+ */
+#define PEER_DEV_FLAGS_84_MASK (MDF_PEER_CONNECTED | MDF_PEER_OUTDATED | \
+				 MDF_PEER_FENCING | MDF_PEER_FULL_SYNC)
+
+/*
+ * The md.peers[] slot of the one 8.4 peer, where it is now: slot 0 while
+ * md->node_id is -1, the peer's slot once drbd_setup_node_ids_84() has set
+ * it. Attach sets md->node_id from the resource's node id. A failed first
+ * connect resets only the latter, and the slot stays where md->node_id says.
+ */
+static inline struct drbd_peer_md *drbd_md_peer_84(struct drbd_md *md)
+{
+	return &md->peers[md->node_id == 0 ? 1 : 0];
+}
+
+#ifdef CONFIG_DRBD_COMPAT_84
+extern atomic_t nr_drbd8_devices;
+
+void drbd_md_decode_84(struct meta_data_on_disk_84 *on_disk, struct drbd_md *md,
+		       int my_node_id);
+void drbd_md_encode_84(struct drbd_device *device, struct meta_data_on_disk_84 *buffer);
+int drbd_setup_node_ids_84(struct drbd_connection *connection, struct drbd_path *path,
+			   unsigned int peer_node_id);
+bool drbd_show_legacy_device(struct seq_file *seq, void *v);
+u32 drbd_pack_state_84(struct drbd_device *device);
+void drbd_get_syncer_progress_84(struct drbd_peer_device *pd,
+		enum drbd_repl_state repl_state, unsigned long *rs_total,
+		unsigned long *bits_left, unsigned int *per_mil_done);
+
+/*
+ * Remap a DRBD 9 enum drbd_state_rv value to one 8.4 userland's own SS_*
+ * string table can render truthfully. SS_UNKNOWN_ERROR (0) through
+ * SS_O_VOL_PEER_PRI (-20), every success code and every enum drbd_ret_code
+ * are numerically identical in both dialects. From SS_INTERRUPTED (-21)
+ * down, DRBD 9 has nine codes 8.4 numbers differently (SS_INTERRUPTED
+ * collides with 8.4's SS_OUTDATE_WO_CONN) or lacks entirely (8.4 ends at
+ * SS_AFTER_LAST_ERROR = -22); passed through raw they would print a wrong
+ * message or "unknown error code". Map each to the nearest 8.4 code whose
+ * string does not mislead: the interrupted, timed-out and retried
+ * handshake cases to SS_IN_TRANSIENT_STATE ("retry"), a blocking
+ * read-only opener to SS_DEVICE_IN_USE, a handshake-forced disconnect to
+ * SS_CW_FAILED_BY_PEER, and the quorum, weak-connectivity, bitmap
+ * negotiation and sentinel codes, which have no 8.4 meaning, to
+ * SS_UNKNOWN_ERROR. compat84_put_outcome() is the only place a
+ * drbd_state_rv reaches the v1 wire.
+ */
+static inline enum drbd_state_rv drbd_state_rv_84(enum drbd_state_rv rv)
+{
+	switch (rv) {
+	case SS_INTERRUPTED:
+	case SS_TIMEOUT:
+	case SS_HANDSHAKE_RETRY:
+		return SS_IN_TRANSIENT_STATE;
+	case SS_PRIMARY_READER:
+		return SS_DEVICE_IN_USE;
+	case SS_HANDSHAKE_DISCONNECT:
+		return SS_CW_FAILED_BY_PEER;
+	case SS_WEAKLY_CONNECTED:
+	case SS_NO_QUORUM:
+	case SS_ATTACH_NO_BITMAP:
+	case SS_AFTER_LAST_ERROR:
+		return SS_UNKNOWN_ERROR;
+	default:
+		return rv;
+	}
+}
+
+/*
+ * Fused v1 SIB_SYNC_PROGRESS event, called from update_on_disk_bitmap()
+ * (drbd_sender.c), mainline 8.4's own call site; already throttled there
+ * by drbd_lazy_bitmap_update_due().
+ */
+void compat84_notify_sync_progress(struct drbd_peer_device *peer_device);
+#else
+static inline void drbd_md_decode_84(struct meta_data_on_disk_84 *on_disk, struct drbd_md *md,
+				     int my_node_id) {};
+static inline void drbd_md_encode_84(struct drbd_device *device,
+	struct meta_data_on_disk_84 *buffer) {};
+static inline int drbd_setup_node_ids_84(struct drbd_connection *connection, struct drbd_path *path,
+			   unsigned int peer_node_id) { return 0; };
+static inline bool drbd_show_legacy_device(struct seq_file *seq, void *v) { return false; };
+static inline u32 drbd_pack_state_84(struct drbd_device *device) { return 0; };
+static inline void drbd_get_syncer_progress_84(struct drbd_peer_device *pd,
+		enum drbd_repl_state repl_state, unsigned long *rs_total,
+		unsigned long *bits_left, unsigned int *per_mil_done) {};
+static inline void compat84_notify_sync_progress(struct drbd_peer_device *peer_device) {};
+#endif  /* CONFIG_DRBD_COMPAT_84 */
+
+#endif  /* __DRBD_LEGACY_84_H */

@@ -7,6 +7,7 @@ drbd-y += drbd_nl_gen.o
 drbd-y += drbd_transport.o
 drbd-$(CONFIG_DRBD_DAX) += drbd_dax_pmem.o
 drbd-$(CONFIG_DEBUG_FS) += drbd_debugfs.o
+drbd-$(CONFIG_DRBD_COMPAT_84) += drbd_legacy_84.o
 
 obj-$(CONFIG_BLK_DEV_DRBD)     += drbd.o
 obj-$(CONFIG_BLK_DEV_DRBD_TCP) += drbd_transport_tcp.o
