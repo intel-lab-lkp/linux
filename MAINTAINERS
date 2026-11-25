@@ -7124,13 +7124,6 @@ F:	kernel/cred.c
 F:	rust/kernel/cred.rs
 F:	Documentation/security/credentials.rst
 
-INTEL CRPS COMMON REDUNDANT PSU DRIVER
-M:	Ninad Palsule <ninad@linux.ibm.com>
-L:	linux-hwmon@vger.kernel.org
-S:	Maintained
-F:	Documentation/hwmon/crps.rst
-F:	drivers/hwmon/pmbus/crps.c
-
 CRYPTO API
 M:	Herbert Xu <herbert@gondor.apana.org.au>
 M:	"David S. Miller" <davem@davemloft.net>
@@ -13309,6 +13302,13 @@ M:	x86@kernel.org
 L:	linux-kernel@vger.kernel.org
 S:	Supported
 F:	arch/x86/include/asm/intel-family.h
+
+INTEL CRPS COMMON REDUNDANT PSU DRIVER
+M:	Ninad Palsule <ninad@linux.ibm.com>
+L:	linux-hwmon@vger.kernel.org
+S:	Maintained
+F:	Documentation/hwmon/crps.rst
+F:	drivers/hwmon/pmbus/crps.c
 
 INTEL DISCRETE GRAPHICS NVM MTD DRIVER
 M:	Alexander Usyskin <alexander.usyskin@intel.com>
