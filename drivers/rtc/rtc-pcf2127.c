@@ -186,7 +186,6 @@ struct pcf21xx_ts_config {
 
 struct pcf21xx_config {
 	int type; /* IC variant */
-	int max_register;
 	unsigned int has_nvmem:1;
 	unsigned int has_bit_wd_ctl_cd0:1;
 	unsigned int wd_val_reg_readable:1; /* If watchdog value register can be read. */
@@ -1020,7 +1019,6 @@ static struct attribute *pcf2131_attrs[] = {
 static struct pcf21xx_config pcf21xx_cfg[] = {
 	[PCF2127] = {
 		.type = PCF2127,
-		.max_register = 0x1d,
 		.has_nvmem = 1,
 		.has_bit_wd_ctl_cd0 = 1,
 		.wd_val_reg_readable = 1,
@@ -1048,7 +1046,6 @@ static struct pcf21xx_config pcf21xx_cfg[] = {
 	},
 	[PCF2129] = {
 		.type = PCF2129,
-		.max_register = 0x19,
 		.has_nvmem = 0,
 		.has_bit_wd_ctl_cd0 = 0,
 		.wd_val_reg_readable = 1,
@@ -1076,7 +1073,6 @@ static struct pcf21xx_config pcf21xx_cfg[] = {
 	},
 	[PCF2131] = {
 		.type = PCF2131,
-		.max_register = 0x36,
 		.has_nvmem = 0,
 		.has_bit_wd_ctl_cd0 = 0,
 		.wd_val_reg_readable = 0,
@@ -1452,13 +1448,27 @@ static const struct i2c_device_id pcf2127_i2c_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, pcf2127_i2c_id);
 
+static const struct regmap_config pcf2127_i2c_regmap_config[PCF21XX_LAST_ID] = {
+	[PCF2127] = {
+		.reg_bits = 8,
+		.val_bits = 8,
+		.max_register = 0x1d,
+	},
+	[PCF2129] = {
+		.reg_bits = 8,
+		.val_bits = 8,
+		.max_register = 0x19,
+	},
+	[PCF2131] = {
+		.reg_bits = 8,
+		.val_bits = 8,
+		.max_register = 0x36,
+	},
+};
+
 static int pcf2127_i2c_probe(struct i2c_client *client)
 {
 	struct regmap *regmap;
-	static struct regmap_config config = {
-		.reg_bits = 8,
-		.val_bits = 8,
-	};
 	const struct pcf21xx_config *variant;
 
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C))
@@ -1468,10 +1478,9 @@ static int pcf2127_i2c_probe(struct i2c_client *client)
 	if (!variant)
 		return -ENODEV;
 
-	config.max_register = variant->max_register,
-
 	regmap = devm_regmap_init(&client->dev, &pcf2127_i2c_regmap,
-					&client->dev, &config);
+				  &client->dev,
+				  &pcf2127_i2c_regmap_config[variant->type]);
 	if (IS_ERR(regmap)) {
 		dev_err(&client->dev, "%s: regmap allocation failed: %ld\n",
 			__func__, PTR_ERR(regmap));
@@ -1518,14 +1527,30 @@ static void pcf2127_i2c_unregister_driver(void)
 static struct spi_driver pcf2127_spi_driver;
 static const struct spi_device_id pcf2127_spi_id[];
 
-static int pcf2127_spi_probe(struct spi_device *spi)
-{
-	static struct regmap_config config = {
+static const struct regmap_config pcf2127_spi_regmap_config[PCF21XX_LAST_ID] = {
+	[PCF2127] = {
 		.reg_bits = 8,
 		.val_bits = 8,
 		.read_flag_mask = 0xa0,
 		.write_flag_mask = 0x20,
-	};
+		.max_register = 0x1d,
+	},
+	[PCF2129] = {
+		.reg_bits = 8,
+		.val_bits = 8,
+		.read_flag_mask = 0xa0,
+		.write_flag_mask = 0x20,
+		.max_register = 0x19,
+	},
+	[PCF2131] = {
+		.reg_bits = 8,
+		.val_bits = 8,
+		.max_register = 0x36,
+	},
+};
+
+static int pcf2127_spi_probe(struct spi_device *spi)
+{
 	struct regmap *regmap;
 	const struct pcf21xx_config *variant;
 
@@ -1541,14 +1566,8 @@ static int pcf2127_spi_probe(struct spi_device *spi)
 		variant = &pcf21xx_cfg[type];
 	}
 
-	if (variant->type == PCF2131) {
-		config.read_flag_mask = 0x0;
-		config.write_flag_mask = 0x0;
-	}
-
-	config.max_register = variant->max_register;
-
-	regmap = devm_regmap_init_spi(spi, &config);
+	regmap = devm_regmap_init_spi(spi,
+				      &pcf2127_spi_regmap_config[variant->type]);
 	if (IS_ERR(regmap)) {
 		dev_err(&spi->dev, "%s: regmap allocation failed: %ld\n",
 			__func__, PTR_ERR(regmap));
