@@ -208,15 +208,16 @@ static void process_rx(struct max_tcpci_chip *chip, u16 status)
 
 static int get_vbus_regulator_handle(struct max_tcpci_chip *chip)
 {
-	if (IS_ERR_OR_NULL(chip->vbus_reg)) {
-		chip->vbus_reg = regulator_get_exclusive(chip->dev, "vbus");
-		if (IS_ERR_OR_NULL(chip->vbus_reg)) {
-			dev_err(chip->dev,
-				"Failed to get vbus regulator handle\n");
-			return -ENODEV;
-		}
-	}
+	struct regulator *reg;
 
+	if (chip->vbus_reg)
+		return 0;
+
+	reg = regulator_get_exclusive(chip->dev, "vbus");
+	if (IS_ERR(reg))
+		return PTR_ERR(reg);
+
+	chip->vbus_reg = reg;
 	return 0;
 }
 
@@ -224,7 +225,7 @@ static void max_tcpci_put_vbus_regulator(void *data)
 {
 	struct max_tcpci_chip *chip = data;
 
-	if (!IS_ERR_OR_NULL(chip->vbus_reg))
+	if (chip->vbus_reg)
 		regulator_put(chip->vbus_reg);
 }
 
@@ -244,7 +245,12 @@ static int max_tcpci_set_vbus(struct tcpci *tcpci, struct tcpci_data *tdata, boo
 		 * Regulator is not necessary for sink only applications. Return
 		 * success in cases where sink mode is being modified.
 		 */
-		return source ? ret : 1;
+		if (!source)
+			return 1;
+
+		dev_err(chip->dev, "Failed to get vbus regulator: %pe\n",
+			ERR_PTR(ret));
+		return ret;
 	}
 
 	if (source) {
