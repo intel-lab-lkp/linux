@@ -341,6 +341,10 @@ static int __init __mpu_min_region_order(void)
 {
 	u32 drbar_result, irbar_result;
 
+	/* On M-class, writing MPU_RBAR selects a region; the minimum is 32 bytes */
+	if (IS_ENABLED(CONFIG_CPU_V7M))
+		return 5;
+
 	/* We've kept a region free for this probing */
 	rgnr_write(PMSAv7_PROBE_REGION);
 	isb();
