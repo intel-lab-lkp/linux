@@ -2062,7 +2062,7 @@ static void vm_destroy_work_func(struct work_struct *w)
 	xe_assert(xe, !vm->size);
 
 	if (xe_vm_in_preempt_fence_mode(vm))
-		flush_work(&vm->preempt.rebind_work);
+		cancel_work_sync(&vm->preempt.rebind_work);
 
 	mutex_destroy(&vm->snap_mutex);
 
