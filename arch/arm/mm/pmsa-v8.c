@@ -140,7 +140,7 @@ static int __init __mpu_max_regions(void)
 
 static int __init __pmsav8_setup_region(unsigned int number, u32 bar, u32 lar)
 {
-	if (number > mpu_max_regions
+	if (number >= mpu_max_regions
 	    || number >= MPU_MAX_REGIONS)
 		return -ENOENT;
 
