@@ -209,8 +209,7 @@ static void process_rx(struct max_tcpci_chip *chip, u16 status)
 static int get_vbus_regulator_handle(struct max_tcpci_chip *chip)
 {
 	if (IS_ERR_OR_NULL(chip->vbus_reg)) {
-		chip->vbus_reg = devm_regulator_get_exclusive(chip->dev,
-							      "vbus");
+		chip->vbus_reg = regulator_get_exclusive(chip->dev, "vbus");
 		if (IS_ERR_OR_NULL(chip->vbus_reg)) {
 			dev_err(chip->dev,
 				"Failed to get vbus regulator handle\n");
@@ -219,6 +218,14 @@ static int get_vbus_regulator_handle(struct max_tcpci_chip *chip)
 	}
 
 	return 0;
+}
+
+static void max_tcpci_put_vbus_regulator(void *data)
+{
+	struct max_tcpci_chip *chip = data;
+
+	if (!IS_ERR_OR_NULL(chip->vbus_reg))
+		regulator_put(chip->vbus_reg);
 }
 
 static int max_tcpci_set_vbus(struct tcpci *tcpci, struct tcpci_data *tdata, bool source, bool sink)
@@ -513,6 +520,11 @@ static int max_tcpci_probe(struct i2c_client *client)
 	chip->data.check_contaminant = max_tcpci_check_contaminant;
 	chip->data.cable_comm_capable = true;
 	chip->data.attempt_vconn_swap_discovery = max_tcpci_attempt_vconn_swap_discovery;
+
+	ret = devm_add_action_or_reset(&client->dev,
+				       max_tcpci_put_vbus_regulator, chip);
+	if (ret)
+		return ret;
 
 	max_tcpci_init_regs(chip);
 	chip->tcpci = tcpci_register_port(chip->dev, &chip->data);
