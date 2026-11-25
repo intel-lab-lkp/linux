@@ -1455,7 +1455,7 @@ MODULE_DEVICE_TABLE(i2c, pcf2127_i2c_id);
 static int pcf2127_i2c_probe(struct i2c_client *client)
 {
 	struct regmap *regmap;
-	static struct regmap_config config = {
+	struct regmap_config config = {
 		.reg_bits = 8,
 		.val_bits = 8,
 	};
@@ -1520,7 +1520,7 @@ static const struct spi_device_id pcf2127_spi_id[];
 
 static int pcf2127_spi_probe(struct spi_device *spi)
 {
-	static struct regmap_config config = {
+	struct regmap_config config = {
 		.reg_bits = 8,
 		.val_bits = 8,
 		.read_flag_mask = 0xa0,
