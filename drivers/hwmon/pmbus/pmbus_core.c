@@ -728,15 +728,32 @@ void pmbus_clear_faults(struct i2c_client *client)
 }
 EXPORT_SYMBOL_NS_GPL(pmbus_clear_faults, "PMBUS");
 
-static void pmbus_clear_cml_fault(struct i2c_client *client, int page)
+#define PB_CML_FAULT_CLEAR_MASK	(PB_CML_FAULT_INVALID_COMMAND | \
+				 PB_CML_FAULT_INVALID_DATA)
+
+static void pmbus_clear_cml_fault(struct i2c_client *client, int page,
+				  bool verify)
 {
 	struct pmbus_data *data = i2c_get_clientdata(client);
+	int ret;
 
-	if (!data->has_status_cml ||
-	    _pmbus_write_byte_data(client, page, PMBUS_STATUS_CML,
-				   PB_CML_FAULT_INVALID_COMMAND |
-				   PB_CML_FAULT_INVALID_DATA) < 0)
-		pmbus_clear_fault_page(client, page);
+	if (data->has_status_cml) {
+		ret = _pmbus_write_byte_data(client, page, PMBUS_STATUS_CML,
+					     PB_CML_FAULT_CLEAR_MASK);
+		if (ret >= 0 && verify &&
+		    !(data->flags & PMBUS_WRITE_PROTECTED)) {
+			ret = _pmbus_read_byte_data(client, page,
+						    PMBUS_STATUS_CML);
+			if (ret >= 0 && (ret & PB_CML_FAULT_CLEAR_MASK)) {
+				data->has_status_cml = false;
+				ret = -EIO;
+			}
+		}
+		if (ret >= 0)
+			return;
+	}
+
+	pmbus_clear_fault_page(client, page);
 }
 
 void pmbus_clear_cml_faults(struct i2c_client *client)
@@ -745,7 +762,7 @@ void pmbus_clear_cml_faults(struct i2c_client *client)
 	int i;
 
 	for (i = 0; i < data->info->pages; i++)
-		pmbus_clear_cml_fault(client, i);
+		pmbus_clear_cml_fault(client, i, true);
 }
 EXPORT_SYMBOL_NS_GPL(pmbus_clear_cml_faults, "PMBUS");
 
@@ -777,7 +794,7 @@ static bool pmbus_check_register(struct i2c_client *client,
 	if (rv < 0 && (data->flags & PMBUS_READ_STATUS_AFTER_FAILED_CHECK))
 		data->read_status(client, -1);
 	if (reg < PMBUS_VIRT_BASE)
-		pmbus_clear_cml_fault(client, -1);
+		pmbus_clear_cml_fault(client, -1, rv < 0);
 	return rv >= 0;
 }
 
@@ -794,7 +811,7 @@ static bool pmbus_check_status_register(struct i2c_client *client, int page)
 			status = -EIO;
 	}
 
-	pmbus_clear_cml_fault(client, -1);
+	pmbus_clear_cml_fault(client, -1, status < 0);
 	return status >= 0;
 }
 
@@ -822,7 +839,7 @@ static bool __maybe_unused pmbus_check_block_register(struct i2c_client *client,
 		rv = pmbus_check_status_cml(client);
 	if (rv < 0 && (data->flags & PMBUS_READ_STATUS_AFTER_FAILED_CHECK))
 		data->read_status(client, -1);
-	pmbus_clear_cml_fault(client, -1);
+	pmbus_clear_cml_fault(client, -1, rv < 0);
 	return rv >= 0;
 }
 
@@ -3095,7 +3112,7 @@ static int pmbus_init_common(struct i2c_client *client, struct pmbus_data *data,
 	if (data->info->pages)
 		pmbus_clear_cml_faults(client);
 	else
-		pmbus_clear_cml_fault(client, -1);
+		pmbus_clear_cml_fault(client, -1, true);
 
 	if (info->identify) {
 		ret = (*info->identify)(client, info);
@@ -3743,7 +3760,7 @@ static int pmbus_write_smbalert_mask(struct i2c_client *client, u8 page, u8 reg,
 	 * Clear fault systematically in case writing PMBUS_SMBALERT_MASK
 	 * is not supported by the chip.
 	 */
-	pmbus_clear_cml_fault(client, page);
+	pmbus_clear_cml_fault(client, page, true);
 
 	return ret;
 }
