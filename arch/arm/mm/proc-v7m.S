@@ -124,6 +124,11 @@ __v7m_setup_cont:
 	mov	r5, #0x00800000
 	str	r5, [r0, V7M_SCB_SHPR3]	@ set PendSV priority
 
+	@ Clear CONTROL: a boot loader may leave FPCA or SPSEL set
+	mov	r5, #0
+	msr	control, r5
+	isb
+
 	@ SVC to switch to handler mode. Notice that this requires sp to
 	@ point to writeable memory because the processor saves
 	@ some registers to the stack.
