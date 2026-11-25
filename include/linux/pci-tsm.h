@@ -4,6 +4,7 @@
 #include <linux/mutex.h>
 #include <linux/pci.h>
 
+struct module;
 struct pci_tsm;
 struct tsm_dev;
 
@@ -15,12 +16,15 @@ struct tsm_dev;
  * @devsec_ops: Lock, unlock, and interrogate the security state of the
  *		function via the platform TSM (typically virtual function
  *		operations).
+ * @owner: Module implementing the PCI TSM operations
  *
  * This operations are mutually exclusive either a tsm_dev instance
  * manages physical link properties or it manages function security
  * states like TDISP lock/unlock.
  */
 struct pci_tsm_ops {
+	struct module *owner;
+
 	/*
 	 * struct pci_tsm_link_ops - Manage physical link and the TSM/DSM session
 	 * @probe: establish context with the TSM (allocate / wrap 'struct
@@ -143,6 +147,7 @@ int pci_tsm_doe_transfer(struct pci_dev *pdev, u8 type, const void *req,
 			 size_t req_sz, void *resp, size_t resp_sz);
 int pci_tsm_context_get(struct pci_dev *pdev, struct tsm_dev *tsm_dev);
 void pci_tsm_context_put(struct pci_dev *pdev);
+struct tsm_dev *pci_tsm_get_device(struct pci_dev *pdev);
 #else
 static inline int pci_tsm_register(struct tsm_dev *tsm_dev)
 {
@@ -150,6 +155,11 @@ static inline int pci_tsm_register(struct tsm_dev *tsm_dev)
 }
 static inline void pci_tsm_unregister(struct tsm_dev *tsm_dev)
 {
+}
+
+static inline struct tsm_dev *pci_tsm_get_device(struct pci_dev *pdev)
+{
+	return NULL;
 }
 
 static inline int

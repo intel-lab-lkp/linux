@@ -340,6 +340,7 @@ static void dsm_disconnect(struct pci_dev *pdev)
 }
 
 static struct pci_tsm_ops sev_tsm_ops = {
+	.owner = THIS_MODULE,
 	.probe = dsm_probe,
 	.remove = dsm_remove,
 	.connect = dsm_connect,
