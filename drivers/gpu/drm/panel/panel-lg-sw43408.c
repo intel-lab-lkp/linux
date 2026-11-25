@@ -186,10 +186,13 @@ static int sw43408_get_modes(struct drm_panel *panel,
 
 static int sw43408_backlight_update_status(struct backlight_device *bl)
 {
-	struct mipi_dsi_device *dsi = bl_get_data(bl);
+	struct sw43408_panel *ctx = bl_get_data(bl);
 	u16 brightness = backlight_get_brightness(bl);
 
-	return mipi_dsi_dcs_set_display_brightness_large(dsi, brightness);
+	if (!ctx->base.prepared)
+		return 0;
+
+	return mipi_dsi_dcs_set_display_brightness_large(ctx->link, brightness);
 }
 
 static const struct backlight_ops sw43408_backlight_ops = {
@@ -207,7 +210,7 @@ static int sw43408_backlight_init(struct sw43408_panel *ctx)
 	};
 
 	ctx->base.backlight = devm_backlight_device_register(dev, dev_name(dev), dev,
-							     ctx->link,
+							     ctx,
 							     &sw43408_backlight_ops,
 							     &props);
 
