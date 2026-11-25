@@ -1088,7 +1088,7 @@ static int run_test(test_func_t test, u32 sectorsize, u32 nodesize)
 	struct btrfs_root *root = NULL;
 	int ret;
 
-	fs_info = btrfs_alloc_dummy_fs_info(sectorsize, nodesize);
+	fs_info = btrfs_alloc_dummy_fs_info(nodesize, sectorsize);
 	if (!fs_info) {
 		test_std_err(TEST_ALLOC_FS_INFO);
 		ret = -ENOMEM;
