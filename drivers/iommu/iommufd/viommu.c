@@ -105,6 +105,7 @@ int iommufd_viommu_alloc_ioctl(struct iommufd_ucmd *ucmd)
 	 * pluggable IOMMU instance (if exists) is responsible for refcounting
 	 * on its own.
 	 */
+	viommu->backing = IOMMUFD_VIOMMU_BACKING_IOMMU;
 	viommu->iommu_dev = iommu_dev;
 
 	rc = ops->viommu_init(viommu, idev->dev,
@@ -218,10 +219,12 @@ int iommufd_vdevice_alloc_ioctl(struct iommufd_ucmd *ucmd)
 		goto out_put_idev;
 	}
 
-	iommu_dev = iommufd_device_get_iommu_dev(idev);
-	if (!iommu_dev || viommu->iommu_dev != iommu_dev) {
-		rc = -EINVAL;
-		goto out_put_idev;
+	if (viommu->backing == IOMMUFD_VIOMMU_BACKING_IOMMU) {
+		iommu_dev = iommufd_device_get_iommu_dev(idev);
+		if (!iommu_dev || viommu->iommu_dev != iommu_dev) {
+			rc = -EINVAL;
+			goto out_put_idev;
+		}
 	}
 
 	mutex_lock(&idev->igroup->lock);

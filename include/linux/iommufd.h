@@ -98,9 +98,14 @@ void iommufd_access_detach(struct iommufd_access *access);
 
 void iommufd_ctx_get(struct iommufd_ctx *ictx);
 
+enum iommufd_viommu_backing {
+	IOMMUFD_VIOMMU_BACKING_IOMMU,
+};
+
 struct iommufd_viommu {
 	struct iommufd_object obj;
 	struct iommufd_ctx *ictx;
+	enum iommufd_viommu_backing backing;
 	struct iommu_device *iommu_dev;
 	struct iommufd_hwpt_paging *hwpt;
 	struct file *kvm_file;
