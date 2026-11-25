@@ -358,10 +358,10 @@ struct kmem_cache_args {
 	 * that may be not present. When both become empty, there's an attempt
 	 * to replace an empty sheaf with a full sheaf from the per-node barn.
 	 *
-	 * When no full sheaf is available, and gfp flags allow blocking, a
-	 * sheaf is allocated and filled from slab(s) using bulk allocation.
-	 * Otherwise the allocation falls back to the normal operation
-	 * allocating a single object from a slab.
+	 * When no full sheaf is available, a sheaf is allocated and filled
+	 * from slab(s) using bulk allocation. If that fails, the allocation
+	 * falls back to the normal operation allocating a single object from
+	 * a slab.
 	 *
 	 * Analogically when freeing and both percpu sheaves are full, the barn
 	 * may replace it with an empty sheaf, unless it's over capacity. In
