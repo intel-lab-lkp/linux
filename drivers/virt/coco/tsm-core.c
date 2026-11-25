@@ -56,24 +56,6 @@ static struct tsm_dev *alloc_tsm_dev(struct device *parent)
 	return no_free_ptr(tsm_dev);
 }
 
-static int tsm_register_pci_or_reset(struct tsm_dev *tsm_dev,
-				     struct pci_tsm_ops *pci_ops)
-{
-	int rc;
-
-	tsm_dev->pci_ops = pci_ops;
-	rc = pci_tsm_register(tsm_dev);
-	if (rc) {
-		dev_err(tsm_dev->dev.parent,
-			"PCI/TSM registration failure: %d\n", rc);
-		return rc;
-	}
-
-	/* Notify TSM userspace that PCI/TSM operations are now possible */
-	kobject_uevent(&tsm_dev->dev.kobj, KOBJ_CHANGE);
-	return 0;
-}
-
 struct tsm_dev *tsm_register(struct device *parent, struct pci_tsm_ops *pci_ops)
 {
 	struct tsm_dev *tsm_dev __free(put_tsm_dev) = alloc_tsm_dev(parent);
@@ -91,15 +73,23 @@ struct tsm_dev *tsm_register(struct device *parent, struct pci_tsm_ops *pci_ops)
 	if (rc)
 		return ERR_PTR(rc);
 
-	rc = device_add(dev);
-	if (rc)
-		return ERR_PTR(rc);
-
-	rc = tsm_register_pci_or_reset(tsm_dev, pci_ops);
+	/* Complete PCI registration before exposing the TSM to class lookup. */
+	tsm_dev->pci_ops = pci_ops;
+	rc = pci_tsm_register(tsm_dev);
 	if (rc) {
-		device_del(dev);
+		dev_err(parent, "PCI/TSM registration failure: %d\n", rc);
 		return ERR_PTR(rc);
 	}
+
+	rc = device_add(dev);
+	if (rc) {
+		pci_tsm_unregister(tsm_dev);
+		return ERR_PTR(rc);
+	}
+
+	/* Notify TSM userspace that PCI/TSM operations are now possible. */
+	kobject_uevent(&dev->kobj, KOBJ_CHANGE);
+
 	return no_free_ptr(tsm_dev);
 }
 EXPORT_SYMBOL_GPL(tsm_register);
