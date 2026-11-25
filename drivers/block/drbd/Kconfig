@@ -128,4 +128,10 @@ config DRBD_COMPAT_84
 	  this compile-time option, creating a resource without a node
 	  ID is not possible.
 
+	  This option also provides the "drbd" generic netlink
+	  family at version 1, which drbd-utils have always used to
+	  configure DRBD. Without it, DRBD can only be configured
+	  through the drbd2 family, which older drbd-utils releases
+	  do not know.
+
 	  If unsure, say Y.

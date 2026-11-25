@@ -6,6 +6,7 @@ drbd-y += drbd_interval.o drbd_state.o
 drbd-$(CONFIG_DRBD_COMPAT_84) += drbd_nl_gen.o
 drbd-y += drbd_nl_defaults.o
 drbd-$(CONFIG_DRBD_COMPAT_84) += drbd_nl_84.o
+drbd-y += drbd_nl_drbd2.o drbd2_nl_gen.o
 drbd-y += drbd_transport.o
 drbd-$(CONFIG_DRBD_DAX) += drbd_dax_pmem.o
 drbd-$(CONFIG_DEBUG_FS) += drbd_debugfs.o
