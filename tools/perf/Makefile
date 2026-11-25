@@ -150,6 +150,9 @@ coverage-prep:
 coverage:
 	@./scripts/coverage.sh $(coverage_o) $(COVERAGE_ARGS)
 
+coverage-table:
+	@./scripts/coverage-table.sh $(coverage_o) $(COVERAGE_ARGS)
+
 #
 # All other targets get passed through:
 #
@@ -157,4 +160,4 @@ coverage:
 	$(print_msg)
 	$(make)
 
-.PHONY: all clean tags TAGS FORCE Makefile build-test build-test-tarball check-headers sync-headers coverage coverage-prep
+.PHONY: all clean tags TAGS FORCE Makefile build-test build-test-tarball check-headers sync-headers coverage coverage-prep coverage-table

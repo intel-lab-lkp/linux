@@ -878,7 +878,8 @@ help:
 	@echo '  sync-headers		- sync those header copies with the kernel, creating commits'
 	@echo '			  (SYNC_HEADERS_ARGS="..." passes options to the script)'
 	@echo '  coverage-prep		- build perf with clang coverage, ready for a root test run'
-	@echo '  coverage		- build perf with clang coverage, run the tests and report'
+	@echo '  coverage		- build perf with clang coverage, run the tests, report and show the table'
+	@echo '  coverage-table	- print a text table of the last coverage run'
 	@echo '			  (O=DIR uses an existing build dir; COVERAGE_ARGS="..." passes options)'
 
 
