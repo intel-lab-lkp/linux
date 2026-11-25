@@ -708,6 +708,8 @@ patternProperties:
     description: Google, Inc.
   "^goramo,.*":
     description: Goramo Gorecki
+  "^goworld,.*":
+    description: Shantou Goworld Display Technology Co., Ltd.
   "^gplus,.*":
     description: GPLUS
   "^graperain,.*":
