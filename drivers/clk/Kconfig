@@ -185,6 +185,15 @@ config COMMON_CLK_CDCE706
 	help
 	  This driver supports TI CDCE706 programmable 3-PLL clock synthesizer.
 
+config COMMON_CLK_TC9564
+	tristate "Toshiba TC9564 clock and reset support"
+	depends on TC9564_PCI || COMPILE_TEST
+	depends on RESET_CONTROLLER
+	default TC9564_PCI
+	help
+	  This enables support for the clock and reset controllers embedded
+	  in the Toshiba TC9564 SoC.
+
 config COMMON_CLK_TPS68470
 	tristate "Clock Driver for TI TPS68470 PMIC"
 	depends on I2C
