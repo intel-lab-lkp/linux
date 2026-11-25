@@ -23,6 +23,7 @@ struct iommufd_access;
 struct iommufd_ctx;
 struct iommufd_device;
 struct iommufd_viommu_ops;
+struct tsm_dev;
 struct page;
 
 enum iommufd_object_type {
@@ -100,13 +101,18 @@ void iommufd_ctx_get(struct iommufd_ctx *ictx);
 
 enum iommufd_viommu_backing {
 	IOMMUFD_VIOMMU_BACKING_IOMMU,
+	IOMMUFD_VIOMMU_BACKING_TSM,
 };
 
 struct iommufd_viommu {
 	struct iommufd_object obj;
 	struct iommufd_ctx *ictx;
 	enum iommufd_viommu_backing backing;
-	struct iommu_device *iommu_dev;
+	union {
+		struct iommu_device *iommu_dev;
+		struct tsm_dev *tsm_dev;
+	};
+
 	struct iommufd_hwpt_paging *hwpt;
 	struct file *kvm_file;
 

@@ -15,6 +15,10 @@ void iommufd_viommu_destroy(struct iommufd_object *obj)
 
 	if (viommu->ops && viommu->ops->destroy)
 		viommu->ops->destroy(viommu);
+
+	if (viommu->backing == IOMMUFD_VIOMMU_BACKING_TSM)
+		tsm_put_device(viommu->tsm_dev);
+
 	refcount_dec(&viommu->hwpt->common.obj.users);
 	if (viommu->kvm_file)
 		fput(viommu->kvm_file);
@@ -32,7 +36,7 @@ int iommufd_viommu_alloc_ioctl(struct iommufd_ucmd *ucmd)
 	struct iommufd_hwpt_paging *hwpt_paging;
 	struct iommufd_viommu *viommu;
 	struct iommufd_device *idev;
-	struct iommu_device *iommu_dev;
+	struct iommu_device *iommu_dev = NULL;
 	const struct iommufd_viommu_ops *ops;
 	size_t viommu_size;
 	int rc;
@@ -44,20 +48,38 @@ int iommufd_viommu_alloc_ioctl(struct iommufd_ucmd *ucmd)
 	if (IS_ERR(idev))
 		return PTR_ERR(idev);
 
-	iommu_dev = iommufd_device_get_iommu_dev(idev);
-	if (!iommu_dev) {
-		rc = -EOPNOTSUPP;
+	struct tsm_dev *tsm_dev __free(tsm_put_device) = tsm_get_device(idev->dev);
+	if (IS_ERR(tsm_dev)) {
+		rc = PTR_ERR(tsm_dev);
 		goto out_put_idev;
 	}
-	if (!iommu_dev->ops->get_viommu_ops) {
-		rc = -EOPNOTSUPP;
+
+	if (tsm_dev)
+		ops = tsm_viommu_get_ops(tsm_dev, idev->dev, cmd->type);
+	else
+		ops = NULL;
+
+	if (IS_ERR(ops)) {
+		rc = PTR_ERR(ops);
 		goto out_put_idev;
 	}
-	ops = iommu_dev->ops->get_viommu_ops(idev->dev, cmd->type);
+
 	if (!ops) {
-		rc = -EOPNOTSUPP;
-		goto out_put_idev;
+		tsm_put_device(no_free_ptr(tsm_dev));
+
+		iommu_dev = iommufd_device_get_iommu_dev(idev);
+		if (!iommu_dev || !iommu_dev->ops->get_viommu_ops) {
+			rc = -EOPNOTSUPP;
+			goto out_put_idev;
+		}
+
+		ops = iommu_dev->ops->get_viommu_ops(idev->dev, cmd->type);
+		if (!ops) {
+			rc = -EOPNOTSUPP;
+			goto out_put_idev;
+		}
 	}
+
 	/*
 	 * It is a driver bug to omit the required operations or provide a size
 	 * smaller than the core vIOMMU structure.
@@ -100,13 +122,19 @@ int iommufd_viommu_alloc_ioctl(struct iommufd_ucmd *ucmd)
 	refcount_inc(&viommu->hwpt->common.obj.users);
 	INIT_LIST_HEAD(&viommu->veventqs);
 	init_rwsem(&viommu->veventqs_rwsem);
-	/*
-	 * It is the most likely case that a physical IOMMU is unpluggable. A
-	 * pluggable IOMMU instance (if exists) is responsible for refcounting
-	 * on its own.
-	 */
-	viommu->backing = IOMMUFD_VIOMMU_BACKING_IOMMU;
-	viommu->iommu_dev = iommu_dev;
+
+	if (tsm_dev) {
+		viommu->backing = IOMMUFD_VIOMMU_BACKING_TSM;
+		viommu->tsm_dev = no_free_ptr(tsm_dev);
+	} else {
+		/*
+		 * It is the most likely case that a physical IOMMU is unpluggable.
+		 * A pluggable IOMMU instance (if exists) is responsible for
+		 * refcounting on its own.
+		 */
+		viommu->backing = IOMMUFD_VIOMMU_BACKING_IOMMU;
+		viommu->iommu_dev = iommu_dev;
+	}
 
 	rc = ops->viommu_init(viommu, idev->dev,
 			      hwpt_paging->common.domain,
