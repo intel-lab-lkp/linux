@@ -357,14 +357,6 @@ configure_seg_id(u64 seg_out_addr, u32 seg_base, u32 seg_limit, u32 seg_id,
 	*boot_conf_ptr = boot_conf;
 }
 
-static u64 get_fw_obj_gpu_addr(struct pvr_fw_object *fw_obj)
-{
-	struct pvr_device *pvr_dev = to_pvr_device(gem_from_pvr_gem(fw_obj->gem)->dev);
-	struct pvr_fw_device *fw_dev = &pvr_dev->fw_dev;
-
-	return fw_obj->fw_addr_offset + fw_dev->fw_heap_info.gpu_addr;
-}
-
 static void
 configure_seg_mmu(struct pvr_device *pvr_dev, u32 **boot_conf_ptr)
 {
@@ -384,7 +376,7 @@ configure_seg_mmu(struct pvr_device *pvr_dev, u32 **boot_conf_ptr)
 		 */
 		if (layout_entries[i].type == FW_DATA) {
 			u32 seg_id = ROGUE_FW_SEGMMU_DATA_ID;
-			u64 seg_out_addr = get_fw_obj_gpu_addr(pvr_dev->fw_dev.mem.data_obj);
+			u64 seg_out_addr = pvr_fw_obj_get_gpu_addr(pvr_dev->fw_dev.mem.data_obj);
 
 			seg_out_addr += layout_entries[i].alloc_offset;
 			seg_out_addr |= seg_out_addr_top;
