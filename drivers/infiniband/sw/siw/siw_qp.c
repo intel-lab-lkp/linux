@@ -1188,10 +1188,11 @@ void siw_sq_flush(struct siw_qp *qp)
 		if (tx_type(wqe) != SIW_OP_READ_RESPONSE &&
 		    ((tx_type(wqe) != SIW_OP_READ &&
 		      tx_type(wqe) != SIW_OP_READ_LOCAL_INV) ||
-		     wqe->wr_status == SIW_WR_QUEUED))
+		     (wqe->wr_status == SIW_WR_QUEUED &&
+		      qp->tx_ctx.orq_fence)))
 			/*
-			 * An in-progress Read Request is already in
-			 * the ORQ
+			 * A Read Request is already in the ORQ unless
+			 * a full ORQ fenced it
 			 */
 			siw_sqe_complete(qp, &wqe->sqe, wqe->bytes,
 					 SIW_WC_WR_FLUSH_ERR);
