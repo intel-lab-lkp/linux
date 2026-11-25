@@ -13,6 +13,8 @@
 
 struct brcmf_pub;
 struct brcmf_if;
+struct net_device;
+struct sk_buff;
 
 /**
  * struct brcmf_awdl - AWDL interface of a device.
@@ -28,6 +30,7 @@ struct brcmf_if;
  * @removing: interface_remove was sent, its interface event is awaited.
  * @detached: the device goes away, no new AWDL interface is created.
  * @ifp: the AWDL interface, NULL when there is none.
+ * @tx_seq: sequence number of the next data frame sent.
  */
 struct brcmf_awdl {
 	spinlock_t lock; /* AWDL state against the event worker */
@@ -38,7 +41,11 @@ struct brcmf_awdl {
 	bool removing;
 	bool detached;
 	struct brcmf_if *ifp;
+	u16 tx_seq;
 };
+
+/* Length of the LLC/SNAP and AWDL data header of AWDL data frames */
+#define BRCMF_AWDL_HDR_LEN		16
 
 void brcmf_awdl_attach(struct brcmf_pub *drvr);
 void brcmf_awdl_detach(struct brcmf_pub *drvr);
@@ -47,5 +54,7 @@ int brcmf_awdl_add(struct brcmf_pub *drvr, const u8 *mac,
 int brcmf_awdl_del(struct brcmf_pub *drvr);
 bool brcmf_awdl_if_added(struct brcmf_pub *drvr, struct brcmf_if *ifp);
 bool brcmf_awdl_if_removed(struct brcmf_pub *drvr, struct brcmf_if *ifp);
+int brcmf_awdl_encap(struct brcmf_if *ifp, struct sk_buff *skb);
+int brcmf_awdl_decap(struct sk_buff *skb);
 
 #endif /* BRCMFMAC_AWDL_H */

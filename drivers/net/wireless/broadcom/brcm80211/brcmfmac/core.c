@@ -309,6 +309,15 @@ static netdev_tx_t brcmf_netdev_start_xmit(struct sk_buff *skb,
 		goto done;
 	}
 
+	/* tx_bytes counts the Ethernet frame, the AWDL header is added here */
+	if (ifp->awdl) {
+		ret = brcmf_awdl_encap(ifp, skb);
+		if (ret) {
+			dev_kfree_skb(skb);
+			goto done;
+		}
+	}
+
 	/* Some recent Broadcom's firmwares disassociate STA when they receive
 	 * an 802.11f ADD frame. This behavior can lead to a local DoS security
 	 * issue. Attacker may trigger disassociation of any STA by sending a
@@ -418,6 +427,12 @@ void brcmf_netif_rx(struct brcmf_if *ifp, struct sk_buff *skb)
 		ifp->ndev->stats.multicast++;
 
 	if (!(ifp->ndev->flags & IFF_UP)) {
+		brcmu_pkt_buf_free_skb(skb);
+		return;
+	}
+
+	if (ifp->awdl && brcmf_awdl_decap(skb)) {
+		ifp->ndev->stats.rx_dropped++;
 		brcmu_pkt_buf_free_skb(skb);
 		return;
 	}
@@ -693,6 +708,8 @@ int brcmf_net_attach(struct brcmf_if *ifp, bool locked)
 		ndev->netdev_ops = &brcmf_netdev_ops_pri;
 
 	ndev->needed_headroom += drvr->hdrlen;
+	if (ifp->awdl)
+		ndev->needed_headroom += BRCMF_AWDL_HDR_LEN;
 	ndev->ethtool_ops = &brcmf_ethtool_ops;
 
 	/* set the mac address & netns */

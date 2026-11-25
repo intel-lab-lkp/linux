@@ -8,11 +8,25 @@
  * an interface of type AWDL with interface_create and configures it through
  * the awdl_* iovars. The AWDL interface has a network device but no cfg80211
  * vif. Its interface events are handled here and not by cfg80211.
+ *
+ * The firmware passes AWDL data frames as 802.3 frames with an LLC/SNAP
+ * header with the Apple OUI and an AWDL data header:
+ *
+ *   aa aa 03 00 17 f2 08 00   LLC/SNAP, OUI 00:17:f2, protocol 0x0800
+ *   03 04                     AWDL data header
+ *   seq (le16) 00 00          sequence number, reserved
+ *   ethertype (be16)
+ *
+ * The network device of the AWDL interface sends and receives plain
+ * Ethernet frames. The header is added before frames are sent and removed
+ * from received frames.
  */
 
 #include <linux/etherdevice.h>
 #include <linux/netdevice.h>
 #include <linux/rtnetlink.h>
+#include <linux/skbuff.h>
+#include <linux/unaligned.h>
 
 #include "core.h"
 #include "debug.h"
@@ -25,6 +39,14 @@
 /* The firmware interface index of the AWDL interface */
 #define BRCMF_AWDL_IFIDX		2
 #define BRCMF_AWDL_IF_TIMEOUT		msecs_to_jiffies(2000)
+
+/* LLC/SNAP with the Apple OUI and the start of the AWDL data header */
+static const u8 brcmf_awdl_llc[10] = {
+	0xaa, 0xaa, 0x03, 0x00, 0x17, 0xf2, 0x08, 0x00, 0x03, 0x04,
+};
+
+#define BRCMF_AWDL_SEQ_OFF		10
+#define BRCMF_AWDL_ETHERTYPE_OFF	14
 
 /* The BSSID of all AWDL frames */
 static const u8 brcmf_awdl_bssid[ETH_ALEN] = {
@@ -270,6 +292,71 @@ int brcmf_awdl_del(struct brcmf_pub *drvr)
 
 	brcmf_remove_interface(ifp, true);
 	return err;
+}
+
+/**
+ * brcmf_awdl_encap() - add the AWDL data header to a frame to be sent.
+ *
+ * @ifp: the AWDL interface.
+ * @skb: Ethernet frame, an 802.3 frame on return.
+ *
+ * Called in the transmit path of the AWDL network device, which serializes
+ * it.
+ *
+ * Return: 0 or a negative error code, the caller frees @skb on error.
+ */
+int brcmf_awdl_encap(struct brcmf_if *ifp, struct sk_buff *skb)
+{
+	struct brcmf_awdl *awdl = &ifp->drvr->awdl;
+	__be16 proto;
+	u8 *hdr;
+
+	if (skb->len < ETH_HLEN || skb_cow_head(skb, BRCMF_AWDL_HDR_LEN))
+		return -EINVAL;
+
+	proto = eth_hdr(skb)->h_proto;
+	hdr = skb_push(skb, BRCMF_AWDL_HDR_LEN);
+	memmove(hdr, hdr + BRCMF_AWDL_HDR_LEN, 2 * ETH_ALEN);
+	put_unaligned_be16(skb->len - ETH_HLEN, hdr + 2 * ETH_ALEN);
+	hdr += ETH_HLEN;
+	memcpy(hdr, brcmf_awdl_llc, sizeof(brcmf_awdl_llc));
+	put_unaligned_le16(awdl->tx_seq++, hdr + BRCMF_AWDL_SEQ_OFF);
+	put_unaligned_le16(0, hdr + BRCMF_AWDL_SEQ_OFF + 2);
+	put_unaligned(proto, (__be16 *)(hdr + BRCMF_AWDL_ETHERTYPE_OFF));
+	skb_reset_mac_header(skb);
+	return 0;
+}
+
+/**
+ * brcmf_awdl_decap() - remove the AWDL data header from a received frame.
+ *
+ * @skb: frame after eth_type_trans(), an Ethernet frame on return.
+ *
+ * The addresses are moved behind the AWDL data header, where they form an
+ * Ethernet header with the ethertype of the AWDL data header.
+ *
+ * Return: 0 or a negative error code for frames that are not AWDL data
+ * frames.
+ */
+int brcmf_awdl_decap(struct sk_buff *skb)
+{
+	__be16 proto;
+	u8 *eth;
+
+	if (skb->protocol != htons(ETH_P_802_2) ||
+	    !pskb_may_pull(skb, BRCMF_AWDL_HDR_LEN) ||
+	    memcmp(skb->data, brcmf_awdl_llc, sizeof(brcmf_awdl_llc)) ||
+	    skb_cow_head(skb, 0))
+		return -EINVAL;
+
+	proto = get_unaligned((__be16 *)(skb->data + BRCMF_AWDL_ETHERTYPE_OFF));
+	eth = skb->data + BRCMF_AWDL_HDR_LEN - ETH_HLEN;
+	memmove(eth, skb_mac_header(skb), 2 * ETH_ALEN);
+	skb_pull_rcsum(skb, BRCMF_AWDL_HDR_LEN);
+	skb_set_mac_header(skb, -ETH_HLEN);
+	skb_reset_network_header(skb);
+	skb->protocol = proto;
+	return 0;
 }
 
 /* Called before the interfaces of the device are removed */
