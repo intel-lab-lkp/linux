@@ -42,24 +42,29 @@
 			__unregistered, __r->name, ## args);		\
 })
 
-/*
- * As long as the connection is still "registered", the resource
- * can not yet be "unregistered", no need to test R_UNREGISTERED
- */
+// As long as the connection is still "registered", the resource
+// can not yet be "unregistered", no need to test R_UNREGISTERED
 #define ___drbd_printk_peer_device(prmacro, rlt, peer_device, lvl_or_desc, fmt, args...)\
 ({									\
-	const struct drbd_peer_device *__pd =				\
-		(const struct drbd_peer_device *)(peer_device);		\
-	const struct drbd_device *__d = __pd->device;			\
-	const struct drbd_connection *__c = __pd->connection;		\
-	const struct drbd_resource *__r = __d->resource;		\
+	const struct drbd_peer_device *__pd;				\
+	const struct drbd_device *__d;					\
+	const struct drbd_connection *__c;				\
+	const struct drbd_resource *__r;				\
+	const char *__cn;						\
 	const char *__unregistered = "";				\
+	rcu_read_lock();						\
+	__pd = (const struct drbd_peer_device *)(peer_device);		\
+	__d = __pd->device;						\
+	__c = __pd->connection;						\
+	__r = __d->resource;						\
+	__cn = rcu_dereference(__c->transport.net_conf)->name;		\
 	if (test_bit(C_UNREGISTERED, &__c->flags))			\
 		__unregistered = "/unregistered/";			\
 	if (drbd_peer_device_ratelimit(__pd, rlt))			\
-		prmacro(lvl_or_desc, "drbd %s%s/%u drbd%u: " fmt,	\
-			__unregistered, __r->name, __d->vnr, __d->minor,\
-			## args);					\
+		prmacro(lvl_or_desc, "drbd %s%s/%u drbd%u %s: " fmt,		\
+			__unregistered, __r->name, __d->vnr, __d->minor, __cn,	\
+			 ## args);					\
+	rcu_read_unlock();						\
 })
 
 #define ___drbd_printk_connection(prmacro, rlt, connection, lvl_or_desc, fmt, args...)	\
@@ -67,12 +72,16 @@
 	const struct drbd_connection *__c =				\
 		(const struct drbd_connection *)(connection);		\
 	const struct drbd_resource *__r = __c->resource;		\
+	const char *__cn;						\
 	const char *__unregistered = "";				\
+	rcu_read_lock();						\
+	__cn = rcu_dereference(__c->transport.net_conf)->name;		\
 	if (test_bit(C_UNREGISTERED, &__c->flags))			\
 		__unregistered = "/unregistered/";			\
 	if (drbd_connection_ratelimit(__c, rlt))			\
-		prmacro(lvl_or_desc, "drbd %s%s: " fmt,			\
-			__unregistered, __r->name, ## args);		\
+		prmacro(lvl_or_desc, "drbd %s%s %s: " fmt,		\
+			__unregistered, __r->name, __cn, ## args);	\
+	rcu_read_unlock();						\
 })
 
 #define __drbd_printk_device(rlt, device, level, fmt, args...)\
@@ -201,7 +210,10 @@ void drbd_dyn_dbg_with_wrong_object_type(void);
 	} while (0)
 
 /**
- * expect  -  Make an assertion
+ * expect - Make an assertion
+ * @x: The object to log the failed assertion for (resource, connection,
+ *	device or peer_device).
+ * @exp: The expression that is expected to be true.
  *
  * Unlike the assert macro, this macro returns a boolean result.
  */
