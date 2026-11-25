@@ -193,7 +193,7 @@ static int __init allocate_region(phys_addr_t base, phys_addr_t size,
 	phys_addr_t diff = size;
 	int attempts = MPU_MAX_REGIONS;
 
-	while (diff) {
+	while (diff && count < limit) {
 		/* Try cover region as is (maybe with help of subregions) */
 		if (try_split_region(base, size, &regions[count])) {
 			count++;
@@ -214,9 +214,6 @@ static int __init allocate_region(phys_addr_t base, phys_addr_t size,
 
 			size = asize < p2size ? asize + 1 : p2size + 1;
 		}
-
-		if (count > limit)
-			break;
 
 		if (!attempts)
 			break;
