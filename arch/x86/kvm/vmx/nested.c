@@ -2291,6 +2291,18 @@ static u64 vmx_calc_preemption_timer_value(struct kvm_vcpu *vcpu)
 			vmcs12->vmx_preemption_timer_value + l1_scaled_tsc;
 		vmx->nested.has_preemption_timer_deadline = true;
 	}
+
+	/*
+	 * The deadline can already be in the past when L2 is (re)entered
+	 * without a VMLAUNCH/VMRESUME, i.e. on RSM or KVM_SET_NESTED_STATE.
+	 * Expire the timer immediately in that case (the SDM requires the
+	 * timer-induced VM-Exit to occur immediately after RSM if the timer
+	 * expired during SMI, in SMM, or during RSM) instead of letting the
+	 * subtraction wrap to a ~2^64 timeout.
+	 */
+	if (vmx->nested.preemption_timer_deadline <= l1_scaled_tsc)
+		return 0;
+
 	return vmx->nested.preemption_timer_deadline - l1_scaled_tsc;
 }
 
