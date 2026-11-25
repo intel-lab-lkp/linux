@@ -172,6 +172,8 @@ struct analogix_dp_device {
 	bool			psr_supported;
 	bool			force_connected_mode;
 	bool			hpd_irq_enabled;
+	bool			hpd_notify_mode;
+	bool			connection_notified;
 
 	u8 dpcd[DP_RECEIVER_CAP_SIZE];
 

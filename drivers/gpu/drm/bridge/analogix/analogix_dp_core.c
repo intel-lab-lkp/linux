@@ -48,7 +48,7 @@ static const bool verify_fast_training;
  */
 static bool analogix_dp_supports_hpd(struct analogix_dp_device *dp)
 {
-	if (dp->force_connected_mode || dp->force_hpd)
+	if (dp->force_connected_mode || dp->force_hpd || dp->hpd_notify_mode)
 		return false;
 
 	if (dp->hpd_gpiod)
@@ -86,9 +86,28 @@ static void analogix_dp_init_dp(struct analogix_dp_device *dp)
 	analogix_dp_init_aux(dp);
 }
 
+static bool analogix_dp_probe_sink(struct analogix_dp_device *dp)
+{
+	u8 dpcd_rev = 0;
+	int ret;
+
+	ret = pm_runtime_resume_and_get(dp->dev);
+	if (ret)
+		return false;
+
+	ret = drm_dp_dpcd_readb(&dp->aux, DP_DPCD_REV, &dpcd_rev);
+
+	pm_runtime_put_autosuspend(dp->dev);
+
+	return ret == 1 && dpcd_rev != 0;
+}
+
 static int analogix_dp_detect_hpd(struct analogix_dp_device *dp)
 {
 	int timeout_loop = 0;
+
+	if (dp->hpd_notify_mode)
+		return 0;
 
 	while (timeout_loop < DP_TIMEOUT_LOOP_COUNT) {
 		if (analogix_dp_get_plug_in_status(dp) == 0)
@@ -940,6 +959,13 @@ analogix_dp_bridge_detect(struct drm_bridge *bridge, struct drm_connector *conne
 	struct analogix_dp_device *dp = to_dp(bridge);
 	enum drm_connector_status status = connector_status_disconnected;
 
+	if (dp->hpd_notify_mode) {
+		dp->connection_notified = analogix_dp_probe_sink(dp);
+
+		return dp->connection_notified ? connector_status_connected :
+						 connector_status_disconnected;
+	}
+
 	if (dp->force_connected_mode)
 		return connector_status_connected;
 
@@ -972,6 +998,21 @@ static bool analogix_dp_bridge_force_connected(struct analogix_dp_device *dp)
 	return force_connected;
 }
 
+static bool analogix_dp_has_downstream_hpd(struct analogix_dp_device *dp)
+{
+	bool hpd_bridge = false;
+
+	drm_for_each_bridge_in_chain_from(dp->bridge.next_bridge, bridge) {
+		if (bridge->ops & DRM_BRIDGE_OP_DETECT)
+			return false;
+
+		if (bridge->ops & DRM_BRIDGE_OP_HPD)
+			hpd_bridge = true;
+	}
+
+	return hpd_bridge;
+}
+
 static int analogix_dp_bridge_attach(struct drm_bridge *bridge,
 				     struct drm_encoder *encoder,
 				     enum drm_bridge_attach_flags flags)
@@ -1000,6 +1041,7 @@ static int analogix_dp_bridge_attach(struct drm_bridge *bridge,
 		 * accurate hotplug state.
 		 */
 		dp->force_connected_mode = analogix_dp_bridge_force_connected(dp);
+		dp->hpd_notify_mode = analogix_dp_has_downstream_hpd(dp);
 	}
 
 	return 0;
@@ -1296,6 +1338,17 @@ static void analogix_dp_bridge_atomic_post_disable(struct drm_bridge *bridge,
 		DRM_ERROR("Failed to enable psr (%d)\n", ret);
 }
 
+static void analogix_dp_bridge_notify(struct drm_bridge *bridge, struct drm_connector *connector,
+				      enum drm_connector_status status)
+{
+	struct analogix_dp_device *dp = to_dp(bridge);
+
+	if (!dp->hpd_notify_mode)
+		return;
+
+	dp->connection_notified = analogix_dp_probe_sink(dp);
+}
+
 static void analogix_dp_bridge_hpd_enable(struct drm_bridge *bridge)
 {
 }
@@ -1316,6 +1369,7 @@ static const struct drm_bridge_funcs analogix_dp_bridge_funcs = {
 	.attach = analogix_dp_bridge_attach,
 	.edid_read = analogix_dp_bridge_edid_read,
 	.detect = analogix_dp_bridge_detect,
+	.hpd_notify = analogix_dp_bridge_notify,
 	.hpd_enable = analogix_dp_bridge_hpd_enable,
 	.hpd_disable = analogix_dp_bridge_hpd_disable,
 };

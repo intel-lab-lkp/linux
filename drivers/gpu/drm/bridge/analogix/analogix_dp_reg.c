@@ -193,7 +193,7 @@ void analogix_dp_config_interrupt(struct analogix_dp_device *dp)
 	writel(0, dp->reg_base + ANALOGIX_DP_COMMON_INT_MASK_2);
 	writel(0, dp->reg_base + ANALOGIX_DP_COMMON_INT_MASK_3);
 
-	if (dp->hpd_gpiod) {
+	if (dp->hpd_gpiod || dp->hpd_notify_mode) {
 		analogix_dp_mute_hpd_interrupt(dp, HPD_IRQ_ALL);
 		return;
 	}
@@ -435,7 +435,7 @@ void analogix_dp_init_hpd(struct analogix_dp_device *dp)
 {
 	u32 reg;
 
-	if (dp->hpd_gpiod)
+	if (dp->hpd_gpiod || dp->hpd_notify_mode)
 		return;
 
 	analogix_dp_clear_hotplug_interrupts(dp, HPD_IRQ_ALL);
@@ -533,16 +533,15 @@ int analogix_dp_get_plug_in_status(struct analogix_dp_device *dp)
 {
 	u32 reg;
 
-	if (dp->hpd_gpiod) {
-		if (gpiod_get_value(dp->hpd_gpiod))
-			return 0;
-	} else {
-		reg = readl(dp->reg_base + ANALOGIX_DP_SYS_CTL_3);
-		if (reg & HPD_STATUS)
-			return 0;
-	}
+	if (dp->hpd_gpiod)
+		return gpiod_get_value(dp->hpd_gpiod) ? 0 : -EINVAL;
 
-	return -EINVAL;
+	if (dp->hpd_notify_mode)
+		return dp->connection_notified ? 0 : -EINVAL;
+
+	reg = readl(dp->reg_base + ANALOGIX_DP_SYS_CTL_3);
+
+	return (reg & HPD_STATUS) ? 0 : -EINVAL;
 }
 
 void analogix_dp_enable_sw_function(struct analogix_dp_device *dp)
