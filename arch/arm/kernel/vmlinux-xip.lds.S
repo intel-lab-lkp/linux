@@ -58,6 +58,8 @@ SECTIONS
 		ARM_TEXT
 	}
 
+	_etext = .;			/* End of text section */
+
 	RO_DATA(PAGE_SIZE)
 
 	. = ALIGN(4);
@@ -70,8 +72,6 @@ SECTIONS
 #ifdef CONFIG_ARM_UNWIND
 	ARM_UNWIND_SECTIONS
 #endif
-
-	_etext = .;			/* End of text and rodata section */
 
 	ARM_VECTORS
 	INIT_TEXT_SECTION(8)
