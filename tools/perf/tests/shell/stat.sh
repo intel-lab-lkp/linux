@@ -43,21 +43,28 @@ test_null_stat() {
 }
 
 find_offline_cpu() {
-  for i in $(seq 1 4096)
+  for i in $(seq 0 4096)
   do
-    if [[ ! -f /sys/devices/system/cpu/cpu$i/online || \
-          $(cat /sys/devices/system/cpu/cpu$i/online) == "0" ]]
+    if [[ ! -d /sys/devices/system/cpu/cpu$i ]]
     then
       echo $i
-      return
+      return 0
+    elif [[ -f /sys/devices/system/cpu/cpu$i/online && \
+            $(cat /sys/devices/system/cpu/cpu$i/online) == "0" ]]
+    then
+      echo $i
+      return 0
     fi
   done
-  echo "Failed to find offline CPU"
-  exit 1
+  return 1
 }
 
 test_offline_cpu_stat() {
-  cpu=$(find_offline_cpu)
+  if ! cpu=$(find_offline_cpu)
+  then
+    echo "Offline CPU stat command test [Skipped - no offline CPU]"
+    return
+  fi
   echo "Offline CPU stat command test (cpu $cpu)"
   if ! perf stat "-C$cpu" -e cycles true 2>&1 | grep -E -q "No supported events found."
   then
