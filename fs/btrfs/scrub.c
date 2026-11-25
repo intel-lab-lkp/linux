@@ -1823,12 +1823,37 @@ static u32 stripe_length(const struct scrub_stripe *stripe)
 		   stripe->bg->start + stripe->bg->length - stripe->logical);
 }
 
-static void scrub_submit_extent_sector_read(struct scrub_stripe *stripe)
+static u32 scrub_read_burst(const struct scrub_stripe *stripe)
+{
+	const u64 bwlimit = READ_ONCE(stripe->dev->scrub_speed_max);
+	const u32 sectorsize = stripe->bg->fs_info->sectorsize;
+	u64 burst;
+
+	if (bwlimit == 0)
+		return stripe->stripe_len;
+	/* units: (bytes / sec) * msec / (msec / sec) ==> bytes */
+	burst = mul_u64_u32_div(bwlimit, SCRUB_THROTTLE_BURST_MS, MSEC_PER_SEC);
+	burst = round_down(burst, sectorsize);
+	return clamp_t(u64, burst, sectorsize, stripe->stripe_len);
+}
+
+static void scrub_submit_read_bio(struct scrub_ctx *sctx, struct scrub_stripe *stripe,
+				  struct btrfs_bio *bbio, int mirror, bool throttle)
+{
+	if (throttle)
+		scrub_throttle_dev_io(sctx, stripe->dev, bbio->bio.bi_iter.bi_size);
+	scrub_stripe_get_io(stripe);
+	btrfs_submit_bbio(bbio, mirror);
+}
+
+static void scrub_submit_extent_sector_read(struct scrub_ctx *sctx,
+					    struct scrub_stripe *stripe, bool throttle)
 {
 	struct btrfs_fs_info *fs_info = stripe->bg->fs_info;
 	struct btrfs_bio *bbio = NULL;
 	unsigned int nr_sectors = stripe_length(stripe) >> fs_info->sectorsize_bits;
 	const unsigned long has_extent = scrub_bitmap_read_has_extent(stripe);
+	const u32 burst = throttle ? scrub_read_burst(stripe) : stripe->stripe_len;
 	u64 stripe_len = stripe->stripe_len;
 	int mirror = stripe->mirror_num;
 	int i;
@@ -1844,10 +1869,10 @@ static void scrub_submit_extent_sector_read(struct scrub_stripe *stripe)
 		/* The current sector cannot be merged, submit the bio. */
 		if (bbio &&
 		    ((i > 0 && !test_bit(i - 1, &has_extent)) ||
-		     bbio->bio.bi_iter.bi_size >= stripe_len)) {
+		     bbio->bio.bi_iter.bi_size >= stripe_len ||
+		     bbio->bio.bi_iter.bi_size >= burst)) {
 			ASSERT(bbio->bio.bi_iter.bi_size);
-			scrub_stripe_get_io(stripe);
-			btrfs_submit_bbio(bbio, mirror);
+			scrub_submit_read_bio(sctx, stripe, bbio, mirror, throttle);
 			bbio = NULL;
 		}
 
@@ -1892,8 +1917,7 @@ static void scrub_submit_extent_sector_read(struct scrub_stripe *stripe)
 
 	if (bbio) {
 		ASSERT(bbio->bio.bi_iter.bi_size);
-		scrub_stripe_get_io(stripe);
-		btrfs_submit_bbio(bbio, mirror);
+		scrub_submit_read_bio(sctx, stripe, bbio, mirror, throttle);
 	}
 
 	if (scrub_stripe_put_io(stripe)) {
@@ -1903,11 +1927,12 @@ static void scrub_submit_extent_sector_read(struct scrub_stripe *stripe)
 }
 
 static void scrub_submit_initial_read(struct scrub_ctx *sctx,
-				      struct scrub_stripe *stripe)
+				      struct scrub_stripe *stripe, bool throttle)
 {
 	struct btrfs_fs_info *fs_info = sctx->fs_info;
-	struct btrfs_bio *bbio;
+	struct btrfs_bio *bbio = NULL;
 	unsigned int nr_sectors = stripe_length(stripe) >> fs_info->sectorsize_bits;
+	const u32 burst = throttle ? scrub_read_burst(stripe) : stripe->stripe_len;
 	int mirror = stripe->mirror_num;
 
 	ASSERT(stripe->bg);
@@ -1915,16 +1940,9 @@ static void scrub_submit_initial_read(struct scrub_ctx *sctx,
 	ASSERT(test_bit(SCRUB_STRIPE_FLAG_INITIALIZED, &stripe->state));
 
 	if (btrfs_need_stripe_tree_update(fs_info, stripe->bg->flags)) {
-		scrub_submit_extent_sector_read(stripe);
+		scrub_submit_extent_sector_read(sctx, stripe, throttle);
 		return;
 	}
-
-	bbio = alloc_scrub_bbio(fs_info, REQ_OP_READ,
-				stripe->logical, scrub_read_endio, stripe);
-	/* Read the whole range inside the chunk boundary. */
-	for (unsigned int cur = 0; cur < nr_sectors; cur++)
-		scrub_bio_add_sector(bbio, stripe, cur);
-	scrub_stripe_get_io(stripe);
 
 	/*
 	 * For dev-replace, either user asks to avoid the source dev, or
@@ -1939,7 +1957,29 @@ static void scrub_submit_initial_read(struct scrub_ctx *sctx,
 
 		mirror = calc_next_mirror(mirror, num_copies);
 	}
-	btrfs_submit_bbio(bbio, mirror);
+
+	/* The extra ref is dropped after all bios are submitted. */
+	scrub_stripe_get_io(stripe);
+
+	/* Read the whole range inside the chunk boundary, @burst bytes per bio. */
+	for (unsigned int cur = 0; cur < nr_sectors; cur++) {
+		if (bbio && bbio->bio.bi_iter.bi_size >= burst) {
+			scrub_submit_read_bio(sctx, stripe, bbio, mirror, throttle);
+			bbio = NULL;
+		}
+		if (!bbio)
+			bbio = alloc_scrub_bbio(fs_info, REQ_OP_READ,
+					stripe->logical + (cur << fs_info->sectorsize_bits),
+					scrub_read_endio, stripe);
+		scrub_bio_add_sector(bbio, stripe, cur);
+	}
+	if (bbio)
+		scrub_submit_read_bio(sctx, stripe, bbio, mirror, throttle);
+
+	if (scrub_stripe_put_io(stripe)) {
+		INIT_WORK(&stripe->work, scrub_stripe_read_repair_worker);
+		queue_work(stripe->bg->fs_info->scrub_workers, &stripe->work);
+	}
 }
 
 static bool stripe_has_metadata_error(struct scrub_stripe *stripe)
@@ -1970,16 +2010,13 @@ static void submit_initial_group_read(struct scrub_ctx *sctx,
 	ASSERT(first_slot < SCRUB_TOTAL_STRIPES);
 	ASSERT(first_slot + nr_stripes <= SCRUB_TOTAL_STRIPES);
 
-	scrub_throttle_dev_io(sctx, sctx->stripes[0].dev,
-			      btrfs_stripe_nr_to_offset(nr_stripes,
-						sctx->stripes[0].stripe_len));
 	blk_start_plug(&plug);
 	for (int i = 0; i < nr_stripes; i++) {
 		struct scrub_stripe *stripe = &sctx->stripes[first_slot + i];
 
 		/* Those stripes should be initialized. */
 		ASSERT(test_bit(SCRUB_STRIPE_FLAG_INITIALIZED, &stripe->state));
-		scrub_submit_initial_read(sctx, stripe);
+		scrub_submit_initial_read(sctx, stripe, true);
 	}
 	blk_finish_plug(&plug);
 }
@@ -2276,7 +2313,8 @@ static int scrub_raid56_parity_stripe(struct scrub_ctx *sctx,
 
 	for (int i = 0; i < data_stripes; i++) {
 		stripe = &sctx->raid56_data_stripes[i];
-		scrub_submit_initial_read(sctx, stripe);
+		/* Do not throttle parity verification reads of other stripes. */
+		scrub_submit_initial_read(sctx, stripe, false);
 	}
 	for (int i = 0; i < data_stripes; i++) {
 		stripe = &sctx->raid56_data_stripes[i];
