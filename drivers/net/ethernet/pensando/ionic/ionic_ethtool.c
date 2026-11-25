@@ -149,6 +149,7 @@ static int ionic_get_link_ksettings(struct net_device *netdev,
 	struct ionic_lif *lif = netdev_priv(netdev);
 	struct ionic_dev *idev = &lif->ionic->idev;
 	int copper_seen = 0;
+	u8 fec_type;
 
 	ethtool_link_ksettings_zero_link_mode(ks, supported);
 
@@ -298,11 +299,15 @@ static int ionic_get_link_ksettings(struct net_device *netdev,
 
 	linkmode_copy(ks->link_modes.advertising, ks->link_modes.supported);
 
+	ethtool_link_ksettings_add_link_mode(ks, supported, FEC_NONE);
 	ethtool_link_ksettings_add_link_mode(ks, supported, FEC_BASER);
 	ethtool_link_ksettings_add_link_mode(ks, supported, FEC_RS);
-	if (idev->port_info->config.fec_type == IONIC_PORT_FEC_TYPE_FC)
+	fec_type = READ_ONCE(idev->port_info->config.fec_type);
+	if (fec_type == IONIC_PORT_FEC_TYPE_NONE)
+		ethtool_link_ksettings_add_link_mode(ks, advertising, FEC_NONE);
+	else if (fec_type == IONIC_PORT_FEC_TYPE_FC)
 		ethtool_link_ksettings_add_link_mode(ks, advertising, FEC_BASER);
-	else if (idev->port_info->config.fec_type == IONIC_PORT_FEC_TYPE_RS)
+	else if (fec_type == IONIC_PORT_FEC_TYPE_RS)
 		ethtool_link_ksettings_add_link_mode(ks, advertising, FEC_RS);
 
 	ethtool_link_ksettings_add_link_mode(ks, supported, FIBRE);
