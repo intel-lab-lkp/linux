@@ -72,7 +72,7 @@ enum resp_states rxe_mr_do_atomic_op(struct rxe_mr *mr, u64 iova, int opcode,
 enum resp_states rxe_mr_do_atomic_write(struct rxe_mr *mr, u64 iova, u64 value);
 struct rxe_mr *lookup_mr(struct rxe_pd *pd, int access, u32 key,
 			 enum rxe_mr_lookup_type type);
-int mr_check_range(struct rxe_mr *mr, u64 iova, size_t length);
+int mr_check_range(struct rxe_mr *mr, u64 iova, unsigned int length);
 int advance_dma_data(struct rxe_dma_info *dma, unsigned int length);
 int rxe_invalidate_mr(struct rxe_qp *qp, u32 key);
 int rxe_reg_fast_mr(struct rxe_qp *qp, struct rxe_send_wqe *wqe);
@@ -197,8 +197,8 @@ extern const struct mmu_interval_notifier_ops rxe_mn_ops;
 #if defined CONFIG_INFINIBAND_ON_DEMAND_PAGING
 int rxe_odp_mr_init_user(struct rxe_dev *rxe, u64 start, u64 length,
 			 u64 iova, int access_flags, struct rxe_mr *mr);
-int rxe_odp_mr_copy(struct rxe_mr *mr, u64 iova, void *addr, int length,
-		    enum rxe_mr_copy_dir dir);
+int rxe_odp_mr_copy(struct rxe_mr *mr, u64 iova, void *addr,
+		    unsigned int length, enum rxe_mr_copy_dir dir);
 enum resp_states rxe_odp_atomic_op(struct rxe_mr *mr, u64 iova, int opcode,
 				   u64 compare, u64 swap_add, u64 *orig_val);
 int rxe_odp_flush_pmem_iova(struct rxe_mr *mr, u64 iova,
@@ -215,7 +215,7 @@ rxe_odp_mr_init_user(struct rxe_dev *rxe, u64 start, u64 length, u64 iova,
 	return -EOPNOTSUPP;
 }
 static inline int rxe_odp_mr_copy(struct rxe_mr *mr, u64 iova, void *addr,
-				  int length, enum rxe_mr_copy_dir dir)
+				  unsigned int length, enum rxe_mr_copy_dir dir)
 {
 	return -EOPNOTSUPP;
 }

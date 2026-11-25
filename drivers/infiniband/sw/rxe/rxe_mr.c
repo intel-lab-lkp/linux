@@ -24,7 +24,7 @@ u8 rxe_get_next_key(u32 last_key)
 	return key;
 }
 
-int mr_check_range(struct rxe_mr *mr, u64 iova, size_t length)
+int mr_check_range(struct rxe_mr *mr, u64 iova, unsigned int length)
 {
 	switch (mr->ibmr.type) {
 	case IB_MR_TYPE_DMA:

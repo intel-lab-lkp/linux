@@ -1263,9 +1263,13 @@ static struct ib_mr *rxe_reg_user_mr(struct ib_pd *ibpd, u64 start,
 	struct rxe_pd *pd = to_rpd(ibpd);
 	struct rxe_mr *mr;
 	int err, cleanup_err;
+	u64 end;
 
 	if (dmah)
 		return ERR_PTR(-EOPNOTSUPP);
+
+	if (check_add_overflow(iova, length, &end))
+		return ERR_PTR(-EINVAL);
 
 	if (access & ~RXE_ACCESS_SUPPORTED_MR) {
 		rxe_err_pd(pd, "access = %#x not supported (%#x)\n", access,

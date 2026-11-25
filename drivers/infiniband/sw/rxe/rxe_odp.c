@@ -41,7 +41,7 @@ const struct mmu_interval_notifier_ops rxe_mn_ops = {
 #define RXE_PAGEFAULT_DEFAULT 0
 #define RXE_PAGEFAULT_RDONLY BIT(0)
 #define RXE_PAGEFAULT_SNAPSHOT BIT(1)
-static int rxe_odp_do_pagefault_and_lock(struct rxe_mr *mr, u64 user_va, int bcnt, u32 flags)
+static int rxe_odp_do_pagefault_and_lock(struct rxe_mr *mr, u64 user_va, u64 bcnt, u32 flags)
 {
 	struct ib_umem_odp *umem_odp = to_ib_umem_odp(mr->umem);
 	bool fault = !(flags & RXE_PAGEFAULT_SNAPSHOT);
@@ -120,12 +120,12 @@ int rxe_odp_mr_init_user(struct rxe_dev *rxe, u64 start, u64 length,
 }
 
 static inline bool rxe_check_pagefault(struct ib_umem_odp *umem_odp, u64 iova,
-				       int length, bool write)
+				       unsigned int length, bool write)
 {
 	bool need_fault = false;
 	u64 access = HMM_PFN_VALID;
 	u64 addr;
-	int idx;
+	unsigned long idx;
 
 	if (write)
 		access |= HMM_PFN_WRITE;
@@ -161,14 +161,15 @@ static unsigned long rxe_odp_iova_to_page_offset(struct ib_umem_odp *umem_odp, u
 	return iova & (BIT(umem_odp->page_shift) - 1);
 }
 
-static int rxe_odp_map_range_and_lock(struct rxe_mr *mr, u64 iova, int length, u32 flags)
+static int rxe_odp_map_range_and_lock(struct rxe_mr *mr, u64 iova,
+				      unsigned int length, u32 flags)
 {
 	struct ib_umem_odp *umem_odp = to_ib_umem_odp(mr->umem);
 	bool write = !(flags & RXE_PAGEFAULT_RDONLY);
 	bool need_fault;
 	int err;
 
-	if (unlikely(length < 1))
+	if (unlikely(!length))
 		return -EINVAL;
 
 	mutex_lock(&umem_odp->umem_mutex);
@@ -194,11 +195,12 @@ static int rxe_odp_map_range_and_lock(struct rxe_mr *mr, u64 iova, int length, u
 }
 
 static int __rxe_odp_mr_copy(struct rxe_mr *mr, u64 iova, void *addr,
-			     int length, enum rxe_mr_copy_dir dir)
+			     unsigned int length, enum rxe_mr_copy_dir dir)
 {
 	struct ib_umem_odp *umem_odp = to_ib_umem_odp(mr->umem);
+	unsigned int bytes;
+	unsigned long idx;
 	struct page *page;
-	int idx, bytes;
 	size_t offset;
 	u8 *user_va;
 
@@ -229,8 +231,8 @@ static int __rxe_odp_mr_copy(struct rxe_mr *mr, u64 iova, void *addr,
 	return 0;
 }
 
-int rxe_odp_mr_copy(struct rxe_mr *mr, u64 iova, void *addr, int length,
-		    enum rxe_mr_copy_dir dir)
+int rxe_odp_mr_copy(struct rxe_mr *mr, u64 iova, void *addr,
+		    unsigned int length, enum rxe_mr_copy_dir dir)
 {
 	struct ib_umem_odp *umem_odp = to_ib_umem_odp(mr->umem);
 	u32 flags = RXE_PAGEFAULT_DEFAULT;
@@ -272,7 +274,7 @@ static enum resp_states rxe_odp_do_atomic_op(struct rxe_mr *mr, u64 iova,
 	struct ib_umem_odp *umem_odp = to_ib_umem_odp(mr->umem);
 	unsigned int page_offset;
 	struct page *page;
-	unsigned int idx;
+	unsigned long idx;
 	u64 value;
 	u64 *va;
 	int err;
