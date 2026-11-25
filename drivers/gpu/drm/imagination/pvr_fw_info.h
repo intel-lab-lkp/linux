@@ -104,10 +104,18 @@ struct pvr_fw_info_header {
  *                              section of the firmware image
  */
 struct pvr_fw_layout_entry {
-	/** @id: Section ID. */
-	enum pvr_fw_section_id id;
-	/** @type: Section type. */
-	enum pvr_fw_section_type type;
+	/**
+	 * @id: Section ID.
+	 *
+	 * Values are given by enum pvr_fw_section_id.
+	 */
+	u32 id;
+	/**
+	 * @type: Section type.
+	 *
+	 * Values are given by enum pvr_fw_section_type.
+	 */
+	u32 type;
 	/** @base_addr: Base address of section in FW address space. */
 	u32 base_addr;
 	/** @max_size: Maximum size of section, in bytes. */
