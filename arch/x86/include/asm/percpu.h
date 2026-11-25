@@ -32,12 +32,12 @@
 
 #define __force_percpu_prefix	"%%"__stringify(__percpu_seg)":"
 
-#ifdef CONFIG_CC_HAS_NAMED_AS
-
 #ifdef __CHECKER__
 # define __seg_gs		__attribute__((address_space(__seg_gs)))
 # define __seg_fs		__attribute__((address_space(__seg_fs)))
 #endif
+
+#ifdef CONFIG_CC_HAS_NAMED_AS
 
 #define __percpu_prefix
 
@@ -144,6 +144,25 @@ do {										\
 
 #else /* !CONFIG_USE_X86_SEG_SUPPORT: */
 
+#if defined(CONFIG_SMP) && defined(CONFIG_CC_IS_CLANG) && !defined(CONFIG_KMSAN)
+
+/*
+ * Clang never discards inline asm with memory operands, even if its result is
+ * unused. Its named address space support is sufficient for plain loads, so
+ * use those instead, allowing unused per-CPU reads to be elided. KMSAN is
+ * excluded as it ignores the segment base when instrumenting such loads.
+ *
+ * Once CONFIG_USE_X86_SEG_SUPPORT is fully implemented in Clang, this version
+ * can be dropped.
+ */
+#define __raw_cpu_read(size, qual, _var)				\
+({									\
+	*(qual TYPEOF_UNQUAL(_var) CONCATENATE(__seg_, __percpu_seg) * __force) \
+		(__force uintptr_t)&(_var);				\
+})
+
+#else
+
 #define __raw_cpu_read(size, qual, _var)				\
 ({									\
 	__pcpu_type_##size pfo_val__;					\
@@ -155,6 +174,8 @@ do {										\
 									\
 	(typeof(_var))(unsigned long) pfo_val__;			\
 })
+
+#endif
 
 #define __raw_cpu_write(size, qual, _var, _val)				\
 do {									\
