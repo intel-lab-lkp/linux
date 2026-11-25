@@ -353,32 +353,30 @@ configure_seg_id(u64 seg_out_addr, u32 seg_base, u32 seg_limit, u32 seg_id,
 static void
 configure_seg_mmu(struct pvr_device *pvr_dev, u32 **boot_conf_ptr)
 {
-	u64 data_seg_gpu_addr =
-		pvr_fw_obj_get_gpu_addr(pvr_dev->fw_dev.mem.segments[PVR_FW_SEGMENT_DATA].obj);
-	u64 seg_out_addr_top =
-		ROGUE_FW_SEGMMU_OUTADDR_TOP_SLC(MMU_CONTEXT_MAPPING_FWPRIV,
-						ROGUE_FW_SEGMMU_META_BIFDM_ID);
+	const struct pvr_fw_section_desc *data =
+		pvr_fw_get_section_desc(pvr_dev, PVR_FW_SECTION_PRIVATE_DATA);
+	struct pvr_fw_object *data_obj =
+		pvr_dev->fw_dev.mem.segments[PVR_FW_SEGMENT_DATA].obj;
+	u64 data_gpu_addr = pvr_fw_obj_get_gpu_addr(data_obj);
+	u64 seg_out_addr = data_gpu_addr + data->alloc_offset;
+	u32 data_base_addr = data->base_addr;
+	u32 data_size = data->size;
 
-	pvr_for_each_fw_section_desc(pvr_dev->fw_dev.metadata, desc) {
-		/*
-		 * FW code is using the bootloader segment which is already
-		 * configured on boot. FW coremem code and data don't use the
-		 * segment MMU. Only the FW data segment needs to be configured.
-		 */
-		if (desc->segment == PVR_FW_SEGMENT_DATA) {
-			u32 seg_id = ROGUE_FW_SEGMMU_DATA_ID;
-			u64 seg_out_addr = data_seg_gpu_addr;
+	/*
+	 * FW code is using the bootloader segment which is already configured on boot.
+	 * FW coremem code and data don't use the segment MMU. Only the FW data segment
+	 * needs to be configured.
+	 */
 
-			seg_out_addr += desc->alloc_offset;
-			seg_out_addr |= seg_out_addr_top;
+	seg_out_addr |= ROGUE_FW_SEGMMU_OUTADDR_TOP_SLC(MMU_CONTEXT_MAPPING_FWPRIV,
+							ROGUE_FW_SEGMMU_META_BIFDM_ID);
 
-			/* Write the sequence to the bootldr. */
-			configure_seg_id(seg_out_addr, desc->base_addr,
-					 desc->size, seg_id, boot_conf_ptr);
-
-			break;
-		}
-	}
+	/* Write the sequence to the bootloader. */
+	configure_seg_id(seg_out_addr,
+			 data_base_addr,
+			 data_size,
+			 ROGUE_FW_SEGMMU_DATA_ID,
+			 boot_conf_ptr);
 }
 
 static void
