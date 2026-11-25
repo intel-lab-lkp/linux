@@ -241,6 +241,13 @@ static void of_gpio_try_fixup_polarity(const struct device_node *np,
 		 */
 		{ "ti,tsc2005",		"reset-gpios",	false },
 #endif
+#if IS_ENABLED(CONFIG_DRM_TOSHIBA_TC358762)
+		/*
+		 * reset is active low, but RPi touchscreen overlays
+		 * specify this as active high
+		 */
+		{"toshiba,tc358762",	"reset-gpios",	false },
+#endif
 #if IS_ENABLED(CONFIG_SND_SOC_WSA881X)
 		/*
 		 * WSA881 powerdown is always active low, but some device trees
