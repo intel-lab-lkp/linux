@@ -20,11 +20,20 @@
 #include <drm/display/drm_dsc.h>
 #include <drm/display/drm_dsc_helper.h>
 
+enum {
+	SW43408_SUPPLY_VDDI,
+	SW43408_SUPPLY_VPNL,
+};
+
 static const struct regulator_bulk_data sw43408_supplies[] = {
-	{ .supply = "vddi", /* 1.8 V */
-	  .init_load_uA = 62000 },
-	{ .supply = "vpnl", /* 3.0 V */
-	  .init_load_uA = 857000 },
+	[SW43408_SUPPLY_VDDI] = {
+		.supply = "vddi", /* 1.8 V */
+		.init_load_uA = 62000,
+	},
+	[SW43408_SUPPLY_VPNL] = {
+		.supply = "vpnl", /* 3.0 V */
+		.init_load_uA = 857000,
+	},
 };
 
 struct sw43408_panel {
@@ -32,6 +41,7 @@ struct sw43408_panel {
 	struct mipi_dsi_device *link;
 
 	struct regulator_bulk_data *supplies;
+	bool vpnl_enabled;
 
 	struct gpio_desc *reset_gpio;
 
@@ -57,14 +67,80 @@ static int sw43408_disable(struct drm_panel *panel)
 	return ctx.accum_err;
 }
 
+static int sw43408_maybe_disable_vpnl(struct sw43408_panel *ctx)
+{
+	struct regulator *vddi = ctx->supplies[SW43408_SUPPLY_VDDI].consumer;
+	struct regulator *vpnl = ctx->supplies[SW43408_SUPPLY_VPNL].consumer;
+
+	/*
+	 * On Pixel 3, vddi is shared with the touchscreen and remains
+	 * powered while awake or when touch wakeup is armed. Dropping vpnl
+	 * (3.0 V) or asserting reset while vddi (1.8 V) stays powered leaves
+	 * the DDIC in a state no init sequence recovers from (until a full
+	 * vddi power cycle): it answers DCS commands and reports display-on,
+	 * but never lights up again.
+	 */
+	if (ctx->vpnl_enabled && regulator_is_enabled(vddi) == 0) {
+		int ret = regulator_disable(vpnl);
+
+		if (ret < 0)
+			return ret;
+
+		ctx->vpnl_enabled = false;
+	}
+
+	return 0;
+}
+
+static int sw43408_power_off(struct sw43408_panel *ctx)
+{
+	struct regulator *vddi = ctx->supplies[SW43408_SUPPLY_VDDI].consumer;
+	int ret;
+
+	ret = regulator_disable(vddi);
+	if (ret)
+		return ret;
+
+	ret = sw43408_maybe_disable_vpnl(ctx);
+	if (ret)
+		goto recover_vddi;
+
+	return 0;
+
+recover_vddi:
+	/* vpnl disable failed, thus we need to re-enable vddi */
+	(void)regulator_enable(vddi);
+	return ret;
+}
+
+static int sw43408_suspend_late(struct device *dev)
+{
+	struct sw43408_panel *ctx = dev_get_drvdata(dev);
+	int ret;
+
+	if (ctx->base.prepared)
+		return 0;
+
+	ret = sw43408_maybe_disable_vpnl(ctx);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
+static void sw43408_cleanup_vpnl(void *data)
+{
+	struct sw43408_panel *ctx = data;
+
+	if (ctx->vpnl_enabled) {
+		regulator_disable(ctx->supplies[SW43408_SUPPLY_VPNL].consumer);
+		ctx->vpnl_enabled = false;
+	}
+}
+
 static int sw43408_unprepare(struct drm_panel *panel)
 {
-	struct sw43408_panel *sw43408 = to_panel_info(panel);
-
-	gpiod_set_value(sw43408->reset_gpio, 1);
-
-	return regulator_bulk_disable(ARRAY_SIZE(sw43408_supplies),
-				      sw43408->supplies);
+	return sw43408_power_off(to_panel_info(panel));
 }
 
 static int sw43408_program(struct drm_panel *panel)
@@ -149,11 +225,22 @@ static void sw43408_reset(struct sw43408_panel *ctx)
 static int sw43408_prepare(struct drm_panel *panel)
 {
 	struct sw43408_panel *ctx = to_panel_info(panel);
+	struct regulator *vddi = ctx->supplies[SW43408_SUPPLY_VDDI].consumer;
+	struct regulator *vpnl = ctx->supplies[SW43408_SUPPLY_VPNL].consumer;
 	int ret;
 
-	ret = regulator_bulk_enable(ARRAY_SIZE(sw43408_supplies), ctx->supplies);
+	ret = regulator_enable(vddi);
 	if (ret < 0)
 		return ret;
+
+	if (!ctx->vpnl_enabled) {
+		ret = regulator_enable(vpnl);
+		if (ret < 0) {
+			regulator_disable(vddi);
+			return ret;
+		}
+		ctx->vpnl_enabled = true;
+	}
 
 	usleep_range(5000, 6000);
 
@@ -166,8 +253,7 @@ static int sw43408_prepare(struct drm_panel *panel)
 	return 0;
 
 poweroff:
-	gpiod_set_value(ctx->reset_gpio, 1);
-	regulator_bulk_disable(ARRAY_SIZE(sw43408_supplies), ctx->supplies);
+	sw43408_power_off(ctx);
 	return ret;
 }
 
@@ -260,6 +346,10 @@ static int sw43408_add(struct sw43408_panel *ctx)
 	if (ret < 0)
 		return ret;
 
+	ret = devm_add_action_or_reset(dev, sw43408_cleanup_vpnl, ctx);
+	if (ret < 0)
+		return ret;
+
 	ctx->reset_gpio = devm_gpiod_get(dev, "reset", GPIOD_OUT_LOW);
 	if (IS_ERR(ctx->reset_gpio)) {
 		return dev_err_probe(dev, PTR_ERR(ctx->reset_gpio),
@@ -318,10 +408,15 @@ static int sw43408_probe(struct mipi_dsi_device *dsi)
 	return devm_mipi_dsi_attach(&dsi->dev, dsi);
 }
 
+static const struct dev_pm_ops sw43408_pm_ops = {
+	LATE_SYSTEM_SLEEP_PM_OPS(sw43408_suspend_late, NULL)
+};
+
 static struct mipi_dsi_driver sw43408_driver = {
 	.driver = {
 		.name = "panel-lg-sw43408",
 		.of_match_table = sw43408_of_match,
+		.pm = pm_sleep_ptr(&sw43408_pm_ops),
 	},
 	.probe = sw43408_probe,
 };
