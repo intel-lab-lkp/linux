@@ -4827,6 +4827,35 @@ static const struct panel_desc tsd_tst043015cmhx = {
 	.bus_flags = DRM_BUS_FLAG_DE_HIGH | DRM_BUS_FLAG_PIXDATA_SAMPLE_NEGEDGE,
 };
 
+static const struct display_timing techshine_ts_p0700031a_timing = {
+	.pixelclock = { 44900000, 51200000, 63000000 },
+	.hactive = { 1024, 1024, 1024 },
+	.hfront_porch = { 16, 160, 216 },
+	.hback_porch = { 160, 160, 160 },
+	.hsync_len = { 1, 1, 256 },
+	.vactive = { 600, 600, 600 },
+	.vfront_porch = { 1, 12, 127 },
+	.vback_porch = { 23, 23, 23 },
+	.vsync_len = { 1, 1, 128 },
+	.flags = DISPLAY_FLAGS_DE_HIGH,
+};
+
+static const struct panel_desc techshine_ts_p0700031a = {
+	.timings = &techshine_ts_p0700031a_timing,
+	.num_timings = 1,
+	.bpc = 8,
+	.size = {
+		.width = 165,
+		.height = 105,
+	},
+	.delay = {
+		.enable = 25,
+		.disable = 25,
+	},
+	.bus_format = MEDIA_BUS_FMT_RGB888_1X7X4_SPWG,
+	.connector_type = DRM_MODE_CONNECTOR_LVDS,
+};
+
 static const struct drm_display_mode tfc_s9700rtwv43tr_01b_mode = {
 	.clock = 30000,
 	.hdisplay = 800,
@@ -6179,6 +6208,9 @@ static const struct of_device_id platform_of_match[] = {
 	}, {
 		.compatible = "team-source-display,tst043015cmhx",
 		.data = &tsd_tst043015cmhx,
+	}, {
+		.compatible = "techshine,ts-p0700031a",
+		.data = &techshine_ts_p0700031a,
 	}, {
 		.compatible = "tfc,s9700rtwv43tr-01b",
 		.data = &tfc_s9700rtwv43tr_01b,
