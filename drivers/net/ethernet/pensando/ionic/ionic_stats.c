@@ -237,7 +237,10 @@ static u32 ionic_extra_port_stats_get_count(struct ionic_lif *lif)
 {
 	struct ionic_dev *idev = &lif->ionic->idev;
 	struct ionic_port_extra_stats *pes_cache;
+	const __le64 *src;
 	u32 count = 0;
+	__le64 *dst;
+	size_t i;
 
 	if (!(lif->ionic->ident.dev.capabilities &
 	      cpu_to_le64(IONIC_DEV_CAP_EXTRA_STATS)))
@@ -252,7 +255,10 @@ static u32 ionic_extra_port_stats_get_count(struct ionic_lif *lif)
 		return count;
 	}
 
-	*pes_cache = idev->port_info->extra_stats;
+	src = (const __le64 *)&idev->port_info->extra_stats;
+	dst = (__le64 *)pes_cache;
+	for (i = 0; i < sizeof(*pes_cache) / sizeof(*dst); i++)
+		dst[i] = READ_ONCE(src[i]);
 
 	if (pes_cache->rx_bits_phy != IONIC_STAT_INVALID)
 		count++;
