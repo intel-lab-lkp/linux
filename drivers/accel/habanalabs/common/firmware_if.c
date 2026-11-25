@@ -68,7 +68,8 @@ int hl_fw_version_cmp(struct hl_device *hdev, u32 major, u32 minor, u32 subminor
 
 static char *extract_fw_ver_from_str(const char *fw_str)
 {
-	char *str, *fw_ver, *whitespace;
+	char *fw_ver;
+	const char *str, *whitespace;
 	u32 ver_offset;
 
 	fw_ver = kmalloc(VERSION_MAX_LEN, GFP_KERNEL);
@@ -105,7 +106,7 @@ free_fw_ver:
  *
  * Return: Upon success, return a pointer to the given_char in the string. Upon failure, return NULL
  */
-static char *extract_u32_until_given_char(char *str, u32 *ver_num, char given_char)
+static const char *extract_u32_until_given_char(const char *str, u32 *ver_num, char given_char)
 {
 	char num_str[8] = {}, *ch;
 
@@ -136,7 +137,7 @@ static char *extract_u32_until_given_char(char *str, u32 *ver_num, char given_ch
  */
 static int hl_get_sw_major_minor_subminor(struct hl_device *hdev, const char *fw_str)
 {
-	char *end, *start;
+	const char *end, *start;
 
 	end = strnstr(fw_str, "-rc-", VERSION_MAX_LEN);
 	if (end == fw_str)
@@ -194,7 +195,7 @@ err_zero_ver:
  *
  * Return: 0 on success, negative error code for failure.
  */
-static int hl_get_preboot_major_minor(struct hl_device *hdev, char *preboot_ver)
+static int hl_get_preboot_major_minor(struct hl_device *hdev, const char *preboot_ver)
 {
 	preboot_ver = extract_u32_until_given_char(preboot_ver, &hdev->fw_inner_major_ver, '.');
 	if (!preboot_ver) {
