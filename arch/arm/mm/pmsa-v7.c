@@ -371,7 +371,7 @@ static int __init mpu_setup_region(unsigned int number, phys_addr_t start,
 	u32 size_data;
 
 	/* We kept a region free for probing resolution of MPU regions*/
-	if (number > mpu_max_regions
+	if (number >= mpu_max_regions
 	    || number >= MPU_MAX_REGIONS)
 		return -ENOENT;
 
