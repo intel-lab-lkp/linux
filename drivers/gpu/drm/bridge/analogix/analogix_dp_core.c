@@ -42,6 +42,33 @@
 
 static const bool verify_fast_training;
 
+/*
+ * The hotplug events are reported either through the optional GPIO HPD
+ * pin or through the native controller interrupt, which is confirmed
+ * to work only on the RK3576 and RK3588 platforms.
+ */
+static bool analogix_dp_supports_hpd(struct analogix_dp_device *dp)
+{
+	if (dp->force_connected_mode || dp->force_hpd)
+		return false;
+
+	if (dp->hpd_gpiod)
+		return true;
+
+	return dp->plat_data->dev_type == RK3576_EDP || dp->plat_data->dev_type == RK3588_EDP;
+}
+
+/*
+ * The native HPD interrupt relies on the controller staying powered
+ * and clocked to report the hotplug events, so a runtime PM reference
+ * is held for it.  The GPIO HPD mode needs no such reference, as it
+ * reads the GPIO level directly.
+ */
+static bool analogix_dp_require_pm_for_hpd_irq(struct analogix_dp_device *dp)
+{
+	return analogix_dp_supports_hpd(dp) && !dp->hpd_gpiod;
+}
+
 static void analogix_dp_init_dp(struct analogix_dp_device *dp)
 {
 	analogix_dp_reset(dp);
@@ -1547,6 +1574,11 @@ EXPORT_SYMBOL_GPL(analogix_dp_probe);
 
 int analogix_dp_suspend(struct analogix_dp_device *dp)
 {
+	if (analogix_dp_require_pm_for_hpd_irq(dp) && dp->hpd_irq_enabled) {
+		disable_irq(dp->irq);
+		dp->hpd_irq_enabled = false;
+	}
+
 	phy_power_off(dp->phy);
 
 	if (dp->plat_data->power_off)
@@ -1575,6 +1607,11 @@ int analogix_dp_resume(struct analogix_dp_device *dp)
 	phy_power_on(dp->phy);
 
 	analogix_dp_init_dp(dp);
+
+	if (analogix_dp_require_pm_for_hpd_irq(dp) && !dp->hpd_irq_enabled) {
+		enable_irq(dp->irq);
+		dp->hpd_irq_enabled = true;
+	}
 
 	return 0;
 }
@@ -1609,7 +1646,16 @@ int analogix_dp_bind(struct analogix_dp_device *dp, struct drm_device *drm_dev)
 		goto err_unregister_aux;
 	}
 
-	enable_irq(dp->irq);
+	if (analogix_dp_require_pm_for_hpd_irq(dp)) {
+		ret = pm_runtime_resume_and_get(dp->dev);
+		if (ret)
+			goto err_unregister_aux;
+	}
+
+	if (analogix_dp_supports_hpd(dp) && !dp->hpd_irq_enabled) {
+		enable_irq(dp->irq);
+		dp->hpd_irq_enabled = true;
+	}
 
 	return 0;
 
@@ -1622,7 +1668,14 @@ EXPORT_SYMBOL_GPL(analogix_dp_bind);
 
 void analogix_dp_unbind(struct analogix_dp_device *dp)
 {
-	disable_irq(dp->irq);
+	if (dp->hpd_irq_enabled) {
+		disable_irq(dp->irq);
+		dp->hpd_irq_enabled = false;
+	}
+
+	if (analogix_dp_require_pm_for_hpd_irq(dp))
+		pm_runtime_put_sync(dp->dev);
+
 	drm_dp_aux_unregister(&dp->aux);
 }
 EXPORT_SYMBOL_GPL(analogix_dp_unbind);
