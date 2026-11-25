@@ -531,6 +531,7 @@ static struct sk_buff *init_req_packet(struct rxe_qp *qp,
 			atmeth_set_comp(pkt, ibwr->wr.atomic.compare_add);
 		} else {
 			atmeth_set_swap_add(pkt, ibwr->wr.atomic.compare_add);
+			atmeth_set_comp(pkt, 0);
 		}
 		atmeth_set_rkey(pkt, ibwr->wr.atomic.rkey);
 	}
