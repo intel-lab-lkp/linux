@@ -448,6 +448,23 @@ static void scrub_blocked_if_needed(struct scrub_ctx *sctx)
 	scrub_pause_off(sctx->fs_info);
 }
 
+/*
+ * Pause the scrub, and sleep for the throttle duration. Pausing allows the
+ * commit to proceed unblocked.
+ * Scrub cancel interrupts the sleep.
+ */
+static void scrub_throttle_sleep(struct scrub_ctx *sctx, ktime_t timeout)
+{
+	struct btrfs_fs_info *fs_info = sctx->fs_info;
+
+	scrub_pause_on(sctx);
+	wait_event_interruptible_hrtimeout(fs_info->scrub_pause_wait,
+					   atomic_read(&fs_info->scrub_cancel_req) ||
+					   atomic_read(&sctx->cancel_req),
+					   timeout);
+	scrub_pause_off(fs_info);
+}
+
 static noinline_for_stack void scrub_free_ctx(struct scrub_ctx *sctx)
 {
 	int i;
@@ -1435,12 +1452,8 @@ static void scrub_throttle_dev_io(struct scrub_ctx *sctx, struct btrfs_device *d
 		delta = 0;
 	}
 
-	if (delta) {
-		long timeout;
-
-		timeout = div_u64(delta * HZ, 1000);
-		schedule_timeout_interruptible(timeout);
-	}
+	if (delta)
+		scrub_throttle_sleep(sctx, ms_to_ktime(delta));
 
 	/* Next call will start the deadline period */
 	sctx->throttle_deadline = 0;
@@ -3334,6 +3347,7 @@ int btrfs_scrub_cancel(struct btrfs_fs_info *fs_info)
 	}
 
 	atomic_inc(&fs_info->scrub_cancel_req);
+	wake_up(&fs_info->scrub_pause_wait);
 	while (atomic_read(&fs_info->scrubs_running)) {
 		mutex_unlock(&fs_info->scrub_lock);
 		wait_event(fs_info->scrub_pause_wait,
@@ -3358,6 +3372,7 @@ int btrfs_scrub_cancel_dev(struct btrfs_device *dev)
 		return -ENOTCONN;
 	}
 	atomic_inc(&sctx->cancel_req);
+	wake_up(&fs_info->scrub_pause_wait);
 	while (dev->scrub_ctx) {
 		mutex_unlock(&fs_info->scrub_lock);
 		wait_event(fs_info->scrub_pause_wait,
