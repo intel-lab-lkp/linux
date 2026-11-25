@@ -154,6 +154,8 @@ properties:
       - giantplus,gpg48273qs5
         # GiantPlus GPM940B0 3.0" QVGA TFT LCD panel
       - giantplus,gpm940b0
+        # Shantou Goworld Display Technology Co., Ltd. ILI6150H6 7.0" 1024x600 LVDS TFT LCD panel
+      - goworld,ili6150h6
         # HannStar Display Corp. HSD070PWW1 7.0" WXGA TFT LCD panel
       - hannstar,hsd070pww1
         # HannStar Display Corp. HSD100PXN1 10.1" XGA LVDS panel
