@@ -2611,6 +2611,15 @@ static void quirk_no_aer_anfe(struct pci_dev *dev)
 DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_APPLE, 0x1802, quirk_no_aer_anfe);
 
 /*
+ * The PLDA PCIe-to-PCI bridge in front of some server BMC VGA devices
+ * reports an Advisory Non-Fatal Error when enumeration reads an absent
+ * device on its secondary bus.  Platform firmware escalates that to a fatal
+ * error, the Root Port is reset, and the devices behind the bridge become
+ * inaccessible.
+ */
+DECLARE_PCI_FIXUP_EARLY(0x1556, 0xbe00, quirk_no_aer_anfe);
+
+/*
  * Under some circumstances, AER is not linked with extended capabilities.
  * Force it to be linked by setting the corresponding control bit in the
  * config space.
