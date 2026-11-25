@@ -18,9 +18,7 @@
 #define AV1_TILE_INFO_SIZE	(AV1_MAX_TILES * 16)
 #define AV1DEC_MAX_PIC_BUFFERS	24
 #define AV1_REF_SCALE_SHIFT	14
-#define AV1_INVALID_IDX		-1
 #define MAX_FRAME_DISTANCE	31
-#define AV1_PRIMARY_REF_NONE	7
 #define AV1_TILE_SIZE		ALIGN(32 * 128, 4096)
 /*
  * These 3 values aren't defined enum v4l2_av1_segment_feature because
@@ -123,8 +121,8 @@ static int rockchip_vpu981_get_frame_index(struct hantro_ctx *ctx, int ref)
 	u64 timestamp;
 	int i, idx = frame->ref_frame_idx[ref];
 
-	if (idx >= V4L2_AV1_TOTAL_REFS_PER_FRAME || idx < 0)
-		return AV1_INVALID_IDX;
+	if (idx < 0)
+		return V4L2_AV1_REF_FRAME_INVALID;
 
 	timestamp = frame->reference_frame_ts[idx];
 	for (i = 0; i < AV1_MAX_FRAME_BUF_COUNT; i++) {
@@ -134,7 +132,7 @@ static int rockchip_vpu981_get_frame_index(struct hantro_ctx *ctx, int ref)
 			return i;
 	}
 
-	return AV1_INVALID_IDX;
+	return V4L2_AV1_REF_FRAME_INVALID;
 }
 
 static int rockchip_vpu981_get_order_hint(struct hantro_ctx *ctx, int ref)
@@ -142,7 +140,7 @@ static int rockchip_vpu981_get_order_hint(struct hantro_ctx *ctx, int ref)
 	struct hantro_av1_dec_hw_ctx *av1_dec = &ctx->av1_dec;
 	int idx = rockchip_vpu981_get_frame_index(ctx, ref);
 
-	if (idx != AV1_INVALID_IDX)
+	if (idx != V4L2_AV1_REF_FRAME_INVALID)
 		return av1_dec->frame_refs[idx].order_hint;
 
 	return 0;
@@ -179,7 +177,7 @@ static int rockchip_vpu981_av1_dec_frame_ref(struct hantro_ctx *ctx,
 		return i;
 	}
 
-	return AV1_INVALID_IDX;
+	return V4L2_AV1_REF_FRAME_INVALID;
 }
 
 static void rockchip_vpu981_av1_dec_frame_unref(struct hantro_ctx *ctx, int idx)
@@ -1256,7 +1254,7 @@ static void rockchip_vpu981_av1_dec_set_prob(struct hantro_ctx *ctx)
 	bool frame_is_intra = IS_INTRA(frame->frame_type);
 
 	if (error_resilient_mode || frame_is_intra ||
-	    frame->primary_ref_frame == AV1_PRIMARY_REF_NONE) {
+	    frame->primary_ref_frame == V4L2_AV1_PRIMARY_REF_NONE) {
 		av1_dec->cdfs = &av1_dec->default_cdfs;
 		av1_dec->cdfs_ndvc = &av1_dec->default_cdfs_ndvc;
 		rockchip_av1_default_coeff_probs(quantization->base_q_idx,
