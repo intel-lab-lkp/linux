@@ -13,6 +13,7 @@
 #include <net/addrconf.h>
 #include <net/ieee80211_radiotap.h>
 #include <net/ipv6.h>
+#include <brcm_hw_ids.h>
 #include <brcmu_utils.h>
 #include <brcmu_wifi.h>
 
@@ -93,6 +94,22 @@ struct brcmf_if *brcmf_get_ifp(struct brcmf_pub *drvr, int ifidx)
 	return ifp;
 }
 
+static bool brcmf_is_apple_nd_offload_broken(struct brcmf_pub *drvr)
+{
+	const char *board_type = drvr->settings->board_type;
+
+	if (!board_type || !strstarts(board_type, "apple,"))
+		return false;
+
+	switch (drvr->bus_if->chip) {
+	case BRCM_CC_4355_CHIP_ID:
+	case BRCM_CC_4364_CHIP_ID:
+		return true;
+	default:
+		return false;
+	}
+}
+
 void brcmf_configure_arp_nd_offload(struct brcmf_if *ifp, bool enable)
 {
 	s32 err;
@@ -101,6 +118,16 @@ void brcmf_configure_arp_nd_offload(struct brcmf_if *ifp, bool enable)
 	if (enable && brcmf_is_apmode_operating(ifp->drvr->wiphy)) {
 		brcmf_dbg(TRACE, "Skip ARP/ND offload enable when soft AP is running\n");
 		return;
+	}
+
+	/* With ND offload on while awake, the Apple firmware for the BCM4355
+	 * and BCM4364 makes downloads drop to low rates. macOS runs ARP and
+	 * ND offload only in sleep, keep both off on these chips.
+	 */
+	if (enable && brcmf_is_apple_nd_offload_broken(ifp->drvr)) {
+		brcmf_dbg(TRACE, "Skip ARP/ND offload enable on Apple BCM%x\n",
+			  ifp->drvr->bus_if->chip);
+		enable = false;
 	}
 
 	if (enable)
