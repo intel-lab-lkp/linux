@@ -13887,8 +13887,9 @@ T:	git git://linuxtv.org/media.git
 F:	drivers/media/pci/intel/ivsc/
 
 INTEL WMI SLIM BOOTLOADER (SBL) FIRMWARE UPDATE DRIVER
+M:	Arav Verma <svav2021@gmail.com>
 L:	platform-driver-x86@vger.kernel.org
-S:	Orphan
+S:	Maintained
 W:	https://slimbootloader.github.io/security/firmware-update.html
 F:	Documentation/ABI/testing/sysfs-platform-intel-wmi-sbl-fw-update
 F:	drivers/platform/x86/intel/wmi/sbl-fw-update.c
