@@ -603,9 +603,15 @@ xe_hwmon_energy_get(struct xe_hwmon *hwmon, int channel, long *energy)
 
 	if (hwmon->xe->info.platform == XE_BATTLEMAGE) {
 		u64 pmt_val;
+		u32 guid;
 
-		ret = xe_pmt_telem_read(hwmon->xe->drm.dev,
-					xe_mmio_read32(mmio, PUNIT_TELEMETRY_GUID),
+		ret = xe_vsec_get_guid(hwmon->xe, &guid);
+		if (ret) {
+			drm_warn(&hwmon->xe->drm, "PMT device is not available: %d\n", ret);
+			*energy = 0;
+			return ret;
+		}
+		ret = xe_pmt_telem_read(hwmon->xe->drm.dev, guid,
 					&pmt_val, BMG_ENERGY_STATUS_PMT_OFFSET,	sizeof(pmt_val));
 		if (ret != sizeof(pmt_val)) {
 			drm_warn(&hwmon->xe->drm, "energy read from pmt failed, ret %d\n", ret);
@@ -1900,9 +1906,9 @@ int xe_hwmon_register(struct xe_device *xe)
 	drm_dbg(&xe->drm, "Register xe hwmon interface\n");
 
 	/*  hwmon_dev points to device hwmon<i> */
-	hwmon->hwmon_dev = devm_hwmon_device_register_with_info(dev, "xe", hwmon,
-								&hwmon_chip_info,
-								hwmon_groups);
+	hwmon->hwmon_dev = hwmon_device_register_with_info(dev, "xe", hwmon,
+							   &hwmon_chip_info,
+							   hwmon_groups);
 	if (IS_ERR(hwmon->hwmon_dev)) {
 		ret = PTR_ERR(hwmon->hwmon_dev);
 		xe_log_err(xe, HWMON, ret, "Failed to register xe hwmon\n");
@@ -1914,5 +1920,21 @@ int xe_hwmon_register(struct xe_device *xe)
 err_null_hwmon:
 	xe->hwmon = NULL;
 	return ret;
+}
+
+/**
+ * xe_hwmon_unregister - Remove the hwmon interface
+ * @xe: xe device
+ *
+ * Called before the device is unplugged, so that no hwmon attribute can
+ * be accessed afterwards.
+ */
+void xe_hwmon_unregister(struct xe_device *xe)
+{
+	if (!xe->hwmon)
+		return;
+
+	hwmon_device_unregister(xe->hwmon->hwmon_dev);
+	xe->hwmon = NULL;
 }
 MODULE_IMPORT_NS("INTEL_PMT_TELEMETRY");

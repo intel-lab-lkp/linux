@@ -188,6 +188,18 @@
  * The PM reference is then dropped. If the queue was not idle, the worker
  * simply re-arms itself.
  *
+ * The worker waits for the "last" job to retire before dropping
+ * @xe_migrate.job_mutex, so a subsequent enter is serialized behind it. A
+ * "first" job is not chained, so it publishes its own ring tail with
+ * xe_lrc_set_ring_tail(), which updates the saved tail in the context image
+ * only. That is enough for a context which is off the hardware, since a
+ * context restore loads RING_TAIL from there, but the context is only off the
+ * hardware once the "last" job has retired. Submitted before then, the write
+ * races the postamble of the job preceding the "last" one, which puts that
+ * same saved tail - and RING_TAIL - at the end of the "last" job. The
+ * postamble landing second rewinds the tail behind the "first" job, which the
+ * command streamer then never executes.
+ *
  * Job state
  * ---------
  *
@@ -227,7 +239,9 @@ struct xe_migrate {
 	u64 large_page_copy_pdes;
 	/**
 	 * @fence: dma-fence representing the last migration job batch.
-	 * Protected by @job_mutex.
+	 * Updated under @job_mutex. Readers must take a reference while holding
+	 * the mutex before using the fence outside the critical section. The
+	 * stored reference is released during final teardown.
 	 */
 	struct dma_fence *fence;
 	/** @min_chunk_size: For dgfx, Minimum chunk size */
@@ -271,6 +285,13 @@ static void xe_migrate_ulls_toggle_enable(struct xe_migrate *m, bool enabled)
 {
 	lockdep_assert_held(&m->job_mutex);
 	m->ulls.enabled = enabled;
+}
+
+static void xe_migrate_fence_set(struct xe_migrate *m, struct dma_fence *fence)
+{
+	lockdep_assert_held(&m->job_mutex);
+	dma_fence_put(m->fence);
+	m->fence = dma_fence_get(fence);
 }
 
 static void xe_migrate_ulls_fini(struct xe_migrate *m)
@@ -768,6 +789,9 @@ static void xe_migrate_ulls_exit(struct work_struct *work)
 	scoped_guard(mutex, &m->job_mutex) {
 		if (xe_exec_queue_is_idle(m->q, 1)) {
 			fence = __xe_migrate_job_push(m, job, ULLS_EXIT);
+
+			/* Keep enter out until the context is off the HW */
+			dma_fence_wait(fence, false);
 			dma_fence_put(fence);
 
 			xe_pm_runtime_put(xe);	/* Pairs with PM get in enter */
@@ -1433,8 +1457,7 @@ static struct dma_fence *__xe_migrate_copy(struct xe_migrate *m,
 		dma_fence_put(fence);
 		fence = xe_migrate_job_push(m, job);
 
-		dma_fence_put(m->fence);
-		m->fence = dma_fence_get(fence);
+		xe_migrate_fence_set(m, fence);
 
 		mutex_unlock(&m->job_mutex);
 
@@ -1862,8 +1885,7 @@ struct dma_fence *xe_migrate_vram_copy_chunk(struct xe_bo *vram_bo, u64 vram_off
 			dma_fence_put(fence);
 			fence = xe_migrate_job_push(m, job);
 
-			dma_fence_put(m->fence);
-			m->fence = dma_fence_get(fence);
+			xe_migrate_fence_set(m, fence);
 		}
 
 		xe_bb_free(bb, fence);
@@ -2097,8 +2119,7 @@ struct dma_fence *xe_migrate_clear(struct xe_migrate *m,
 		dma_fence_put(fence);
 		fence = xe_migrate_job_push(m, job);
 
-		dma_fence_put(m->fence);
-		m->fence = dma_fence_get(fence);
+		xe_migrate_fence_set(m, fence);
 
 		mutex_unlock(&m->job_mutex);
 
@@ -2150,8 +2171,16 @@ struct migrate_test_params {
  */
 void xe_migrate_wait(struct xe_migrate *m)
 {
-	if (m->fence)
-		dma_fence_wait(m->fence, false);
+	struct dma_fence *fence;
+
+	scoped_guard(mutex, &m->job_mutex) {
+		fence = dma_fence_get(m->fence);
+	}
+
+	if (fence) {
+		dma_fence_wait(fence, false);
+		dma_fence_put(fence);
+	}
 }
 
 static u32 pte_update_cmd_size(u64 size)
@@ -2455,12 +2484,10 @@ static struct dma_fence *xe_migrate_vram(struct xe_migrate *m,
 		err = 0;
 	}
 
-	mutex_lock(&m->job_mutex);
-	fence = xe_migrate_job_push(m, job);
-
-	dma_fence_put(m->fence);
-	m->fence = dma_fence_get(fence);
-	mutex_unlock(&m->job_mutex);
+	scoped_guard(mutex, &m->job_mutex) {
+		fence = xe_migrate_job_push(m, job);
+		xe_migrate_fence_set(m, fence);
+	}
 
 	xe_bb_free(bb, fence);
 
