@@ -4,6 +4,7 @@ devpts_pts
 fclog
 anon_inode_test
 kernfs_test
+mgtime_test
 idmapped_tmpfile
 ustat_test
 rw_hint_test
