@@ -1726,6 +1726,8 @@ patternProperties:
     description: TechNexion
   "^technologic,.*":
     description: Technologic Systems
+  "^techshine,.*":
+    description: Guangxi Techshine Electronics Co., Ltd.
   "^techstar,.*":
     description: Shenzhen Techstar Electronics Co., Ltd.
   "^techvision,.*":
