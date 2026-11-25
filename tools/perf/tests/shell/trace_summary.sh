@@ -63,6 +63,15 @@ if ! perf check feature -q bpf; then
     exit 2
 fi
 
+# The tp_btf programs need BTF in the running kernel.  A vmlinux image
+# on disk is not sufficient: it can be readable even when the kernel has
+# no BTF loaded.
+if [ ! -r /sys/kernel/btf/vmlinux ]; then
+    echo "Skip --bpf-summary tests as kernel BTF is missing"
+    rm -f ${OUTPUT}
+    exit 2
+fi
+
 # summary only for system wide - per-thread summary with BPF
 test_perf_trace "-as --summary-mode=thread --bpf-summary"
 
