@@ -23376,6 +23376,13 @@ F:	drivers/clk/clk-rp1.c
 F:	drivers/misc/rp1/
 F:	drivers/pinctrl/pinctrl-rp1.c
 
+RASPBERRY PI RP1 PWM DRIVER
+M:	Andrea della Porta <andrea.porta@suse.com>
+L:	linux-pwm@vger.kernel.org
+S:	Maintained
+F:	Documentation/devicetree/bindings/pwm/raspberrypi,rp1-pwm.yaml
+F:	drivers/pwm/pwm-rp1.c
+
 RC-CORE / LIRC FRAMEWORK
 M:	Sean Young <sean@mess.org>
 L:	linux-media@vger.kernel.org
