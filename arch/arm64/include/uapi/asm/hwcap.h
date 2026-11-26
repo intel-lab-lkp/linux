@@ -155,5 +155,6 @@
 #define HWCAP3_F16F32DOT	(1UL << 9)
 #define HWCAP3_F16F32MM		(1UL << 10)
 #define HWCAP3_SVE_LUT6		(1UL << 11)
+#define HWCAP3_LS64_ACCDATA	(1UL << 12)
 
 #endif /* _UAPI__ASM_HWCAP_H */
