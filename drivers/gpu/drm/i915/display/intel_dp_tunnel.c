@@ -153,7 +153,7 @@ static int allocate_initial_tunnel_bw_for_pipes(struct intel_dp *intel_dp, u8 pi
 	for_each_intel_crtc_in_pipe_mask(display, crtc, pipe_mask) {
 		const struct intel_crtc_state *crtc_state =
 			to_intel_crtc_state(crtc->base.state);
-		int stream_bw = intel_dp_config_required_rate(crtc_state);
+		int stream_bw = intel_dp_config_required_rate(intel_dp, crtc_state);
 
 		tunnel_bw += stream_bw;
 
@@ -648,7 +648,7 @@ int intel_dp_tunnel_atomic_compute_stream_bw(struct intel_atomic_state *state,
 	struct intel_display *display = to_intel_display(state);
 	struct intel_encoder *encoder = &dp_to_dig_port(intel_dp)->base;
 	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
-	int required_rate = intel_dp_config_required_rate(crtc_state);
+	int required_rate = intel_dp_config_required_rate(intel_dp, crtc_state);
 	int ret;
 
 	if (!intel_dp_tunnel_bw_alloc_is_enabled(intel_dp))

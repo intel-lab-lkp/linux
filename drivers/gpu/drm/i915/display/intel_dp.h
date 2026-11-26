@@ -107,7 +107,8 @@ void intel_dp_mst_suspend(struct intel_display *display);
 void intel_dp_mst_resume(struct intel_display *display);
 int intel_dp_rate_limit_len(const int *rates, int len, int max_rate);
 int intel_dp_max_source_lane_count(struct intel_digital_port *dig_port);
-int intel_dp_config_required_rate(const struct intel_crtc_state *crtc_state);
+int intel_dp_config_required_rate(struct intel_dp *intel_dp,
+				  const struct intel_crtc_state *crtc_state);
 int intel_dp_rate_select(struct intel_dp *intel_dp, int rate);
 int intel_dp_rate_index(const int *rates, int len, int rate);
 void intel_dp_update_sink_caps(struct intel_dp *intel_dp);
@@ -149,9 +150,9 @@ int intel_dp_compute_min_compressed_bpp_x16(struct intel_connector *connector,
 bool intel_dp_get_connector_max_link_config(struct intel_connector *connector,
 					    const struct link_config_limits *limits,
 					    struct intel_dp_link_config *max_link_config);
-bool intel_dp_mode_valid_with_dsc(struct intel_connector *connector,
+bool intel_dp_mode_valid_with_dsc(struct intel_connector *connector, bool is_mst,
 				  int link_clock, int lane_count,
-				  int mode_clock, int mode_hdisplay,
+				  int mode_clock, int mode_hdisplay, int mode_htotal,
 				  int num_joined_pipes,
 				  enum intel_output_format output_format,
 				  int pipe_bpp, unsigned long bw_overhead_flags);
@@ -217,12 +218,18 @@ int intel_dp_dsc_min_src_compressed_bpp(void);
 int intel_dp_compute_min_hblank(struct intel_crtc_state *crtc_state,
 				const struct drm_connector_state *conn_state);
 bool intel_dp_use_symbol_tg(struct intel_display *display, bool is_mst, bool is_uhbr);
-bool intel_dp_mode_valid_symbol_tg(struct intel_connector *connector,
-				   struct intel_dp *intel_dp, bool is_mst,
-				   const struct drm_display_mode *mode,
-				   int link_rate,
-				   enum intel_output_format output_format,
-				   bool uncompressed_ok, int dsc_slice_count);
+int intel_dp_symbol_tg_bw_params(struct intel_dp *intel_dp,
+				 int hdisplay, int htotal,
+				 int link_bpp_x16, int dsc_slice_count,
+				 enum intel_output_format output_format,
+				 bool is_uhbr, unsigned long bw_overhead_flags,
+				 int *bw_bpp_x16, int *bw_overhead);
+int intel_dp_stream_link_required(struct intel_dp *intel_dp, bool is_mst,
+				  int link_clock, int lane_count,
+				  int mode_clock, int mode_hdisplay, int mode_htotal,
+				  int dsc_slice_count,
+				  enum intel_output_format output_format,
+				  int link_bpp_x16, unsigned long bw_overhead_flags);
 void intel_dp_symbol_tg_select_mn(struct intel_crtc_state *crtc_state);
 int intel_dp_compute_symbol_tg(struct intel_dp *intel_dp,
 			       struct intel_crtc_state *crtc_state,
