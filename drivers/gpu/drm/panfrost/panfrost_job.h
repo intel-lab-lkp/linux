@@ -37,6 +37,8 @@ struct panfrost_job {
 	struct panfrost_engine_usage *engine_usage;
 	bool is_profiled;
 	bool cycle_counter_ref;
+	/* JS_COMMAND_START written */
+	bool started;
 	ktime_t start_time;
 	u64 start_cycles;
 };
