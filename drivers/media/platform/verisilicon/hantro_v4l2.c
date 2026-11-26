@@ -561,6 +561,12 @@ static int hantro_set_fmt_out(struct hantro_ctx *ctx,
 	ctx->vpu_src_fmt = hantro_find_format(ctx, pix_mp->pixelformat);
 	ctx->src_fmt = *pix_mp;
 
+	/* Setting the OUTPUT format resets the encoder crop to the full frame. */
+	if (ctx->is_encoder) {
+		ctx->dst_fmt.width = pix_mp->width;
+		ctx->dst_fmt.height = pix_mp->height;
+	}
+
 	/*
 	 * Current raw format might have become invalid with newly
 	 * selected codec, so reset it to default just to be safe and
