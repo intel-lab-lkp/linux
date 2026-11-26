@@ -12165,7 +12165,8 @@ static const match_table_t if_tokens = {
  */
 static int
 perf_event_parse_addr_filter(struct perf_event *event, char *fstr,
-			     struct list_head *filters)
+			     struct list_head *filters,
+			     unsigned int *nr_file_filters)
 {
 	struct perf_addr_filter *filter = NULL;
 	char *start, *orig, *filename = NULL;
@@ -12277,7 +12278,7 @@ perf_event_parse_addr_filter(struct perf_event *event, char *fstr,
 				 * different processes.
 				 */
 				ret = -EOPNOTSUPP;
-				if (!event->ctx->task)
+				if (!(READ_ONCE(event->attach_state) & PERF_ATTACH_TASK))
 					goto fail;
 
 				/* look up the path and grab its inode */
@@ -12292,7 +12293,7 @@ perf_event_parse_addr_filter(struct perf_event *event, char *fstr,
 					     ->i_mode))
 					goto fail;
 
-				event->addr_filters.nr_file_filters++;
+				(*nr_file_filters)++;
 			}
 
 			/* ready to consume more filters */
@@ -12323,6 +12324,8 @@ fail:
 static int
 perf_event_set_addr_filter(struct perf_event *event, char *filter_str)
 {
+	struct perf_event_context *ctx = event->ctx;
+	unsigned int nr_file_filters = 0;
 	LIST_HEAD(filters);
 	int ret;
 
@@ -12330,14 +12333,30 @@ perf_event_set_addr_filter(struct perf_event *event, char *filter_str)
 	 * Since this is called in perf_ioctl() path, we're already holding
 	 * ctx::mutex.
 	 */
-	lockdep_assert_held(&event->ctx->mutex);
+	lockdep_assert_held(&ctx->mutex);
 
 	if (WARN_ON_ONCE(event->parent))
 		return -EINVAL;
 
-	ret = perf_event_parse_addr_filter(event, filter_str, &filters);
+	/*
+	 * Parsing the filters looks up the files they refer to. That can
+	 * block for as long as the filesystem likes and a lookup below /proc
+	 * takes exec_update_lock which nests outside of ctx->mutex. So don't
+	 * hold ctx->mutex for it. As per perf_event_ctx_lock() we already
+	 * have a reference on ctx and an event with address filters isn't
+	 * moved to another context.
+	 */
+	mutex_unlock(&ctx->mutex);
+	ret = perf_event_parse_addr_filter(event, filter_str, &filters,
+					   &nr_file_filters);
+	mutex_lock(&ctx->mutex);
 	if (ret)
-		goto fail_clear_files;
+		return ret;
+
+	/* The pmu may have gone away while ctx->mutex was dropped. */
+	ret = -ENODEV;
+	if (event->state <= PERF_EVENT_STATE_REVOKED)
+		goto fail_free_filters;
 
 	ret = event->pmu->addr_filters_validate(&filters);
 	if (ret)
@@ -12345,6 +12364,7 @@ perf_event_set_addr_filter(struct perf_event *event, char *filter_str)
 
 	/* remove existing filters, if any */
 	perf_addr_filters_splice(event, &filters);
+	event->addr_filters.nr_file_filters = nr_file_filters;
 
 	/* install new filters */
 	perf_event_for_each_child(event, perf_event_addr_filters_apply);
@@ -12353,10 +12373,6 @@ perf_event_set_addr_filter(struct perf_event *event, char *filter_str)
 
 fail_free_filters:
 	free_filters_list(&filters);
-
-fail_clear_files:
-	event->addr_filters.nr_file_filters = 0;
-
 	return ret;
 }
 
