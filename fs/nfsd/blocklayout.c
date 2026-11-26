@@ -182,7 +182,9 @@ nfsd4_block_proc_layoutget(struct svc_rqst *rqstp, struct inode *inode,
 		}
 
 		bex_length = bex->len - (offset - bex->foff);
-		if (bex_length >= length) {
+		/* There is nothing to map past the maximum file size. */
+		if (bex_length >= length ||
+		    bex->foff + bex->len >= inode->i_sb->s_maxbytes) {
 			bl->nr_extents = i + 1;
 			break;
 		}
