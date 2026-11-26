@@ -1224,6 +1224,11 @@
 # define DP_AS_SDP_FAVT_PAYLOAD_FIELDS_PARSING_SUPPORTED			BIT(2) /* 2.1 */
 # define DP_VSC_EXT_SDP_FRAMEWORK_VERSION_1_SUPPORTED				BIT(4)
 
+#define DP_RX_MIN_HBLANK_8B10B				0x221a /* 2.1 */
+#define DP_RX_MIN_HBLANK_128B132B			0x221b /* 2.1 */
+# define DP_RX_MIN_HBLANK_MASK				0x0f
+# define DP_RX_MIN_HBLANK_ENABLE			BIT(4)
+
 #define DP_128B132B_SUPPORTED_LINK_RATES       0x2215 /* 2.0 */
 # define DP_UHBR10                             (1 << 0)
 # define DP_UHBR20                             (1 << 1)
