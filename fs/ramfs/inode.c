@@ -25,17 +25,11 @@
 
 #include <linux/fs.h>
 #include <linux/pagemap.h>
-#include <linux/highmem.h>
-#include <linux/time.h>
 #include <linux/init.h>
 #include <linux/string.h>
-#include <linux/backing-dev.h>
 #include <linux/ramfs.h>
-#include <linux/sched.h>
-#include <linux/parser.h>
 #include <linux/magic.h>
 #include <linux/slab.h>
-#include <linux/uaccess.h>
 #include <linux/fs_context.h>
 #include <linux/fs_parser.h>
 #include <linux/seq_file.h>
