@@ -433,22 +433,25 @@ int ext4_ext_migrate(struct inode *inode)
 	uid_t owner[2];
 	int alloc_ctx;
 
+	filemap_invalidate_lock(inode->i_mapping);
+	alloc_ctx = ext4_writepages_down_write(inode->i_sb);
+
 	/*
 	 * If the filesystem does not support extents, or the inode
 	 * already is extent-based, error out.
 	 */
 	if (!ext4_has_feature_extents(inode->i_sb) ||
 	    ext4_test_inode_flag(inode, EXT4_INODE_EXTENTS) ||
-	    ext4_has_inline_data(inode))
-		return -EINVAL;
+	    ext4_has_inline_data(inode)) {
+		retval = -EINVAL;
+		goto out_unlock;
+	}
 
 	if (S_ISLNK(inode->i_mode) && inode->i_blocks == 0)
 		/*
 		 * don't migrate fast symlink
 		 */
-		return retval;
-
-	alloc_ctx = ext4_writepages_down_write(inode->i_sb);
+		goto out_unlock;
 
 	/*
 	 * Worst case we can touch the allocation bitmaps and a block
@@ -613,6 +616,7 @@ out_tmp_inode:
 out_unlock:
 	ext4_writepages_up_write(inode->i_sb, alloc_ctx);
 	iput(tmp_inode);
+	filemap_invalidate_unlock(inode->i_mapping);
 	return retval;
 }
 EXPORT_SYMBOL_FOR_EXT4_TEST(ext4_ext_migrate);
@@ -634,14 +638,19 @@ int ext4_ind_migrate(struct inode *inode)
 	int				ret, ret2 = 0;
 	int				alloc_ctx;
 
-	if (!ext4_has_feature_extents(inode->i_sb) ||
-	    (!ext4_test_inode_flag(inode, EXT4_INODE_EXTENTS)))
-		return -EINVAL;
+	filemap_invalidate_lock(inode->i_mapping);
 
-	if (ext4_has_feature_bigalloc(inode->i_sb))
-		return -EOPNOTSUPP;
-	if (ext4_inode_buffered_iomap(inode))
-		return -EOPNOTSUPP;
+	if (!ext4_has_feature_extents(inode->i_sb) ||
+	    (!ext4_test_inode_flag(inode, EXT4_INODE_EXTENTS))) {
+		ret = -EINVAL;
+		goto out_invalidate;
+	}
+
+	if (ext4_has_feature_bigalloc(inode->i_sb) ||
+	    ext4_inode_buffered_iomap(inode)) {
+		ret = -EOPNOTSUPP;
+		goto out_invalidate;
+	}
 
 	/*
 	 * In order to get correct extent info, force all delayed allocation
@@ -702,6 +711,8 @@ errout:
 	ext4_journal_stop(handle);
 out_unlock:
 	ext4_writepages_up_write(inode->i_sb, alloc_ctx);
+out_invalidate:
+	filemap_invalidate_unlock(inode->i_mapping);
 	return ret;
 }
 EXPORT_SYMBOL_FOR_EXT4_TEST(ext4_ind_migrate);
