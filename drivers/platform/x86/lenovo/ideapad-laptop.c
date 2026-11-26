@@ -2627,9 +2627,9 @@ static int ideapad_check_features(struct ideapad_private *priv)
 			} else if (val == KBD_BL_TRISTATE_AUTO_TYPE) {
 				priv->features.kbd_bl = true;
 				priv->kbd_bl.type = KBD_BL_TRISTATE_AUTO;
-			} else {
+			} else if (val) {
 				dev_warn(&priv->platform_device->dev,
-					 "Unknown keyboard type: %lu",
+					 "Unknown keyboard type: %lu\n",
 					 val);
 			}
 		}
