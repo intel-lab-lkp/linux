@@ -2795,7 +2795,13 @@ int trace_probe_remove_file(struct trace_probe *tp,
 		return -ENOENT;
 
 	list_del_rcu(&link->list);
-	kvfree_rcu_mightsleep(link);
+
+	/*
+	 * Synchronize with probes being executed. This is not only for freeing
+	 * link but also for related objects (e.g. link->file).
+	 */
+	synchronize_rcu();
+	kvfree(link);
 
 	if (list_empty(&tp->event->files))
 		trace_probe_clear_flag(tp, TP_FLAG_TRACE);
