@@ -1310,10 +1310,12 @@ impl Thread {
         info.code = td.transaction_data.code;
         info.flags = TransactionFlags::from_bits(td.transaction_data.flags);
         info.data_ptr = UserPtr::from_addr(trd_data_ptr.buffer as usize);
-        info.data_size = td.transaction_data.data_size as usize;
+        // Saturate sizes exceeding `usize::MAX` to `usize::MAX`, which is
+        // guaranteed to be rejected as `EINVAL` in `copy_transaction_data`.
+        info.data_size = usize::try_from(td.transaction_data.data_size).unwrap_or(usize::MAX);
         info.offsets_ptr = UserPtr::from_addr(trd_data_ptr.offsets as usize);
-        info.offsets_size = td.transaction_data.offsets_size as usize;
-        info.buffers_size = td.buffers_size as usize;
+        info.offsets_size = usize::try_from(td.transaction_data.offsets_size).unwrap_or(usize::MAX);
+        info.buffers_size = usize::try_from(td.buffers_size).unwrap_or(usize::MAX);
         // SAFETY: Above `read` call initializes all bytes, so this union read is ok.
         info.target_handle = unsafe { td.transaction_data.target.handle };
 
