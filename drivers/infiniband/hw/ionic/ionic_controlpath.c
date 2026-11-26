@@ -23,6 +23,13 @@ static int ionic_validate_qdesc(struct ionic_qdesc *q)
 	if (q->addr & (PAGE_SIZE - 1))
 		return -EINVAL;
 
+	/* Keep the shift counts below within the width of their types */
+	if (q->depth_log2 > order_base_2(IONIC_MAX_DEPTH))
+		return -EINVAL;
+
+	if (q->depth_log2 + q->stride_log2 >= BITS_PER_LONG_LONG)
+		return -EINVAL;
+
 	if (q->mask != BIT(q->depth_log2) - 1)
 		return -EINVAL;
 
