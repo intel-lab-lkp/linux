@@ -1520,9 +1520,10 @@ impl Thread {
 
     fn write(self: &Arc<Self>, req: &mut BinderWriteRead) -> Result {
         let write_start = req.write_buffer.wrapping_add(req.write_consumed);
-        let write_len = req.write_size.saturating_sub(req.write_consumed);
+        let write_len = usize::try_from(req.write_size.saturating_sub(req.write_consumed))
+            .unwrap_or(usize::MAX);
         let mut reader =
-            UserSlice::new(UserPtr::from_addr(write_start as usize), write_len as usize).reader();
+            UserSlice::new(UserPtr::from_addr(write_start as usize), write_len).reader();
 
         while reader.len() >= size_of::<u32>() && self.inner.lock().return_work.is_unused() {
             let before = reader.len();
@@ -1592,9 +1593,10 @@ impl Thread {
 
     fn read(self: &Arc<Self>, req: &mut BinderWriteRead, wait: bool) -> Result {
         let read_start = req.read_buffer.wrapping_add(req.read_consumed);
-        let read_len = req.read_size.saturating_sub(req.read_consumed);
+        let read_len =
+            usize::try_from(req.read_size.saturating_sub(req.read_consumed)).unwrap_or(usize::MAX);
         let mut writer = BinderReturnWriter::new(
-            UserSlice::new(UserPtr::from_addr(read_start as usize), read_len as usize).writer(),
+            UserSlice::new(UserPtr::from_addr(read_start as usize), read_len).writer(),
             self,
         );
         let (in_pool, has_transaction, thread_todo, use_proc_queue) = {
@@ -1654,13 +1656,13 @@ impl Thread {
             }
         }
 
-        req.read_consumed += read_len - writer.len() as u64;
+        req.read_consumed += (read_len - writer.len()) as u64;
 
         // Write BR_SPAWN_LOOPER if the process needs more threads for its pool.
         if has_noop_placeholder && in_pool && self.process.needs_thread() {
             let mut writer = UserSlice::new(
                 UserPtr::from_addr(req.read_buffer as usize),
-                req.read_size as usize,
+                usize::try_from(req.read_size).unwrap_or(usize::MAX),
             )
             .writer();
             writer.write(&BR_SPAWN_LOOPER)?;
