@@ -247,6 +247,8 @@ void xe_irq_enable_hwe(struct xe_gt *gt)
 		if (other_fuse_mask) {
 			gsc_mask = common_mask | GSC_ER_COMPLETE;
 			heci_mask = GSC_IRQ_INTF(1);
+		} else if (xe->info.platform == XE_DG2) {
+			gsc_mask = GSC_IRQ_INTF(0) | GSC_IRQ_INTF(1);
 		} else if (xe->info.has_heci_gscfi) {
 			gsc_mask = GSC_IRQ_INTF(1);
 		}
