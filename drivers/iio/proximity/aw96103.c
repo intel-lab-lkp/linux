@@ -268,7 +268,7 @@ static int aw96103_get_diff_raw(struct aw96103 *aw96103, unsigned int chan,
 			  AW96103_REG_DIFF_CH0 + chan * 4, &data);
 	if (ret)
 		return ret;
-	*buf = (int)(data / AW_DATA_PROCESS_FACTOR);
+	*buf = (s32)data / AW_DATA_PROCESS_FACTOR;
 
 	return 0;
 }
