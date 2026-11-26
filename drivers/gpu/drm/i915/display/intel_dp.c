@@ -1275,14 +1275,18 @@ bool intel_dp_has_dsc(const struct intel_connector *connector)
  * SST/MST, but only once all the pieces needed for that are in place, which is
  * done by a later patch.
  */
-static bool intel_dp_use_symbol_tg(struct intel_display *display, bool is_mst, bool is_uhbr)
+bool intel_dp_use_symbol_tg(struct intel_display *display, bool is_mst, bool is_uhbr)
 {
 	return false;
 }
 
 static int
-intel_dp_get_max_m_n_ratio(struct intel_display *display)
+intel_dp_get_max_m_n_ratio(struct intel_display *display, bool is_mst, int link_rate)
 {
+	/* No Link M/N ratio limit with the symbol based timing generator */
+	if (intel_dp_use_symbol_tg(display, is_mst, drm_dp_is_uhbr_rate(link_rate)))
+		return INT_MAX;
+
 	if (DISPLAY_VER(display) >= 35)
 		return 22;
 
@@ -1312,7 +1316,9 @@ bool intel_dp_can_support_m_n(struct intel_display *display,
 			      const struct intel_crtc_state *crtc_state,
 			      int pixel_clock, int link_rate)
 {
-	int max_m_n_ratio = intel_dp_get_max_m_n_ratio(display);
+	bool is_mst = crtc_state &&
+		      intel_crtc_has_type(crtc_state, INTEL_OUTPUT_DP_MST);
+	int max_m_n_ratio = intel_dp_get_max_m_n_ratio(display, is_mst, link_rate);
 	enum transcoder cpu_transcoder = TRANSCODER_A;
 	u32 link_m, link_n;
 	int m_n_ratio;
@@ -1335,7 +1341,10 @@ void intel_dp_check_m_n_ratio(const struct intel_crtc_state *crtc_state,
 			      struct intel_link_m_n *m_n)
 {
 	struct intel_display *display = to_intel_display(crtc_state);
-	int max_m_n_ratio = intel_dp_get_max_m_n_ratio(display);
+	int max_m_n_ratio =
+		intel_dp_get_max_m_n_ratio(display,
+					   intel_crtc_has_type(crtc_state, INTEL_OUTPUT_DP_MST),
+					   crtc_state->port_clock);
 	int m_n_ratio;
 
 	m_n->bypass_m_n_ratio_limit = false;
@@ -2819,7 +2828,8 @@ intel_dp_compute_m_n_ratio_limits(struct intel_dp *intel_dp,
 		drm_dbg_kms(display->drm,
 			    "[CONNECTOR:%d:%s] No link config with a Link M/N ratio <= %d\n",
 			    connector->base.base.id, connector->base.name,
-			    intel_dp_get_max_m_n_ratio(display));
+			    intel_dp_get_max_m_n_ratio(display, false,
+						       crtc_state->port_clock));
 
 		return false;
 	}
