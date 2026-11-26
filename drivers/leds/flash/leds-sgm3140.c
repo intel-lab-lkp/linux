@@ -264,7 +264,7 @@ static int sgm3140_probe(struct platform_device *pdev)
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to register flash device: %d\n",
 			ret);
-		goto err;
+		goto out_put_node;
 	}
 
 	sgm3140_init_v4l2_flash_config(priv, &v4l2_sd_cfg);
@@ -276,12 +276,10 @@ static int sgm3140_probe(struct platform_device *pdev)
 					   &v4l2_sd_cfg);
 	if (IS_ERR(priv->v4l2_flash)) {
 		ret = PTR_ERR(priv->v4l2_flash);
-		goto err;
+		goto out_put_node;
 	}
 
-	return ret;
-
-err:
+out_put_node:
 	fwnode_handle_put(child_node);
 	return ret;
 }
