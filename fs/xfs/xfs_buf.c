@@ -1382,6 +1382,9 @@ xfs_buf_submit(
 
 	ASSERT(!(bp->b_flags & _XBF_DELWRI_Q));
 
+	if (bp->b_flags & XBF_WRITE)
+		xfs_buf_wait_unpin(bp);
+
 	/*
 	 * On log shutdown we stale and complete the buffer immediately. We can
 	 * be called to read the superblock before the log has been set up, so
@@ -1401,9 +1404,6 @@ xfs_buf_submit(
 		xfs_buf_ioerror(bp, -EIO);
 		goto ioerror;
 	}
-
-	if (bp->b_flags & XBF_WRITE)
-		xfs_buf_wait_unpin(bp);
 
 	/*
 	 * Make sure we capture only current IO errors rather than stale errors
