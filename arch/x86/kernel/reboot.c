@@ -635,10 +635,6 @@ static void native_machine_emergency_restart(void)
 		case BOOT_BIOS:
 			machine_real_restart(MRR_BIOS);
 
-			/* We're probably dead after this, but... */
-			reboot_type = BOOT_CF9_SAFE;
-			break;
-
 		case BOOT_CF9_FORCE:
 			port_cf9_safe = true;
 			fallthrough;
