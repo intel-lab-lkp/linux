@@ -589,12 +589,13 @@ static void aw96103_cfg_update(const struct firmware *fw, void *data)
 	struct aw96103 *aw96103 = data;
 	int ret, i;
 
-	if (!fw || !fw->data) {
-		dev_err(aw96103->dev, "No firmware.\n");
-		return;
+	if (fw && fw->data) {
+		ret = aw96103_cfg_all_loaded(fw, aw96103);
+	} else {
+		release_firmware(fw);
+		dev_warn(aw96103->dev, "No firmware, using the default configuration\n");
+		ret = -ENOENT;
 	}
-
-	ret = aw96103_cfg_all_loaded(fw, aw96103);
 	/*
 	 * If loading the register configuration file fails,
 	 * load the default register configuration in the driver to
