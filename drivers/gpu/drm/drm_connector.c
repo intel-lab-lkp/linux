@@ -2106,9 +2106,10 @@ void drm_connector_attach_dp_subconnector_property(struct drm_connector *connect
 				drm_dp_subconnector_enum_list,
 				ARRAY_SIZE(drm_dp_subconnector_enum_list));
 
-	drm_object_attach_property(&connector->base,
-				   mode_config->dp_subconnector_property,
-				   DRM_MODE_SUBCONNECTOR_Unknown);
+	if (mode_config->dp_subconnector_property)
+		drm_object_attach_property(&connector->base,
+					   mode_config->dp_subconnector_property,
+					   DRM_MODE_SUBCONNECTOR_Unknown);
 }
 EXPORT_SYMBOL(drm_connector_attach_dp_subconnector_property);
 
