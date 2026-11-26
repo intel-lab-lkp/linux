@@ -16,6 +16,13 @@ rust_helper_reset_control_get_optional_exclusive(struct device *dev,
 }
 
 #ifndef CONFIG_RESET_CONTROLLER
+__rust_helper struct reset_control *
+rust_helper_fwnode_reset_control_array_get(struct fwnode_handle *fwnode,
+					   enum reset_control_flags flags)
+{
+	return fwnode_reset_control_array_get(fwnode, flags);
+}
+
 __rust_helper void rust_helper_reset_control_put(struct reset_control *rstc)
 {
 	reset_control_put(rstc);
