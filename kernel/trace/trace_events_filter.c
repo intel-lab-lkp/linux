@@ -1121,6 +1121,10 @@ static int regex_match_end_dynstr(char *str, struct regex *r, int len)
 
 static int regex_match_glob(char *str, struct regex *r, int len)
 {
+	/* Zero is reserved for a NUL-terminated string of unknown length. */
+	if (!len)
+		return glob_match(r->pattern, str);
+
 	return glob_match_len(r->pattern, str, len) ? 1 : 0;
 }
 
