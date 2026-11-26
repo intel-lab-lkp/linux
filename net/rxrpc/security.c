@@ -138,6 +138,11 @@ const struct rxrpc_security *rxrpc_get_incoming_security(struct rxrpc_sock *rx,
 
 	_enter("");
 
+	if (sp->hdr.securityIndex == RXRPC_SECURITY_NONE &&
+	    rx->min_sec_level > RXRPC_SECURITY_PLAIN &&
+	    !rx->sk.sk_kern_sock)
+		return NULL;
+
 	sec = rxrpc_security_lookup(sp->hdr.securityIndex);
 	if (!sec) {
 		rxrpc_direct_conn_abort(skb, rxrpc_abort_unsupported_security,
