@@ -96,9 +96,9 @@ static void rmnet_unregister_bridge(struct rmnet_port *port)
 	if (port->rmnet_mode != RMNET_EPMODE_BRIDGE)
 		return;
 
-	rmnet_dev = port->rmnet_dev;
 	if (!port->nr_rmnet_devs) {
 		/* bridge device */
+		rmnet_dev = port->rmnet_dev;
 		real_dev = port->bridge_ep;
 		bridge_dev = port->dev;
 
@@ -108,6 +108,7 @@ static void rmnet_unregister_bridge(struct rmnet_port *port)
 	} else {
 		/* real device */
 		bridge_dev = port->bridge_ep;
+		rmnet_dev = rmnet_get_port_rtnl(bridge_dev)->rmnet_dev;
 
 		port->bridge_ep = NULL;
 		port->rmnet_mode = RMNET_EPMODE_VND;
