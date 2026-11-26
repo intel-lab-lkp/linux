@@ -26,7 +26,7 @@
 #define FRAME_META_TYPE_PT_REGS		2
 
 #ifndef __ASSEMBLER__
-/* 
+/*
  * A standard AAPCS64 frame record.
  */
 struct frame_record {
