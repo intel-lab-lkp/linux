@@ -3276,7 +3276,7 @@ static int event_callback(const char *name, umode_t *mode, void **data,
 	return 0;
 }
 
-/* The file is incremented on creation and freeing the enable file decrements it */
+/* The file is incremented on creation and freeing the event directory decrements it */
 static void event_release(const char *name, void *data)
 {
 	struct trace_event_file *file = data;
@@ -3298,6 +3298,7 @@ event_create_dir(struct eventfs_inode *parent, struct trace_event_file *file)
 		{
 			.name		= "format",
 			.callback	= event_callback,
+			.release	= event_release,
 		},
 #ifdef CONFIG_PERF_EVENTS
 		{
@@ -3317,7 +3318,6 @@ event_create_dir(struct eventfs_inode *parent, struct trace_event_file *file)
 		{
 			.name		= "enable",
 			.callback	= event_callback,
-			.release	= event_release,
 		},
 		{
 			.name		= "filter",
@@ -3380,7 +3380,7 @@ event_create_dir(struct eventfs_inode *parent, struct trace_event_file *file)
 
 	file->ei = ei;
 
-	/* Gets decremented on freeing of the "enable" file */
+	/* Gets decremented by event_release() when the ei is freed */
 	event_file_get(file);
 
 	return 0;
