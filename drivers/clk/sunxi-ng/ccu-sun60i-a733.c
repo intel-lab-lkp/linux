@@ -567,8 +567,9 @@ static SUNXI_CCU_GATE_HWS(ahb_serdes_clk, "ahb-serdes", ahb_hws,
 			  0x5c0, BIT(8), 0);
 static SUNXI_CCU_GATE_HWS(ahb_usb_sys_clk, "ahb-usb-sys", ahb_hws,
 			  0x5c0, BIT(9), 0);
+/* Keep enabled for the shared MSI-Lite0 AHB bus fabric. */
 static SUNXI_CCU_GATE_HWS(ahb_msi_lite0_clk, "ahb-msi-lite0", ahb_hws,
-			  0x5c0, BIT(16), 0);
+			  0x5c0, BIT(16), CLK_IS_CRITICAL);
 
 /* This gate controls access to the storage controller MMIO registers. */
 static SUNXI_CCU_GATE_HWS(ahb_store_clk, "ahb-store", ahb_hws,
@@ -597,8 +598,9 @@ static SUNXI_CCU_GATE_HWS(mbus_vid_in_clk, "mbus-vid-in", mbus_hws,
 			  0x5e0, BIT(24), 0);
 static SUNXI_CCU_GATE_HWS(mbus_serdes_clk, "mbus-serdes", mbus_hws,
 			  0x5e0, BIT(28), 0);
+/* Keep enabled for the shared MSI-Lite0 MBUS DMA paths. */
 static SUNXI_CCU_GATE_HWS(mbus_msi_lite0_clk, "mbus-msi-lite0", mbus_hws,
-			  0x5e0, BIT(29), 0);
+			  0x5e0, BIT(29), CLK_IS_CRITICAL);
 
 /* Keep enabled for the storage controller DMA paths. */
 static SUNXI_CCU_GATE_HWS(mbus_store_clk, "mbus-store", mbus_hws,
