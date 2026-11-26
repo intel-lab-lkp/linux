@@ -12,6 +12,10 @@
 //! A driver can also get a single reset control for all the reset lines in the `resets`
 //! property of its device. Its operations then act on all of those lines.
 //!
+//! An [`ExclusiveResetControl`] in the [`Unknown`] state can also assert its line for a limited
+//! time, with [`ExclusiveResetControl::assert_guard`]. The [`AssertedGuard`] that it returns
+//! deasserts the line when dropped, and the control stays in the [`Unknown`] state.
+//!
 //! C header: [`include/linux/reset.h`](srctree/include/linux/reset.h)
 //!
 //! See [Reset controller API](https://docs.kernel.org/driver-api/reset.html) for more information.
@@ -381,6 +385,24 @@ impl<'a> ExclusiveResetControl<'a, Unknown> {
     pub fn deassert(self) -> Result<ExclusiveResetControl<'a, Deasserted>, Error<Self>> {
         self.deassert_internal()
     }
+
+    /// Asserts the reset line and returns an [`AssertedGuard`], which deasserts it when dropped.
+    ///
+    /// The [`ExclusiveResetControl`] stays in the [`Unknown`] state, and it cannot be used while
+    /// the guard exists.
+    ///
+    /// The line is asserted with the kernel's [`reset_control_assert()`].
+    ///
+    /// [`reset_control_assert()`]:
+    /// https://docs.kernel.org/driver-api/reset.html#c.reset_control_assert
+    #[inline]
+    pub fn assert_guard(&mut self) -> Result<AssertedGuard<'_, 'a>> {
+        // SAFETY: By the type invariants, `self.inner` is a pointer that a C getter returned, and
+        // `self` owns its reference.
+        to_result(unsafe { bindings::reset_control_assert(self.inner) })?;
+
+        Ok(AssertedGuard { reset: self })
+    }
 }
 
 impl<'a> ExclusiveResetControl<'a, Asserted> {
@@ -421,5 +443,65 @@ impl<State: ResetState> Drop for ExclusiveResetControl<'_, State> {
         // SAFETY: By the type invariants, `self` owns the reference that the C getter returned,
         // so it is safe to relinquish it now.
         unsafe { bindings::reset_control_put(self.inner) };
+    }
+}
+
+/// A guard returned by [`ExclusiveResetControl::assert_guard`], which deasserts the reset line when
+/// dropped.
+///
+/// An error from the deassert done on drop is discarded. [`AssertedGuard::deassert`] deasserts the
+/// line and returns the error.
+///
+/// # Examples
+///
+/// Holding a device in reset for a limited time:
+///
+/// ```
+/// use kernel::reset::{
+///     ExclusiveResetControl,
+///     Unknown, //
+/// };
+///
+/// # fn restart_clocks() -> Result { Ok(()) }
+/// fn reset_device(reset: &mut ExclusiveResetControl<'_, Unknown>) -> Result {
+///     let asserted = reset.assert_guard()?;
+///
+///     // If this fails, dropping `asserted` deasserts the line.
+///     restart_clocks()?;
+///
+///     asserted.deassert()
+/// }
+/// ```
+#[must_use = "the reset line is deasserted immediately when the guard is unused"]
+pub struct AssertedGuard<'r, 'a> {
+    reset: &'r mut ExclusiveResetControl<'a, Unknown>,
+}
+
+impl<'r, 'a> AssertedGuard<'r, 'a> {
+    /// Deasserts the reset line and consumes the guard.
+    ///
+    /// The only difference from dropping the guard is that this returns an error from the
+    /// deassert, which a drop discards.
+    ///
+    /// Equivalent to the kernel's [`reset_control_deassert()`].
+    ///
+    /// [`reset_control_deassert()`]:
+    /// https://docs.kernel.org/driver-api/reset.html#c.reset_control_deassert
+    #[inline]
+    pub fn deassert(self) -> Result {
+        // Skip `drop()`, which would deassert the line a second time.
+        let guard = ManuallyDrop::new(self);
+
+        // SAFETY: By the type invariants of `ExclusiveResetControl`, `guard.reset.inner` is a
+        // pointer that a C getter returned, and `guard.reset` owns its reference.
+        to_result(unsafe { bindings::reset_control_deassert(guard.reset.inner) })
+    }
+}
+
+impl<'r, 'a> Drop for AssertedGuard<'r, 'a> {
+    fn drop(&mut self) {
+        // SAFETY: By the type invariants of `ExclusiveResetControl`, `self.reset.inner` is a
+        // pointer that a C getter returned, and `self.reset` owns its reference.
+        unsafe { bindings::reset_control_deassert(self.reset.inner) };
     }
 }
