@@ -626,6 +626,37 @@ out:
 
 EXPORT_SYMBOL_GPL(fat_build_inode);
 
+/* Like an open file that got unlinked: no directory entry, i_pos is 0. */
+int fat_tmpfile(const struct mnt_idmap *idmap, struct inode *dir,
+		struct file *file, umode_t mode)
+{
+	struct super_block *sb = dir->i_sb;
+	struct msdos_dir_entry de = { .attr = ATTR_ARCH };
+	struct timespec64 ts = current_time(dir);
+	struct inode *inode;
+	int err;
+
+	fat_time_unix2fat(MSDOS_SB(sb), &ts, &de.time, &de.date, &de.ctime_cs);
+	de.ctime = de.time;
+	de.cdate = de.date;
+	de.adate = de.date;
+
+	inode = new_inode(sb);
+	if (!inode)
+		return -ENOMEM;
+	inode->i_ino = iunique(sb, MSDOS_ROOT_INO);
+	inode_set_iversion(inode, 1);
+	err = fat_fill_inode(inode, &de);
+	if (err) {
+		iput(inode);
+		return err;
+	}
+	insert_inode_hash(inode);
+	d_tmpfile(file, inode);
+	return finish_open_simple(file, 0);
+}
+EXPORT_SYMBOL_GPL(fat_tmpfile);
+
 static int __fat_write_inode(struct inode *inode);
 
 static int fat_sync_inode_metadata(struct inode *inode,
