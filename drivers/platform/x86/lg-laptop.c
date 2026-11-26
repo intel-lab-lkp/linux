@@ -32,7 +32,7 @@
 #define LED_DEVICE(_name, max, flag) struct led_classdev _name = { \
 	.name           = __stringify(_name),   \
 	.max_brightness = max,                  \
-	.brightness_set = _name##_set,          \
+	.brightness_set_blocking = _name##_set, \
 	.brightness_get = _name##_get,          \
 	.flags = flag,                          \
 }
@@ -599,10 +599,9 @@ static const struct attribute_group dev_attribute_group = {
 	.attrs = dev_attributes,
 };
 
-static void tpad_led_set(struct led_classdev *cdev,
-			 enum led_brightness brightness)
+static int tpad_led_set(struct led_classdev *cdev, enum led_brightness brightness)
 {
-	lg_wmab_set(cdev->dev->parent, WM_TLED, brightness > LED_OFF);
+	return lg_wmab_set(cdev->dev->parent, WM_TLED, brightness > LED_OFF);
 }
 
 static enum led_brightness tpad_led_get(struct led_classdev *cdev)
@@ -612,8 +611,7 @@ static enum led_brightness tpad_led_get(struct led_classdev *cdev)
 
 static LED_DEVICE(tpad_led, 1, 0);
 
-static void kbd_backlight_set(struct led_classdev *cdev,
-			      enum led_brightness brightness)
+static int kbd_backlight_set(struct led_classdev *cdev, enum led_brightness brightness)
 {
 	/* Must always be written */
 	u32 value = KBD_LED_STATUS;
@@ -633,7 +631,7 @@ static void kbd_backlight_set(struct led_classdev *cdev,
 	value |= FIELD_PREP(KBD_LED_BRIGHTNESS_MASK, bright);
 	value |= FIELD_PREP(KBD_LED_MODE_MASK, mode);
 
-	lg_wmab_set(cdev->dev->parent, WM_KEY_LIGHT, value);
+	return lg_wmab_set(cdev->dev->parent, WM_KEY_LIGHT, value);
 }
 
 static enum led_brightness get_kbd_backlight_level(struct device *dev)
