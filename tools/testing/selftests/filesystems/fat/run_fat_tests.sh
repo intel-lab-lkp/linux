@@ -51,6 +51,15 @@ mount_image()
     sudo mount -o loop "${IMG_PATH}" "${MNT_PATH}"
 }
 
+mount_image_as()
+{
+    local fstype="$1"
+    local opts="$2"
+
+    mkdir -p "${MNT_PATH}"
+    sudo mount -t "${fstype}" -o "loop${opts:+,${opts}}" "${IMG_PATH}" "${MNT_PATH}"
+}
+
 rename_exchange_test()
 {
     local rename_exchange="${BASE_DIR}/rename_exchange"
@@ -86,11 +95,43 @@ unmount_image()
     sudo umount "${MNT_PATH}" &> /dev/null
 }
 
+tmpfile_test()
+{
+    local tmpfile="${BASE_DIR}/tmpfile"
+    local fstype="$1"
+    local opts="$2"
+    local dots=0
+
+    if [ "${opts}" = "dots" ]; then
+        dots=1
+    fi
+
+    create_loopback
+    mount_image_as "${fstype}" "${opts}"
+    sudo env FAT_MNT="${MNT_PATH}" FAT_DOTS="${dots}" "${tmpfile}"
+    unmount_image
+
+    # No clusters leaked by unnamed O_TMPFILEs, named ones are complete.
+    fsck.vfat -n "${IMG_PATH}" >/dev/null 2>&1
+
+    mount_image_as "${fstype}" "${opts}"
+    # Missing if the tests skipped because O_TMPFILE isn't supported.
+    if [ -e "${MNT_PATH}/regular.txt" ]; then
+        cmp "${MNT_PATH}/tmpfile.txt" "${MNT_PATH}/regular.txt" >/dev/null 2>&1
+        if [ "${dots}" -eq 1 ]; then
+            test -f "${MNT_PATH}/.hidden"
+        fi
+    fi
+    unmount_image
+}
+
 check_prereqs
 create_loopback
 mount_image
 rename_exchange_test
 rename_exchange_subdir_test
 unmount_image
+tmpfile_test vfat ""
+tmpfile_test msdos dots
 
 exit 0
