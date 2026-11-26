@@ -921,7 +921,7 @@ static int ext4_da_convert_inline_data_to_extent(struct address_space *mapping,
 	if (IS_ERR(folio))
 		return PTR_ERR(folio);
 
-	down_read(&EXT4_I(inode)->xattr_sem);
+	down_write(&EXT4_I(inode)->xattr_sem);
 	if (!ext4_has_inline_data(inode)) {
 		ext4_clear_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA);
 		goto out;
@@ -938,7 +938,7 @@ static int ext4_da_convert_inline_data_to_extent(struct address_space *mapping,
 	ret = ext4_block_write_begin(NULL, folio, 0, inline_size,
 				     ext4_da_get_block_prep);
 	if (ret) {
-		up_read(&EXT4_I(inode)->xattr_sem);
+		up_write(&EXT4_I(inode)->xattr_sem);
 		folio_unlock(folio);
 		folio_put(folio);
 		ext4_truncate_failed_write(inode);
@@ -946,12 +946,19 @@ static int ext4_da_convert_inline_data_to_extent(struct address_space *mapping,
 	}
 
 	clear_buffer_new(folio_buffers(folio));
+	/*
+	 * Clear EXT4_STATE_MAY_INLINE_DATA before marking folio 0 dirty so
+	 * concurrent writeback cannot see PAGECACHE_TAG_DIRTY while
+	 * EXT4_STATE_MAY_INLINE_DATA is still set. Holding xattr_sem for
+	 * write prevents ext4_convert_inline_data() from observing the
+	 * cleared state before folio 0 is dirtied.
+	 */
+	ext4_clear_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA);
 	folio_mark_dirty(folio);
 	folio_mark_uptodate(folio);
-	ext4_clear_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA);
 
 out:
-	up_read(&EXT4_I(inode)->xattr_sem);
+	up_write(&EXT4_I(inode)->xattr_sem);
 	if (folio) {
 		folio_unlock(folio);
 		folio_put(folio);
@@ -1842,10 +1849,18 @@ out:
 
 int ext4_destroy_inline_data(handle_t *handle, struct inode *inode)
 {
-	int ret, no_expand;
+	int ret = 0, no_expand;
 
 	ext4_write_lock_xattr(inode, &no_expand);
+	if (!ext4_has_inline_data(inode))
+		goto out;
+	/* Only writeback of a completed delayed-allocation handoff may proceed. */
+	if (ext4_test_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA)) {
+		ret = -EIO;
+		goto out;
+	}
 	ret = ext4_destroy_inline_data_nolock(handle, inode);
+out:
 	ext4_write_unlock_xattr(inode, &no_expand);
 
 	return ret;
@@ -1914,6 +1929,25 @@ int ext4_inline_data_truncate(struct inode *inode, int *has_inline)
 	if ((err = ext4_orphan_add(handle, inode)) != 0)
 		goto out;
 
+	/*
+	 * If the file was already moved to delayed allocation
+	 * (!EXT4_STATE_MAY_INLINE_DATA) and is now truncated to zero,
+	 * truncate_pagecache() has already dropped dirty folio 0. Finish
+	 * converting the empty inode out of inline data here instead of
+	 * leaving EXT4_INODE_INLINE_DATA set with !EXT4_STATE_MAY_INLINE_DATA
+	 * and no dirty pages.
+	 */
+	if (!ext4_test_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA) &&
+	    inode->i_size == 0) {
+		down_write(&EXT4_I(inode)->i_data_sem);
+		EXT4_I(inode)->i_disksize = 0;
+		ext4_es_remove_extent(inode, 0, EXT_MAX_BLOCKS);
+		up_write(&EXT4_I(inode)->i_data_sem);
+
+		err = ext4_destroy_inline_data_nolock(handle, inode);
+		goto out;
+	}
+
 	if ((err = ext4_get_inode_loc(inode, &is.iloc)) != 0)
 		goto out;
 
@@ -1922,20 +1956,19 @@ int ext4_inline_data_truncate(struct inode *inode, int *has_inline)
 	inline_size = ext4_get_inline_size(inode);
 	EXT4_I(inode)->i_disksize = i_size;
 
+	/*
+	 * If this file was moved to delayed allocation
+	 * (!EXT4_STATE_MAY_INLINE_DATA), remove delayed extents beyond the
+	 * new i_size while keeping block 0 if i_size > 0 (folio 0 is still
+	 * dirty in the page cache).
+	 */
+	if (!ext4_test_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA)) {
+		ext4_lblk_t lblk = EXT4_B_TO_LBLK(inode, inode->i_size);
+
+		ext4_es_remove_extent(inode, lblk, EXT_MAX_BLOCKS - lblk);
+	}
+
 	if (i_size < inline_size) {
-		/*
-		 * if there's inline data to truncate and this file was
-		 * converted to extents after that inline data was written,
-		 * the extent status cache must be cleared to avoid leaving
-		 * behind stale delayed allocated extent entries
-		 */
-		if (!ext4_test_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA)) {
-			ext4_lblk_t lblk = EXT4_B_TO_LBLK(inode, i_size);
-
-			ext4_es_remove_extent(inode, lblk,
-					      EXT_MAX_BLOCKS - lblk);
-		}
-
 		/* Clear the content in the xattr space. */
 		if (inline_size > EXT4_MIN_INLINE_DATA_SIZE) {
 			if ((err = ext4_xattr_ibody_find(inode, &i, &is)) != 0)
@@ -2005,22 +2038,40 @@ int ext4_convert_inline_data(struct inode *inode)
 	handle_t *handle;
 	struct ext4_iloc iloc;
 
+retry:
+	if (!ext4_has_inline_data(inode) &&
+	    !ext4_test_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA))
+		return 0;
+
+	down_read(&EXT4_I(inode)->xattr_sem);
 	if (!ext4_has_inline_data(inode)) {
 		ext4_clear_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA);
+		up_read(&EXT4_I(inode)->xattr_sem);
 		return 0;
-	} else if (!ext4_test_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA)) {
+	}
+	if (!ext4_test_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA)) {
+		up_read(&EXT4_I(inode)->xattr_sem);
 		/*
 		 * Inode has inline data but EXT4_STATE_MAY_INLINE_DATA is
 		 * cleared. This means we are in the middle of moving of
-		 * inline data to delay allocated block. Just force writeout
-		 * here to finish conversion.
+		 * inline data to delay allocated block. Force synchronous
+		 * writeout here to finish conversion.
 		 */
-		error = filemap_flush(inode->i_mapping);
+		error = filemap_write_and_wait(inode->i_mapping);
 		if (error)
 			return error;
-		if (!ext4_has_inline_data(inode))
+		down_read(&EXT4_I(inode)->xattr_sem);
+		if (!ext4_has_inline_data(inode)) {
+			up_read(&EXT4_I(inode)->xattr_sem);
 			return 0;
+		}
+		up_read(&EXT4_I(inode)->xattr_sem);
+		error = ext4_emergency_state(inode->i_sb);
+		if (error)
+			return error;
+		return -EIO;
 	}
+	up_read(&EXT4_I(inode)->xattr_sem);
 
 	needed_blocks = ext4_chunk_trans_extent(inode, 1);
 
@@ -2036,8 +2087,15 @@ int ext4_convert_inline_data(struct inode *inode)
 	}
 
 	ext4_write_lock_xattr(inode, &no_expand);
-	if (ext4_has_inline_data(inode))
+	if (ext4_has_inline_data(inode)) {
+		if (!ext4_test_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA)) {
+			ext4_write_unlock_xattr(inode, &no_expand);
+			ext4_journal_stop(handle);
+			brelse(iloc.bh);
+			goto retry;
+		}
 		error = ext4_convert_inline_data_nolock(handle, inode, &iloc);
+	}
 	ext4_write_unlock_xattr(inode, &no_expand);
 	ext4_journal_stop(handle);
 out_free:

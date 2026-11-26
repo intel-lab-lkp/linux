@@ -3019,16 +3019,20 @@ static int ext4_do_writepages(struct mpage_da_data *mpd)
 	 * we'd better clear the inline data here.
 	 */
 	if (ext4_has_inline_data(inode)) {
+		int stop_err;
+
 		/* Just inode will be modified... */
 		handle = ext4_journal_start(inode, EXT4_HT_INODE, 1);
 		if (IS_ERR(handle)) {
 			ret = PTR_ERR(handle);
 			goto out_writepages;
 		}
-		BUG_ON(ext4_test_inode_state(inode,
-				EXT4_STATE_MAY_INLINE_DATA));
-		ext4_destroy_inline_data(handle, inode);
-		ext4_journal_stop(handle);
+		ret = ext4_destroy_inline_data(handle, inode);
+		stop_err = ext4_journal_stop(handle);
+		if (!ret)
+			ret = stop_err;
+		if (ret)
+			goto out_writepages;
 	}
 
 	/*
@@ -3437,9 +3441,15 @@ static void ext4_da_truncate_failed_write(struct inode *inode)
 
 	filemap_invalidate_lock(mapping);
 	truncate_inode_pages(mapping, inode->i_size);
+	if (inode->i_size == 0 && ext4_has_inline_data(inode) &&
+	    !ext4_test_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA)) {
+		if (!ext4_truncate(inode))
+			goto out_unlock;
+	}
 	down_write(&EXT4_I(inode)->i_data_sem);
 	ext4_es_remove_extent(inode, lblk, EXT_MAX_BLOCKS - lblk);
 	up_write(&EXT4_I(inode)->i_data_sem);
+out_unlock:
 	filemap_invalidate_unlock(mapping);
 }
 

@@ -717,6 +717,11 @@ static void test_write_and_destroy_inline_data(struct kunit *test)
 	KUNIT_ASSERT_FALSE(test, IS_ERR(handle));
 	ret = ext4_get_inode_loc(inode, &iloc);
 	KUNIT_ASSERT_EQ(test, ret, 0);
+	ext4_set_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA);
+	ret = ext4_destroy_inline_data(handle, inode);
+	KUNIT_EXPECT_EQ(test, ret, -EIO);
+	KUNIT_EXPECT_TRUE(test, ext4_has_inline_data(inode));
+	ext4_clear_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA);
 	ret = ext4_destroy_inline_data(handle, inode);
 	KUNIT_EXPECT_EQ(test, ret, 0);
 	KUNIT_EXPECT_FALSE(test, ext4_has_inline_data(inode));
@@ -741,6 +746,7 @@ static void test_write_and_destroy_inline_data(struct kunit *test)
 
 	handle = ext4_journal_start(inode, EXT4_HT_INODE, 1);
 	KUNIT_ASSERT_FALSE(test, IS_ERR(handle));
+	ext4_clear_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA);
 	ret = ext4_destroy_inline_data(handle, inode);
 	KUNIT_EXPECT_EQ(test, ret, 0);
 	KUNIT_EXPECT_FALSE(test, ext4_test_inode_flag(inode, EXT4_INODE_EXTENTS));
@@ -1139,14 +1145,23 @@ static void test_convert_inline_data_and_rollback(struct kunit *test)
 
 	/*
 	 * 2. Inline inode without EXT4_STATE_MAY_INLINE_DATA -> calls
-	 * filemap_flush() and finishes converting inline data if still inline.
+	 * filemap_write_and_wait() and returns -EIO if still inline instead of
+	 * falling through to ext4_convert_inline_data_nolock(). With
+	 * EXT4_STATE_MAY_INLINE_DATA set, converts inline data to an extent.
 	 */
 	ret = create_inline_file(inode, buf, sizeof(buf));
 	KUNIT_ASSERT_EQ(test, ret, 0);
 	ext4_clear_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA);
 	ret = ext4_convert_inline_data(inode);
+	KUNIT_EXPECT_EQ(test, ret, -EIO);
+	KUNIT_EXPECT_TRUE(test, ext4_has_inline_data(inode));
+
+	ext4_set_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA);
+	ret = ext4_convert_inline_data(inode);
 	KUNIT_EXPECT_EQ(test, ret, 0);
 	KUNIT_EXPECT_FALSE(test, ext4_has_inline_data(inode));
+	KUNIT_EXPECT_FALSE(test,
+			   ext4_test_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA));
 	KUNIT_EXPECT_MEMEQ(test, ctx->data_block_buf, buf, sizeof(buf));
 
 	/*
