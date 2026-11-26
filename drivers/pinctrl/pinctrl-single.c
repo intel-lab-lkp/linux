@@ -154,9 +154,7 @@ struct pcs_soc_data {
  * @mutex:	mutex protecting the lists
  * @width:	bits per mux register
  * @fmask:	function register mask
- * @fshift:	function register shift
  * @foff:	value to turn mux off
- * @fmax:	max number of functions in fmask
  * @bits_per_mux: number of bits per mux
  * @bits_per_pin: number of bits per pin
  * @pins:	physical pins on the SoC
@@ -187,9 +185,7 @@ struct pcs_device {
 	struct mutex mutex;
 	unsigned width;
 	unsigned fmask;
-	unsigned fshift;
 	unsigned foff;
-	unsigned fmax;
 	bool bits_per_mux;
 	unsigned bits_per_pin;
 	struct pcs_data pins;
@@ -1843,15 +1839,9 @@ static int pcs_probe(struct platform_device *pdev)
 
 	ret = of_property_read_u32(np, "pinctrl-single,function-mask",
 				   &pcs->fmask);
-	if (!ret) {
-		pcs->fshift = __ffs(pcs->fmask);
-		pcs->fmax = pcs->fmask >> pcs->fshift;
-	} else {
-		/* If mask property doesn't exist, function mux is invalid. */
+	/* If mask property doesn't exist, function mux is invalid. */
+	if (ret)
 		pcs->fmask = 0;
-		pcs->fshift = 0;
-		pcs->fmax = 0;
-	}
 
 	ret = of_property_read_u32(np, "pinctrl-single,function-off",
 					&pcs->foff);
