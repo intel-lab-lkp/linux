@@ -109,8 +109,11 @@ impl CondVar {
         guard: &mut Guard<'_, T, B>,
         timeout: Delta<Jiffy>,
     ) -> Delta<Jiffy> {
-        self.wq.wait_once_exclusive(wait_state, || {
-            guard.do_unlocked(|| task::schedule_timeout(timeout))
+        self.wq.wait_once_exclusive(wait_state, |finish| {
+            guard.do_unlocked(|| {
+                let ret = task::schedule_timeout(timeout);
+                (ret, finish.finish_wait())
+            })
         })
     }
 
@@ -180,11 +183,13 @@ impl CondVar {
         &self,
         guard: &mut Guard<'_, T, B>,
     ) -> bool {
-        self.wq.wait_once(TASK_INTERRUPTIBLE | TASK_FREEZABLE, || {
-            guard.do_unlocked(|| {
-                task::schedule_timeout(Delta::from_jiffies(task::MAX_SCHEDULE_TIMEOUT))
-            })
-        });
+        self.wq
+            .wait_once(TASK_INTERRUPTIBLE | TASK_FREEZABLE, |finish| {
+                guard.do_unlocked(|| {
+                    task::schedule_timeout(Delta::from_jiffies(task::MAX_SCHEDULE_TIMEOUT));
+                    ((), finish.finish_wait())
+                })
+            });
         crate::current!().signal_pending()
     }
 

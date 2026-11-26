@@ -18,6 +18,7 @@ use crate::{
 };
 
 use core::{
+    marker::PhantomData,
     pin::Pin,
     ptr, //
 };
@@ -228,27 +229,33 @@ impl WaitQueue {
 
     /// Performs a single non-exclusive prepare-to-wait / finish-wait cycle, calling `schedule_fn`
     /// in between. Non-exclusive waiters are all woken by [`wake_up()`](Self::wake_up).
+    ///
+    /// `schedule_fn` receives a [`WaitFinish`] token and must call [`WaitFinish::finish_wait`]
+    /// before returning (e.g. before reacquiring a lock).
     #[inline]
     pub(super) fn wait_once<F, R>(&self, wait_state: c_int, schedule_fn: F) -> R
     where
-        F: FnOnce() -> R,
+        F: for<'a> FnOnce(WaitFinish<'a>) -> (R, WaitFinishCalled<'a>),
     {
         self.wait_once_internal(wait_state, false, schedule_fn)
     }
 
     /// Performs a single exclusive prepare-to-wait / finish-wait cycle, calling `schedule_fn`
     /// in between.
+    ///
+    /// `schedule_fn` receives a [`WaitFinish`] token and must call [`WaitFinish::finish_wait`]
+    /// before returning (e.g. before reacquiring a lock).
     #[inline]
     pub(super) fn wait_once_exclusive<F, R>(&self, wait_state: c_int, schedule_fn: F) -> R
     where
-        F: FnOnce() -> R,
+        F: for<'a> FnOnce(WaitFinish<'a>) -> (R, WaitFinishCalled<'a>),
     {
         self.wait_once_internal(wait_state, true, schedule_fn)
     }
 
     fn wait_once_internal<F, R>(&self, wait_state: c_int, exclusive: bool, schedule_fn: F) -> R
     where
-        F: FnOnce() -> R,
+        F: for<'a> FnOnce(WaitFinish<'a>) -> (R, WaitFinishCalled<'a>),
     {
         let wait = Opaque::<bindings::wait_queue_entry>::uninit();
 
@@ -268,10 +275,11 @@ impl WaitQueue {
             }
         };
 
-        let ret = schedule_fn();
-
-        // SAFETY: Both `wait` and `wait_queue_head` point to valid memory.
-        unsafe { bindings::finish_wait(self.wait_queue_head.get(), wait.get()) };
+        let (ret, _finished) = schedule_fn(WaitFinish {
+            wq: self,
+            wait: &wait,
+            _invariant: PhantomData,
+        });
 
         ret
     }
@@ -326,6 +334,28 @@ impl WaitQueue {
         // SAFETY: `wait_queue_head` points to valid memory.
         unsafe { bindings::__wake_up_pollfree(self.wait_queue_head.get()) };
     }
+}
+
+#[must_use]
+pub(super) struct WaitFinish<'a> {
+    wq: &'a WaitQueue,
+    wait: &'a Opaque<bindings::wait_queue_entry>,
+    _invariant: PhantomData<fn(&'a ()) -> &'a ()>,
+}
+
+impl<'a> WaitFinish<'a> {
+    #[inline]
+    pub(super) fn finish_wait(self) -> WaitFinishCalled<'a> {
+        // SAFETY: Both `wait` and `wait_queue_head` point to valid memory.
+        unsafe { bindings::finish_wait(self.wq.wait_queue_head.get(), self.wait.get()) };
+        WaitFinishCalled {
+            _invariant: PhantomData,
+        }
+    }
+}
+
+pub(super) struct WaitFinishCalled<'a> {
+    _invariant: PhantomData<fn(&'a ()) -> &'a ()>,
 }
 
 /// A wait was interrupted by a signal.
