@@ -928,7 +928,7 @@ static int rockchip_pm_add_one_domain(struct rockchip_pmu *pmu,
 			pd->qos_regmap[j] = syscon_node_to_regmap(qos_node);
 			of_node_put(qos_node);
 			if (IS_ERR(pd->qos_regmap[j])) {
-				error = -ENODEV;
+				error = PTR_ERR(pd->qos_regmap[j]);
 				goto err_unprepare_clocks;
 			}
 		}
