@@ -482,6 +482,7 @@ static int at24_write(void *priv, unsigned int off, void *val, size_t count)
 	struct at24_data *at24;
 	struct device *dev;
 	char *buf = val;
+	char dummy;
 	int ret;
 
 	at24 = priv;
@@ -514,11 +515,17 @@ static int at24_write(void *priv, unsigned int off, void *val, size_t count)
 		count -= ret;
 	}
 
+	/*
+	 * Wait for the last chunk's internal write cycle to finish before
+	 * dropping the runtime PM reference, which may switch off vcc.
+	 */
+	ret = at24_regmap_read(at24, &dummy, off - 1, 1);
+
 	mutex_unlock(&at24->lock);
 
 	pm_runtime_put(dev);
 
-	return 0;
+	return ret < 0 ? ret : 0;
 }
 
 static int at24_make_dummy_client(struct at24_data *at24, unsigned int index,
