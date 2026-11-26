@@ -540,6 +540,7 @@ static int panfrost_device_runtime_resume(struct device *dev)
 		}
 	}
 
+	atomic_set(&pfdev->reset.pending, 0);
 	panfrost_device_reset(pfdev, true);
 	panfrost_devfreq_resume(pfdev);
 
