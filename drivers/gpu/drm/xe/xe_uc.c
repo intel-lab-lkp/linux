@@ -20,6 +20,7 @@
 #include "xe_guc_engine_activity.h"
 #include "xe_guc_submit.h"
 #include "xe_huc.h"
+#include "xe_huc_mei.h"
 #include "xe_mmio.h"
 #include "xe_sriov.h"
 #include "xe_tile.h"
@@ -374,6 +375,7 @@ int xe_uc_reset_prepare(struct xe_uc *uc)
 
 void xe_uc_stop_prepare(struct xe_uc *uc)
 {
+	xe_huc_mei_stop(&uc->huc);
 	xe_gsc_stop_prepare(&uc->gsc);
 	xe_guc_stop_prepare(&uc->guc);
 }
@@ -444,6 +446,7 @@ void xe_uc_flr_prepare(struct xe_uc *uc)
 	struct xe_uc_flr flr = { .uc = uc };
 	struct xe_gt *gt = uc_to_gt(uc);
 
+	xe_huc_mei_stop(&uc->huc);
 	xe_uc_reset_prepare(uc);
 
 	/*
@@ -485,6 +488,7 @@ int xe_uc_reinit(struct xe_uc *uc)
 
 void xe_uc_suspend_prepare(struct xe_uc *uc)
 {
+	xe_huc_mei_stop(&uc->huc);
 	xe_gsc_wait_for_worker_completion(&uc->gsc);
 	xe_guc_stop_prepare(&uc->guc);
 }
@@ -494,6 +498,9 @@ int xe_uc_suspend(struct xe_uc *uc)
 	/* GuC submission not enabled, nothing to do */
 	if (!xe_device_uc_enabled(uc_to_xe(uc)))
 		return 0;
+
+	/* runtime D3cold gets here without xe_uc_suspend_prepare() */
+	xe_huc_mei_stop(&uc->huc);
 
 	uc_reset_wait(uc);
 

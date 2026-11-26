@@ -81,6 +81,7 @@ xe-y += xe_bb.o \
 	xe_guc_tlb_inval.o \
 	xe_heci_gsc.o \
 	xe_huc.o \
+	xe_huc_mei.o \
 	xe_hw_engine.o \
 	xe_hw_engine_class_sysfs.o \
 	xe_hw_engine_group.o \
