@@ -92,6 +92,7 @@
 #include "rcu.c"
 #include "refcount.c"
 #include "regulator.c"
+#include "reset.c"
 #include "scatterlist.c"
 #include "security.c"
 #include "serdev.c"

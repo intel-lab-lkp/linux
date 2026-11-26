@@ -24063,6 +24063,7 @@ F:	include/dt-bindings/reset/
 F:	include/linux/reset-controller.h
 F:	include/linux/reset.h
 F:	include/linux/reset/
+F:	rust/helpers/reset.c
 K:	\b(?:devm_|of_)?reset_control(?:ler_[a-z]+|_[a-z_]+)?\b
 
 RESTARTABLE SEQUENCES SUPPORT
