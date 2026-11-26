@@ -1880,12 +1880,12 @@ static int gl9763e_runtime_suspend(struct sdhci_pci_chip *chip)
 	struct sdhci_host *host = slot->host;
 	u16 clock;
 
-	/* Enable LPM negotiation to allow entering L1 state */
-	gl9763e_set_low_power_negotiation(slot, true);
-
 	clock = sdhci_readw(host, SDHCI_CLOCK_CONTROL);
 	clock &= ~(SDHCI_CLOCK_PLL_EN | SDHCI_CLOCK_CARD_EN);
 	sdhci_writew(host, clock, SDHCI_CLOCK_CONTROL);
+
+	/* Enable LPM negotiation only after SDHCI MMIO accesses complete. */
+	gl9763e_set_low_power_negotiation(slot, true);
 
 	return 0;
 }
@@ -1895,6 +1895,13 @@ static int gl9763e_runtime_resume(struct sdhci_pci_chip *chip)
 	struct sdhci_pci_slot *slot = chip->slots[0];
 	struct sdhci_host *host = slot->host;
 	u16 clock;
+
+	/*
+	 * Restore vendor PCI settings (lost across D3cold/reset) and disable
+	 * LPM negotiation before touching SDHCI MMIO registers.
+	 */
+	gl9763e_hw_setting(slot);
+	gl9763e_set_low_power_negotiation(slot, false);
 
 	if (host->mmc->ios.power_mode != MMC_POWER_ON)
 		return 0;
@@ -1916,9 +1923,6 @@ static int gl9763e_runtime_resume(struct sdhci_pci_chip *chip)
 	clock |= SDHCI_CLOCK_CARD_EN;
 	sdhci_writew(host, clock, SDHCI_CLOCK_CONTROL);
 
-	/* Disable LPM negotiation to avoid entering L1 state. */
-	gl9763e_set_low_power_negotiation(slot, false);
-
 	return 0;
 }
 #endif
@@ -1939,21 +1943,19 @@ static int gl9763e_resume(struct sdhci_pci_chip *chip)
 	struct sdhci_pci_slot *slot = chip->slots[0];
 	int ret;
 
+	/*
+	 * Restore vendor PCI config settings (AXI_REQ, L1DLY, HS400_RXDLY,
+	 * AER replay-timer-timeout mask) lost across D3cold/reset and disable
+	 * LPM negotiation before touching SDHCI/CQHCI MMIO registers.
+	 */
+	gl9763e_hw_setting(slot);
+	gl9763e_set_low_power_negotiation(slot, false);
+
 	ret = sdhci_pci_gli_resume(chip);
 	if (ret)
 		return ret;
 
-	ret = cqhci_resume(slot->host->mmc);
-	if (ret)
-		return ret;
-
-	/*
-	 * Disable LPM negotiation to bring device back in sync
-	 * with its runtime_pm state.
-	 */
-	gl9763e_set_low_power_negotiation(slot, false);
-
-	return 0;
+	return cqhci_resume(slot->host->mmc);
 }
 
 static int gl9763e_suspend(struct sdhci_pci_chip *chip)
@@ -1961,28 +1963,26 @@ static int gl9763e_suspend(struct sdhci_pci_chip *chip)
 	struct sdhci_pci_slot *slot = chip->slots[0];
 	int ret;
 
-	/*
-	 * Certain SoCs can suspend only with the bus in low-
-	 * power state, notably x86 SoCs when using S0ix.
-	 * Re-enable LPM negotiation to allow entering L1 state
-	 * and entering system suspend.
-	 */
-	gl9763e_set_low_power_negotiation(slot, true);
-
 	ret = cqhci_suspend(slot->host->mmc);
 	if (ret)
-		goto err_suspend;
+		return ret;
 
 	ret = sdhci_suspend_host(slot->host);
 	if (ret)
 		goto err_suspend_host;
 
+	/*
+	 * Certain SoCs can suspend only with the bus in low-
+	 * power state, notably x86 SoCs when using S0ix.
+	 * Re-enable LPM negotiation to allow entering L1 state
+	 * only after CQHCI/SDHCI MMIO suspend accesses finish.
+	 */
+	gl9763e_set_low_power_negotiation(slot, true);
+
 	return 0;
 
 err_suspend_host:
 	cqhci_resume(slot->host->mmc);
-err_suspend:
-	gl9763e_set_low_power_negotiation(slot, false);
 	return ret;
 }
 #endif
