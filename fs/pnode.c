@@ -351,6 +351,12 @@ int propagate_mnt(struct mount *dest_mnt, struct mountpoint *dest_mp,
 			err = count_mounts(n->mnt_ns, this);
 			if (err)
 				break;
+			/* what is already there would end up on this root */
+			if (cant_mount(topmost_overmount(this)->mnt.mnt_root) &&
+			    mount_goes_beneath(n, dest_mp, source_mnt)) {
+				err = -ENOENT;
+				break;
+			}
 			type = CL_MAKE_SHARED;
 		} while ((n = next_peer(n)) != m);
 	}

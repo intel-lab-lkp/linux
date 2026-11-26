@@ -2561,6 +2561,21 @@ int count_mounts(struct mnt_namespace *ns, struct mount *mnt)
 	return 0;
 }
 
+/*
+ * Would @source_mnt or a copy of it go beneath a mount that is already at
+ * @mp on @parent? Call under namespace_sem, without mount_lock.
+ */
+bool mount_goes_beneath(struct mount *parent, struct mountpoint *mp,
+			struct mount *source_mnt)
+{
+	struct mount *q;
+
+	guard(mount_locked_reader)();
+	q = __lookup_mnt(&parent->mnt, mp->m_dentry);
+	/* a moved @source_mnt is gone from there by then */
+	return q && q != source_mnt;
+}
+
 enum mnt_tree_flags_t {
 	MNT_TREE_BENEATH = BIT(0),
 	MNT_TREE_PROPAGATION = BIT(1),
@@ -2676,6 +2691,16 @@ static int attach_recursive_mnt(struct mount *source_mnt,
 	err = get_mountpoint(top->mnt.mnt_root, &root);
 	if (err)
 		return err;
+
+	/*
+	 * Don't mount on top of a root that dont_mount() was called on. It's
+	 * a mountpoint now so a later detach_mounts() will find it.
+	 */
+	if (cant_mount(root.mp->m_dentry) &&
+	    mount_goes_beneath(dest_mnt, dest_mp, source_mnt)) {
+		err = -ENOENT;
+		goto out;
+	}
 
 	/* Is there space to add these mounts to the mount namespace? */
 	if (!moving) {
