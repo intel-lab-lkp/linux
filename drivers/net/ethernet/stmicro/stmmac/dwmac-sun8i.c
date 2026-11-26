@@ -192,7 +192,6 @@ static const struct emac_variant emac_variant_h616_emac1 = {
 
 /* Used in EMAC_RX_FRM_FLT */
 #define EMAC_FRM_FLT_RXALL              BIT(0)
-#define EMAC_FRM_FLT_CTL                BIT(13)
 #define EMAC_FRM_FLT_MULTICAST          BIT(16)
 
 /* Used in RX_CTL1*/
@@ -720,7 +719,7 @@ static void sun8i_dwmac_set_filter(struct mac_device_info *hw,
 	struct netdev_hw_addr *ha;
 	int macaddrs = netdev_uc_count(dev) + netdev_mc_count(dev) + 1;
 
-	v = EMAC_FRM_FLT_CTL;
+	v = 0;
 
 	if (dev->flags & IFF_PROMISC) {
 		v = EMAC_FRM_FLT_RXALL;
