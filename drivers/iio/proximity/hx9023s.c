@@ -359,18 +359,24 @@ static int hx9023s_ch_cfg(struct hx9023s_data *data)
 
 static int hx9023s_write_far_debounce(struct hx9023s_data *data, int val)
 {
+	if (val < 0 || val > FIELD_MAX(HX9023S_PROX_DEBOUNCE_MASK))
+		return -EINVAL;
+
 	guard(mutex)(&data->mutex);
 	return regmap_update_bits(data->regmap, HX9023S_PROX_INT_LOW_CFG,
 				HX9023S_PROX_DEBOUNCE_MASK,
-				FIELD_GET(HX9023S_PROX_DEBOUNCE_MASK, val));
+				FIELD_PREP(HX9023S_PROX_DEBOUNCE_MASK, val));
 }
 
 static int hx9023s_write_near_debounce(struct hx9023s_data *data, int val)
 {
+	if (val < 0 || val > FIELD_MAX(HX9023S_PROX_DEBOUNCE_MASK))
+		return -EINVAL;
+
 	guard(mutex)(&data->mutex);
 	return regmap_update_bits(data->regmap, HX9023S_PROX_INT_HIGH_CFG,
 				HX9023S_PROX_DEBOUNCE_MASK,
-				FIELD_GET(HX9023S_PROX_DEBOUNCE_MASK, val));
+				FIELD_PREP(HX9023S_PROX_DEBOUNCE_MASK, val));
 }
 
 static int hx9023s_read_far_debounce(struct hx9023s_data *data, int *val)
