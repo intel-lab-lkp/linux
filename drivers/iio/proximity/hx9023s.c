@@ -718,10 +718,17 @@ static int hx9023s_set_samp_freq(struct hx9023s_data *data, int val, int val2)
 	struct device *dev = regmap_get_device(data->regmap);
 	unsigned int i, period_ms;
 
-	if (!val && !val2)
+	if (val < 0 || val2 < 0 || (val == 0 && val2 == 0))
 		return -EINVAL;
 
-	period_ms = div_u64(NANO, (val * MEGA + val2));
+	/*
+	 * 1 kHz or more gives a period below the smallest table entry. Rejecting
+	 * it here also keeps the divisor below NANO, so it fits in 32 bits.
+	 */
+	if (val >= KILO)
+		return -EINVAL;
+
+	period_ms = NANO / (val * MEGA + val2);
 
 	for (i = 0; i < ARRAY_SIZE(hx9023s_samp_freq_table); i++) {
 		if (period_ms == hx9023s_samp_freq_table[i])
