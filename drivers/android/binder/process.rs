@@ -1248,8 +1248,12 @@ impl Process {
 
         {
             let mut node_refs = self.node_refs.lock();
-            let node_info = node_refs.by_handle.get_mut(&out.handle).ok_or(ENOENT)?;
+            let node_info = node_refs.by_handle.get_mut(&out.handle).ok_or(EINVAL)?;
             let node_ref = node_info.node_ref();
+            if node_ref.get_count().0 == 0 {
+                binder_debug!(UserError, "tried to use weak ref as strong ref");
+                return Err(EINVAL);
+            }
             let owner_inner = node_ref.node.owner.inner.lock();
             node_ref.node.populate_counts(&mut out, &owner_inner);
         }
