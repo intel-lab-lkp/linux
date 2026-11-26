@@ -16,6 +16,9 @@
 //! time, with [`ExclusiveResetControl::assert_guard`]. The [`AssertedGuard`] that it returns
 //! deasserts the line when dropped, and the control stays in the [`Unknown`] state.
 //!
+//! If the reset line is shared with other devices, the driver asks for a [`SharedResetControl`]
+//! instead.
+//!
 //! C header: [`include/linux/reset.h`](srctree/include/linux/reset.h)
 //!
 //! See [Reset controller API](https://docs.kernel.org/driver-api/reset.html) for more information.
@@ -67,6 +70,9 @@ pub struct Asserted;
 ///
 /// Dropping a reset control in this state asserts the line. An error from that assert is
 /// discarded.
+///
+/// For a [`SharedResetControl`], the line may still be deasserted after that assert, as described
+/// in [`SharedResetControl::assert`].
 pub struct Deasserted;
 
 impl ResetState for Unknown {
@@ -80,6 +86,15 @@ impl ResetState for Asserted {
 impl ResetState for Deasserted {
     const ASSERT_ON_DROP: bool = true;
 }
+
+/// A trait representing the states a [`SharedResetControl`] can be in.
+///
+/// [`Asserted`] is not one of them, since the line may still be deasserted after a
+/// [`SharedResetControl`] is asserted.
+pub trait SharedResetState: ResetState {}
+
+impl SharedResetState for Unknown {}
+impl SharedResetState for Deasserted {}
 
 /// An error that can occur when trying to move a reset control between states.
 pub struct Error<T> {
@@ -503,5 +518,196 @@ impl<'r, 'a> Drop for AssertedGuard<'r, 'a> {
         // SAFETY: By the type invariants of `ExclusiveResetControl`, `self.reset.inner` is a
         // pointer that a C getter returned, and `self.reset` owns its reference.
         unsafe { bindings::reset_control_deassert(self.reset.inner) };
+    }
+}
+
+/// A shared reset control of a device.
+///
+/// Shared means that other devices may use the same reset line. The deasserts on the line are
+/// counted, and only the first deassert and the last assert act on it. A [`SharedResetControl`]
+/// can only be asserted after it was deasserted, as the C API requires.
+///
+/// A reset line cannot be held by a [`SharedResetControl`] and by an [`ExclusiveResetControl`] at
+/// the same time.
+///
+/// The reset control is released when the [`SharedResetControl`] is dropped. The lifetime `'a` is
+/// that of the reference to the bound device it was obtained from, so a [`SharedResetControl`]
+/// cannot outlive the binding of that device to its driver.
+///
+/// # Examples
+///
+/// Keeping a shared reset line deasserted:
+///
+/// ```
+/// use kernel::{
+///     device::{
+///         Bound,
+///         Device, //
+///     },
+///     reset::{
+///         Deasserted,
+///         SharedResetControl, //
+///     },
+/// };
+///
+/// struct Data<'a> {
+///     // Dropping `Data` asserts the reset control again.
+///     reset: SharedResetControl<'a, Deasserted>,
+/// }
+///
+/// fn probe<'a>(dev: &'a Device<Bound>) -> Result<Data<'a>> {
+///     let reset = SharedResetControl::get(dev, None)?.deassert()?;
+///
+///     Ok(Data { reset })
+/// }
+/// ```
+///
+/// # Invariants
+///
+/// `inner` is a pointer obtained from a successful call to one of the following:
+///
+/// - [`reset_control_get_shared()`]
+/// - [`reset_control_get_optional_shared()`]
+///
+/// It is treated as an opaque token that may only be accessed using C API methods (e.g., it may be
+/// `NULL` if the C API returns `NULL`). The [`SharedResetControl`] owns the reference that the
+/// call returned.
+///
+/// [`reset_control_get_shared()`]:
+/// https://docs.kernel.org/driver-api/reset.html#c.reset_control_get_shared
+/// [`reset_control_get_optional_shared()`]:
+/// https://docs.kernel.org/driver-api/reset.html#c.reset_control_get_optional_shared
+pub struct SharedResetControl<'a, State: SharedResetState> {
+    inner: *mut bindings::reset_control,
+    _phantom: PhantomData<(&'a Device<Bound>, State)>,
+}
+
+// SAFETY: A reset control can be used and released from any thread.
+unsafe impl<State: SharedResetState> Send for SharedResetControl<'_, State> {}
+
+// SAFETY: A `SharedResetControl` has no `&self` methods, so references to it can be shared between
+// threads.
+unsafe impl<State: SharedResetState> Sync for SharedResetControl<'_, State> {}
+
+impl<'a> SharedResetControl<'a, Unknown> {
+    /// Gets the reset line `name` of `dev`, or its first reset line if `name` is `None`.
+    ///
+    /// Equivalent to the kernel's [`reset_control_get_shared()`].
+    ///
+    /// [`reset_control_get_shared()`]:
+    /// https://docs.kernel.org/driver-api/reset.html#c.reset_control_get_shared
+    #[inline]
+    pub fn get(dev: &'a Device<Bound>, name: Option<&CStr>) -> Result<Self> {
+        let id = name.map_or(ptr::null(), |n| n.as_char_ptr());
+
+        // SAFETY: `dev` is a valid device, and `id` is `NULL` or a valid C string.
+        let inner = unsafe { bindings::reset_control_get_shared(dev.as_raw(), id) };
+        let inner = from_err_ptr(inner)?;
+
+        // INVARIANT: `inner` comes from a successful call to `reset_control_get_shared()`, and the
+        // returned value owns the reference from that call.
+        Ok(Self {
+            inner,
+            _phantom: PhantomData,
+        })
+    }
+
+    /// Gets the reset line `name` of `dev`, if there is one.
+    ///
+    /// Behaves the same as [`Self::get`], except when the device has no such reset line or
+    /// `CONFIG_RESET_CONTROLLER` is disabled. In those cases, it returns a [`SharedResetControl`]
+    /// on which every operation succeeds and does nothing.
+    ///
+    /// Equivalent to the kernel's [`reset_control_get_optional_shared()`].
+    ///
+    /// [`reset_control_get_optional_shared()`]:
+    /// https://docs.kernel.org/driver-api/reset.html#c.reset_control_get_optional_shared
+    #[inline]
+    pub fn get_optional(dev: &'a Device<Bound>, name: Option<&CStr>) -> Result<Self> {
+        let id = name.map_or(ptr::null(), |n| n.as_char_ptr());
+
+        // SAFETY: `dev` is a valid device, and `id` is `NULL` or a valid C string.
+        let inner = unsafe { bindings::reset_control_get_optional_shared(dev.as_raw(), id) };
+        let inner = from_err_ptr(inner)?;
+
+        // INVARIANT: `inner` comes from a successful call to
+        // `reset_control_get_optional_shared()`, and the returned value owns the reference from
+        // that call.
+        Ok(Self {
+            inner,
+            _phantom: PhantomData,
+        })
+    }
+
+    /// Deasserts the reset line and moves the [`SharedResetControl`] to the [`Deasserted`] state.
+    ///
+    /// Equivalent to the kernel's [`reset_control_deassert()`].
+    ///
+    /// [`reset_control_deassert()`]:
+    /// https://docs.kernel.org/driver-api/reset.html#c.reset_control_deassert
+    #[inline]
+    pub fn deassert(self) -> Result<SharedResetControl<'a, Deasserted>, Error<Self>> {
+        // INVARIANT: The reference that `self` owns moves to the value that this returns.
+        let reset = ManuallyDrop::new(self);
+
+        // SAFETY: By the type invariants, `reset.inner` is a pointer that a C getter returned, and
+        // `reset` owns its reference.
+        to_result(unsafe { bindings::reset_control_deassert(reset.inner) })
+            .map(|()| SharedResetControl {
+                inner: reset.inner,
+                _phantom: PhantomData,
+            })
+            .map_err(|error| Error {
+                error,
+                reset: ManuallyDrop::into_inner(reset),
+            })
+    }
+}
+
+impl<'a> SharedResetControl<'a, Deasserted> {
+    /// Asserts the reset line and moves the [`SharedResetControl`] to the [`Unknown`] state.
+    ///
+    /// The line may still be deasserted afterwards, for as long as other users keep it so.
+    ///
+    /// If this fails, the [`SharedResetControl`] is returned in the [`Unknown`] state as well.
+    ///
+    /// Equivalent to the kernel's [`reset_control_assert()`].
+    ///
+    /// [`reset_control_assert()`]:
+    /// https://docs.kernel.org/driver-api/reset.html#c.reset_control_assert
+    #[inline]
+    pub fn assert(
+        self,
+    ) -> Result<SharedResetControl<'a, Unknown>, Error<SharedResetControl<'a, Unknown>>> {
+        // INVARIANT: The reference that `self` owns moves to `reset`.
+        let this = ManuallyDrop::new(self);
+        let reset = SharedResetControl {
+            inner: this.inner,
+            _phantom: PhantomData,
+        };
+
+        // An assert that fails may already have given the deassert back, so `reset` is `Unknown`
+        // in both cases.
+        //
+        // SAFETY: By the type invariants, `reset.inner` is a pointer that a C getter returned, and
+        // `reset` owns its reference.
+        match to_result(unsafe { bindings::reset_control_assert(reset.inner) }) {
+            Ok(()) => Ok(reset),
+            Err(error) => Err(Error { error, reset }),
+        }
+    }
+}
+
+impl<State: SharedResetState> Drop for SharedResetControl<'_, State> {
+    fn drop(&mut self) {
+        if State::ASSERT_ON_DROP {
+            // SAFETY: By the type invariants, `self.inner` is a pointer that a C getter returned,
+            // and `self` owns its reference.
+            unsafe { bindings::reset_control_assert(self.inner) };
+        }
+
+        // SAFETY: By the type invariants, `self` owns the reference that the C getter returned,
+        // so it is safe to relinquish it now.
+        unsafe { bindings::reset_control_put(self.inner) };
     }
 }
