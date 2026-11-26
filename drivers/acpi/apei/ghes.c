@@ -1483,10 +1483,10 @@ static int __maybe_unused ghes_in_nmi_spool_from_list(struct list_head *rcu_list
 		if (!ghes_in_nmi_queue_one_entry(ghes, fixmap_idx))
 			ret = 0;
 	}
-	rcu_read_unlock();
 
 	if (IS_ENABLED(CONFIG_ARCH_HAVE_NMI_SAFE_CMPXCHG) && !ret)
 		irq_work_queue(&ghes_proc_irq_work);
+	rcu_read_unlock();
 
 	return ret;
 }
@@ -1600,6 +1600,7 @@ static void ghes_sea_remove(struct ghes *ghes)
 	mutex_unlock(&ghes_list_mutex);
 	ghes_unmap_error_status(ghes);
 	synchronize_rcu();
+	irq_work_sync(&ghes_proc_irq_work);
 }
 #else /* CONFIG_ACPI_APEI_SEA */
 static inline int ghes_sea_add(struct ghes *ghes) { return -EINVAL; }
@@ -1663,10 +1664,11 @@ static void ghes_nmi_remove(struct ghes *ghes)
 	ghes_unmap_error_status(ghes);
 
 	/*
-	 * To synchronize with NMI handler, ghes can only be
-	 * freed after NMI handler finishes.
+	 * To synchronize with NMI handler and any queued estatus work,
+	 * ghes can only be freed after both complete.
 	 */
 	synchronize_rcu();
+	irq_work_sync(&ghes_proc_irq_work);
 }
 #else /* CONFIG_HAVE_ACPI_APEI_NMI */
 static inline int ghes_nmi_add(struct ghes *ghes) { return -EINVAL; }
@@ -1921,6 +1923,7 @@ static void ghes_remove(struct platform_device *ghes_dev)
 				ERR_PTR(rc));
 			return;
 		}
+		irq_work_sync(&ghes_proc_irq_work);
 		break;
 	default:
 		BUG();
