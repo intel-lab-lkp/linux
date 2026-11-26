@@ -96,6 +96,10 @@ static bool sysmap_omits(const char *name, char type)
 {
 	size_t i;
 
+	/* Unnamed symbols (st_name == 0). */
+	if (!*name)
+		return true;
+
 	/* Absolute, undefined and debugging symbols. */
 	if (type == 'a' || type == 'N' || type == 'U' || type == 'w')
 		return true;
