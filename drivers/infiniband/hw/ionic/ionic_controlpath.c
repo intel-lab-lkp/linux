@@ -14,13 +14,9 @@
 #define ionic_set_ecn(tos)   (((tos) | 2u) & ~1u)
 #define ionic_clear_ecn(tos)  ((tos) & ~3u)
 
-static int ionic_validate_qdesc(struct ionic_qdesc *q)
+static int ionic_validate_qdesc_geom(const struct ionic_qdesc *q)
 {
-	if (!q->addr || !q->size || !q->mask ||
-	    !q->depth_log2 || !q->stride_log2)
-		return -EINVAL;
-
-	if (q->addr & (PAGE_SIZE - 1))
+	if (!q->size || !q->mask || !q->depth_log2 || !q->stride_log2)
 		return -EINVAL;
 
 	/* Keep the shift counts below within the width of their types */
@@ -37,6 +33,14 @@ static int ionic_validate_qdesc(struct ionic_qdesc *q)
 		return -EINVAL;
 
 	return 0;
+}
+
+static int ionic_validate_qdesc(const struct ionic_qdesc *q)
+{
+	if (!q->addr || !IS_ALIGNED(q->addr, PAGE_SIZE))
+		return -EINVAL;
+
+	return ionic_validate_qdesc_geom(q);
 }
 
 static u32 ionic_get_eqid(struct ionic_ibdev *dev, u32 comp_vector, u8 udma_idx)
@@ -80,11 +84,79 @@ static void ionic_put_cqid(struct ionic_ibdev *dev, u32 cqid)
 	ionic_resid_put(&dev->inuse_cqid, bitid);
 }
 
+static const u16 ionic_cq_buf_attrs[] = {
+	IONIC_IB_ATTR_CREATE_CQ_BUF_UMEM_0,
+	IONIC_IB_ATTR_CREATE_CQ_BUF_UMEM_1,
+};
+
+static int ionic_cq_get_user_umem(struct ionic_ibdev *dev, struct ionic_cq *cq,
+				  const struct ionic_qdesc *req_cq,
+				  const struct uverbs_attr_bundle *attrs,
+				  int udma_idx)
+{
+	struct ib_umem_dmabuf *umem_dmabuf;
+	struct ib_uverbs_buffer_desc desc;
+	struct ib_umem *umem;
+	u16 attr_id;
+	int rc;
+
+	if (udma_idx < 0 || udma_idx >= ARRAY_SIZE(ionic_cq_buf_attrs))
+		return -EINVAL;
+
+	attr_id = ionic_cq_buf_attrs[udma_idx];
+	if (attrs && uverbs_attr_is_valid(attrs, attr_id)) {
+		rc = uverbs_get_buffer_desc(attrs, attr_id, &desc);
+		if (rc)
+			return rc;
+
+		if (desc.length < req_cq->size)
+			return -EINVAL;
+
+		if (desc.type == IB_UVERBS_BUFFER_TYPE_DMABUF) {
+			/* The descriptor locates the ring, not the qdesc */
+			if (req_cq->addr || !IS_ALIGNED(desc.addr, PAGE_SIZE))
+				return -EINVAL;
+
+			rc = ionic_validate_qdesc_geom(req_cq);
+			if (rc)
+				return rc;
+
+			umem_dmabuf = ib_umem_dmabuf_get_pinned(&dev->ibdev,
+								desc.addr,
+								req_cq->size,
+								desc.fd,
+								IB_ACCESS_LOCAL_WRITE);
+			if (IS_ERR(umem_dmabuf))
+				return PTR_ERR(umem_dmabuf);
+
+			cq->umem = &umem_dmabuf->umem;
+			return 0;
+		}
+
+		if (desc.type != IB_UVERBS_BUFFER_TYPE_VA ||
+		    desc.addr != req_cq->addr)
+			return -EINVAL;
+	}
+
+	rc = ionic_validate_qdesc(req_cq);
+	if (rc)
+		return rc;
+
+	umem = ib_umem_get_cq_buf_or_va(&dev->ibdev, NULL, req_cq->addr,
+					req_cq->size, IB_ACCESS_LOCAL_WRITE);
+	if (IS_ERR(umem))
+		return PTR_ERR(umem);
+
+	cq->umem = umem;
+	return 0;
+}
+
 int ionic_create_cq_common(struct ionic_vcq *vcq,
 			   struct ionic_tbl_buf *buf,
 			   const struct ib_cq_init_attr *attr,
 			   struct ionic_ctx *ctx,
 			   struct ib_udata *udata,
+			   const struct uverbs_attr_bundle *attrs,
 			   struct ionic_qdesc *req_cq,
 			   int udma_idx)
 {
@@ -113,17 +185,9 @@ int ionic_create_cq_common(struct ionic_vcq *vcq,
 	INIT_LIST_HEAD(&cq->flush_rq);
 
 	if (udata) {
-		rc = ionic_validate_qdesc(req_cq);
+		rc = ionic_cq_get_user_umem(dev, cq, req_cq, attrs, udma_idx);
 		if (rc)
 			goto err_qdesc;
-
-		cq->umem = ib_umem_get_cq_buf_or_va(&dev->ibdev, NULL,
-						    req_cq->addr, req_cq->size,
-						    IB_ACCESS_LOCAL_WRITE);
-		if (IS_ERR(cq->umem)) {
-			rc = PTR_ERR(cq->umem);
-			goto err_qdesc;
-		}
 
 		cq->q.ptr = NULL;
 		cq->q.size = req_cq->size;
@@ -435,7 +499,8 @@ int ionic_alloc_ucontext(struct ib_ucontext *ibctx, struct ib_udata *udata)
 	resp.udma_count = dev->lif_cfg.udma_count;
 	resp.expdb_mask = dev->lif_cfg.expdb_mask;
 	resp.rcq_sign_bit = dev->lif_cfg.rcq_sign_bit;
-	resp.comp_mask |= IONIC_CTX_CMASK_IONIC_FLAGS;
+	resp.comp_mask |= IONIC_CTX_CMASK_IONIC_FLAGS |
+			  IONIC_CTX_CMASK_CQ_QP_BUF_UMEM;
 
 	if (dev->lif_cfg.sq_expdb)
 		resp.expdb_qtypes |= IONIC_EXPDB_SQ;
@@ -1399,13 +1464,24 @@ int ionic_create_cq(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
 		goto err_init;
 	}
 
-	for (; udma_idx < dev->lif_cfg.udma_count; ++udma_idx) {
+	for (udma_idx = 0; udma_idx < ARRAY_SIZE(ionic_cq_buf_attrs);
+	     udma_idx++) {
+		if (vcq->udma_mask & BIT(udma_idx))
+			continue;
+
+		if (uverbs_attr_is_valid(attrs, ionic_cq_buf_attrs[udma_idx])) {
+			rc = -EINVAL;
+			udma_idx = 0;
+			goto err_init;
+		}
+	}
+
+	for (udma_idx = 0; udma_idx < dev->lif_cfg.udma_count; ++udma_idx) {
 		if (!(vcq->udma_mask & BIT(udma_idx)))
 			continue;
 
-		rc = ionic_create_cq_common(vcq, &buf, attr, ctx, udata,
-					    &req.cq[udma_idx],
-					    udma_idx);
+		rc = ionic_create_cq_common(vcq, &buf, attr, ctx, udata, attrs,
+					    &req.cq[udma_idx], udma_idx);
 		if (rc)
 			goto err_init;
 
