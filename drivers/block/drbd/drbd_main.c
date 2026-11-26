@@ -3497,6 +3497,14 @@ void drbd_queue_bitmap_io(struct drbd_device *device,
 
 	spin_lock_irq(&device->resource->req_lock);
 	set_bit(BITMAP_IO, &device->flags);
+	/* Pair with atomic_dec_return() in dec_ap_bio(): order this BITMAP_IO
+	 * store before the ap_bio_cnt load below. dec_ap_bio() decrements
+	 * ap_bio_cnt and then tests BITMAP_IO in the reverse order. Without
+	 * this barrier, on weakly ordered CPUs both sites may observe the
+	 * other's stale value, so neither queues the bitmap work: BITMAP_IO
+	 * stays set and application IO freezes.
+	 */
+	smp_mb__after_atomic();
 	/* don't wait for pending application IO if the caller indicates that
 	 * application IO does not conflict anyways. */
 	if (flags == BM_LOCKED_CHANGE_ALLOWED || atomic_read(&device->ap_bio_cnt) == 0) {

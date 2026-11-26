@@ -2213,6 +2213,9 @@ static inline void dec_ap_bio(struct drbd_device *device)
 
 	D_ASSERT(device, ap_bio >= 0);
 
+	/* atomic_dec_return() above orders this against the
+	 * set_bit(BITMAP_IO) / ap_bio_cnt read in drbd_queue_bitmap_io().
+	 */
 	if (ap_bio == 0 && test_bit(BITMAP_IO, &device->flags)) {
 		if (!test_and_set_bit(BITMAP_IO_QUEUED, &device->flags))
 			drbd_queue_work(&first_peer_device(device)->
