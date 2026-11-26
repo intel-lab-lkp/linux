@@ -16,6 +16,7 @@
 #include <linux/mm_types.h>
 #include <linux/pgtable.h>
 #include <linux/pkeys.h>
+#include <linux/iommu.h>
 
 #include <asm/cacheflush.h>
 #include <asm/cpufeature.h>
@@ -247,12 +248,28 @@ static inline void __switch_mm(struct mm_struct *next)
 	check_and_switch_context(next);
 }
 
+/* switch to PASID if new task has enabled st64bv0 */
+static inline void switch_iommu_mm(struct mm_struct *mm, struct task_struct *tsk)
+{
+	u32 pasid;
+
+	if (!IS_ENABLED(CONFIG_IOMMU_SVA) ||
+	    !(tsk->thread.sctlr_user & SCTLR_EL1_EnAS0))
+		return;
+
+	pasid = mm_get_enqcmd_pasid(mm);
+	if (pasid != IOMMU_PASID_INVALID)
+		write_sysreg_s(pasid, SYS_ACCDATA_EL1);
+}
+
 static inline void
 switch_mm(struct mm_struct *prev, struct mm_struct *next,
 	  struct task_struct *tsk)
 {
 	if (prev != next)
 		__switch_mm(next);
+
+	switch_iommu_mm(next, tsk);
 
 	/*
 	 * Update the saved TTBR0_EL1 of the scheduled-in task as the previous

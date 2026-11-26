@@ -93,6 +93,9 @@
 	cmp	x1, #ID_AA64ISAR1_EL1_LS64_LS64_V
 	b.lt	.Lset_hcrx_\@
 	orr	x0, x0, #HCRX_EL2_EnASR
+	cmp	x1, #ID_AA64ISAR1_EL1_LS64_LS64_ACCDATA
+	b.lt	.Lset_hcrx_\@
+	orr	x0, x0, #HCRX_EL2_EnAS0
 
 .Lset_hcrx_\@:
 	msr_s	SYS_HCRX_EL2, x0

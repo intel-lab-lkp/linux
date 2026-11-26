@@ -807,6 +807,14 @@ static void noinstr el0_fpac(struct pt_regs *regs, unsigned long esr)
 	arm64_exit_to_user_mode(regs);
 }
 
+static void noinstr el0_other(struct pt_regs *regs, unsigned long esr)
+{
+	arm64_enter_from_user_mode(regs);
+	local_daif_restore(DAIF_PROCCTX);
+	do_el0_other(regs, esr);
+	arm64_exit_to_user_mode(regs);
+}
+
 asmlinkage void noinstr el0t_64_sync_handler(struct pt_regs *regs)
 {
 	unsigned long esr = read_sysreg(esr_el1);
@@ -869,6 +877,9 @@ asmlinkage void noinstr el0t_64_sync_handler(struct pt_regs *regs)
 		break;
 	case ESR_ELx_EC_FPAC:
 		el0_fpac(regs, esr);
+		break;
+	case ESR_ELx_EC_OTHER:
+		el0_other(regs, esr);
 		break;
 	default:
 		el0_inv(regs, esr);

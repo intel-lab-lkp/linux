@@ -42,6 +42,20 @@ void __init cpu_suspend_set_dbg_restorer(int (*hw_bp_restore)(unsigned int))
 	hw_breakpoint_restore = hw_bp_restore;
 }
 
+static void ls64_accdata_suspend_exit(void)
+{
+	u32 pasid;
+
+	if (!system_supports_ls64_accdata())
+		return;
+
+	/* if current thread has accdata enabled, restore the pasid value */
+	if (current->thread.sctlr_user & SCTLR_EL1_EnAS0) {
+		pasid = mm_get_enqcmd_pasid(current->mm);
+		write_sysreg_s(pasid, SYS_ACCDATA_EL1);
+	}
+}
+
 void notrace __cpu_suspend_exit(void)
 {
 	unsigned int cpu = smp_processor_id();
@@ -86,6 +100,9 @@ void notrace __cpu_suspend_exit(void)
 
 	/* Restore additional feature-specific configuration */
 	ptrauth_suspend_exit();
+
+	/* Restore accdata for st64bv0 */
+	ls64_accdata_suspend_exit();
 }
 
 /*

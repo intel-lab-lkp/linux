@@ -143,9 +143,13 @@ static inline bool ctxt_has_accdata(struct kvm_cpu_context *ctxt)
 {
 	struct kvm_vcpu *vcpu;
 
-	/* The host never uses ACCDATA_EL1 */
-	if (!cpus_have_final_cap(ARM64_HAS_LS64_ACCDATA) || !ctxt_is_guest(ctxt))
+	/* The hardware does not support ACCDATA_EL1 */
+	if (!cpus_have_final_cap(ARM64_HAS_LS64_ACCDATA))
 		return false;
+
+	/* host only cares if SVA is enabled */
+	if (!ctxt_is_guest(ctxt))
+		return IS_ENABLED(CONFIG_IOMMU_SVA);
 
 	vcpu = ctxt_to_vcpu(ctxt);
 	return kvm_has_feat(kern_hyp_va(vcpu->kvm), ID_AA64ISAR1_EL1, LS64, LS64_ACCDATA);

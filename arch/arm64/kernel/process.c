@@ -340,6 +340,29 @@ static int copy_thread_gcs(struct task_struct *p,
 
 #endif
 
+#ifdef CONFIG_IOMMU_SVA
+static void flush_ls64_accdata(void)
+{
+	if (!system_supports_ls64_accdata() ||
+	    !(current->thread.sctlr_user & SCTLR_EL1_EnAS0))
+		return;
+
+	preempt_disable();
+	current->thread.sctlr_user &= ~SCTLR_EL1_EnAS0;
+	update_sctlr_el1(current->thread.sctlr_user);
+	preempt_enable();
+}
+
+static void copy_thread_ls64_accdata(struct task_struct *p)
+{
+	/* Turn off ls64_accdata for new thread */
+	p->thread.sctlr_user &= ~SCTLR_EL1_EnAS0;
+}
+#else
+static void flush_ls64_accdata(void) { }
+static void copy_thread_ls64_accdata(struct task_struct *p) { }
+#endif
+
 void flush_thread(void)
 {
 	fpsimd_flush_thread();
@@ -348,6 +371,7 @@ void flush_thread(void)
 	flush_tagged_addr_state();
 	flush_poe();
 	flush_gcs();
+	flush_ls64_accdata();
 }
 
 void exit_thread(struct task_struct *tsk)
@@ -524,6 +548,7 @@ int copy_thread(struct task_struct *p, const struct kernel_clone_args *args)
 		if (system_supports_poe())
 			p->thread.por_el0 = POR_EL0_INIT;
 	}
+	copy_thread_ls64_accdata(p);
 	p->thread.cpu_context.pc = (unsigned long)ret_from_fork;
 	p->thread.cpu_context.sp = (unsigned long)childregs;
 	/*

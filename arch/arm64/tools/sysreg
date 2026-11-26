@@ -3707,6 +3707,11 @@ Sysreg	TPIDR_EL1	3	0	13	0	4
 Field	63:0	ThreadID
 EndSysreg
 
+Sysreg	ACCDATA_EL1	3	0	13	0	5
+Res0	63:32
+Field	31:0	ACCDATA
+EndSysreg
+
 Sysreg	RCWMASK_EL1	3	0	13	0	6
 Field	63:0	RCWMASK
 EndSysreg
