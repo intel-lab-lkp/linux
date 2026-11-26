@@ -19,6 +19,7 @@
 #include "xe_gt.h"
 #include "xe_gt_printk.h"
 #include "xe_guc.h"
+#include "xe_huc_mei.h"
 #include "xe_map.h"
 #include "xe_mmio.h"
 #include "xe_sriov.h"
@@ -91,7 +92,8 @@ int xe_huc_init(struct xe_huc *huc)
 	if (IS_SRIOV_VF(xe))
 		return 0;
 
-	if (huc->fw.has_gsc_headers) {
+	/* on DG2 the GSC loads the HuC through mei, not via GSCCS packets */
+	if (huc->fw.has_gsc_headers && xe->info.platform != XE_DG2) {
 		ret = huc_alloc_gsc_pkt(huc);
 		if (ret)
 			goto out;
@@ -122,6 +124,8 @@ int xe_huc_init_post_hwconfig(struct xe_huc *huc)
 	if (ret)
 		return ret;
 
+	xe_huc_mei_init(huc);
+
 	return 0;
 }
 
@@ -129,6 +133,11 @@ int xe_huc_upload(struct xe_huc *huc)
 {
 	if (!xe_uc_fw_is_loadable(&huc->fw))
 		return 0;
+
+	/* the GSC loads it from VRAM itself */
+	if (xe_huc_mei_is_used(huc))
+		return 0;
+
 	return xe_uc_fw_upload(&huc->fw, 0, HUC_UKERNEL);
 }
 
@@ -243,6 +252,11 @@ int xe_huc_auth(struct xe_huc *huc, enum xe_huc_auth_types type)
 
 	if (!xe_uc_fw_is_loadable(&huc->fw))
 		return 0;
+
+	if (xe_huc_mei_is_used(huc)) {
+		xe_huc_mei_start(huc);
+		return 0;
+	}
 
 	/* On newer platforms the HuC survives reset, so no need to re-auth */
 	if (xe_huc_is_authenticated(huc, type)) {
