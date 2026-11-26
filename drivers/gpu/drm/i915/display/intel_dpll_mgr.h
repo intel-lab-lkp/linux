@@ -463,6 +463,8 @@ void intel_dpll_update_ref_clks(struct intel_display *display);
 void intel_dpll_readout_hw_state(struct intel_display *display);
 void intel_dpll_sanitize_state(struct intel_display *display);
 
+bool intel_dpll_hw_state_ssc_enabled(struct intel_display *display,
+				     const struct intel_dpll_hw_state *dpll_hw_state);
 void intel_dpll_dump_hw_state(struct intel_display *display,
 			      struct drm_printer *p,
 			      const struct intel_dpll_hw_state *dpll_hw_state);
