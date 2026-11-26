@@ -775,8 +775,8 @@ panfrost_reset(struct panfrost_device *pfdev,
 	dma_fence_end_signalling(cookie);
 }
 
-static enum drm_gpu_sched_stat panfrost_job_timedout(struct drm_sched_job
-						     *sched_job)
+static enum drm_gpu_sched_stat
+panfrost_job_handle_timeout(struct drm_sched_job *sched_job)
 {
 	struct panfrost_job *job = to_panfrost_job(sched_job);
 	struct panfrost_device *pfdev = job->pfdev;
@@ -819,6 +819,19 @@ static enum drm_gpu_sched_stat panfrost_job_timedout(struct drm_sched_job
 	panfrost_reset(pfdev, sched_job);
 
 	return DRM_GPU_SCHED_STAT_RESET;
+}
+
+static enum drm_gpu_sched_stat panfrost_job_timedout(struct drm_sched_job
+						     *sched_job)
+{
+	struct panfrost_device *pfdev = to_panfrost_job(sched_job)->pfdev;
+	enum drm_gpu_sched_stat stat;
+
+	pm_runtime_get_noresume(pfdev->base.dev);
+	stat = panfrost_job_handle_timeout(sched_job);
+	pm_runtime_put_autosuspend(pfdev->base.dev);
+
+	return stat;
 }
 
 static void panfrost_reset_work(struct work_struct *work)
