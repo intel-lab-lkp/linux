@@ -32,7 +32,7 @@ use crate::{
     stats::GLOBAL_STATS,
     trace::{trace_transaction_alloc_buf, trace_transaction_buffer_release},
     transaction::{Transaction, TransactionFlag, TransactionFlags, TransactionInfo},
-    BinderReturnWriter, DArc, DLArc, DTRWrap, DeliverCode, DeliverToRead,
+    u64_align, BinderReturnWriter, DArc, DLArc, DTRWrap, DeliverCode, DeliverToRead,
 };
 
 use core::mem::size_of;
@@ -213,7 +213,7 @@ impl UnusedBufferSpace {
     /// into the buffer is returned.
     fn claim_next(&mut self, size: usize) -> Result<usize> {
         // We require every chunk to be aligned.
-        let size = ptr_align(size).ok_or(EINVAL)?;
+        let size = u64_align(size).ok_or(EINVAL)?;
         let new_offset = self.offset.checked_add(size).ok_or(EINVAL)?;
 
         if new_offset <= self.limit {

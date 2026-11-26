@@ -300,6 +300,11 @@ fn ptr_align(value: usize) -> Option<usize> {
     Some(value.checked_add(size)? & !size)
 }
 
+fn u64_align(value: usize) -> Option<usize> {
+    let size = size_of::<u64>() - 1;
+    Some(value.checked_add(size)? & !size)
+}
+
 // SAFETY: We call register in `init`.
 static BINDER_SHRINKER: Shrinker = unsafe { Shrinker::new() };
 
