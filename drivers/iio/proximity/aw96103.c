@@ -401,6 +401,9 @@ static int aw96103_write_event_val(struct iio_dev *indio_dev,
 		return regmap_write(aw96103->regmap,
 				    AW96103_REG_PROXTH0_CH(chan->channel), val);
 	case IIO_EV_INFO_PERIOD:
+		if (val < 0 || val > FIELD_MAX(AW96103_OUTDEB_MASK))
+			return -EINVAL;
+
 		switch (dir) {
 		case IIO_EV_DIR_RISING:
 			return regmap_update_bits(aw96103->regmap,
@@ -417,6 +420,9 @@ static int aw96103_write_event_val(struct iio_dev *indio_dev,
 			return -EINVAL;
 		}
 	case IIO_EV_INFO_HYSTERESIS:
+		if (val < 0 || val > FIELD_MAX(AW96103_THHYST_MASK))
+			return -EINVAL;
+
 		return regmap_update_bits(aw96103->regmap,
 					AW96103_REG_PROXCTRL_CH(chan->channel),
 					AW96103_THHYST_MASK,
