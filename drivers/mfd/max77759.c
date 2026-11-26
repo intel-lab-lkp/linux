@@ -91,8 +91,7 @@ static const struct regmap_config max77759_regmap_config_top = {
 	.wr_table = &max77759_top_wr_table,
 	.rd_table = &max77759_top_rd_table,
 	.volatile_table = &max77759_top_volatile_table,
-	.num_reg_defaults_raw = MAX77759_PMIC_REG_CONTROL_FG + 1,
-	.cache_type = REGCACHE_FLAT,
+	.cache_type = REGCACHE_FLAT_S,
 };
 
 static const struct regmap_range max77759_maxq_registers[] = {
@@ -139,8 +138,7 @@ static const struct regmap_config max77759_regmap_config_maxq = {
 	.wr_table = &max77759_maxq_wr_table,
 	.rd_table = &max77759_maxq_rd_table,
 	.volatile_table = &max77759_maxq_volatile_table,
-	.num_reg_defaults_raw = MAX77759_MAXQ_REG_UIC_SWRST + 1,
-	.cache_type = REGCACHE_FLAT,
+	.cache_type = REGCACHE_FLAT_S,
 };
 
 static const struct regmap_range max77759_charger_registers[] = {
@@ -181,8 +179,7 @@ static const struct regmap_config max77759_regmap_config_charger = {
 	.wr_table = &max77759_charger_wr_table,
 	.rd_table = &max77759_charger_rd_table,
 	.volatile_table = &max77759_charger_volatile_table,
-	.num_reg_defaults_raw = MAX77759_CHGR_REG_CHG_CNFG_19 + 1,
-	.cache_type = REGCACHE_FLAT,
+	.cache_type = REGCACHE_FLAT_S,
 };
 
 /*
