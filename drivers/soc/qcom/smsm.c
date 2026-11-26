@@ -8,6 +8,7 @@
 #include <linux/mailbox_client.h>
 #include <linux/mfd/syscon.h>
 #include <linux/module.h>
+#include <linux/of.h>
 #include <linux/of_irq.h>
 #include <linux/platform_device.h>
 #include <linux/spinlock.h>
@@ -368,7 +369,15 @@ static const struct irq_domain_ops smsm_irq_ops = {
 static int smsm_parse_mbox(struct qcom_smsm *smsm, unsigned int host_id)
 {
 	struct smsm_host *host = &smsm->hosts[host_id];
-	int ret = 0;
+	struct of_phandle_args args;
+	int ret;
+
+	/* Hosts without a mailbox have a null or no entry: fall back quietly */
+	ret = of_parse_phandle_with_args(smsm->dev->of_node, "mboxes", "#mbox-cells",
+					 host_id, &args);
+	if (ret)
+		return ret;
+	of_node_put(args.np);
 
 	host->mbox_chan = mbox_request_channel(&smsm->mbox_client, host_id);
 	if (IS_ERR(host->mbox_chan)) {
