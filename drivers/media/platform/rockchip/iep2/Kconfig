@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: GPL-2.0-only
+config VIDEO_ROCKCHIP_IEP2
+	tristate "Rockchip IEP2 deinterlacer"
+	depends on V4L_MEM2MEM_DRIVERS
+	depends on VIDEO_DEV
+	depends on ARCH_ROCKCHIP || COMPILE_TEST
+	select VIDEOBUF2_DMA_CONTIG
+	select V4L2_MEM2MEM_DEV
+	help
+	  Support for the IEP2 (image enhancement processor) found in the
+	  Rockchip RK3568 and RK3588 SoCs. It is exposed as a V4L2 memory to
+	  memory device that deinterlaces NV12/NV21/NV16/NV61 frames, using
+	  either intra-field (bob) or motion-adaptive interpolation.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called rockchip-iep2.
