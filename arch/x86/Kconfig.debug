@@ -110,6 +110,21 @@ config IOMMU_LEAK
 config HAVE_MMIOTRACE_SUPPORT
 	def_bool y
 
+config X86_E820_KUNIT_TEST
+	bool "KUnit tests for the x86 E820 memory map code" if !KUNIT_ALL_TESTS
+	depends on KUNIT=y
+	default KUNIT_ALL_TESTS
+	help
+	  Run KUnit tests for e820__update_table() and
+	  e820__range_update_table() during boot. The tests work on
+	  tables of their own and do not change the memory map of the
+	  running kernel.
+
+	  For more information on KUnit and unit tests in general please
+	  refer to the KUnit documentation in Documentation/dev-tools/kunit/.
+
+	  If unsure, say N.
+
 config X86_DECODER_SELFTEST
 	bool "x86 instruction decoder selftest"
 	depends on DEBUG_KERNEL && INSTRUCTION_DECODER
