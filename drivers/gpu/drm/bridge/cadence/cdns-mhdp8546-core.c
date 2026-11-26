@@ -12,7 +12,6 @@
  *
  * TODO:
  *     - Implement optimized mailbox communication using mailbox interrupts
- *     - Add support for power management
  *     - Add support for features like audio, MST and fast link training
  *     - Implement request_fw_cancel to handle HW_STATE
  *     - Fix asynchronous loading of firmware implementation
@@ -2258,6 +2257,125 @@ static void cdns_mhdp_hpd_work(struct work_struct *work)
 	drm_bridge_hpd_notify(&mhdp->bridge, cdns_mhdp_detect(mhdp));
 }
 
+static int cdns_mhdp_resume(struct device *dev)
+{
+	struct cdns_mhdp_device *mhdp = dev_get_drvdata(dev);
+	unsigned int keep_alive, keep_alive_inc;
+	unsigned long rate;
+	int ret;
+
+	ret = clk_prepare_enable(mhdp->clk);
+	if (ret)
+		return ret;
+
+	rate = clk_get_rate(mhdp->clk);
+	writel(rate % 1000000, mhdp->regs + CDNS_SW_CLK_L);
+	writel(rate / 1000000, mhdp->regs + CDNS_SW_CLK_H);
+	writel(~0, mhdp->regs + CDNS_APB_INT_MASK);
+
+	ret = phy_init(mhdp->phy);
+	if (ret) {
+		dev_err(mhdp->dev, "Failed to initialize PHY: %d\n", ret);
+		goto disable_clk;
+	}
+	ret = phy_power_on(mhdp->phy);
+	if (ret < 0) {
+		dev_err(mhdp->dev, "Failed to power on PHY: %d\n", ret);
+		goto phy_exit;
+	}
+
+	/*
+	 * The KEEP_ALIVE register is incremented at every scheduler loop of the
+	 * firmware. If it changes between reads, the firmware is still running
+	 * (e.g. the suspend was aborted) and only needs to be activated. If it
+	 * does not change, the bridge lost power and the firmware must be loaded
+	 * again.
+	 */
+	keep_alive = readl(mhdp->regs + CDNS_KEEP_ALIVE) & CDNS_KEEP_ALIVE_MASK;
+	ret = readl_poll_timeout(mhdp->regs + CDNS_KEEP_ALIVE, keep_alive_inc,
+				 (keep_alive_inc & CDNS_KEEP_ALIVE_MASK) != keep_alive,
+				 2000, 2 * CDNS_KEEP_ALIVE_TIMEOUT);
+	if (ret) {
+		ret = cdns_mhdp_load_firmware(mhdp);
+		if (ret)
+			goto phy_off;
+
+		ret = wait_event_timeout(mhdp->fw_load_wq,
+					 mhdp->hw_state == MHDP_HW_READY,
+					 msecs_to_jiffies(1000));
+		if (ret == 0) {
+			dev_err(mhdp->dev, "%s: Timeout waiting for fw loading\n",
+				__func__);
+			ret = -ETIMEDOUT;
+			goto phy_off;
+		}
+	} else {
+		ret = cdns_mhdp_set_firmware_active(mhdp, true);
+		if (ret) {
+			dev_err(mhdp->dev, "Failed to activate firmware (%pe)\n",
+				ERR_PTR(ret));
+			goto phy_off;
+		}
+
+		spin_lock(&mhdp->start_lock);
+		mhdp->hw_state = MHDP_HW_READY;
+		if (!mhdp->no_hpd)
+			cdns_mhdp_bridge_hpd_enable(&mhdp->bridge);
+		spin_unlock(&mhdp->start_lock);
+	}
+
+	return 0;
+
+phy_off:
+	phy_power_off(mhdp->phy);
+phy_exit:
+	phy_exit(mhdp->phy);
+disable_clk:
+	clk_disable_unprepare(mhdp->clk);
+
+	return ret;
+}
+
+static int cdns_mhdp_suspend(struct device *dev)
+{
+	struct cdns_mhdp_device *mhdp = dev_get_drvdata(dev);
+	unsigned long timeout = msecs_to_jiffies(100);
+	int ret;
+
+	cancel_work_sync(&mhdp->hpd_work);
+
+	ret = wait_event_timeout(mhdp->fw_load_wq,
+				 mhdp->hw_state == MHDP_HW_READY,
+				 timeout);
+	if (ret == 0) {
+		dev_err(mhdp->dev, "%s: Timeout waiting for fw loading\n", __func__);
+		return -ETIMEDOUT;
+	}
+
+	spin_lock(&mhdp->start_lock);
+	mhdp->hw_state = MHDP_HW_STOPPED;
+	spin_unlock(&mhdp->start_lock);
+
+	ret = cdns_mhdp_set_firmware_active(mhdp, false);
+	if (ret) {
+		dev_err(mhdp->dev, "Failed to stop firmware (%pe)\n", ERR_PTR(ret));
+		spin_lock(&mhdp->start_lock);
+		mhdp->hw_state = MHDP_HW_READY;
+		spin_unlock(&mhdp->start_lock);
+		return ret;
+	}
+
+	phy_power_off(mhdp->phy);
+	phy_exit(mhdp->phy);
+	clk_disable_unprepare(mhdp->clk);
+
+	return 0;
+}
+
+static const struct dev_pm_ops cdns_mhdp_pm_ops = {
+	LATE_SYSTEM_SLEEP_PM_OPS(cdns_mhdp_suspend, cdns_mhdp_resume)
+};
+
 static int cdns_mhdp_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -2455,6 +2573,7 @@ static struct platform_driver mhdp_driver = {
 	.driver	= {
 		.name		= "cdns-mhdp8546",
 		.of_match_table	= mhdp_ids,
+		.pm = pm_sleep_ptr(&cdns_mhdp_pm_ops),
 	},
 	.probe	= cdns_mhdp_probe,
 	.remove = cdns_mhdp_remove,
