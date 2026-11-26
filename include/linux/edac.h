@@ -45,7 +45,7 @@ static inline void opstate_init(void)
 }
 
 /* Max length of a DIMM label*/
-#define EDAC_MC_LABEL_LEN	31
+#define EDAC_MC_LABEL_LEN	34
 
 /* Maximum size of the location string */
 #define LOCATION_SIZE 256
