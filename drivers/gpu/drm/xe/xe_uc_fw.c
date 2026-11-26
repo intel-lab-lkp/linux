@@ -137,6 +137,7 @@ struct fw_blobs_by_type {
 	fw_def(BATTLEMAGE,	GT_TYPE_ANY,	no_ver(xe,	huc,		bmg))		\
 	fw_def(LUNARLAKE,	GT_TYPE_ANY,	no_ver(xe,	huc,		lnl))		\
 	fw_def(METEORLAKE,	GT_TYPE_ANY,	no_ver(i915,	huc_gsc,	mtl))		\
+	fw_def(DG2,		GT_TYPE_ANY,	no_ver(i915,	huc_gsc,	dg2))		\
 	fw_def(DG1,		GT_TYPE_ANY,	no_ver(i915,	huc,		dg1))		\
 	fw_def(ALDERLAKE_N,	GT_TYPE_ANY,	no_ver(i915,	huc,		tgl))		\
 	fw_def(ALDERLAKE_P,	GT_TYPE_ANY,	no_ver(i915,	huc,		tgl))		\
@@ -555,11 +556,7 @@ static int parse_cpd_header(struct xe_uc_fw *uc_fw, const void *data, size_t siz
 	if (css_entry) {
 		int ret;
 
-		/*
-		 * This section does not contain a CSS entry on DG2. We
-		 * don't support DG2 HuC right now, so no need to handle
-		 * it, just add a reminder in case that changes.
-		 */
+		/* The DG2 HuC has no CSS entry, its caller passes none */
 		xe_assert(xe, xe->info.platform != XE_DG2);
 
 		offset = entry_offset(header, css_entry);
@@ -661,6 +658,13 @@ static int parse_headers(struct xe_uc_fw *uc_fw, const struct firmware *fw)
 	case XE_UC_FW_TYPE_GSC:
 		return parse_gsc_layout(uc_fw, fw->data, fw->size);
 	case XE_UC_FW_TYPE_HUC:
+		/*
+		 * The GSC loads the whole DG2 binary itself, so there is no
+		 * legacy CSS image to find for a DMA load.
+		 */
+		if (uc_fw_to_xe(uc_fw)->info.platform == XE_DG2)
+			return parse_cpd_header(uc_fw, fw->data, fw->size, "HUCP.man", NULL);
+
 		ret = parse_cpd_header(uc_fw, fw->data, fw->size, "HUCP.man", "huc_fw");
 		if (!ret || ret != -ENOENT)
 			return ret;
