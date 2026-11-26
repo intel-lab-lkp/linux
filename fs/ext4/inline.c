@@ -428,6 +428,10 @@ static int ext4_prepare_inline_data(handle_t *handle, struct inode *inode,
 		return -ENOSPC;
 
 	ext4_write_lock_xattr(inode, &no_expand);
+	if (!ext4_test_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA)) {
+		ext4_write_unlock_xattr(inode, &no_expand);
+		return -ENOSPC;
+	}
 	/*
 	 * ei->i_inline_size may have changed since the initial check
 	 * if other xattrs were added. Recalculate to ensure
@@ -507,7 +511,8 @@ static int ext4_destroy_inline_data_nolock(handle_t *handle,
 
 	EXT4_I(inode)->i_inline_off = 0;
 	EXT4_I(inode)->i_inline_size = 0;
-	ext4_clear_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA);
+	if (error)
+		ext4_clear_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA);
 out:
 	brelse(is.iloc.bh);
 	if (error == -ENODATA)
@@ -595,14 +600,17 @@ static int ext4_convert_inline_data_to_extent(struct address_space *mapping,
 	unsigned from, to;
 	struct ext4_iloc iloc;
 
+	down_read(&EXT4_I(inode)->xattr_sem);
 	if (!ext4_has_inline_data(inode)) {
 		/*
 		 * clear the flag so that no new write
 		 * will trap here again.
 		 */
 		ext4_clear_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA);
+		up_read(&EXT4_I(inode)->xattr_sem);
 		return 0;
 	}
+	up_read(&EXT4_I(inode)->xattr_sem);
 
 	needed_blocks = ext4_chunk_trans_extent(inode, 1);
 
@@ -647,6 +655,7 @@ retry:
 	ret = ext4_destroy_inline_data_nolock(handle, inode);
 	if (ret)
 		goto out;
+	ext4_clear_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA);
 
 	if (ext4_should_dioread_nolock(inode)) {
 		ret = ext4_block_write_begin(handle, folio, from, to,
@@ -1114,6 +1123,7 @@ static void ext4_restore_inline_data(handle_t *handle, struct inode *inode,
 		ext4_msg(inode->i_sb, KERN_EMERG,
 			"error restoring inline_data for inode -- potential data loss! (inode %llu, error %d)",
 			inode->i_ino, ret);
+		ext4_clear_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA);
 		return;
 	}
 	ext4_write_inline_data(inode, iloc, buf, 0, inline_size);
@@ -1214,6 +1224,8 @@ static int ext4_convert_inline_data_nolock(handle_t *handle,
 out_restore:
 	if (error)
 		ext4_restore_inline_data(handle, inode, iloc, buf, inline_size);
+	else
+		ext4_clear_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA);
 
 out:
 	brelse(data_bh);

@@ -326,7 +326,8 @@ int ext4_read_folio(struct file *file, struct folio *folio)
 
 	trace_ext4_read_folio(inode, folio);
 
-	if (ext4_has_inline_data(inode)) {
+	if (ext4_has_inline_data(inode) ||
+	    ext4_test_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA)) {
 		ret = ext4_readpage_inline(inode, folio);
 		if (ret != -EAGAIN)
 			return ret;
@@ -345,8 +346,16 @@ void ext4_readahead(struct readahead_control *rac)
 	struct fsverity_info *vi = NULL;
 
 	/* If the file has inline data, no need to do readahead. */
-	if (ext4_has_inline_data(inode))
-		return;
+	if (ext4_has_inline_data(inode) ||
+	    ext4_test_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA)) {
+		bool has_inline;
+
+		down_read(&EXT4_I(inode)->xattr_sem);
+		has_inline = ext4_has_inline_data(inode);
+		up_read(&EXT4_I(inode)->xattr_sem);
+		if (has_inline)
+			return;
+	}
 
 	if (readahead_index(rac) < DIV_ROUND_UP(inode->i_size, PAGE_SIZE))
 		vi = fsverity_get_info(inode);

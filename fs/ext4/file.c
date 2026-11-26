@@ -70,6 +70,7 @@ static ssize_t ext4_dio_read_iter(struct kiocb *iocb, struct iov_iter *to)
 {
 	ssize_t ret;
 	struct inode *inode = file_inode(iocb->ki_filp);
+	bool use_dio, check_inline;
 
 	if (iocb->ki_flags & IOCB_NOWAIT) {
 		if (!inode_trylock_shared(inode))
@@ -78,7 +79,23 @@ static ssize_t ext4_dio_read_iter(struct kiocb *iocb, struct iov_iter *to)
 		inode_lock_shared(inode);
 	}
 
-	if (!ext4_should_use_dio(iocb, to)) {
+	check_inline = ext4_has_inline_data(inode) ||
+		ext4_test_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA);
+	if (check_inline) {
+		if (iocb->ki_flags & IOCB_NOWAIT) {
+			if (!down_read_trylock(&EXT4_I(inode)->xattr_sem)) {
+				inode_unlock_shared(inode);
+				return -EAGAIN;
+			}
+		} else {
+			down_read(&EXT4_I(inode)->xattr_sem);
+		}
+	}
+	use_dio = ext4_should_use_dio(iocb, to);
+	if (check_inline)
+		up_read(&EXT4_I(inode)->xattr_sem);
+
+	if (!use_dio) {
 		inode_unlock_shared(inode);
 		/*
 		 * Fallback to buffered I/O if the operation being performed on
@@ -633,22 +650,46 @@ static ssize_t ext4_dio_write_iter(struct kiocb *iocb, struct iov_iter *from)
 	}
 
 	/* Fallback to buffered I/O if the inode does not support direct I/O. */
-	if (!ext4_should_use_dio(iocb, from)) {
-		if (ilock_shared)
-			inode_unlock_shared(inode);
-		else
-			inode_unlock(inode);
-		return ext4_buffered_write_iter(iocb, from);
-	}
+	{
+		bool check_inline = ext4_has_inline_data(inode) ||
+			ext4_test_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA);
 
-	/*
-	 * Prevent inline data from being created since we are going to allocate
-	 * blocks for DIO. We know the inode does not currently have inline data
-	 * because ext4_should_use_dio() checked for it, but we have to clear
-	 * the state flag before the write checks because a lock cycle could
-	 * introduce races with other writers.
-	 */
-	ext4_clear_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA);
+		if (check_inline) {
+			if (iocb->ki_flags & IOCB_NOWAIT) {
+				if (!down_read_trylock(&EXT4_I(inode)->xattr_sem)) {
+					if (ilock_shared)
+						inode_unlock_shared(inode);
+					else
+						inode_unlock(inode);
+					return -EAGAIN;
+				}
+			} else {
+				down_read(&EXT4_I(inode)->xattr_sem);
+			}
+		}
+		if (!ext4_should_use_dio(iocb, from)) {
+			if (check_inline)
+				up_read(&EXT4_I(inode)->xattr_sem);
+			if (ilock_shared)
+				inode_unlock_shared(inode);
+			else
+				inode_unlock(inode);
+			return ext4_buffered_write_iter(iocb, from);
+		}
+
+		/*
+		 * Prevent inline data from being created since we are going to
+		 * allocate blocks for DIO. We know the inode does not currently
+		 * have inline data because ext4_should_use_dio() checked for it
+		 * under xattr_sem, but we have to clear the state flag before
+		 * releasing xattr_sem and running the write checks because a
+		 * lock cycle could introduce races with other writers or inline
+		 * data rollback.
+		 */
+		ext4_clear_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA);
+		if (check_inline)
+			up_read(&EXT4_I(inode)->xattr_sem);
+	}
 
 	ret = ext4_dio_write_checks(iocb, from, &ilock_shared, &extend,
 				    &dio_flags);

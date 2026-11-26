@@ -3613,8 +3613,16 @@ static sector_t ext4_bmap(struct address_space *mapping, sector_t block)
 	/*
 	 * We can get here for an inline file via the FIBMAP ioctl
 	 */
-	if (ext4_has_inline_data(inode))
-		goto out;
+	if (ext4_has_inline_data(inode) ||
+	    ext4_test_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA)) {
+		bool has_inline;
+
+		down_read(&EXT4_I(inode)->xattr_sem);
+		has_inline = ext4_has_inline_data(inode);
+		up_read(&EXT4_I(inode)->xattr_sem);
+		if (has_inline)
+			goto out;
+	}
 
 	if (mapping_tagged(mapping, PAGECACHE_TAG_DIRTY) &&
 	    (test_opt(inode->i_sb, DELALLOC) ||
@@ -4117,7 +4125,8 @@ static int ext4_iomap_begin_report(struct inode *inode, loff_t offset,
 	if ((offset >> blkbits) > EXT4_MAX_LOGICAL_BLOCK)
 		return -EINVAL;
 
-	if (ext4_has_inline_data(inode)) {
+	if (ext4_has_inline_data(inode) ||
+	    ext4_test_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA)) {
 		ret = ext4_inline_data_iomap(inode, iomap);
 		if (ret != -EAGAIN) {
 			if (ret == 0 && offset >= iomap->length)
@@ -5104,13 +5113,21 @@ int ext4_block_zero_eof(struct inode *inode, loff_t from, loff_t end)
 	if (!offset || from >= end)
 		return 0;
 	/*
-	 * Inline data has no tail block to zero out.  Note that a race with
-	 * ext4_page_mkwrite() converting inline data to an extent without
-	 * holding i_rwsem is safe, as that path zeroes the full block before
-	 * copying in the inline data.
+	 * Inline data has no tail block to zero out.  Serialize against a
+	 * concurrent ext4_page_mkwrite() inline data conversion so we do not
+	 * observe transiently cleared EXT4_INODE_INLINE_DATA before block 0 is
+	 * initialized or rolled back.
 	 */
-	if (ext4_has_inline_data(inode))
-		return 0;
+	if (ext4_has_inline_data(inode) ||
+	    ext4_test_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA)) {
+		bool has_inline;
+
+		down_read(&EXT4_I(inode)->xattr_sem);
+		has_inline = ext4_has_inline_data(inode);
+		up_read(&EXT4_I(inode)->xattr_sem);
+		if (has_inline)
+			return 0;
+	}
 	/* If we are processing an encrypted inode during orphan list handling */
 	if (IS_ENCRYPTED(inode) && !fscrypt_has_encryption_key(inode))
 		return 0;
@@ -7246,11 +7263,19 @@ int ext4_setattr(const struct mnt_idmap *idmap, struct dentry *dentry,
 		 * convert to extent-based storage first to prevent inconsistent
 		 * state (inline flag set but size exceeds inline capacity).
 		 */
-		if (ext4_has_inline_data(inode) &&
-		    attr->ia_size > EXT4_I(inode)->i_inline_size) {
-			error = ext4_convert_inline_data(inode);
-			if (error)
-				return error;
+		if (ext4_has_inline_data(inode) ||
+		    ext4_test_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA)) {
+			bool convert_inline;
+
+			down_read(&EXT4_I(inode)->xattr_sem);
+			convert_inline = ext4_has_inline_data(inode) &&
+				attr->ia_size > EXT4_I(inode)->i_inline_size;
+			up_read(&EXT4_I(inode)->xattr_sem);
+			if (convert_inline) {
+				error = ext4_convert_inline_data(inode);
+				if (error)
+					return error;
+			}
 		}
 
 		if (shrink) {
