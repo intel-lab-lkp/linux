@@ -493,7 +493,6 @@ static int do_task_stat(struct seq_file *m, struct pid_namespace *ns,
 	permitted = ptrace_may_access(task, PTRACE_MODE_READ_FSCREDS | PTRACE_MODE_NOAUDIT);
 	mm = get_task_mm(task);
 	if (mm) {
-		vsize = task_vsize(mm);
 		/*
 		 * esp and eip are intentionally zeroed out.  There is no
 		 * non-racy way to read them without freezing the task.
@@ -542,6 +541,17 @@ static int do_task_stat(struct seq_file *m, struct pid_namespace *ns,
 
 	if (permitted && (!whole || num_threads < 2))
 		wchan = !task_is_running(task);
+
+	/*
+	 * What depends on the access check has been read from the task or
+	 * comes from the mm that was pinned along with it. Don't hold
+	 * exec_update_lock for the rest, task_vsize() takes the mmap lock
+	 * without an MMU.
+	 */
+	up_read(&task->signal->exec_update_lock);
+
+	if (mm)
+		vsize = task_vsize(mm);
 
 	scoped_guard(rcu) {
 		scoped_seqlock_read (&sig->stats_lock, ss_lock_irqsave) {
@@ -662,7 +672,6 @@ static int do_task_stat(struct seq_file *m, struct pid_namespace *ns,
 		seq_puts(m, " 0");
 
 	seq_putc(m, '\n');
-	up_read(&task->signal->exec_update_lock);
 	if (mm)
 		mmput(mm);
 	return 0;
