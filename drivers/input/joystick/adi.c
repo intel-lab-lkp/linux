@@ -392,7 +392,7 @@ static int adi_init_input(struct adi *adi, struct adi_port *port, int half)
 	t = adi->id < ADI_ID_MAX ? adi->id : ADI_ID_MAX;
 
 	snprintf(buf, ADI_MAX_PHYS_LENGTH, adi_names[t], adi->id);
-	snprintf(adi->name, ADI_MAX_NAME_LENGTH, "Logitech %s [%s]", buf, adi->cname);
+	scnprintf(adi->name, ADI_MAX_NAME_LENGTH, "Logitech %s [%s]", buf, adi->cname);
 	snprintf(adi->phys, ADI_MAX_PHYS_LENGTH, "%s/input%d", port->gameport->phys, half);
 
 	adi->abs = adi_abs[t];
