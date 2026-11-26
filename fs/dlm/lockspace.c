@@ -800,12 +800,18 @@ int dlm_release_lockspace(void *lockspace, unsigned int release_option)
 	if (release_option > __DLM_RELEASE_MAX)
 		return -EINVAL;
 
-	ls = dlm_find_lockspace_local(lockspace);
-	if (!ls)
-		return -EINVAL;
-	dlm_put_lockspace(ls);
-
 	mutex_lock(&ls_lock);
+	spin_lock_bh(&lslist_lock);
+	list_for_each_entry(ls, &lslist, ls_list) {
+		if (ls == lockspace)
+			goto found;
+	}
+	spin_unlock_bh(&lslist_lock);
+	mutex_unlock(&ls_lock);
+	return -EINVAL;
+
+found:
+	spin_unlock_bh(&lslist_lock);
 	error = release_lockspace(ls, release_option);
 	if (!error)
 		ls_count--;
