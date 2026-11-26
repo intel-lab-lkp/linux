@@ -18,7 +18,6 @@
 #include <linux/i2c.h>
 #include <linux/interrupt.h>
 #include <linux/irqreturn.h>
-#include <linux/math64.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/pm.h>
@@ -702,7 +701,7 @@ static int hx9023s_get_samp_freq(struct hx9023s_data *data, int *val, int *val2)
 
 	odr = hx9023s_samp_freq_table[index];
 	*val = KILO / odr;
-	*val2 = div_u64((KILO % odr) * MICRO, odr);
+	*val2 = (KILO % odr) * MICRO / odr;
 
 	return IIO_VAL_INT_PLUS_MICRO;
 }
