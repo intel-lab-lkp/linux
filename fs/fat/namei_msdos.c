@@ -439,6 +439,74 @@ out:
 	return err;
 }
 
+/***** Give an O_TMPFILE its first name */
+static int msdos_link(struct dentry *old_dentry, struct inode *dir,
+		      struct dentry *dentry)
+{
+	struct inode *inode = d_inode(old_dentry);
+	struct super_block *sb = dir->i_sb;
+	struct fat_slot_info sinfo;
+	unsigned char msdos_name[MSDOS_NAME];
+	struct timespec64 ts;
+	int err, err2, is_hid, old_attrs;
+
+	/* FAT has no hard links. */
+	if (inode->i_nlink)
+		return -EPERM;
+
+	mutex_lock(&MSDOS_SB(sb)->s_lock);
+
+	err = msdos_format_name(dentry->d_name.name, dentry->d_name.len,
+				msdos_name, &MSDOS_SB(sb)->options);
+	if (err)
+		goto out;
+	is_hid = (dentry->d_name.name[0] == '.') && (msdos_name[0] != '.');
+	/* Have to do it due to foo vs. .foo conflicts */
+	if (!fat_scan(dir, msdos_name, &sinfo)) {
+		brelse(sinfo.bh);
+		err = -EINVAL;
+		goto out;
+	}
+
+	ts = current_time(dir);
+	err = msdos_add_entry(dir, msdos_name, 0, is_hid, 0, &ts, &sinfo);
+	if (err)
+		goto out;
+	inode_inc_iversion(dir);
+
+	old_attrs = MSDOS_I(inode)->i_attrs;
+	fat_attach(inode, sinfo.i_pos);
+	if (is_hid)
+		MSDOS_I(inode)->i_attrs |= ATTR_HIDDEN;
+	else
+		MSDOS_I(inode)->i_attrs &= ~ATTR_HIDDEN;
+	mark_inode_dirty(inode);
+	if (IS_DIRSYNC(dir)) {
+		err = sync_inode_metadata(inode, 1);
+		if (err)
+			goto out_detach;
+	}
+	brelse(sinfo.bh);
+
+	inc_nlink(inode);
+	ihold(inode);
+	d_instantiate(dentry, inode);
+	mutex_unlock(&MSDOS_SB(sb)->s_lock);
+	fat_flush_inodes(sb, dir, inode);
+	return 0;
+
+out_detach:
+	fat_detach(inode);
+	MSDOS_I(inode)->i_attrs = old_attrs;
+	err2 = fat_remove_entries(dir, &sinfo);	/* and releases bh */
+	if (err2)
+		fat_msg(sb, KERN_WARNING,
+			"failed to roll back new entry (%d)", err2);
+out:
+	mutex_unlock(&MSDOS_SB(sb)->s_lock);
+	return err;
+}
+
 static int do_msdos_rename(struct inode *old_dir, unsigned char *old_name,
 			   struct dentry *old_dentry,
 			   struct inode *new_dir, unsigned char *new_name,
@@ -651,10 +719,12 @@ out:
 static const struct inode_operations msdos_dir_inode_operations = {
 	.create		= msdos_create,
 	.lookup		= msdos_lookup,
+	.link		= msdos_link,
 	.unlink		= msdos_unlink,
 	.mkdir		= msdos_mkdir,
 	.rmdir		= msdos_rmdir,
 	.rename		= msdos_rename,
+	.tmpfile	= fat_tmpfile,
 	.setattr	= fat_setattr,
 	.getattr	= fat_getattr,
 	.fileattr_get	= fat_fileattr_get,
