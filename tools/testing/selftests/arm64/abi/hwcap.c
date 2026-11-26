@@ -693,6 +693,48 @@ static void ls64_sigill(void)
 	/* ST64B x0, [x8] */
 	asm volatile(".inst 0xf83f9100" : : "r" (xt_1), "r" (xn)
 		     : "x1", "x2", "x3", "x4", "x5", "x6", "x7");
+	sigaction(SIGBUS, &old, NULL);
+}
+
+static void ls64_accdata_sigill(void)
+{
+	struct sigaction ign, old;
+	char dst[64] __aligned(64);
+
+	/*
+	 * Like LS64, LS64_ACCDATA requires both the feature to be
+	 * available in hardware, and the address to be on a device
+	 * capable of the transaction.
+	 * In addition, the device driver that has mapped the device
+	 * must have created a PASID that can be used as ACCDATA.
+	 *
+	 * For testing the ABI, check only that st64bv0 on a user
+	 * address gives the expected SIGBUS error when the instruction
+	 * is not enabled for this thread. If it was enabled, the
+	 * error status would be reported in 'st' instead of a signal,
+	 * but that can only be tested if a PASID is set for this thread.
+	 */
+	ign.sa_sigaction = ignore_signal;
+	ign.sa_flags = SA_SIGINFO | SA_RESTART;
+	sigemptyset(&ign.sa_mask);
+	sigaction(SIGBUS, &ign, &old);
+
+	register void *xn asm ("x8") = dst;
+	register u64 xt_1 asm ("x0") = 1;
+	register u64 xt_2 asm ("x1") = 2;
+	register u64 xt_3 asm ("x2") = 3;
+	register u64 xt_4 asm ("x3") = 4;
+	register u64 xt_5 asm ("x4") = 5;
+	register u64 xt_6 asm ("x5") = 6;
+	register u64 xt_7 asm ("x6") = 7;
+	register u64 xt_8 asm ("x7") = 8;
+	register u64 st asm ("x9");
+
+	/* ST64BV0 x9, x0, [x8] */
+	asm volatile(".inst 0xf829a100" : "=r" (st) :
+			"r" (xt_1), "r" (xt_2), "r" (xt_3), "r" (xt_4),
+			"r" (xt_5), "r" (xt_6), "r" (xt_7), "r" (xt_8),
+			"r" (xn));
 
 	sigaction(SIGBUS, &old, NULL);
 }
@@ -1298,6 +1340,14 @@ static const struct hwcap_data {
 		.hwcap_bit = HWCAP3_LS64,
 		.cpuinfo = "ls64",
 		.sigill_fn = ls64_sigill,
+		.sigill_reliable = true,
+	},
+	{
+		.name = "LS64_ACCDATA",
+		.at_hwcap = AT_HWCAP3,
+		.hwcap_bit = HWCAP3_LS64_ACCDATA,
+		.cpuinfo = "ls64_accdata",
+		.sigill_fn = ls64_accdata_sigill,
 		.sigill_reliable = true,
 	},
 };
