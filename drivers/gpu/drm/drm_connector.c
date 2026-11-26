@@ -3449,25 +3449,39 @@ static const struct drm_prop_enum_list privacy_screen_enum[] = {
  *
  * This function creates the "privacy-screen sw-state" and "privacy-screen
  * hw-state" properties for the connector. They are not attached.
+ *
+ * Returns:
+ * Zero on success, negative errno on failure.
  */
-void
+int
 drm_connector_create_privacy_screen_properties(struct drm_connector *connector)
 {
+	struct drm_property *sw_state, *hw_state;
+
 	if (connector->privacy_screen_sw_state_property)
-		return;
+		return 0;
 
 	/* Note sw-state only supports the first 2 values of the enum */
-	connector->privacy_screen_sw_state_property =
-		drm_property_create_enum(connector->dev, DRM_MODE_PROP_ENUM,
-				"privacy-screen sw-state",
-				privacy_screen_enum, 2);
+	sw_state = drm_property_create_enum(connector->dev, DRM_MODE_PROP_ENUM,
+					    "privacy-screen sw-state",
+					    privacy_screen_enum, 2);
+	if (!sw_state)
+		return -ENOMEM;
 
-	connector->privacy_screen_hw_state_property =
-		drm_property_create_enum(connector->dev,
-				DRM_MODE_PROP_IMMUTABLE | DRM_MODE_PROP_ENUM,
-				"privacy-screen hw-state",
-				privacy_screen_enum,
-				ARRAY_SIZE(privacy_screen_enum));
+	hw_state = drm_property_create_enum(connector->dev,
+					    DRM_MODE_PROP_IMMUTABLE | DRM_MODE_PROP_ENUM,
+					    "privacy-screen hw-state",
+					    privacy_screen_enum,
+					    ARRAY_SIZE(privacy_screen_enum));
+	if (!hw_state) {
+		drm_property_destroy(connector->dev, sw_state);
+		return -ENOMEM;
+	}
+
+	connector->privacy_screen_sw_state_property = sw_state;
+	connector->privacy_screen_hw_state_property = hw_state;
+
+	return 0;
 }
 EXPORT_SYMBOL(drm_connector_create_privacy_screen_properties);
 
@@ -3539,16 +3553,26 @@ static int drm_connector_privacy_screen_notifier(
  * a generic notifier for generating sysfs-connector-status-events
  * on external changes to the privacy-screen status.
  * This function takes ownership of the passed in drm_privacy_screen and will
- * call drm_privacy_screen_put() on it when the connector is destroyed.
+ * release it when the connector is destroyed or property creation fails.
+ * If property creation fails, the connector is left without a privacy-screen
+ * provider.
  */
 void drm_connector_attach_privacy_screen_provider(
 	struct drm_connector *connector, struct drm_privacy_screen *priv)
 {
+	int ret;
+
+	ret = drm_connector_create_privacy_screen_properties(connector);
+	if (ret) {
+		drm_err(connector->dev, "Failed to create privacy-screen properties\n");
+		drm_privacy_screen_put(priv);
+		return;
+	}
+
 	connector->privacy_screen = priv;
 	connector->privacy_screen_notifier.notifier_call =
 		drm_connector_privacy_screen_notifier;
 
-	drm_connector_create_privacy_screen_properties(connector);
 	drm_connector_update_privacy_screen_properties(connector, true);
 	drm_connector_attach_privacy_screen_properties(connector);
 }
