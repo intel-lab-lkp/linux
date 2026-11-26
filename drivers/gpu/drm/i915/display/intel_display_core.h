@@ -398,6 +398,11 @@ struct intel_display {
 	} dsi;
 
 	struct {
+		/* Debugfs knob: use the pixel based DP timing generator instead */
+		bool disable_symbol_tg;
+	} dp;
+
+	struct {
 		const struct dram_info *info;
 	} dram;
 

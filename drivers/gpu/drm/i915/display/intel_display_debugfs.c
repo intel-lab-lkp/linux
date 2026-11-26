@@ -841,6 +841,9 @@ void intel_display_debugfs_register(struct intel_display *display)
 	debugfs_create_file("i915_fifo_underrun_reset", 0644, debugfs_root,
 			    display, &i915_fifo_underrun_reset_ops);
 
+	debugfs_create_bool("i915_dp_disable_symbol_tg", 0644, debugfs_root,
+			    &display->dp.disable_symbol_tg);
+
 	drm_debugfs_create_files(intel_display_debugfs_list,
 				 ARRAY_SIZE(intel_display_debugfs_list),
 				 debugfs_root, display->drm->primary);

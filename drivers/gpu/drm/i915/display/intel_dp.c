@@ -1271,13 +1271,13 @@ bool intel_dp_has_dsc(const struct intel_connector *connector)
 }
 
 /*
- * The symbol based timing generator is to be used for 8b/10b MST and 128b/132b
- * SST/MST, but only once all the pieces needed for that are in place, which is
- * done by a later patch.
+ * The symbol based timing generator is used for 8b/10b MST and 128b/132b
+ * SST/MST, unless disabled by the i915_dp_disable_symbol_tg debugfs knob.
  */
 bool intel_dp_use_symbol_tg(struct intel_display *display, bool is_mst, bool is_uhbr)
 {
-	return false;
+	return HAS_DP_SYMBOL_TG(display) && !display->dp.disable_symbol_tg &&
+		(is_mst || is_uhbr);
 }
 
 static int
@@ -4004,7 +4004,7 @@ int intel_dp_compute_symbol_tg(struct intel_dp *intel_dp,
 
 	/* MSO is only used with 8b/10b SST, where the symbol TG isn't used */
 	if (drm_WARN_ON(display->drm, crtc_state->splitter.enable))
-		return 0;
+		return -EINVAL;
 
 	ret = intel_dp_compute_dsc_slices_and_link_bpp(crtc_state, connector,
 						       &dsc_slices, &link_bpp_x16);
@@ -4019,12 +4019,11 @@ int intel_dp_compute_symbol_tg(struct intel_dp *intel_dp,
 	hblank_cycles = cycles.hblank;
 	chunk_cycles = cycles.chunk;
 
-	if (!intel_dp_symbol_tg_cycles_in_range(&cycles)) {
-		drm_dbg_kms(display->drm,
-			    "LL symbol timings out of range (hactive %d, hblank %d, chunk %d), using pixel TG\n",
-			    hactive_cycles, hblank_cycles, chunk_cycles);
-		return 0;
-	}
+	/* The link config search already checked that the timings fit. */
+	if (drm_WARN(display->drm, !intel_dp_symbol_tg_cycles_in_range(&cycles),
+		     "LL symbol timings out of range (hactive %d, hblank %d, chunk %d)\n",
+		     hactive_cycles, hblank_cycles, chunk_cycles))
+		return -EINVAL;
 
 	if (is_uhbr) {
 		ch_num = 1568768;
@@ -4077,12 +4076,11 @@ int intel_dp_compute_symbol_tg(struct intel_dp *intel_dp,
 				     (u64)ch_num * (ssc_num / ssc_gcd),
 				     data_n[ssc]);
 
-		if (intel_dp_cmp_u128(data_m[ssc], data_n[ssc]) > 0) {
-			drm_dbg_kms(display->drm,
-				    "LL symbol data M/N ratio exceeds 1.0 (SSC %s), using pixel TG\n",
-				    str_enabled_disabled(ssc));
-			return 0;
-		}
+		/* The link config search already checked that the stream fits. */
+		if (drm_WARN(display->drm, intel_dp_cmp_u128(data_m[ssc], data_n[ssc]) > 0,
+			     "LL symbol data M/N ratio exceeds 1.0 (SSC %s)\n",
+			     str_enabled_disabled(ssc)))
+			return -EINVAL;
 	}
 
 	tg->enable = true;
