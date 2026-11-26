@@ -3931,6 +3931,11 @@ static int receive_sizes(struct drbd_connection *connection, struct packet_info 
 		    (device->state.conn < C_CONNECTED || device->state.pdsk == D_DISKLESS)) {
 			drbd_err(device, "The peer's disk size is too small! (%llu < %llu sectors)\n",
 					(unsigned long long)new_size, (unsigned long long)cur_size);
+			/* We rejected that size, reset to zero so it won't
+			 * confuse the aggregation with min_not_zero() if
+			 * someone requests a resize later.
+			 */
+			device->p_size = 0;
 			conn_request_state(peer_device->connection, NS(conn, C_DISCONNECTING), CS_HARD);
 			put_ldev(device);
 			return -EIO;
