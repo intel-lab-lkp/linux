@@ -363,9 +363,11 @@ static int sys_off_notify(struct notifier_block *nb,
 	return handler->sys_off_cb(&data);
 }
 
-static struct sys_off_handler platform_sys_off_handler;
+static struct sys_off_handler
+	platform_sys_off_handlers[SYS_OFF_MODE_RESTART + 1];
 
-static struct sys_off_handler *alloc_sys_off_handler(int priority)
+static struct sys_off_handler *alloc_sys_off_handler(enum sys_off_mode mode,
+						     int priority)
 {
 	struct sys_off_handler *handler;
 	gfp_t flags;
@@ -375,8 +377,8 @@ static struct sys_off_handler *alloc_sys_off_handler(int priority)
 	 * at the early boot time because memory allocator isn't available yet.
 	 */
 	if (priority == SYS_OFF_PRIO_PLATFORM) {
-		handler = &platform_sys_off_handler;
-		if (handler->cb_data)
+		handler = &platform_sys_off_handlers[mode];
+		if (handler->list)
 			return ERR_PTR(-EBUSY);
 	} else {
 		if (system_state > SYSTEM_RUNNING)
@@ -394,7 +396,9 @@ static struct sys_off_handler *alloc_sys_off_handler(int priority)
 
 static void free_sys_off_handler(struct sys_off_handler *handler)
 {
-	if (handler == &platform_sys_off_handler)
+	if (handler >= platform_sys_off_handlers &&
+	    handler < platform_sys_off_handlers +
+		      ARRAY_SIZE(platform_sys_off_handlers))
 		memset(handler, 0, sizeof(*handler));
 	else
 		kfree(handler);
@@ -428,35 +432,39 @@ register_sys_off_handler(enum sys_off_mode mode,
 			 void *cb_data)
 {
 	struct sys_off_handler *handler;
+	bool blocking = false;
+	void *list;
 	int err;
-
-	handler = alloc_sys_off_handler(priority);
-	if (IS_ERR(handler))
-		return handler;
 
 	switch (mode) {
 	case SYS_OFF_MODE_POWER_OFF_PREPARE:
-		handler->list = &power_off_prep_handler_list;
-		handler->blocking = true;
+		list = &power_off_prep_handler_list;
+		blocking = true;
 		break;
 
 	case SYS_OFF_MODE_POWER_OFF:
-		handler->list = &power_off_handler_list;
+		list = &power_off_handler_list;
 		break;
 
 	case SYS_OFF_MODE_RESTART_PREPARE:
-		handler->list = &restart_prep_handler_list;
-		handler->blocking = true;
+		list = &restart_prep_handler_list;
+		blocking = true;
 		break;
 
 	case SYS_OFF_MODE_RESTART:
-		handler->list = &restart_handler_list;
+		list = &restart_handler_list;
 		break;
 
 	default:
-		free_sys_off_handler(handler);
 		return ERR_PTR(-EINVAL);
 	}
+
+	handler = alloc_sys_off_handler(mode, priority);
+	if (IS_ERR(handler))
+		return handler;
+
+	handler->list = list;
+	handler->blocking = blocking;
 
 	handler->nb.notifier_call = sys_off_notify;
 	handler->nb.priority = priority;
