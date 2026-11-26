@@ -344,13 +344,17 @@ quiet_cmd_gzip = GZIP    $@
 
 # Bzip2 and LZMA do not include size in file... so we have to fake that;
 # append the size as a 32-bit littleendian number as gzip does.
-size_append = printf $(shell						\
+total_file_size = $(shell						\
 dec_size=0;								\
 for F in $(real-prereqs); do					\
 	fsize=$$($(CONFIG_SHELL) $(srctree)/scripts/file-size.sh $$F);	\
 	dec_size=$$(expr $$dec_size + $$fsize);				\
 done;									\
-printf "%08x\n" $$dec_size |						\
+printf "%d\n" $$dec_size						\
+)
+
+size_append = printf $(shell						\
+printf "%08x\n" $(total_file_size) |					\
 	sed 's/\(..\)/\1 /g' | {					\
 		read ch0 ch1 ch2 ch3;					\
 		for ch in $$ch3 $$ch2 $$ch1 $$ch0; do			\
@@ -479,7 +483,7 @@ quiet_cmd_zstd = ZSTD    $@
       cmd_zstd = cat $(real-prereqs) | $(ZSTD) -19 > $@
 
 quiet_cmd_zstd22 = ZSTD22  $@
-      cmd_zstd22 = cat $(real-prereqs) | $(ZSTD) -22 --ultra > $@
+      cmd_zstd22 = cat $(real-prereqs) | $(ZSTD) -22 --ultra --stream-size=$(total_file_size) > $@
 
 quiet_cmd_zstd22_with_size = ZSTD22  $@
       cmd_zstd22_with_size = { cat $(real-prereqs) | $(ZSTD) -22 --ultra; $(size_append); } > $@
