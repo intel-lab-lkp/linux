@@ -156,7 +156,8 @@ Initialization
 
      ``sizeimage``
          desired size of ``CAPTURE`` buffers; the encoder may adjust it to
-         match hardware requirements.
+         match hardware requirements. If 0, the encoder chooses it for the
+         coded size and again when the coded size changes, see step 3.
 
      ``width``, ``height``
          ignored (read-only).
@@ -229,6 +230,12 @@ Initialization
    * Setting the ``OUTPUT`` format will reset the selection rectangles to their
      default values, based on the new resolution, as described in the next
      step.
+
+   * Setting the ``OUTPUT`` format sets the ``CAPTURE`` ``width`` and
+     ``height`` to the new coded size. A ``CAPTURE`` ``sizeimage`` chosen by
+     the encoder (the client passed 0, or the encoder ignores the client's
+     value) is chosen again for the new coded size. A ``sizeimage`` requested
+     by the client is not reduced.
 
 4. Set the raw frame interval on the ``OUTPUT`` queue via
    :c:func:`VIDIOC_S_PARM`. This also sets the coded frame interval on the
