@@ -57,13 +57,13 @@ static int slpc_set_freq(struct intel_gt *gt, u32 freq)
 
 	err = slpc_set_max_freq(slpc, freq);
 	if (err) {
-		pr_err("Unable to update max freq");
+		pr_err("Unable to update max freq\n");
 		return err;
 	}
 
 	err = slpc_set_min_freq(slpc, freq);
 	if (err) {
-		pr_err("Unable to update min freq");
+		pr_err("Unable to update min freq\n");
 		return err;
 	}
 
@@ -76,19 +76,19 @@ static int slpc_restore_freq(struct intel_guc_slpc *slpc, u32 min, u32 max)
 
 	err = slpc_set_max_freq(slpc, max);
 	if (err) {
-		pr_err("Unable to restore max freq");
+		pr_err("Unable to restore max freq\n");
 		return err;
 	}
 
 	err = slpc_set_min_freq(slpc, min);
 	if (err) {
-		pr_err("Unable to restore min freq");
+		pr_err("Unable to restore min freq\n");
 		return err;
 	}
 
 	err = intel_guc_slpc_set_ignore_eff_freq(slpc, false);
 	if (err) {
-		pr_err("Unable to restore efficient freq");
+		pr_err("Unable to restore efficient freq\n");
 		return err;
 	}
 
@@ -313,7 +313,7 @@ static int run_test(struct intel_gt *gt, int test_type)
 	 */
 	err = slpc_set_min_freq(slpc, slpc->min_freq);
 	if (err) {
-		pr_err("Unable to update min freq!");
+		pr_err("Unable to update min freq!\n");
 		return err;
 	}
 
@@ -322,7 +322,7 @@ static int run_test(struct intel_gt *gt, int test_type)
 	 */
 	err = intel_guc_slpc_set_ignore_eff_freq(slpc, true);
 	if (err) {
-		pr_err("Unable to turn off efficient freq!");
+		pr_err("Unable to turn off efficient freq!\n");
 		return err;
 	}
 
