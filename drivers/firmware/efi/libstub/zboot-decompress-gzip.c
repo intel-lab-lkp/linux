@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 
 #include <linux/efi.h>
+#include <linux/unaligned.h>
 #include <linux/zlib.h>
 
 #include <asm/efi.h>
@@ -12,7 +13,6 @@
 #include "inflate.c"
 
 extern unsigned char _gzdata_start[], _gzdata_end[];
-extern u32 __aligned(1) payload_size;
 
 static struct z_stream_s stream;
 
@@ -38,7 +38,8 @@ efi_status_t efi_zboot_decompress_init(unsigned long *alloc_size)
 		goto out;
 	}
 
-	*alloc_size = payload_size;
+	/* the last 4 bytes of a GZIP stream carry the uncompressed size */
+	*alloc_size = get_unaligned_le32(_gzdata_end - 4);
 	return EFI_SUCCESS;
 out:
 	efi_free(zlib_inflate_workspacesize(), (unsigned long)stream.workspace);

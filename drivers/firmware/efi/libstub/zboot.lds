@@ -15,7 +15,6 @@ SECTIONS
 	.rodata : ALIGN(8) {
 		__efistub__gzdata_start = .;
 		*(.gzdata)
-		__efistub_payload_size = . - 4;
 		__efistub__gzdata_end = .;
 		*(.rodata* .init.rodata* .srodata*)
 
