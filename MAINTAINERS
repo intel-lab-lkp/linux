@@ -12353,6 +12353,11 @@ F:	drivers/power/supply/huawei-gaokun-battery.c
 F:	drivers/usb/typec/ucsi/ucsi_huawei_gaokun.c
 F:	include/linux/platform_data/huawei-gaokun-ec.h
 
+HUGETLB RESERVATION DEBUG SCRIPT
+M:	Aveline Noir <jm5905938@gmail.com>
+S:	Maintained
+F:	tools/mm/show_hugetlb_resv.py
+
 HUGETLB SUBSYSTEM
 M:	Muchun Song <muchun.song@linux.dev>
 M:	Oscar Salvador <osalvador@suse.de>
