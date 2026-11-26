@@ -11,6 +11,7 @@
 #include "xfs_inode.h"
 #include "xfs_trans.h"
 #include "xfs_bmap.h"
+#include "xfs_bmap_util.h"
 #include "xfs_iomap.h"
 #include "xfs_pnfs.h"
 #include <linux/exportfs_block.h>
@@ -191,6 +192,18 @@ xfs_fs_map_blocks(
 	error = invalidate_inode_pages2(inode->i_mapping);
 	if (WARN_ON_ONCE(error))
 		goto out_unlock;
+
+	/*
+	 * Writeback stops allocating a delalloc extent once the page it writes
+	 * is covered, so speculative preallocation past EOF can stay delalloc.
+	 * Delalloc past EOF never holds data. Punch all of it, as
+	 * xfs_free_eofblocks() does for preallocated files, so that a layout
+	 * never maps it and a LAYOUTCOMMIT never moves EOF over it.
+	 */
+	if (ip->i_delayed_blks)
+		xfs_bmap_punch_delalloc_range(ip, XFS_DATA_FORK,
+				round_up(XFS_ISIZE(ip), mp->m_sb.sb_blocksize),
+				LLONG_MAX, NULL);
 
 	end_fsb = XFS_B_TO_FSB(mp, (xfs_ufsize_t)offset + length);
 	offset_fsb = XFS_B_TO_FSBT(mp, offset);
