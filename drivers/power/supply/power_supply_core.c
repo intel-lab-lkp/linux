@@ -208,8 +208,7 @@ static int power_supply_check_supplies_by_name(struct power_supply *psy)
 		return -ENOMEM;
 
 	ret = device_property_read_string_array(parent, "supplied-from",
-						(const char **)psy->supplied_from,
-						nval);
+						psy->supplied_from, nval);
 	if (ret < 0)
 		return ret;
 
@@ -223,6 +222,7 @@ static int __power_supply_populate_supplied_from(struct power_supply *epsy,
 {
 	struct power_supply *psy = data;
 	struct fwnode_handle *np;
+	const char *name;
 	int i = 0;
 
 	do {
@@ -231,9 +231,15 @@ static int __power_supply_populate_supplied_from(struct power_supply *epsy,
 			break;
 
 		if (np == epsy->dev.fwnode) {
+			name = devm_kstrdup_const(&psy->dev, epsy->desc->name,
+						  GFP_KERNEL);
+			if (!name) {
+				fwnode_handle_put(np);
+				return -ENOMEM;
+			}
 			dev_dbg(&psy->dev, "%s: Found supply : %s\n",
 				psy->desc->name, epsy->desc->name);
-			psy->supplied_from[i-1] = (char *)epsy->desc->name;
+			psy->supplied_from[i - 1] = name;
 			psy->num_supplies++;
 			fwnode_handle_put(np);
 			break;

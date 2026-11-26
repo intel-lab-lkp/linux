@@ -355,7 +355,7 @@ struct power_supply {
 	char **supplied_to;
 	size_t num_supplicants;
 
-	char **supplied_from;
+	const char **supplied_from;
 	size_t num_supplies;
 
 	/* Driver private data */
