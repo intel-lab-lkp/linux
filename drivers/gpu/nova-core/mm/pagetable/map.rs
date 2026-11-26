@@ -82,7 +82,7 @@ impl<M: MmuConfig> PtMapInner<M> {
     }
 
     /// Allocate and zero a physical page table page.
-    fn alloc_and_zero_page(mm: &mut GpuMm<'_>, level: PageTableLevel) -> Result<PreparedPtPage> {
+    fn alloc_and_zero_page(mm: &GpuMm<'_>, level: PageTableLevel) -> Result<PreparedPtPage> {
         let blocks = KBox::pin_init(
             mm.buddy().alloc_blocks(
                 GpuBuddyAllocMode::Simple,
@@ -115,7 +115,7 @@ impl<M: MmuConfig> PtMapInner<M> {
     /// The mutable PRAMIN borrow ends before each allocation.
     fn ensure_single_pte_path(
         &self,
-        mm: &mut GpuMm<'_>,
+        mm: &GpuMm<'_>,
         vfn: Vfn,
         pt_pages: &mut RBTree<VramAddress, PreparedPtPage>,
     ) -> Result {
@@ -168,7 +168,7 @@ impl<M: MmuConfig> PtMapInner<M> {
     /// per-VFN to prepare pages for all missing PDEs.
     pub(super) fn prepare_map(
         &self,
-        mm: &mut GpuMm<'_>,
+        mm: &GpuMm<'_>,
         vfn_start: Vfn,
         num_pages: usize,
         page_table_allocs: &mut KVec<Pin<KBox<AllocatedBlocks>>>,
@@ -193,7 +193,7 @@ impl<M: MmuConfig> PtMapInner<M> {
     /// Drains `pt_pages` and moves allocations into `page_table_allocs`.
     pub(super) fn install_mappings(
         &self,
-        mm: &mut GpuMm<'_>,
+        mm: &GpuMm<'_>,
         pt_pages: &mut RBTree<VramAddress, PreparedPtPage>,
         page_table_allocs: &mut KVec<Pin<KBox<AllocatedBlocks>>>,
         vfn_start: Vfn,
@@ -251,7 +251,7 @@ impl<M: MmuConfig> PtMapInner<M> {
     /// Invalidate PTEs for a range and flush TLB.
     pub(super) fn invalidate_ptes(
         &self,
-        mm: &mut GpuMm<'_>,
+        mm: &GpuMm<'_>,
         vfn_start: Vfn,
         num_pages: usize,
     ) -> Result {
@@ -308,7 +308,7 @@ impl PtMap {
     /// Prepare page table resources for a mapping.
     pub(in crate::mm) fn prepare_map(
         &self,
-        mm: &mut GpuMm<'_>,
+        mm: &GpuMm<'_>,
         vfn_start: Vfn,
         num_pages: usize,
         page_table_allocs: &mut KVec<Pin<KBox<AllocatedBlocks>>>,
@@ -323,7 +323,7 @@ impl PtMap {
     /// Install prepared PDEs and write PTEs, then flush TLB.
     pub(in crate::mm) fn install_mappings(
         &self,
-        mm: &mut GpuMm<'_>,
+        mm: &GpuMm<'_>,
         pt_pages: &mut RBTree<VramAddress, PreparedPtPage>,
         page_table_allocs: &mut KVec<Pin<KBox<AllocatedBlocks>>>,
         vfn_start: Vfn,
@@ -339,7 +339,7 @@ impl PtMap {
     /// Invalidate PTEs for a range and flush TLB.
     pub(in crate::mm) fn invalidate_ptes(
         &self,
-        mm: &mut GpuMm<'_>,
+        mm: &GpuMm<'_>,
         vfn_start: Vfn,
         num_pages: usize,
     ) -> Result {

@@ -61,7 +61,7 @@ impl<'a> BarUser<'a> {
     /// Map physical pages to a contiguous BAR1 virtual range.
     pub(crate) fn map(
         &self,
-        mm: &mut GpuMm<'_>,
+        mm: &GpuMm<'_>,
         pfns: &[Pfn],
         writable: bool,
     ) -> Result<BarUserAccess<'_>> {
@@ -91,7 +91,7 @@ pub(crate) struct BarUserAccess<'a> {
 #[expect(dead_code)]
 impl BarUserAccess<'_> {
     /// Tear down the BAR1 mapping.
-    pub(crate) fn release(mut self, mm: &mut GpuMm<'_>) -> Result {
+    pub(crate) fn release(mut self, mm: &GpuMm<'_>) -> Result {
         let mapped = self.mapped.take().ok_or(EINVAL)?;
         let mut vmm = self.bar_user.vmm.lock();
         vmm.unmap_pages(mm, mapped)?;
@@ -183,7 +183,7 @@ impl Drop for BarUserAccess<'_> {
 #[cfg(CONFIG_NOVA_CORE_SELFTESTS)]
 pub(crate) fn run_self_test(
     dev: &device::Device<device::Bound>,
-    mm: &mut GpuMm<'_>,
+    mm: &GpuMm<'_>,
     bar_user: &BarUser<'_>,
     bar1_pdb: u64,
     chipset: Chipset,

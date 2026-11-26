@@ -171,7 +171,7 @@ impl<M: MmuConfig> PtWalkInner<M> {
     /// Walk to PTE for lookup only (no allocation).
     ///
     /// Returns [`WalkResult::PageTableMissing`] if intermediate tables don't exist.
-    pub(super) fn walk_to_pte_lookup(&self, mm: &mut GpuMm<'_>, vfn: Vfn) -> Result<WalkResult> {
+    pub(super) fn walk_to_pte_lookup(&self, mm: &GpuMm<'_>, vfn: Vfn) -> Result<WalkResult> {
         mm.with_pramin_locked(|pramin| self.walk_to_pte_lookup_with_window(pramin, vfn))
     }
 
@@ -238,7 +238,7 @@ impl PtWalk {
     }
 
     /// Walk to PTE for lookup.
-    pub(in crate::mm) fn walk_to_pte(&self, mm: &mut GpuMm<'_>, vfn: Vfn) -> Result<WalkResult> {
+    pub(in crate::mm) fn walk_to_pte(&self, mm: &GpuMm<'_>, vfn: Vfn) -> Result<WalkResult> {
         pt_walk_dispatch!(self, walk_to_pte_lookup(mm, vfn))
     }
 }

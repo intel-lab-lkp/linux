@@ -311,7 +311,7 @@ pub(crate) mod selftest {
     /// Run MM subsystem self-tests during probe.
     pub(crate) fn run(
         dev: &device::Device<device::Bound>,
-        mm: &mut GpuMm<'_>,
+        mm: &GpuMm<'_>,
         usable_fb_regions: &[Range<u64>],
         bar_user: &bar_user::BarUser<'_>,
         bar1_pdb: u64,

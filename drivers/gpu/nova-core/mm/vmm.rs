@@ -204,7 +204,7 @@ impl Vmm {
     }
 
     /// Read the [`Pfn`] for a mapped [`Vfn`] if one is mapped.
-    pub(super) fn read_mapping(&self, mm: &mut GpuMm<'_>, vfn: Vfn) -> Result<Option<Pfn>> {
+    pub(super) fn read_mapping(&self, mm: &GpuMm<'_>, vfn: Vfn) -> Result<Option<Pfn>> {
         match self.pt_walk.walk_to_pte(mm, vfn)? {
             WalkResult::Mapped { pfn, .. } => Ok(Some(pfn)),
             WalkResult::Unmapped { .. } | WalkResult::PageTableMissing => Ok(None),
@@ -220,7 +220,7 @@ impl Vmm {
     /// to call outside the fence signalling critical path.
     pub(crate) fn prepare_map(
         &mut self,
-        mm: &mut GpuMm<'_>,
+        mm: &GpuMm<'_>,
         num_pages: usize,
         va_range: Option<Range<u64>>,
     ) -> Result<PreparedMapping> {
@@ -254,7 +254,7 @@ impl Vmm {
     /// Installs all prepared PDEs and writes PTEs into the page table, then flushes TLB.
     pub(crate) fn execute_map(
         &mut self,
-        mm: &mut GpuMm<'_>,
+        mm: &GpuMm<'_>,
         prepared: PreparedMapping,
         pfns: &[Pfn],
         writable: bool,
@@ -297,7 +297,7 @@ impl Vmm {
     /// [`Vmm::execute_map()`] will be called separately.
     pub(crate) fn map_pages(
         &mut self,
-        mm: &mut GpuMm<'_>,
+        mm: &GpuMm<'_>,
         pfns: &[Pfn],
         va_range: Option<Range<u64>>,
         writable: bool,
@@ -324,7 +324,7 @@ impl Vmm {
     }
 
     /// Unmap all pages in a [`MappedRange`] with a single TLB flush.
-    pub(crate) fn unmap_pages(&mut self, mm: &mut GpuMm<'_>, range: MappedRange) -> Result {
+    pub(crate) fn unmap_pages(&mut self, mm: &GpuMm<'_>, range: MappedRange) -> Result {
         let result = self
             .pt_map
             .invalidate_ptes(mm, range.vfn_start, range.num_pages);

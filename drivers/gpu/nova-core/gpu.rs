@@ -613,18 +613,17 @@ impl<'gpu> Gpu<'gpu> {
 
     /// Runs self-tests on the constructed [`Gpu`], logging failures without failing probe.
     #[cfg(CONFIG_NOVA_CORE_SELFTESTS)]
-    pub(crate) fn run_selftests(self: Pin<&mut Self>, pdev: &pci::Device<device::Bound>) {
-        let this = self.project();
+    pub(crate) fn run_selftests(&self, pdev: &pci::Device<device::Bound>) {
         let dev = pdev.as_ref();
-        let regions = &this.gsp_static_info.usable_fb_regions;
+        let regions = &self.gsp_static_info.usable_fb_regions;
 
         if let Err(err) = crate::mm::selftest::run(
             dev,
-            this.mm,
+            &self.mm,
             regions,
-            &this.bar_user,
-            this.gsp_static_info.bar1_pde_base,
-            this.spec.chipset,
+            &self.bar_user,
+            self.gsp_static_info.bar1_pde_base,
+            self.spec.chipset,
         ) {
             dev_err!(dev, "self-tests failed: {:?}\n", err);
         }
