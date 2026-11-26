@@ -139,8 +139,10 @@ static ssize_t lockdown_write(struct file *file, const char __user *buf,
 		enum lockdown_reason level = lockdown_levels[i];
 		const char *label = lockdown_reasons[level];
 
-		if (label && !strcmp(state, label))
+		if (label && !strcmp(state, label)) {
 			err = lock_kernel_down("securityfs", level);
+			break;
+		}
 	}
 
 	kfree(state);
