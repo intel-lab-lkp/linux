@@ -419,6 +419,10 @@ static long swap_inode_boot_loader(struct super_block *sb,
 	}
 
 	filemap_invalidate_lock(inode->i_mapping);
+	if (ext4_has_inline_data(inode)) {
+		err = -EINVAL;
+		goto err_out;
+	}
 	err = filemap_write_and_wait(inode->i_mapping);
 	if (err)
 		goto err_out;
