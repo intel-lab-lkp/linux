@@ -4763,10 +4763,13 @@ static inline bool should_try_to_free_swap(struct swap_info_struct *si,
 		return true;
 
 	/*
-	 * Free the swapcache only if we are the exclusive user and
-	 * this is a write fault.
+	 * Free the swapcache only if we are the exclusive user and this is a
+	 * write fault, or the folio is dirty: its copy in the swap slot is
+	 * stale then (zswap loads are exclusive and dirty the folio), so the
+	 * slot only holds swap space.
 	 */
-	return (fault_flags & FAULT_FLAG_WRITE) && exclusive;
+	return exclusive && ((fault_flags & FAULT_FLAG_WRITE) ||
+			     folio_test_dirty(folio));
 }
 
 static vm_fault_t pte_marker_clear(struct vm_fault *vmf)
