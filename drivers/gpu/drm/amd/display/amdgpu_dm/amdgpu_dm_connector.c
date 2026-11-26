@@ -3325,7 +3325,8 @@ void amdgpu_dm_connector_init_helper(struct amdgpu_display_manager *dm,
 
 	if (connector_type == DRM_MODE_CONNECTOR_HDMIA) {
 		/* Content Type is currently only implemented for HDMI. */
-		drm_connector_attach_content_type_property(&aconnector->base);
+		if (drm_connector_attach_content_type_property(&aconnector->base))
+			drm_err(adev_to_drm(adev), "Failed to attach content type property\n");
 	}
 
 	if (connector_type == DRM_MODE_CONNECTOR_HDMIA) {

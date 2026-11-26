@@ -7012,7 +7012,8 @@ intel_dp_add_properties(struct intel_dp *intel_dp, struct drm_connector *_connec
 
 	/* Register HDMI colorspace for case of lspcon */
 	if (intel_bios_encoder_is_lspcon(dp_to_dig_port(intel_dp)->base.devdata)) {
-		drm_connector_attach_content_type_property(&connector->base);
+		if (drm_connector_attach_content_type_property(&connector->base))
+			drm_err(connector->base.dev, "Failed to attach content type property\n");
 		intel_attach_hdmi_colorspace_property(&connector->base);
 	} else {
 		intel_attach_dp_colorspace_property(&connector->base);

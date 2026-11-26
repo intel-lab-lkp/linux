@@ -2719,7 +2719,8 @@ intel_hdmi_add_properties(struct intel_hdmi *intel_hdmi, struct drm_connector *_
 	intel_attach_aspect_ratio_property(&connector->base);
 
 	intel_attach_hdmi_colorspace_property(&connector->base);
-	drm_connector_attach_content_type_property(&connector->base);
+	if (drm_connector_attach_content_type_property(&connector->base))
+		drm_err(connector->base.dev, "Failed to attach content type property\n");
 
 	if (DISPLAY_VER(display) >= 10)
 		drm_connector_attach_hdr_output_metadata_property(&connector->base);

@@ -2253,14 +2253,20 @@ EXPORT_SYMBOL(drm_connector_attach_dp_subconnector_property);
  *
  * Called by a driver the first time a HDMI connector is made.
  *
- * Returns: %0
+ * Returns:
+ * Zero on success, negative errno on failure.
  */
 int drm_connector_attach_content_type_property(struct drm_connector *connector)
 {
-	if (!drm_mode_create_content_type_property(connector->dev))
-		drm_object_attach_property(&connector->base,
-					   connector->dev->mode_config.content_type_property,
-					   DRM_MODE_CONTENT_TYPE_NO_DATA);
+	int ret;
+
+	ret = drm_mode_create_content_type_property(connector->dev);
+	if (ret)
+		return ret;
+
+	drm_object_attach_property(&connector->base,
+				   connector->dev->mode_config.content_type_property,
+				   DRM_MODE_CONTENT_TYPE_NO_DATA);
 	return 0;
 }
 EXPORT_SYMBOL(drm_connector_attach_content_type_property);
