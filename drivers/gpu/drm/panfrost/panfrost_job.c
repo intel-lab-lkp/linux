@@ -893,7 +893,7 @@ int panfrost_jm_init(struct panfrost_device *pfdev)
 		return ret;
 	}
 
-	pfdev->reset.wq = alloc_ordered_workqueue("panfrost-reset", 0);
+	pfdev->reset.wq = alloc_ordered_workqueue("panfrost-reset", WQ_FREEZABLE);
 	if (!pfdev->reset.wq)
 		return -ENOMEM;
 	args.timeout_wq = pfdev->reset.wq;
