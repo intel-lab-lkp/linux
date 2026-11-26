@@ -938,6 +938,50 @@ static void vfat_update_dir_metadata(struct inode *dir, struct timespec64 *ts)
 		(void)sync_inode_metadata(dir, 1);
 }
 
+static int vfat_link(struct dentry *old_dentry, struct inode *dir,
+		     struct dentry *dentry)
+{
+	struct inode *inode = d_inode(old_dentry);
+	struct super_block *sb = dir->i_sb;
+	struct fat_slot_info sinfo;
+	struct timespec64 ts;
+	int err, err2;
+
+	/* No hard links on FAT, only give an O_TMPFILE its first name. */
+	if (inode->i_nlink)
+		return -EPERM;
+
+	mutex_lock(&MSDOS_SB(sb)->s_lock);
+
+	ts = current_time(dir);
+	err = vfat_add_entry(dir, &dentry->d_name, 0, 0, &ts, &sinfo);
+	if (err)
+		goto out;
+	inode_inc_iversion(dir);
+
+	fat_attach(inode, sinfo.i_pos);
+	err = vfat_sync_ipos(dir, inode);
+	if (err)
+		goto out_detach;
+	brelse(sinfo.bh);
+
+	inc_nlink(inode);
+	ihold(inode);
+	d_instantiate(dentry, inode);
+	mutex_unlock(&MSDOS_SB(sb)->s_lock);
+	return 0;
+
+out_detach:
+	fat_detach(inode);
+	err2 = fat_remove_entries(dir, &sinfo);	/* and releases bh */
+	if (err2)
+		fat_msg(sb, KERN_WARNING,
+			"failed to roll back new entry (%d)", err2);
+out:
+	mutex_unlock(&MSDOS_SB(sb)->s_lock);
+	return err;
+}
+
 static int vfat_rename(struct inode *old_dir, struct dentry *old_dentry,
 		       struct inode *new_dir, struct dentry *new_dentry)
 {
@@ -1190,10 +1234,12 @@ static int vfat_rename2(const struct mnt_idmap *idmap, struct inode *old_dir,
 static const struct inode_operations vfat_dir_inode_operations = {
 	.create		= vfat_create,
 	.lookup		= vfat_lookup,
+	.link		= vfat_link,
 	.unlink		= vfat_unlink,
 	.mkdir		= vfat_mkdir,
 	.rmdir		= vfat_rmdir,
 	.rename		= vfat_rename2,
+	.tmpfile	= fat_tmpfile,
 	.setattr	= fat_setattr,
 	.getattr	= fat_getattr,
 	.fileattr_get	= fat_fileattr_get,
