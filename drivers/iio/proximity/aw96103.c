@@ -8,6 +8,7 @@
  */
 #include <linux/bits.h>
 #include <linux/bitfield.h>
+#include <linux/completion.h>
 #include <linux/delay.h>
 #include <linux/firmware.h>
 #include <linux/i2c.h>
@@ -118,6 +119,8 @@ struct aw96103 {
 	struct aw_channels_info channels_arr[6];
 	unsigned int max_channels;
 	unsigned int chan_en;
+	/* Signalled when the asynchronous configuration load has finished */
+	struct completion cfg_done;
 };
 
 static const unsigned int aw96103_reg_default[] = {
@@ -605,7 +608,7 @@ static void aw96103_cfg_update(const struct firmware *fw, void *data)
 		ret = aw96103_para_loaded(aw96103);
 		if (ret) {
 			dev_err(aw96103->dev, "load param error.\n");
-			return;
+			goto out;
 		}
 	}
 
@@ -615,6 +618,16 @@ static void aw96103_cfg_update(const struct firmware *fw, void *data)
 		else
 			aw96103->channels_arr[i].used = false;
 	}
+
+out:
+	complete(&aw96103->cfg_done);
+}
+
+static void aw96103_wait_cfg_update(void *data)
+{
+	struct aw96103 *aw96103 = data;
+
+	wait_for_completion(&aw96103->cfg_done);
 }
 
 static int aw96103_sw_reset(struct aw96103 *aw96103)
@@ -811,9 +824,16 @@ static int aw96103_i2c_probe(struct i2c_client *i2c)
 	if (ret)
 		return ret;
 
+	init_completion(&aw96103->cfg_done);
 	ret = request_firmware_nowait(THIS_MODULE, true, "aw96103_0.bin",
 				      aw96103->dev, GFP_KERNEL, aw96103,
 				      aw96103_cfg_update);
+	if (ret)
+		return ret;
+
+	/* The callback uses aw96103, so it must finish before that is freed */
+	ret = devm_add_action_or_reset(aw96103->dev, aw96103_wait_cfg_update,
+				       aw96103);
 	if (ret)
 		return ret;
 
