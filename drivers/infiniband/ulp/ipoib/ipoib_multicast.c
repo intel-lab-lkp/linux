@@ -792,25 +792,38 @@ void ipoib_mcast_send(struct net_device *dev, u8 *daddr, struct sk_buff *skb)
 		}
 	} else {
 		struct ipoib_neigh *neigh;
+		struct ipoib_ah *ah;
 
 		spin_unlock_irqrestore(&priv->lock, flags);
 		neigh = ipoib_neigh_get(dev, daddr);
 		spin_lock_irqsave(&priv->lock, flags);
+		mcast = __ipoib_mcast_find(dev, mgid);
+		if (!mcast || !mcast->ah) {
+			++dev->stats.tx_dropped;
+			dev_kfree_skb_any(skb);
+			spin_unlock_irqrestore(&priv->lock, flags);
+			if (neigh)
+				ipoib_neigh_put(neigh);
+			return;
+		}
+		ah = mcast->ah;
+		kref_get(&ah->ref);
 		if (!neigh) {
 			neigh = ipoib_neigh_alloc(daddr, dev);
 			/* Make sure that the neigh will be added only
 			 * once to mcast list.
 			 */
 			if (neigh && list_empty(&neigh->list)) {
-				kref_get(&mcast->ah->ref);
-				neigh->ah	= mcast->ah;
+				kref_get(&ah->ref);
+				neigh->ah	= ah;
 				neigh->ah->valid = 1;
 				list_add_tail(&neigh->list, &mcast->neigh_list);
 			}
 		}
 		spin_unlock_irqrestore(&priv->lock, flags);
-		mcast->ah->last_send = rn->send(dev, skb, mcast->ah->ah,
-						IB_MULTICAST_QPN);
+		ah->last_send = rn->send(dev, skb, ah->ah,
+					 IB_MULTICAST_QPN);
+		ipoib_put_ah(ah);
 		if (neigh)
 			ipoib_neigh_put(neigh);
 		return;
