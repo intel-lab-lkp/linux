@@ -1889,6 +1889,8 @@ struct intel_dp {
 	u8 lttpr_common_caps[DP_LTTPR_COMMON_CAP_SIZE];
 	u8 lttpr_phy_caps[DP_MAX_LTTPR_COUNT][DP_LTTPR_PHY_CAP_SIZE];
 	u8 pcon_dsc_dpcd[DP_PCON_DSC_ENCODER_CAP_SIZE];
+	/* Rx minimum Hblank, DP_RX_MIN_HBLANK_{8B10B,128B132B} */
+	u8 rx_min_hblank[2];
 	/* source rates */
 	int num_source_rates;
 	const int *source_rates;

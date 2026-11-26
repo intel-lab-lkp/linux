@@ -728,6 +728,11 @@ static int mst_stream_compute_link_for_joined_pipes(struct intel_encoder *encode
 			return -EINVAL;
 	}
 
+	ret = intel_dp_compute_symbol_tg(connector->mst.dp,
+					 pipe_config, conn_state);
+	if (ret)
+		return ret;
+
 	ret = intel_dp_compute_min_hblank(pipe_config, conn_state);
 	if (ret)
 		return ret;
