@@ -1125,7 +1125,8 @@ impl Process {
         Ok(NewAllocation(res))
     }
 
-    pub(crate) fn buffer_get(self: &Arc<Self>, ptr: usize) -> Option<Allocation> {
+    pub(crate) fn buffer_get(self: &Arc<Self>, ptr: u64) -> Option<Allocation> {
+        let ptr = usize::try_from(ptr).ok()?;
         let mut inner = self.inner.lock();
         let mapping = inner.mapping.as_mut()?;
         let offset = ptr.checked_sub(mapping.address)?;
