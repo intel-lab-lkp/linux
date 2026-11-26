@@ -214,6 +214,15 @@ static inline void exit_tasks_rcu_start(void) { }
 static inline void exit_tasks_rcu_finish(void) { }
 #endif /* #else #ifdef CONFIG_TASKS_RCU_GENERIC */
 
+typedef void (*rcu_tasks_exiting_fn_t)(struct task_struct *t, void *arg);
+#ifdef CONFIG_TASKS_RCU
+void rcu_tasks_visit_exiting(rcu_tasks_exiting_fn_t fn, void *arg);
+int rcu_tasks_snapshot_exiting(struct task_struct **buf, int max);
+#else
+static inline void rcu_tasks_visit_exiting(rcu_tasks_exiting_fn_t fn, void *arg) { }
+static inline int rcu_tasks_snapshot_exiting(struct task_struct **buf, int max) { return 0; }
+#endif
+
 /**
  * cond_resched_tasks_rcu_qs - Report potential quiescent states to RCU
  *
