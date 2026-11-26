@@ -635,8 +635,8 @@ new_packet:
 	if (skb->len > size) {
 		agg_skb = port->skbagg_head;
 		reset_aggr_params(port);
+		hrtimer_try_to_cancel(&port->hrtimer);
 		spin_unlock_bh(&port->agg_lock);
-		hrtimer_cancel(&port->hrtimer);
 		rmnet_send_skb(port, agg_skb);
 		spin_lock_bh(&port->agg_lock);
 		goto new_packet;
@@ -658,14 +658,14 @@ new_packet:
 	    port->skbagg_head->len == port->egress_agg_params.bytes) {
 		agg_skb = port->skbagg_head;
 		reset_aggr_params(port);
+		hrtimer_try_to_cancel(&port->hrtimer);
 		spin_unlock_bh(&port->agg_lock);
-		hrtimer_cancel(&port->hrtimer);
 		rmnet_send_skb(port, agg_skb);
 		return len;
 	}
 
 schedule:
-	if (!hrtimer_active(&port->hrtimer) && port->agg_state != -EINPROGRESS) {
+	if (port->agg_state != -EINPROGRESS) {
 		port->agg_state = -EINPROGRESS;
 		hrtimer_start(&port->hrtimer,
 			      ns_to_ktime(port->egress_agg_params.time_nsec),
