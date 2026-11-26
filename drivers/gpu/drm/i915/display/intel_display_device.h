@@ -170,6 +170,7 @@ struct intel_display_platforms {
 #define HAS_DP20(__display)		((__display)->platform.dg2 || DISPLAY_VER(__display) >= 14)
 #define HAS_DPT(__display)		(DISPLAY_VER(__display) >= 13)
 #define HAS_DP_MST(__display)		(DISPLAY_INFO(__display)->has_dp_mst)
+#define HAS_DP_SYMBOL_TG(__display)	(DISPLAY_VER(__display) >= 35)
 #define HAS_DSB(__display)		(DISPLAY_INFO(__display)->has_dsb)
 #define HAS_DSC(__display)		(DISPLAY_RUNTIME_INFO(__display)->has_dsc)
 #define HAS_DSC_3ENGINES(__display)	(DISPLAY_VERx100(__display) == 1401 && HAS_DSC(__display))
