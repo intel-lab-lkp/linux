@@ -4904,6 +4904,8 @@ static bool rtl8152_is_fw_mac_ok(struct r8152 *tp, struct fw_mac *mac)
 			max_bp = 8;
 			break;
 		case RTL_VER_14:
+		case RTL_VER_16:
+		case RTL_VER_17:
 			fw_reg = 0xf800;
 			bp_ba_addr = PLA_BP_BA;
 			bp_en_addr = USB_BP2_EN;
@@ -4932,6 +4934,8 @@ static bool rtl8152_is_fw_mac_ok(struct r8152 *tp, struct fw_mac *mac)
 		case RTL_VER_13:
 		case RTL_VER_14:
 		case RTL_VER_15:
+		case RTL_VER_16:
+		case RTL_VER_17:
 			fw_reg = 0xe600;
 			bp_ba_addr = USB_BP_BA;
 			bp_en_addr = USB_BP2_EN;
