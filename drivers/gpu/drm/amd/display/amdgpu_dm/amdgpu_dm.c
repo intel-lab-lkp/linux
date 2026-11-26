@@ -85,6 +85,7 @@
 #include <linux/firmware.h>
 #include <linux/component.h>
 #include <linux/sort.h>
+#include <linux/string_choices.h>
 
 #include <drm/drm_privacy_screen_consumer.h>
 #include <drm/display/drm_dp_mst_helper.h>
@@ -1468,7 +1469,7 @@ STATIC_IFN_KUNIT void dm_gpureset_toggle_interrupts(struct amdgpu_device *adev,
 			rc = amdgpu_dm_irq_set(adev, irq_source, enable) ? 0 : -EBUSY;
 			if (rc)
 				drm_warn(adev_to_drm(adev), "Failed to %s pflip interrupts\n",
-					 enable ? "enable" : "disable");
+					 str_enable_disable(enable));
 
 			if (dc_supports_vrr(adev->dm.dc->ctx->dce_version)) {
 				if (enable) {
