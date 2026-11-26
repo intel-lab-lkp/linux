@@ -28,6 +28,7 @@
 #include <linux/interrupt.h>
 #include <linux/jiffies.h>
 #include <linux/kernel.h>
+#include <linux/math64.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/scatterlist.h>
@@ -734,6 +735,7 @@ static int test_ahash_jiffies_digest(struct tcrypt_ahash_request *treq,
 {
 	struct ahash_request *req = treq->req;
 	unsigned long start, end;
+	u64 bytes;
 	int bcount;
 	int ret;
 
@@ -744,8 +746,9 @@ static int test_ahash_jiffies_digest(struct tcrypt_ahash_request *treq,
 			return ret;
 	}
 
-	pr_cont("%6u opers/sec, %9lu bytes/sec\n",
-		bcount / secs, ((long)bcount * blen) / secs);
+	bytes = div_u64((u64)bcount * blen, secs);
+	pr_cont("%6u opers/sec, %9llu bytes/sec\n",
+		bcount / secs, (unsigned long long)bytes);
 
 	return 0;
 }
@@ -755,6 +758,7 @@ static int test_ahash_jiffies(struct tcrypt_ahash_request *treq, int blen,
 {
 	struct ahash_request *req = treq->req;
 	unsigned long start, end;
+	u64 bytes;
 	int bcount, pcount;
 	int ret;
 
@@ -777,8 +781,9 @@ static int test_ahash_jiffies(struct tcrypt_ahash_request *treq, int blen,
 			return ret;
 	}
 
-	pr_cont("%6u opers/sec, %9lu bytes/sec\n",
-		bcount / secs, ((long)bcount * blen) / secs);
+	bytes = div_u64((u64)bcount * blen, secs);
+	pr_cont("%6u opers/sec, %9llu bytes/sec\n",
+		bcount / secs, (unsigned long long)bytes);
 
 	return 0;
 }
