@@ -368,7 +368,7 @@ static int __acpi_power_on(struct acpi_power_resource *resource)
 	struct acpi_power_dependent_device *dep;
 	acpi_status status = AE_OK;
 
-	status = acpi_evaluate_object(handle, "_ON", NULL, NULL);
+	status = acpi_evaluate_object_exclusive(handle, "_ON", NULL, NULL);
 	if (ACPI_FAILURE(status)) {
 		resource->state = ACPI_POWER_RESOURCE_STATE_UNKNOWN;
 		return -ENODEV;
