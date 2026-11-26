@@ -19,7 +19,6 @@
 
 #define SOCFPGA_MAX_PARENTS		5
 
-#define streq(a, b) (strcmp((a), (b)) == 0)
 #define SYSMGR_SDMMC_CTRL_SET(smplsel, drvsel) \
 	((((smplsel) & 0x7) << 3) | (((drvsel) & 0x7) << 0))
 

@@ -287,6 +287,18 @@ static void string_test_strspn(struct kunit *test)
 	}
 }
 
+static void string_test_streq(struct kunit *test)
+{
+	KUNIT_ASSERT_TRUE(test,  streq("foo", "foo"));
+	KUNIT_ASSERT_TRUE(test,  streq("", ""));
+
+	KUNIT_ASSERT_FALSE(test, streq("foo", "foobar"));
+	KUNIT_ASSERT_FALSE(test, streq("foobar", "foo"));
+	KUNIT_ASSERT_FALSE(test, streq("foo", "bar"));
+	KUNIT_ASSERT_FALSE(test, streq("foo", ""));
+	KUNIT_ASSERT_FALSE(test, streq("", "bar"));
+}
+
 static char strcmp_buffer1[STRCMP_LARGE_BUF_LEN];
 static char strcmp_buffer2[STRCMP_LARGE_BUF_LEN];
 
@@ -891,6 +903,7 @@ static struct kunit_case string_test_cases[] = {
 	KUNIT_CASE(string_test_strnchr),
 	KUNIT_CASE(string_test_strrchr),
 	KUNIT_CASE(string_test_strspn),
+	KUNIT_CASE(string_test_streq),
 	KUNIT_CASE(string_test_strcmp),
 	KUNIT_CASE(string_test_strcmp_long_strings),
 	KUNIT_CASE(string_test_strncmp),
