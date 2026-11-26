@@ -2061,7 +2061,8 @@ int drm_connector_create_standard_properties(struct drm_device *dev)
  *
  * Called by a driver the first time a DVI-I connector is made.
  *
- * Returns: %0
+ * Returns:
+ * Zero on success, negative errno on failure.
  */
 int drm_mode_create_dvi_i_properties(struct drm_device *dev)
 {
@@ -2076,12 +2077,19 @@ int drm_mode_create_dvi_i_properties(struct drm_device *dev)
 				    "select subconnector",
 				    drm_dvi_i_select_enum_list,
 				    ARRAY_SIZE(drm_dvi_i_select_enum_list));
-	dev->mode_config.dvi_i_select_subconnector_property = dvi_i_selector;
+	if (!dvi_i_selector)
+		return -ENOMEM;
 
 	dvi_i_subconnector = drm_property_create_enum(dev, DRM_MODE_PROP_IMMUTABLE,
 				    "subconnector",
 				    drm_dvi_i_subconnector_enum_list,
 				    ARRAY_SIZE(drm_dvi_i_subconnector_enum_list));
+	if (!dvi_i_subconnector) {
+		drm_property_destroy(dev, dvi_i_selector);
+		return -ENOMEM;
+	}
+
+	dev->mode_config.dvi_i_select_subconnector_property = dvi_i_selector;
 	dev->mode_config.dvi_i_subconnector_property = dvi_i_subconnector;
 
 	return 0;

@@ -657,7 +657,13 @@ nouveau_display_create(struct drm_device *dev)
 
 	drm_mode_config_init(dev);
 	drm_mode_create_scaling_mode_property(dev);
-	drm_mode_create_dvi_i_properties(dev);
+	ret = drm_mode_create_dvi_i_properties(dev);
+	if (ret) {
+		drm_mode_config_cleanup(dev);
+		drm->display = NULL;
+		kfree(disp);
+		return ret;
+	}
 
 	/* this only gets set if the driver has the ATOMIC flag */
 	if (drm_drv_uses_atomic_modeset(dev))
