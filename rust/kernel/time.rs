@@ -309,6 +309,12 @@ pub trait TimeUnit: private::Sealed {
 
     /// The zero value of [`Self::Repr`].
     const ZERO: Self::Repr;
+
+    /// The suffix that denotes this unit when a [`Delta`] is formatted.
+    const SUFFIX: &'static str;
+
+    /// Widens `repr` to an [`i64`].
+    fn repr_to_i64(repr: Self::Repr) -> i64;
 }
 
 /// A time unit of nanoseconds.
@@ -321,6 +327,12 @@ pub enum Nsec {}
 impl TimeUnit for Nsec {
     type Repr = i64;
     const ZERO: Self::Repr = 0;
+    const SUFFIX: &'static str = "ns";
+
+    #[inline]
+    fn repr_to_i64(repr: Self::Repr) -> i64 {
+        repr
+    }
 }
 
 /// A time unit of jiffies.
@@ -333,6 +345,14 @@ pub enum Jiffy {}
 impl TimeUnit for Jiffy {
     type Repr = isize;
     const ZERO: Self::Repr = 0;
+    const SUFFIX: &'static str = "jiffies";
+
+    #[inline]
+    fn repr_to_i64(repr: Self::Repr) -> i64 {
+        // CAST: `isize` is 32 or 64 bits wide on the architectures the kernel
+        // supports, so widening to `i64` preserves the value.
+        repr as i64
+    }
 }
 
 /// A span of time.
@@ -341,7 +361,7 @@ impl TimeUnit for Jiffy {
 /// [`TimeUnit`]); its value has type `U::Repr`. `U` defaults to [`Nsec`], so a
 /// plain [`Delta`] is a span in nanoseconds. The value can be negative, zero, or
 /// positive.
-#[derive(Copy, Clone, PartialEq, PartialOrd, Eq, Ord, Debug)]
+#[derive(Copy, Clone, PartialEq, PartialOrd, Eq, Ord)]
 pub struct Delta<U: TimeUnit = Nsec> {
     value: U::Repr,
 }
@@ -669,10 +689,122 @@ impl Delta {
     }
 }
 
+impl<U: TimeUnit> kernel::fmt::Debug for Delta<U> {
+    /// Formats the span as a number of time units, followed by the unit.
+    ///
+    /// The value and the unit are separated by a space, and each group of three
+    /// digits is separated by an underscore, the way Rust integer literals are
+    /// written.
+    ///
+    /// ```
+    /// # use kernel::{prelude::fmt, str::CString, time::Delta};
+    /// let delta = Delta::from_micros(5);
+    /// let formatted = CString::try_from_fmt(fmt!("{delta:?}"))?;
+    /// assert_eq!(formatted.to_bytes(), b"5_000 ns");
+    ///
+    /// let negative = Delta::from_millis(-2);
+    /// let formatted = CString::try_from_fmt(fmt!("{negative:?}"))?;
+    /// assert_eq!(formatted.to_bytes(), b"-2_000_000 ns");
+    ///
+    /// let jiffies = Delta::from_jiffies(1234);
+    /// let formatted = CString::try_from_fmt(fmt!("{jiffies:?}"))?;
+    /// assert_eq!(formatted.to_bytes(), b"1_234 jiffies");
+    /// # Ok::<(), kernel::error::Error>(())
+    /// ```
+    fn fmt(&self, f: &mut kernel::fmt::Formatter<'_>) -> kernel::fmt::Result {
+        let value = U::repr_to_i64(self.value);
+
+        if value < 0 {
+            f.write_str("-")?;
+        }
+
+        // `unsigned_abs` is used because the magnitude of `i64::MIN` is not
+        // representable as an `i64`.
+        let mut magnitude = value.unsigned_abs();
+
+        // Split the magnitude into groups of three digits, least significant
+        // group first. A `u64` holds at most 20 digits, so 7 groups suffice.
+        //
+        // Dividing by the constant keeps the compiler from emitting a check for
+        // a division by zero with a potential panic.
+        let mut groups = [0u64; 7];
+        let mut used = 0;
+
+        for group in groups.iter_mut() {
+            *group = magnitude % 1000;
+            magnitude /= 1000;
+            used += 1;
+
+            if magnitude == 0 {
+                break;
+            }
+        }
+
+        let mut groups = groups.into_iter().take(used).rev();
+
+        // The leading group holds the most significant digits of the value, so
+        // it is the only one that is not zero padded.
+        if let Some(leading) = groups.next() {
+            write!(f, "{}", leading)?;
+        }
+
+        for group in groups {
+            write!(f, "_{:03}", group)?;
+        }
+
+        write!(f, " {}", U::SUFFIX)
+    }
+}
+
 #[cfg(CONFIG_RUST_TIME_KUNIT_TEST)]
 #[macros::kunit_tests(rust_kernel_time)]
 mod tests {
     use super::*;
+    use crate::{prelude::fmt, str::CString};
+
+    /// Formats `delta` with its [`kernel::fmt::Debug`] implementation.
+    fn debug_fmt<U: TimeUnit>(delta: Delta<U>) -> Result<CString, crate::error::Error> {
+        CString::try_from_fmt(fmt!("{delta:?}"))
+    }
+
+    #[test]
+    fn delta_debug_separates_digit_groups() -> Result<(), crate::error::Error> {
+        // A value below one thousand is printed without a separator.
+        assert_eq!(debug_fmt(Delta::from_nanos(999))?.to_bytes(), b"999 ns");
+
+        // Groups that do not lead the value are zero padded.
+        assert_eq!(debug_fmt(Delta::from_nanos(1000))?.to_bytes(), b"1_000 ns");
+        assert_eq!(
+            debug_fmt(Delta::from_nanos(1_000_007))?.to_bytes(),
+            b"1_000_007 ns"
+        );
+
+        // Zero has a single group.
+        assert_eq!(debug_fmt(Delta::<Nsec>::ZERO)?.to_bytes(), b"0 ns");
+
+        // The extremes of the representation are printed in full. The magnitude
+        // of `i64::MIN` does not fit an `i64`, which makes it the interesting
+        // one.
+        assert_eq!(
+            debug_fmt(Delta::from_nanos(i64::MAX))?.to_bytes(),
+            b"9_223_372_036_854_775_807 ns"
+        );
+        assert_eq!(
+            debug_fmt(Delta::from_nanos(i64::MIN))?.to_bytes(),
+            b"-9_223_372_036_854_775_808 ns"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn delta_debug_uses_the_unit_suffix() -> Result<(), crate::error::Error> {
+        assert_eq!(debug_fmt(Delta::from_nanos(1))?.to_bytes(), b"1 ns");
+        assert_eq!(debug_fmt(Delta::from_jiffies(1))?.to_bytes(), b"1 jiffies");
+        assert_eq!(debug_fmt(Delta::<Jiffy>::ZERO)?.to_bytes(), b"0 jiffies");
+
+        Ok(())
+    }
 
     #[test]
     fn to_jiffies_timeout_converts() {
