@@ -347,6 +347,7 @@ static BLOCKING_NOTIFIER_HEAD(power_off_prep_handler_list);
  *	to power off system.
  */
 static ATOMIC_NOTIFIER_HEAD(power_off_handler_list);
+static atomic_t power_off_handlers;
 
 static int sys_off_notify(struct notifier_block *nb,
 			  unsigned long mode, void *cmd)
@@ -493,6 +494,9 @@ register_sys_off_handler(enum sys_off_mode mode,
 		return ERR_PTR(err);
 	}
 
+	if (mode == SYS_OFF_MODE_POWER_OFF)
+		atomic_inc(&power_off_handlers);
+
 	return handler;
 }
 EXPORT_SYMBOL_GPL(register_sys_off_handler);
@@ -519,6 +523,9 @@ void unregister_sys_off_handler(struct sys_off_handler *handler)
 
 	/* sanity check, shall never happen */
 	WARN_ON(err);
+
+	if (!err && handler->mode == SYS_OFF_MODE_POWER_OFF)
+		atomic_dec(&power_off_handlers);
 
 	free_sys_off_handler(handler);
 }
@@ -660,13 +667,28 @@ void unregister_platform_power_off(void (*power_off)(void))
 }
 EXPORT_SYMBOL_GPL(unregister_platform_power_off);
 
-static int legacy_pm_power_off(struct sys_off_data *data)
+static int legacy_pm_power_off(struct notifier_block *nb,
+			       unsigned long mode, void *cmd)
 {
 	if (pm_power_off)
 		pm_power_off();
 
 	return NOTIFY_DONE;
 }
+
+static struct notifier_block legacy_pm_power_off_nb = {
+	.notifier_call = legacy_pm_power_off,
+	.priority = SYS_OFF_PRIO_DEFAULT - 1,
+};
+
+/* Keep pm_power_off static so do_kernel_power_off() cannot sleep */
+static int __init legacy_pm_init(void)
+{
+	atomic_notifier_chain_register(&power_off_handler_list,
+				       &legacy_pm_power_off_nb);
+	return 0;
+}
+core_initcall(legacy_pm_init);
 
 static void do_kernel_power_off_prepare(void)
 {
@@ -683,23 +705,7 @@ static void do_kernel_power_off_prepare(void)
  */
 void do_kernel_power_off(void)
 {
-	struct sys_off_handler *sys_off = NULL;
-
-	/*
-	 * Register sys-off handlers for legacy PM callback. This allows
-	 * legacy PM callbacks temporary co-exist with the new sys-off API.
-	 *
-	 * TODO: Remove legacy handlers once all legacy PM users will be
-	 *       switched to the sys-off based APIs.
-	 */
-	if (pm_power_off)
-		sys_off = register_sys_off_handler(SYS_OFF_MODE_POWER_OFF,
-						   SYS_OFF_PRIO_DEFAULT,
-						   legacy_pm_power_off, NULL);
-
 	atomic_notifier_call_chain(&power_off_handler_list, 0, NULL);
-
-	unregister_sys_off_handler(sys_off);
 }
 
 /**
@@ -710,8 +716,7 @@ void do_kernel_power_off(void)
  */
 bool kernel_can_power_off(void)
 {
-	return !atomic_notifier_call_chain_is_empty(&power_off_handler_list) ||
-		pm_power_off;
+	return atomic_read(&power_off_handlers) > 0 || pm_power_off;
 }
 EXPORT_SYMBOL_GPL(kernel_can_power_off);
 
