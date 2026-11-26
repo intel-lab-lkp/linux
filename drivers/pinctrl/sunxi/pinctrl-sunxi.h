@@ -328,8 +328,7 @@ static inline u32 sunxi_irq_status_offset(u16 irq)
 	return irq_num * IRQ_STATUS_IRQ_BITS;
 }
 
-static inline u32 sunxi_grp_config_reg(const struct sunxi_pinctrl *pctl,
-				       u16 pin)
+static inline u32 sunxi_grp_config_reg(u16 pin)
 {
 	u8 bank = pin / PINS_PER_BANK;
 
