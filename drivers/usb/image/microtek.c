@@ -449,7 +449,8 @@ static void mts_command_done( struct urb *transfer )
 		mts_int_submit_urb(transfer,
 				   context->data_pipe,
 				   context->srb->sense_buffer,
-				   context->data_length,
+				   min_t(unsigned int, context->data_length,
+					 SCSI_SENSE_BUFFERSIZE),
 				   mts_data_done);
 	} else { if ( context->data ) {
 			mts_int_submit_urb(transfer,
