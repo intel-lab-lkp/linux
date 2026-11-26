@@ -1772,6 +1772,46 @@ out_destroy_hash:
 	return -ENOMEM;
 }
 
+/* Record that the flush numbered @seq completed successfully. */
+void
+xfs_buftarg_flush_done(
+	struct xfs_buftarg	*btp,
+	s64			seq)
+{
+	s64			old = atomic64_read(&btp->bt_flush_completed);
+
+	while (seq > old &&
+	       !atomic64_try_cmpxchg(&btp->bt_flush_completed, &old, seq))
+		;
+}
+
+/*
+ * Return true if a flush has been submitted and completed since @submit_seq
+ * was sampled. If so, all writes that completed before @submit_seq was sampled
+ * are on stable storage.
+ */
+bool
+xfs_buftarg_flushed_since(
+	struct xfs_buftarg	*btp,
+	s64			submit_seq)
+{
+	return atomic64_read(&btp->bt_flush_completed) > submit_seq;
+}
+
+/* Flush the device cache and record it. */
+int
+xfs_buftarg_flush(
+	struct xfs_buftarg	*btp)
+{
+	s64			seq = xfs_buftarg_flush_start(btp);
+	int			error;
+
+	error = blkdev_issue_flush(btp->bt_bdev);
+	if (!error)
+		xfs_buftarg_flush_done(btp, seq);
+	return error;
+}
+
 struct xfs_buftarg *
 xfs_alloc_buftarg(
 	struct xfs_mount	*mp,

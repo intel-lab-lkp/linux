@@ -1211,6 +1211,8 @@ xlog_ioend_work(
 		xlog_force_shutdown(log, SHUTDOWN_LOG_IO_ERROR);
 	}
 
+	if (!error && iclog->ic_flush_seq)
+		xfs_buftarg_flush_done(log->l_targ, iclog->ic_flush_seq);
 	xlog_state_done_syncing(iclog);
 	bio_uninit(&iclog->ic_bio);
 
@@ -1570,19 +1572,21 @@ xlog_flush_end_io(
 	bio_put(bio);
 }
 
-static void
+static s64
 xlog_flush_async(
 	struct xlog_flush_done	*done,
-	struct block_device	*bdev)
+	struct xfs_buftarg	*btp)
 {
+	s64			seq = xfs_buftarg_flush_start(btp);
 	struct bio		*bio;
 
-	bio = bio_alloc(bdev, 0, REQ_OP_WRITE | REQ_PREFLUSH | REQ_SYNC,
+	bio = bio_alloc(btp->bt_bdev, 0, REQ_OP_WRITE | REQ_PREFLUSH | REQ_SYNC,
 			GFP_NOFS);
 	bio->bi_private = done;
 	bio->bi_end_io = xlog_flush_end_io;
 	atomic_inc(&done->pending);
 	submit_bio(bio);
+	return seq;
 }
 
 /*
@@ -1605,16 +1609,18 @@ xlog_flush_data_caches(
 		.pending	= ATOMIC_INIT(1),
 		.done		= COMPLETION_INITIALIZER_ONSTACK(done.done),
 	};
+	s64			dseq = 0, rseq = 0;
+	s64			lseq;
 
 	*did_flush = false;
 	if (mp->m_ddev_targp != mp->m_logdev_targp &&
 	    bdev_write_cache(mp->m_ddev_targp->bt_bdev)) {
-		xlog_flush_async(&done, mp->m_ddev_targp->bt_bdev);
+		dseq = xlog_flush_async(&done, mp->m_ddev_targp);
 		*did_flush = true;
 	}
 	if (mp->m_rtdev_targp && mp->m_rtdev_targp != mp->m_ddev_targp &&
 	    bdev_write_cache(mp->m_rtdev_targp->bt_bdev)) {
-		xlog_flush_async(&done, mp->m_rtdev_targp->bt_bdev);
+		rseq = xlog_flush_async(&done, mp->m_rtdev_targp);
 		*did_flush = true;
 	}
 
@@ -1623,12 +1629,17 @@ xlog_flush_data_caches(
 		 * If we flushed any other device, also use an async flush for
 		 * the log device so that all flushes happen in parallel.
 		 */
-		xlog_flush_async(&done, mp->m_logdev_targp->bt_bdev);
+		lseq = xlog_flush_async(&done, mp->m_logdev_targp);
 
 		xlog_flush_done(&done);
 		wait_for_completion(&done.done);
 		if (done.status)
 			return -EIO;
+		if (dseq)
+			xfs_buftarg_flush_done(mp->m_ddev_targp, dseq);
+		if (rseq)
+			xfs_buftarg_flush_done(mp->m_rtdev_targp, rseq);
+		xfs_buftarg_flush_done(mp->m_logdev_targp, lseq);
 	}
 
 	return 0;
@@ -1678,14 +1689,18 @@ xlog_write_iclog(
 	iclog->ic_bio.bi_iter.bi_sector = log->l_logBBstart + bno;
 	iclog->ic_bio.bi_end_io = xlog_bio_end_io;
 	iclog->ic_bio.bi_private = iclog;
+	iclog->ic_flush_seq = 0;
 
 	if (iclog->ic_flags & XLOG_ICL_NEED_FLUSH) {
 		if (xlog_flush_data_caches(log->l_mp, &did_flush))
 			goto shutdown;
 	}
 	if (!did_flush &&
-	    (iclog->ic_flags & (XLOG_ICL_NEED_FLUSH | XLOG_ICL_NEED_FLUSH_LOG)))
+	    (iclog->ic_flags &
+	     (XLOG_ICL_NEED_FLUSH | XLOG_ICL_NEED_FLUSH_LOG))) {
 		iclog->ic_bio.bi_opf |= REQ_PREFLUSH;
+		iclog->ic_flush_seq = xfs_buftarg_flush_start(log->l_targ);
+	}
 	if (iclog->ic_flags & XLOG_ICL_NEED_FUA)
 		iclog->ic_bio.bi_opf |= REQ_FUA;
 

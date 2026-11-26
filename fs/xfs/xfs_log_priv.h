@@ -222,6 +222,7 @@ struct xlog_in_core {
 #endif
 	struct semaphore	ic_sema;
 	struct work_struct	ic_end_io_work;
+	s64			ic_flush_seq;	/* buftarg flush number */
 	struct bio		ic_bio;
 	struct bio_vec		ic_bvec[];
 };
