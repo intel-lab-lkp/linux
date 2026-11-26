@@ -135,7 +135,7 @@ int radeon_sync_rings(struct radeon_device *rdev,
 
 		/* prevent GPU deadlocks */
 		if (!rdev->ring[i].ready) {
-			dev_err(rdev->dev, "Syncing to a disabled ring!");
+			dev_err(rdev->dev, "Syncing to a disabled ring!\n");
 			return -EINVAL;
 		}
 
