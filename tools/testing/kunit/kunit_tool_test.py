@@ -18,6 +18,7 @@ import os
 import signal
 import subprocess
 import sys
+import xml.etree.ElementTree as ET
 from typing import Iterable
 
 import kunit_config
@@ -724,6 +725,19 @@ class KUnitJUnitTest(unittest.TestCase):
 		result = self._junit_string('test_is_test_passed-no_tests_run_with_header.log')
 		self.assertTrue("tests=\"0\"" in result)
 		self.assertFalse("testcase" in result)
+
+	def test_nested_test_classnames_junit(self):
+		result = self._junit_string('test_is_test_passed-all_passed_nested.log')
+		testcases = ET.fromstring(result).iter('testcase')
+		self.assertEqual([
+			('main.sysctl_test', 'sysctl_test_dointvec_null_tbl_data'),
+			('main.sysctl_test.example', 'example_simple_test'),
+			('main.sysctl_test.example', 'example_mock_test'),
+			('main.sysctl_test', 'sysctl_test_dointvec_table_len_is_zero'),
+			('main.sysctl_test', 'sysctl_test_dointvec_table_read_but_position_set'),
+			('main.example', 'example_simple_test'),
+			('main.example', 'example_mock_test'),
+		], [(case.get('classname'), case.get('name')) for case in testcases])
 
 
 class KUnitMainTest(unittest.TestCase):

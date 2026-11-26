@@ -10,7 +10,8 @@ from kunit_parser import Test, TestStatus
 from typing import Optional
 
 # Get a string representing a tes suite (including subtests) in JUnit XML
-def get_test_suite(test: Test, parent: Optional[ET.Element]) -> ET.Element:
+def get_test_suite(test: Test, parent: Optional[ET.Element], name_prefix: str = '') -> ET.Element:
+	classname = f'{name_prefix}.{test.name}' if name_prefix else test.name
 	suite_attrs = {
 		'name': test.name,
 		'tests': str(test.counts.total()),
@@ -26,9 +27,12 @@ def get_test_suite(test: Test, parent: Optional[ET.Element]) -> ET.Element:
 
 	for subtest in test.subtests:
 		if subtest.subtests:
-			get_test_suite(subtest, test_suite_element)
+			get_test_suite(subtest, test_suite_element, classname)
 			continue
-		test_case_element = ET.SubElement(test_suite_element, 'testcase', {'name': subtest.name})
+		test_case_element = ET.SubElement(test_suite_element, 'testcase', {
+			'name': subtest.name,
+			'classname': classname,
+		})
 		if subtest.status == TestStatus.FAILURE:
 			ET.SubElement(test_case_element, 'failure', {}).text = 'Test Failed'
 		elif subtest.status == TestStatus.SKIPPED:
