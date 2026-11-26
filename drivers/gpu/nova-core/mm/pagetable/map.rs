@@ -96,12 +96,13 @@ impl<M: MmuConfig> PtMapInner<M> {
         let page_vram = VramAddress::from_raw(blocks.iter().next().ok_or(ENOMEM)?.offset());
 
         // Zero via PRAMIN.
-        let window = mm
-            .pramin_mut()
-            .window_at::<[u64; PAGE_SIZE / 8]>(page_vram)?;
-        for i in 0..PAGE_SIZE / 8 {
-            io_write!(window.view(), [build: i], 0);
-        }
+        mm.with_pramin_locked(|pramin| -> Result {
+            let window = pramin.window_at::<[u64; PAGE_SIZE / 8]>(page_vram)?;
+            for i in 0..PAGE_SIZE / 8 {
+                io_write!(window.view(), [build: i], 0);
+            }
+            Ok(())
+        })?;
 
         Ok(PreparedPtPage {
             alloc: blocks,
@@ -121,16 +122,16 @@ impl<M: MmuConfig> PtMapInner<M> {
         let max_iter = 2 * M::PDE_LEVELS.len();
 
         for _ in 0..max_iter {
-            let result = self
-                .walker
-                .walk_pde_levels(mm.pramin_mut(), vfn, |install_addr| {
+            let result = mm.with_pramin_locked(|pramin| {
+                self.walker.walk_pde_levels(pramin, vfn, |install_addr| {
                     pt_pages.get(&install_addr).and_then(|p| {
                         p.alloc
                             .iter()
                             .next()
                             .map(|b| VramAddress::from_raw(b.offset()))
                     })
-                })?;
+                })
+            })?;
 
             match result {
                 WalkPdeResult::Complete { .. } => {
@@ -199,9 +200,7 @@ impl<M: MmuConfig> PtMapInner<M> {
         pfns: &[Pfn],
         writable: bool,
     ) -> Result {
-        {
-            let pramin = mm.pramin_mut();
-
+        mm.with_pramin_locked(|pramin| -> Result {
             // Drain prepared PT pages, install all pending PDEs.
             let mut cursor = pt_pages.cursor_front_mut();
             while let Some(c) = cursor {
@@ -242,7 +241,8 @@ impl<M: MmuConfig> PtMapInner<M> {
                     }
                 }
             }
-        }
+            Ok(())
+        })?;
 
         // Flush TLB.
         mm.tlb().flush(self.pdb_addr)
@@ -257,8 +257,7 @@ impl<M: MmuConfig> PtMapInner<M> {
     ) -> Result {
         let invalid_pte = M::Pte::invalid();
 
-        {
-            let pramin = mm.pramin_mut();
+        mm.with_pramin_locked(|pramin| -> Result {
             for i in 0..num_pages {
                 let i_u64: u64 = i.into_safe_cast();
                 let vfn = Vfn::new(vfn_start.raw() + i_u64);
@@ -273,7 +272,8 @@ impl<M: MmuConfig> PtMapInner<M> {
                     }
                 }
             }
-        }
+            Ok(())
+        })?;
 
         mm.tlb().flush(self.pdb_addr)
     }

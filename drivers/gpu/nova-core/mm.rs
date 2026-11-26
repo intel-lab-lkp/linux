@@ -72,11 +72,11 @@ pub(super) mod vmm;
 ///
 /// Provides centralized ownership of memory management resources:
 /// - [`GpuBuddy`] allocator for VRAM page table allocation.
-/// - [`pramin::Pramin`] for direct VRAM access.
+/// - [`pramin::SharedPramin`] for direct VRAM access.
 /// - [`Tlb`] manager for translation buffer flush operations.
 pub(crate) struct GpuMm<'gpu> {
     buddy: GpuBuddy,
-    pramin: pramin::Pramin<'gpu>,
+    pramin: Pin<KBox<pramin::SharedPramin<'gpu>>>,
     tlb: Pin<KBox<Tlb<'gpu>>>,
 }
 
@@ -94,7 +94,10 @@ impl<'gpu> GpuMm<'gpu> {
 
         Ok(Self {
             buddy: GpuBuddy::new(buddy_params)?,
-            pramin: pramin::Pramin::new(bar, chipset, vram_region)?,
+            pramin: KBox::pin_init(
+                pramin::SharedPramin::new(bar, chipset, vram_region),
+                GFP_KERNEL,
+            )?,
             tlb: KBox::pin_init(Tlb::new(bar), GFP_KERNEL)?,
         })
     }
@@ -104,9 +107,11 @@ impl<'gpu> GpuMm<'gpu> {
         &self.buddy
     }
 
-    /// Access the [`pramin::Pramin`].
-    fn pramin_mut(&mut self) -> &mut pramin::Pramin<'gpu> {
-        &mut self.pramin
+    /// Runs `f` with exclusive access to the PRAMIN window.
+    ///
+    /// Do not perform reclaimable allocations in `f`.
+    fn with_pramin_locked<R>(&self, f: impl FnOnce(&mut pramin::Pramin<'_>) -> R) -> R {
+        self.pramin.with_locked(f)
     }
 
     /// Access the [`Tlb`] manager.
@@ -329,7 +334,9 @@ pub(crate) mod selftest {
             return Ok(());
         };
 
-        pramin::selftest::run(dev, mm.pramin_mut(), VramAddress::from_raw(base))?;
+        mm.with_pramin_locked(|pramin| {
+            pramin::selftest::run(dev, pramin, VramAddress::from_raw(base))
+        })?;
         bar_user::run_self_test(dev, mm, bar_user, bar1_pdb, chipset)
     }
 }

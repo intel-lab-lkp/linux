@@ -213,7 +213,12 @@ pub(crate) fn run_self_test(
     let pdb_addr = VramAddress::from_raw(bar1_pdb);
 
     // Check if initial page tables are in VRAM.
-    if crate::mm::pagetable::check_pdb_valid(mm.pramin_mut(), pdb_addr, chipset).is_err() {
+    if mm
+        .with_pramin_locked(|pramin| {
+            crate::mm::pagetable::check_pdb_valid(pramin, pdb_addr, chipset)
+        })
+        .is_err()
+    {
         dev_info!(dev, "MM: Self-test SKIPPED - no valid VRAM page tables\n");
         return Ok(());
     }
@@ -246,10 +251,13 @@ pub(crate) fn run_self_test(
     let vram_read_addr = test_vram + 0x100;
 
     // Test 1: Write via PRAMIN, read via BAR1.
-    mm.pramin_mut()
-        .window_at::<u32>(vram_read_addr)?
-        .view()
-        .write_val(PATTERN_PRAMIN);
+    mm.with_pramin_locked(|pramin| -> Result {
+        pramin
+            .window_at::<u32>(vram_read_addr)?
+            .view()
+            .write_val(PATTERN_PRAMIN);
+        Ok(())
+    })?;
 
     // Read back via BAR1 aperture.
     let bar1_value = bar1.try_read32(bar1_read_offset)?;
@@ -353,11 +361,11 @@ pub(crate) fn run_self_test(
 
             bar1.try_write32(PATTERN_BAR1, page_bar1_off)?;
 
-            let pramin_val = mm
-                .pramin_mut()
-                .window_at::<u32>(VramAddress::from_raw(page_phys))?
-                .view()
-                .read_val();
+            let pramin_val = mm.with_pramin_locked(|pramin| {
+                pramin
+                    .window_at::<u32>(VramAddress::from_raw(page_phys))
+                    .map(|window| window.view().read_val())
+            })?;
 
             if pramin_val != PATTERN_BAR1 {
                 dev_err!(
@@ -392,10 +400,13 @@ pub(crate) fn run_self_test(
     let access = bar_user.map(mm, &[test_pfn], true)?;
 
     // Write pattern via PRAMIN, read via BarUserAccess.
-    mm.pramin_mut()
-        .window_at::<u32>(test_vram)?
-        .view()
-        .write_val(PATTERN_BAR1);
+    mm.with_pramin_locked(|pramin| -> Result {
+        pramin
+            .window_at::<u32>(test_vram)?
+            .view()
+            .write_val(PATTERN_BAR1);
+        Ok(())
+    })?;
 
     let readback = access.try_read32(0)?;
     let test4_passed = if readback == PATTERN_BAR1 {
