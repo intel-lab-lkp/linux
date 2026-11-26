@@ -13,7 +13,6 @@ use kernel::{
         Io,
         Mmio, //
     },
-    new_mutex,
     prelude::*,
     ptr::{
         Alignable,
@@ -23,7 +22,6 @@ use kernel::{
         SizeConstants,
         SZ_1M, //
     },
-    sync::Mutex, //
 };
 
 use crate::{
@@ -54,38 +52,6 @@ register! {
 
     /// Location of the window inside BAR0.
     PRAMIN: PraminWindow @ 0x700000;
-}
-
-/// A [`Pramin`] shared between users, serialized by a mutex.
-#[pin_data]
-pub(super) struct SharedPramin<'gpu>
-where
-    // Hide the mutex's invariant resource lifetime so `SharedPramin` remains covariant.
-    exists<'res>: 'gpu,
-{
-    #[pin]
-    #[uses('res: invariant)]
-    inner: Mutex<Pramin<'res>>,
-}
-
-impl<'gpu> SharedPramin<'gpu> {
-    /// Creates the shared window manager for the given VRAM region.
-    pub(super) fn new(
-        bar: Bar0<'gpu>,
-        chipset: Chipset,
-        vram_range: Range<VramAddress>,
-    ) -> impl PinInit<Self, Error> {
-        try_pin_init!(Self {
-            inner <- new_mutex!(Pramin::new(bar, chipset, vram_range)?, "pramin"),
-        })
-    }
-
-    /// Runs `f` with exclusive access to the PRAMIN window.
-    ///
-    /// Do not perform reclaimable allocations in `f`.
-    pub(super) fn with_locked<R>(&self, f: impl FnOnce(&mut Pramin<'_>) -> R) -> R {
-        self.with_inner(|inner| f(&mut inner.lock()))
-    }
 }
 
 /// Owner of the PRAMIN window state.

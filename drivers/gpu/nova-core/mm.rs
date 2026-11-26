@@ -44,13 +44,15 @@ use kernel::{
         GpuBuddy,
         GpuBuddyParams, //
     },
+    new_mutex,
     num::Bounded,
     prelude::*,
     ptr::{
         Alignable,
         Alignment, //
     },
-    sizes::SZ_4K, //
+    sizes::SZ_4K,
+    sync::Mutex, //
 };
 
 use crate::{
@@ -72,13 +74,18 @@ pub(super) mod vmm;
 ///
 /// Provides centralized ownership of memory management resources:
 /// - [`GpuBuddy`] allocator for VRAM page table allocation.
-/// - [`pramin::SharedPramin`] for direct VRAM access.
+/// - [`pramin::Pramin`] for direct VRAM access.
 /// - [`Tlb`] manager for translation buffer flush operations.
 #[pin_data]
-pub(crate) struct GpuMm<'gpu> {
+pub(crate) struct GpuMm<'gpu>
+where
+    // Hide the mutex's invariant resource lifetime so `GpuMm` remains covariant.
+    exists<'res>: 'gpu,
+{
     buddy: GpuBuddy,
     #[pin]
-    pramin: pramin::SharedPramin<'gpu>,
+    #[uses('res: invariant)]
+    pramin: Mutex<pramin::Pramin<'res>>,
     #[pin]
     tlb: Tlb<'gpu>,
 }
@@ -97,7 +104,7 @@ impl<'gpu> GpuMm<'gpu> {
 
         try_pin_init!(Self {
             buddy: GpuBuddy::new(buddy_params)?,
-            pramin <- pramin::SharedPramin::new(bar, chipset, vram_region),
+            pramin <- new_mutex!(pramin::Pramin::new(bar, chipset, vram_region)?, "pramin"),
             tlb <- Tlb::new(bar),
         })
     }
@@ -111,7 +118,7 @@ impl<'gpu> GpuMm<'gpu> {
     ///
     /// Do not perform reclaimable allocations in `f`.
     fn with_pramin_locked<R>(&self, f: impl FnOnce(&mut pramin::Pramin<'_>) -> R) -> R {
-        self.pramin.with_locked(f)
+        self.with_pramin(|pramin| f(&mut pramin.lock()))
     }
 
     /// Access the [`Tlb`] manager.
