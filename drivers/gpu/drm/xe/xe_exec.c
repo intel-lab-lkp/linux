@@ -14,6 +14,8 @@
 
 #include "xe_device.h"
 #include "xe_exec_queue.h"
+#include "xe_gt_types.h"
+#include "xe_huc_mei.h"
 #include "xe_hw_engine_group.h"
 #include "xe_macros.h"
 #include "xe_pm.h"
@@ -316,6 +318,17 @@ retry:
 		err = xe_sync_entry_add_deps(&syncs[i], job);
 	if (err)
 		goto err_put_job;
+
+	/* as on i915, video decode must not run before a pending HuC load */
+	if (q->class == XE_ENGINE_CLASS_VIDEO_DECODE) {
+		struct dma_fence *huc_load = xe_huc_mei_load_fence(&q->gt->uc.huc);
+
+		if (huc_load) {
+			err = drm_sched_job_add_dependency(&job->drm, huc_load);
+			if (err)
+				goto err_put_job;
+		}
+	}
 
 	if (!xe_vm_in_lr_mode(vm)) {
 		err = xe_svm_notifier_lock_interruptible(vm);

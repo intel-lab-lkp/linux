@@ -22,6 +22,7 @@
 #include "xe_gt.h"
 #include "xe_gt_topology.h"
 #include "xe_guc_hwconfig.h"
+#include "xe_huc_mei.h"
 #include "xe_macros.h"
 #include "xe_mmio.h"
 #include "xe_oa.h"
@@ -600,6 +601,7 @@ query_uc_fw_version(struct xe_device *xe, struct drm_xe_device_query *query)
 	case XE_QUERY_UC_TYPE_HUC: {
 		struct xe_gt *media_gt = NULL;
 		struct xe_huc *huc;
+		int ret;
 
 		if (MEDIA_VER(xe) >= 13) {
 			struct xe_tile *tile;
@@ -619,6 +621,9 @@ query_uc_fw_version(struct xe_device *xe, struct drm_xe_device_query *query)
 			break;
 
 		huc = &media_gt->uc.huc;
+		ret = xe_huc_mei_wait(huc);
+		if (ret)
+			return ret;
 		if (huc->fw.status == XE_UC_FIRMWARE_RUNNING)
 			version = &huc->fw.versions.found[XE_UC_FW_VER_RELEASE];
 		break;
