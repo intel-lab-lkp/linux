@@ -43,8 +43,6 @@ static void psb_setup_outputs(struct drm_device *dev)
 	struct drm_connector_list_iter conn_iter;
 	struct drm_connector *connector;
 
-	drm_mode_create_scaling_mode_property(dev);
-
 	/* It is ok for this to fail - we just don't get backlight control */
 	if (!dev_priv->backlight_property)
 		dev_priv->backlight_property = drm_property_create_range(dev, 0,
@@ -98,14 +96,19 @@ static void psb_setup_outputs(struct drm_device *dev)
 	drm_connector_list_iter_end(&conn_iter);
 }
 
-void psb_modeset_init(struct drm_device *dev)
+int psb_modeset_init(struct drm_device *dev)
 {
 	struct drm_psb_private *dev_priv = to_drm_psb_private(dev);
 	struct psb_intel_mode_device *mode_dev = &dev_priv->mode_dev;
-	int i;
+	int i, ret;
 
-	if (drmm_mode_config_init(dev))
-		return;
+	ret = drmm_mode_config_init(dev);
+	if (ret)
+		return ret;
+
+	ret = drm_mode_create_scaling_mode_property(dev);
+	if (ret)
+		return ret;
 
 	dev->mode_config.min_width = 0;
 	dev->mode_config.min_height = 0;
@@ -125,6 +128,8 @@ void psb_modeset_init(struct drm_device *dev)
 	        dev_priv->ops->errata(dev);
 
         dev_priv->modeset = true;
+
+	return 0;
 }
 
 void psb_modeset_cleanup(struct drm_device *dev)

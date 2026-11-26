@@ -589,7 +589,7 @@ struct psb_ops {
 };
 
 /* modesetting */
-extern void psb_modeset_init(struct drm_device *dev);
+int psb_modeset_init(struct drm_device *dev);
 extern void psb_modeset_cleanup(struct drm_device *dev);
 
 /* fbdev */

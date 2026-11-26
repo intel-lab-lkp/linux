@@ -1576,7 +1576,7 @@ static int amdgpu_display_setup_abm_prop(struct amdgpu_device *adev)
 
 int amdgpu_display_modeset_create_props(struct amdgpu_device *adev)
 {
-	int sz;
+	int sz, ret;
 
 	adev->mode_info.coherent_mode_property =
 		drm_property_create_range(adev_to_drm(adev), 0, "coherent", 0, 1);
@@ -1588,7 +1588,9 @@ int amdgpu_display_modeset_create_props(struct amdgpu_device *adev)
 	if (!adev->mode_info.load_detect_property)
 		return -ENOMEM;
 
-	drm_mode_create_scaling_mode_property(adev_to_drm(adev));
+	ret = drm_mode_create_scaling_mode_property(adev_to_drm(adev));
+	if (ret)
+		return ret;
 
 	sz = ARRAY_SIZE(amdgpu_underscan_enum_list);
 	adev->mode_info.underscan_property =

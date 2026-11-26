@@ -1410,7 +1410,7 @@ static const struct drm_prop_enum_list radeon_output_csc_enum_list[] =
 
 static int radeon_modeset_create_props(struct radeon_device *rdev)
 {
-	int sz;
+	int sz, ret;
 
 	if (rdev->is_atom_bios) {
 		rdev->mode_info.coherent_mode_property =
@@ -1432,7 +1432,9 @@ static int radeon_modeset_create_props(struct radeon_device *rdev)
 	if (!rdev->mode_info.load_detect_property)
 		return -ENOMEM;
 
-	drm_mode_create_scaling_mode_property(rdev_to_drm(rdev));
+	ret = drm_mode_create_scaling_mode_property(rdev_to_drm(rdev));
+	if (ret)
+		return ret;
 
 	sz = ARRAY_SIZE(radeon_tv_std_enum_list);
 	rdev->mode_info.tv_std_property =

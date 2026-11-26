@@ -386,7 +386,9 @@ static int psb_driver_load(struct drm_device *dev, unsigned long flags)
 
 	dev->max_vblank_count = 0xffffff; /* only 24 bits of frame count */
 
-	psb_modeset_init(dev);
+	ret = psb_modeset_init(dev);
+	if (ret)
+		goto out_err;
 	drm_kms_helper_poll_init(dev);
 
 	/* Only add backlight support if we have LVDS or MIPI output */

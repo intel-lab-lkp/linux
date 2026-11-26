@@ -41,8 +41,6 @@ static int cdv_output_init(struct drm_device *dev)
 {
 	struct drm_psb_private *dev_priv = to_drm_psb_private(dev);
 
-	drm_mode_create_scaling_mode_property(dev);
-
 	cdv_disable_vga(dev);
 
 	cdv_intel_crt_init(dev, &dev_priv->mode_dev);

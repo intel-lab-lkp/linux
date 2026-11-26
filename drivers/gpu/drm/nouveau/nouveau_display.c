@@ -656,8 +656,9 @@ nouveau_display_create(struct drm_device *dev)
 		return -ENOMEM;
 
 	drm_mode_config_init(dev);
-	drm_mode_create_scaling_mode_property(dev);
-	ret = drm_mode_create_dvi_i_properties(dev);
+	ret = drm_mode_create_scaling_mode_property(dev);
+	if (!ret)
+		ret = drm_mode_create_dvi_i_properties(dev);
 	if (ret) {
 		drm_mode_config_cleanup(dev);
 		drm->display = NULL;

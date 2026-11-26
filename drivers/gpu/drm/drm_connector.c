@@ -2495,7 +2495,8 @@ EXPORT_SYMBOL(drm_mode_create_tv_properties);
  * instead to correctly assign &drm_connector_state.scaling_mode
  * in the atomic state.
  *
- * Returns: %0
+ * Returns:
+ * Zero on success, negative errno on failure.
  */
 int drm_mode_create_scaling_mode_property(struct drm_device *dev)
 {
@@ -2508,6 +2509,8 @@ int drm_mode_create_scaling_mode_property(struct drm_device *dev)
 		drm_property_create_enum(dev, 0, "scaling mode",
 				drm_scaling_mode_enum_list,
 				    ARRAY_SIZE(drm_scaling_mode_enum_list));
+	if (!scaling_mode)
+		return -ENOMEM;
 
 	dev->mode_config.scaling_mode_property = scaling_mode;
 
