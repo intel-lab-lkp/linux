@@ -2098,8 +2098,12 @@ static int parse_pred(const char *str, void *data,
 
 		} else if (field->filter_type == FILTER_DYN_STRING) {
 			pred->fn_num = FILTER_PRED_FN_STRLOC;
+			if (pred->regex->match == regex_match_end)
+				pred->regex->match = regex_match_end_str;
 		} else if (field->filter_type == FILTER_RDYN_STRING) {
 			pred->fn_num = FILTER_PRED_FN_STRRELLOC;
+			if (pred->regex->match == regex_match_end)
+				pred->regex->match = regex_match_end_str;
 		} else if (field->filter_type == FILTER_WITHIN) {
 			unsigned long func;
 
