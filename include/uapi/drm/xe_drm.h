@@ -628,6 +628,11 @@ struct drm_xe_query_engine_cycles {
  *
  * Given a uc_type this will return the branch, major, minor and patch version
  * of the micro-controller firmware.
+ *
+ * On platforms where the GSC loads the HuC (DG2), the load runs asynchronously
+ * after probe, reset and resume. A query of %XE_QUERY_UC_TYPE_HUC then waits
+ * (interruptibly, for at most 10 seconds) until a pending load settled, so
+ * that it does not report a HuC that is about to run as missing.
  */
 struct drm_xe_query_uc_fw_version {
 	/** @uc_type: The micro-controller type to query firmware version */
