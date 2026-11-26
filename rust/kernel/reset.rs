@@ -568,6 +568,8 @@ impl<'r, 'a> Drop for AssertedGuard<'r, 'a> {
 ///
 /// - [`reset_control_get_shared()`]
 /// - [`reset_control_get_optional_shared()`]
+/// - `fwnode_reset_control_array_get()` with the `RESET_CONTROL_SHARED` or
+///   `RESET_CONTROL_OPTIONAL_SHARED` flag
 ///
 /// It is treated as an opaque token that may only be accessed using C API methods (e.g., it may be
 /// `NULL` if the C API returns `NULL`). The [`SharedResetControl`] owns the reference that the
@@ -637,6 +639,95 @@ impl<'a> SharedResetControl<'a, Unknown> {
             inner,
             _phantom: PhantomData,
         })
+    }
+
+    /// Gets the reset lines of `dev` as one [`SharedResetControl`], as [`Self::get_array`] does
+    /// or, if `optional` is set, as [`Self::get_array_optional`] does.
+    fn get_array_internal(dev: &'a Device<Bound>, optional: bool) -> Result<Self> {
+        let flags = if optional {
+            bindings::reset_control_flags_RESET_CONTROL_OPTIONAL_SHARED
+        } else {
+            bindings::reset_control_flags_RESET_CONTROL_SHARED
+        };
+
+        let fwnode = dev
+            .fwnode()
+            .map_or(ptr::null_mut(), |fwnode| fwnode.as_raw());
+
+        // SAFETY: `fwnode` is the firmware node of `dev` or `NULL`, which
+        // `fwnode_reset_control_array_get()` checks for.
+        let inner = unsafe { bindings::fwnode_reset_control_array_get(fwnode, flags) };
+        let inner = from_err_ptr(inner)?;
+
+        // INVARIANT: `inner` comes from a successful call to `fwnode_reset_control_array_get()`
+        // with one of the two flags above, and the returned value owns the reference from that
+        // call.
+        Ok(Self {
+            inner,
+            _phantom: PhantomData,
+        })
+    }
+
+    /// Gets the reset lines listed in the `resets` property of `dev` as one
+    /// [`SharedResetControl`].
+    ///
+    /// Its operations act on all the lines, in no guaranteed order. If one of them fails on a
+    /// line, the opposite operation is run on the lines it had already succeeded on. This
+    /// includes the assert that is done on drop. The caller only gets the error from the line
+    /// that failed, while errors from the opposite operation are discarded.
+    ///
+    /// A [`SharedResetControl::assert`] that fails on one line therefore leaves the control
+    /// holding its deasserts on the other lines. The control is in the [`Unknown`] state then,
+    /// and does not give them back.
+    ///
+    /// Equivalent to the kernel's `fwnode_reset_control_array_get()` on the firmware node of
+    /// `dev`, as `devm_reset_control_array_get_shared()` does.
+    ///
+    /// # Examples
+    ///
+    /// Keeping all the shared reset lines of a device deasserted:
+    ///
+    /// ```
+    /// use kernel::{
+    ///     device::{
+    ///         Bound,
+    ///         Device, //
+    ///     },
+    ///     reset::{
+    ///         Deasserted,
+    ///         SharedResetControl, //
+    ///     },
+    /// };
+    ///
+    /// struct Data<'a> {
+    ///     // Dropping `Data` asserts the reset control again.
+    ///     resets: SharedResetControl<'a, Deasserted>,
+    /// }
+    ///
+    /// fn probe<'a>(dev: &'a Device<Bound>) -> Result<Data<'a>> {
+    ///     let resets = SharedResetControl::get_array(dev)?.deassert()?;
+    ///
+    ///     Ok(Data { resets })
+    /// }
+    /// ```
+    #[inline]
+    pub fn get_array(dev: &'a Device<Bound>) -> Result<Self> {
+        Self::get_array_internal(dev, false)
+    }
+
+    /// Gets the reset lines listed in the `resets` property of `dev` as one
+    /// [`SharedResetControl`], if there are any.
+    ///
+    /// Behaves the same as [`Self::get_array`], except when `dev` has no firmware node, when its
+    /// `resets` property has no entry or cannot be read, or when `CONFIG_RESET_CONTROLLER` is
+    /// disabled. In those cases, it returns a [`SharedResetControl`] on which every operation
+    /// succeeds and does nothing.
+    ///
+    /// Equivalent to the kernel's `fwnode_reset_control_array_get()` on the firmware node of
+    /// `dev`, as `devm_reset_control_array_get_optional_shared()` does.
+    #[inline]
+    pub fn get_array_optional(dev: &'a Device<Bound>) -> Result<Self> {
+        Self::get_array_internal(dev, true)
     }
 
     /// Deasserts the reset line and moves the [`SharedResetControl`] to the [`Deasserted`] state.
