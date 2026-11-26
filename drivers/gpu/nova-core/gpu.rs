@@ -399,6 +399,7 @@ pub(crate) struct Gpu<'gpu> {
     ///
     /// Must be kept declared *before* `gsp_resources`, so that its components are dropped while
     /// the GSP is still operational.
+    #[pin]
     mm: GpuMm<'gpu>,
     /// BAR1 user interface for CPU access to GPU virtual memory.
     #[pin]
@@ -562,7 +563,7 @@ impl<'gpu> Gpu<'gpu> {
             },
 
             // Create GPU memory manager owning memory management resources.
-            mm: {
+            mm <- {
                 let usable_vram = gsp_static_info.usable_fb_regions.first().ok_or(ENODEV)?;
                 let buddy_params = GpuBuddyParams {
                     base_offset: usable_vram.start,
@@ -575,7 +576,7 @@ impl<'gpu> Gpu<'gpu> {
                     gsp_resources.spec.chipset,
                     buddy_params,
                     VramAddress::from_raw(gsp_static_info.total_fb_end),
-                )?
+                )
             },
 
             // Create BAR1 user interface for CPU access to GPU virtual memory.

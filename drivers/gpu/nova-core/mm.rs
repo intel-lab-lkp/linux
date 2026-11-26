@@ -74,10 +74,13 @@ pub(super) mod vmm;
 /// - [`GpuBuddy`] allocator for VRAM page table allocation.
 /// - [`pramin::SharedPramin`] for direct VRAM access.
 /// - [`Tlb`] manager for translation buffer flush operations.
+#[pin_data]
 pub(crate) struct GpuMm<'gpu> {
     buddy: GpuBuddy,
-    pramin: Pin<KBox<pramin::SharedPramin<'gpu>>>,
-    tlb: Pin<KBox<Tlb<'gpu>>>,
+    #[pin]
+    pramin: pramin::SharedPramin<'gpu>,
+    #[pin]
+    tlb: Tlb<'gpu>,
 }
 
 impl<'gpu> GpuMm<'gpu> {
@@ -87,18 +90,15 @@ impl<'gpu> GpuMm<'gpu> {
         chipset: Chipset,
         buddy_params: GpuBuddyParams,
         total_fb_end: VramAddress,
-    ) -> Result<Self> {
+    ) -> impl PinInit<Self, Error> {
         // PRAMIN covers all physical VRAM (including GSP-reserved areas
         // above the usable region, e.g. the BAR1 page directory).
         let vram_region = VramAddress::ZERO..total_fb_end;
 
-        Ok(Self {
+        try_pin_init!(Self {
             buddy: GpuBuddy::new(buddy_params)?,
-            pramin: KBox::pin_init(
-                pramin::SharedPramin::new(bar, chipset, vram_region),
-                GFP_KERNEL,
-            )?,
-            tlb: KBox::pin_init(Tlb::new(bar), GFP_KERNEL)?,
+            pramin <- pramin::SharedPramin::new(bar, chipset, vram_region),
+            tlb <- Tlb::new(bar),
         })
     }
 
@@ -116,7 +116,7 @@ impl<'gpu> GpuMm<'gpu> {
 
     /// Access the [`Tlb`] manager.
     pub(crate) fn tlb(&self) -> &Tlb<'gpu> {
-        self.tlb.as_ref().get_ref()
+        &self.tlb
     }
 }
 
