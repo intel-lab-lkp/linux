@@ -981,7 +981,7 @@ drbd_determine_dev_size(struct drbd_device *device, enum dds_flags flags, struct
 	struct drbd_md *md = &device->ldev->md;
 	void *buffer;
 
-	int md_moved, la_size_changed;
+	bool md_moved, la_size_changed, al_layout_changed;
 	enum determine_dev_size rv = DS_UNCHANGED;
 
 	/* We may change the on-disk offsets of our meta data below.  Lock out
@@ -1009,7 +1009,6 @@ drbd_determine_dev_size(struct drbd_device *device, enum dds_flags flags, struct
 	prev.al_stripe_size_4k = md->al_stripe_size_4k;
 
 	if (rs) {
-		/* rs is non NULL if we should change the AL layout only */
 		md->al_stripes = rs->al_stripes;
 		md->al_stripe_size_4k = rs->al_stripe_size / 4;
 		md->al_size_4k = (u64)rs->al_stripes * rs->al_stripe_size / 4;
@@ -1064,8 +1063,11 @@ drbd_determine_dev_size(struct drbd_device *device, enum dds_flags flags, struct
 
 	md_moved = prev.md_offset    != md->md_offset
 		|| prev.md_size_sect != md->md_size_sect;
+	al_layout_changed =
+		   prev.al_stripes   != md->al_stripes
+		|| prev.al_stripe_size_4k != md->al_stripe_size_4k;
 
-	if (la_size_changed || md_moved || rs) {
+	if (la_size_changed || md_moved || al_layout_changed) {
 		u32 prev_flags;
 
 		/* We do some synchronous IO below, which may take some time.
@@ -1098,7 +1100,7 @@ drbd_determine_dev_size(struct drbd_device *device, enum dds_flags flags, struct
 		md->flags = prev_flags;
 		drbd_md_write(device, buffer);
 
-		if (rs)
+		if (al_layout_changed)
 			drbd_info(device, "Changed AL layout to al-stripes = %d, al-stripe-size-kB = %d\n",
 				  md->al_stripes, md->al_stripe_size_4k * 4);
 	}
@@ -2861,7 +2863,6 @@ int drbd_nl_resize_doit(struct sk_buff *skb, struct genl_info *info)
 	struct drbd_device *device;
 	enum drbd_ret_code retcode;
 	enum determine_dev_size dd;
-	bool change_al_layout = false;
 	enum dds_flags ddsf;
 	sector_t u_size;
 	int err;
@@ -2936,8 +2937,6 @@ int drbd_nl_resize_doit(struct sk_buff *skb, struct genl_info *info)
 			retcode = ERR_MD_LAYOUT_CONNECTED;
 			goto fail_ldev;
 		}
-
-		change_al_layout = true;
 	}
 
 	if (device->ldev->known_size != drbd_get_capacity(device->ldev->backing_bdev))
@@ -2955,7 +2954,7 @@ int drbd_nl_resize_doit(struct sk_buff *skb, struct genl_info *info)
 	}
 
 	ddsf = (rs.resize_force ? DDSF_FORCED : 0) | (rs.no_resync ? DDSF_NO_RESYNC : 0);
-	dd = drbd_determine_dev_size(device, ddsf, change_al_layout ? &rs : NULL);
+	dd = drbd_determine_dev_size(device, ddsf, &rs);
 	drbd_md_sync(device);
 	put_ldev(device);
 	if (dd == DS_ERROR) {
