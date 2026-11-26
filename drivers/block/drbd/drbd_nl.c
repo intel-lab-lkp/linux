@@ -1257,8 +1257,11 @@ static unsigned int drbd_max_peer_bio_size(struct drbd_device *device)
 static unsigned int drbd_max_discard_sectors(struct drbd_connection *connection)
 {
 	/* when we introduced REQ_WRITE_SAME support, we also bumped
-	 * our maximum supported batch bio size used for discards. */
-	if (connection->agreed_features & DRBD_FF_WSAME)
+	 * our maximum supported batch bio size used for discards.
+	 * Until a handshake completed, assume a capable peer.
+	 */
+	if (connection->agreed_pro_version < PRO_VERSION_MIN ||
+	    connection->agreed_features & DRBD_FF_WSAME)
 		return DRBD_MAX_BBIO_SECTORS;
 	/* before, with DRBD <= 8.4.6, we only allowed up to one AL_EXTENT_SIZE. */
 	return AL_EXTENT_SIZE >> 9;
