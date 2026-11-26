@@ -19,6 +19,9 @@
 //! If the reset line is shared with other devices, the driver asks for a [`SharedResetControl`]
 //! instead.
 //!
+//! A driver that only needs its reset line deasserted while it is bound can call
+//! [`ExclusiveResetControl::devm_deassert`] instead of keeping a reset control.
+//!
 //! C header: [`include/linux/reset.h`](srctree/include/linux/reset.h)
 //!
 //! See [Reset controller API](https://docs.kernel.org/driver-api/reset.html) for more information.
@@ -323,6 +326,69 @@ impl<'a> ExclusiveResetControl<'a, Unknown> {
     #[inline]
     pub fn get_array_optional(dev: &'a Device<Bound>) -> Result<Self> {
         Self::get_array_internal(dev, true)
+    }
+
+    /// Deasserts the reset line `name` of `dev`, or its first reset line if `name` is `None`, until
+    /// `dev` is unbound.
+    ///
+    /// The reset control is managed by devres, which asserts the line and releases the control
+    /// when `dev` is unbound. An error from that assert is discarded. Until then, devres holds
+    /// the line as an [`ExclusiveResetControl`] does.
+    ///
+    /// Equivalent to the kernel's [`devm_reset_control_get_exclusive_deasserted()`].
+    ///
+    /// # Examples
+    ///
+    /// Keeping the reset line of a device deasserted until the device is unbound:
+    ///
+    /// ```
+    /// use kernel::{
+    ///     device::{
+    ///         Bound,
+    ///         Device, //
+    ///     },
+    ///     reset::ExclusiveResetControl,
+    /// };
+    ///
+    /// fn probe(dev: &Device<Bound>) -> Result {
+    ///     ExclusiveResetControl::devm_deassert(dev, None)
+    /// }
+    /// ```
+    ///
+    /// [`devm_reset_control_get_exclusive_deasserted()`]:
+    /// https://docs.kernel.org/driver-api/reset.html#c.devm_reset_control_get_exclusive_deasserted
+    #[inline]
+    pub fn devm_deassert(dev: &Device<Bound>, name: Option<&CStr>) -> Result {
+        let id = name.map_or(ptr::null(), |n| n.as_char_ptr());
+
+        // SAFETY: `dev` is a valid and bound device, and `id` is `NULL` or a valid C string.
+        let inner =
+            unsafe { bindings::devm_reset_control_get_exclusive_deasserted(dev.as_raw(), id) };
+        from_err_ptr(inner)?;
+
+        Ok(())
+    }
+
+    /// Deasserts the reset line `name` of `dev` until `dev` is unbound, if there is such a line.
+    ///
+    /// Behaves the same as [`Self::devm_deassert`], except when the device has no such reset line
+    /// or `CONFIG_RESET_CONTROLLER` is disabled. In those cases, it succeeds and does nothing.
+    ///
+    /// Equivalent to the kernel's [`devm_reset_control_get_optional_exclusive_deasserted()`].
+    ///
+    /// [`devm_reset_control_get_optional_exclusive_deasserted()`]:
+    /// https://docs.kernel.org/driver-api/reset.html#c.devm_reset_control_get_optional_exclusive_deasserted
+    #[inline]
+    pub fn devm_deassert_optional(dev: &Device<Bound>, name: Option<&CStr>) -> Result {
+        let id = name.map_or(ptr::null(), |n| n.as_char_ptr());
+
+        // SAFETY: `dev` is a valid and bound device, and `id` is `NULL` or a valid C string.
+        let inner = unsafe {
+            bindings::devm_reset_control_get_optional_exclusive_deasserted(dev.as_raw(), id)
+        };
+        from_err_ptr(inner)?;
+
+        Ok(())
     }
 }
 

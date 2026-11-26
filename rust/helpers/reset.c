@@ -28,6 +28,20 @@ rust_helper_reset_control_get_optional_shared(struct device *dev,
 	return reset_control_get_optional_shared(dev, id);
 }
 
+__rust_helper struct reset_control *
+rust_helper_devm_reset_control_get_exclusive_deasserted(struct device *dev,
+							const char *id)
+{
+	return devm_reset_control_get_exclusive_deasserted(dev, id);
+}
+
+__rust_helper struct reset_control *
+rust_helper_devm_reset_control_get_optional_exclusive_deasserted(struct device *dev,
+								 const char *id)
+{
+	return devm_reset_control_get_optional_exclusive_deasserted(dev, id);
+}
+
 #ifndef CONFIG_RESET_CONTROLLER
 __rust_helper struct reset_control *
 rust_helper_fwnode_reset_control_array_get(struct fwnode_handle *fwnode,
