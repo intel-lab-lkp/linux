@@ -133,8 +133,11 @@ static int nci_core_conn_intf_error_ntf_packet(struct nci_dev *ndev,
 	pr_debug("status 0x%x, conn_id %d\n", ntf->status, ntf->conn_id);
 
 	/* complete the data exchange transaction, if exists */
-	if (test_bit(NCI_DATA_EXCHANGE, &ndev->flags))
+	if (test_bit(NCI_DATA_EXCHANGE, &ndev->flags)) {
+		kfree_skb(ndev->rx_data_reassembly);
+		ndev->rx_data_reassembly = NULL;
 		nci_data_exchange_complete(ndev, NULL, ntf->conn_id, -EIO);
+	}
 
 	return 0;
 }
