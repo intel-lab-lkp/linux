@@ -376,7 +376,7 @@ int fat_ent_read(struct inode *inode, struct fat_entry *fatent, int entry)
 	return ops->ent_get(fatent);
 }
 
-/* FIXME: We can write the blocks as more big chunk. */
+/* FIXME: We can write the blocks as a bigger chunk. */
 static int fat_mirror_bhs(struct super_block *sb, struct buffer_head **bhs,
 			  int nr_bhs)
 {

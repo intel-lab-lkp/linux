@@ -109,8 +109,10 @@ int fat_add_clusters(struct inode *inode, int nr_cluster)
 	err = fat_alloc_chain(inode, &cluster, nr_cluster);
 	if (err)
 		return err;
-	/* FIXME: this cluster should be added after data of this
-	 * cluster is writed */
+	/*
+	 * FIXME: this cluster should be added after data of this
+	 * cluster is written
+	 */
 	err = fat_chain_add(inode, cluster, nr_cluster);
 	if (err)
 		fat_free_clusters(inode, cluster);
