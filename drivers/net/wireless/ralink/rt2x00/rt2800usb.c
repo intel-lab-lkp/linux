@@ -118,7 +118,8 @@ static bool rt2800usb_tx_sta_fifo_read_completed(struct rt2x00_dev *rt2x00dev,
 	if (rt2800_txstatus_timeout(rt2x00dev))
 		queue_work(rt2x00dev->workqueue, &rt2x00dev->txdone_work);
 
-	if (rt2800_txstatus_pending(rt2x00dev)) {
+	if (rt2800_txstatus_pending(rt2x00dev) &&
+	    test_bit(DEVICE_STATE_INITIALIZED, &rt2x00dev->flags)) {
 		/* Read register after 1 ms */
 		hrtimer_start(&rt2x00dev->txstatus_timer,
 			      TXSTATUS_READ_INTERVAL,
@@ -142,6 +143,8 @@ stop_reading:
 
 static void rt2800usb_async_read_tx_status(struct rt2x00_dev *rt2x00dev)
 {
+	if (!test_bit(DEVICE_STATE_INITIALIZED, &rt2x00dev->flags))
+		return;
 
 	if (test_and_set_bit(TX_STATUS_READING, &rt2x00dev->flags))
 		return;
@@ -163,6 +166,11 @@ static enum hrtimer_restart rt2800usb_tx_sta_fifo_timeout(struct hrtimer *timer)
 {
 	struct rt2x00_dev *rt2x00dev =
 	    container_of(timer, struct rt2x00_dev, txstatus_timer);
+
+	if (!test_bit(DEVICE_STATE_INITIALIZED, &rt2x00dev->flags)) {
+		clear_bit(TX_STATUS_READING, &rt2x00dev->flags);
+		return HRTIMER_NORESTART;
+	}
 
 	rt2x00usb_register_read_async(rt2x00dev, TX_STA_FIFO,
 				      rt2800usb_tx_sta_fifo_read_completed);
