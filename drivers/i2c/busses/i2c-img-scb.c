@@ -1324,6 +1324,7 @@ static int img_i2c_probe(struct platform_device *pdev)
 {
 	struct device_node *node = pdev->dev.of_node;
 	struct img_i2c *i2c;
+	bool rpm_enabled;
 	int irq, ret;
 	u32 val;
 
@@ -1400,9 +1401,10 @@ static int img_i2c_probe(struct platform_device *pdev)
 	return 0;
 
 rpm_disable:
-	if (!pm_runtime_enabled(&pdev->dev))
-		img_i2c_runtime_suspend(&pdev->dev);
+	rpm_enabled = pm_runtime_enabled(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
+	if (!rpm_enabled || !pm_runtime_status_suspended(&pdev->dev))
+		img_i2c_runtime_suspend(&pdev->dev);
 	pm_runtime_dont_use_autosuspend(&pdev->dev);
 	return ret;
 }
