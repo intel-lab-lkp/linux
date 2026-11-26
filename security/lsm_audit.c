@@ -393,10 +393,6 @@ void audit_log_lsm_data(struct audit_buffer *ab,
 				 a->u.ibendport->dev_name,
 				 a->u.ibendport->port);
 		break;
-	case LSM_AUDIT_DATA_LOCKDOWN:
-		audit_log_format(ab, " lockdown_reason=\"%s\"",
-				 lockdown_reasons[a->u.reason]);
-		break;
 	case LSM_AUDIT_DATA_ANONINODE:
 		audit_log_format(ab, " anonclass=%s", a->u.anonclass);
 		break;
