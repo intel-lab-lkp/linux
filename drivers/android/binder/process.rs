@@ -231,7 +231,7 @@ impl ProcessInner {
         node: &DArc<Node>,
         inc: bool,
         strong: bool,
-        count: usize,
+        count: u64,
         othread: Option<&Thread>,
     ) {
         let push = node.update_refcount_locked(inc, strong, count, self);
@@ -579,7 +579,7 @@ impl Process {
 
         {
             let mut refs = self.node_refs.lock();
-            let (mut count, mut weak, mut strong) = (0, 0, 0);
+            let (mut count, mut weak, mut strong) = (0usize, 0u64, 0u64);
             for r in refs.by_handle.values_mut() {
                 let node_ref = r.node_ref();
                 let (nstrong, nweak) = node_ref.get_count();

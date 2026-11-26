@@ -129,7 +129,7 @@ impl DeliveryState {
 
 struct CountState {
     /// The reference count.
-    count: usize,
+    count: u64,
     /// Whether the process that owns this node thinks that we hold a refcount on it. (Note that
     /// even if count is greater than one, we only increment it once in the owning process.)
     has_count: bool,
@@ -409,7 +409,7 @@ impl Node {
         self: &DArc<Node>,
         inc: bool,
         strong: bool,
-        count: usize,
+        count: u64,
         owner_inner: &mut ProcessInner,
     ) -> Option<DLArc<Node>> {
         let is_dead = owner_inner.is_dead;
@@ -506,7 +506,7 @@ impl Node {
         }
     }
 
-    pub(crate) fn update_refcount(self: &DArc<Self>, inc: bool, count: usize, strong: bool) {
+    pub(crate) fn update_refcount(self: &DArc<Self>, inc: bool, count: u64, strong: bool) {
         self.owner
             .inner
             .lock()
@@ -519,8 +519,8 @@ impl Node {
         guard: &Guard<'_, ProcessInner, SpinLockBackend>,
     ) {
         let inner = self.inner.access(guard);
-        out.strong_count = inner.strong.count as u32;
-        out.weak_count = inner.weak.count as u32;
+        out.strong_count = u32::try_from(inner.strong.count).unwrap_or(u32::MAX);
+        out.weak_count = u32::try_from(inner.weak.count).unwrap_or(u32::MAX);
     }
 
     pub(crate) fn populate_debug_info(
@@ -808,15 +808,15 @@ impl DeliverToRead for Node {
 pub(crate) struct NodeRef {
     pub(crate) node: DArc<Node>,
     /// How many times does this NodeRef hold a refcount on the Node?
-    strong_node_count: usize,
-    weak_node_count: usize,
+    strong_node_count: u64,
+    weak_node_count: u64,
     /// How many times does userspace hold a refcount on this NodeRef?
-    strong_count: usize,
-    weak_count: usize,
+    strong_count: u64,
+    weak_count: u64,
 }
 
 impl NodeRef {
-    pub(crate) fn new(node: DArc<Node>, strong_count: usize, weak_count: usize) -> Self {
+    pub(crate) fn new(node: DArc<Node>, strong_count: u64, weak_count: u64) -> Self {
         Self {
             node,
             strong_node_count: strong_count,
@@ -857,7 +857,7 @@ impl NodeRef {
         }
     }
 
-    pub(crate) fn get_count(&self) -> (usize, usize) {
+    pub(crate) fn get_count(&self) -> (u64, u64) {
         (self.strong_count, self.weak_count)
     }
 
