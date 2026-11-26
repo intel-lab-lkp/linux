@@ -24064,6 +24064,7 @@ F:	include/linux/reset-controller.h
 F:	include/linux/reset.h
 F:	include/linux/reset/
 F:	rust/helpers/reset.c
+F:	rust/kernel/reset.rs
 K:	\b(?:devm_|of_)?reset_control(?:ler_[a-z]+|_[a-z_]+)?\b
 
 RESTARTABLE SEQUENCES SUPPORT
