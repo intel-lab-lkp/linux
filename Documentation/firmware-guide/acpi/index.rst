@@ -13,6 +13,7 @@ ACPI Support
    dsd/leds
    dsd/motorcomm-yt8xxx-phy
    dsd/phy
+   dsd/reg-names
    enumeration
    osi
    method-tracing

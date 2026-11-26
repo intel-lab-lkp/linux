@@ -457,12 +457,29 @@ EXPORT_SYMBOL_GPL(devm_platform_get_irqs_affinity);
  * @dev: platform device
  * @type: resource type
  * @name: resource name
+ *
+ * For memory resources, the name may also be resolved through the
+ * "reg-names" firmware device property, where the i-th string names the
+ * i-th memory resource of the device.
  */
 struct resource *platform_get_resource_byname(struct platform_device *dev,
 					      unsigned int type,
 					      const char *name)
 {
 	u32 i;
+
+	if (type == IORESOURCE_MEM) {
+		int index = device_property_match_string(&dev->dev,
+							 "reg-names", name);
+
+		if (index >= 0) {
+			struct resource *r = platform_get_resource(dev, type,
+								   index);
+
+			if (r)
+				return r;
+		}
+	}
 
 	for (i = 0; i < dev->num_resources; i++) {
 		struct resource *r = &dev->resource[i];
