@@ -274,12 +274,8 @@ static int sgm3140_probe(struct platform_device *pdev)
 					   child_node,
 					   fled_cdev, NULL,
 					   &v4l2_sd_cfg);
-	if (IS_ERR(priv->v4l2_flash)) {
+	if (IS_ERR(priv->v4l2_flash))
 		ret = PTR_ERR(priv->v4l2_flash);
-		goto err;
-	}
-
-	return ret;
 
 err:
 	fwnode_handle_put(child_node);
