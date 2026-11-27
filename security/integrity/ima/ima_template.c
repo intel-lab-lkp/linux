@@ -526,6 +526,7 @@ int ima_restore_measurement_list(loff_t size, void *buf)
 						entry);
 			if (ret < 0) {
 				pr_err("cannot calculate template digest\n");
+				ima_free_template_entry(entry);
 				ret = -EINVAL;
 				break;
 			}
@@ -541,8 +542,10 @@ int ima_restore_measurement_list(loff_t size, void *buf)
 		entry->pcr = !ima_canonical_fmt ? *(u32 *)(hdr[HDR_PCR].data) :
 			     le32_to_cpu(*(__le32 *)(hdr[HDR_PCR].data));
 		ret = ima_restore_measurement_entry(entry);
-		if (ret < 0)
+		if (ret < 0) {
+			ima_free_template_entry(entry);
 			break;
+		}
 
 	}
 	return ret;
