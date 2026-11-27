@@ -5457,6 +5457,7 @@ int its_cpu_init(void)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(its_cpu_init);
 
 static void rdist_memreserve_cpuhp_cleanup_workfn(struct work_struct *work)
 {
