@@ -32,8 +32,6 @@
 
 #define MAX_WAIT_FOR_8021X_TX			msecs_to_jiffies(950)
 
-#define BRCMF_BSSIDX_INVALID			-1
-
 #define	RXS_PBPRES				BIT(2)
 
 #define	D11_PHY_HDR_LEN				6
@@ -642,6 +640,42 @@ static const struct net_device_ops brcmf_netdev_ops_pri = {
 	.ndo_set_rx_mode = brcmf_netdev_set_multicast_list
 };
 
+static int brcmf_awdl_netdev_open(struct net_device *ndev)
+{
+	struct brcmf_if *ifp = netdev_priv(ndev);
+
+	if (ifp->drvr->bus_if->state != BRCMF_BUS_UP)
+		return -EAGAIN;
+
+	/* The firmware runs AWDL, the link is there while it exists */
+	netif_carrier_on(ndev);
+	netif_start_queue(ndev);
+	return 0;
+}
+
+static int brcmf_awdl_netdev_stop(struct net_device *ndev)
+{
+	netif_stop_queue(ndev);
+	netif_carrier_off(ndev);
+	return 0;
+}
+
+/*
+ * The AWDL interface gets no multicast list and no MAC address change, the
+ * firmware filters AWDL traffic itself.
+ */
+static const struct net_device_ops brcmf_netdev_ops_awdl = {
+	.ndo_open = brcmf_awdl_netdev_open,
+	.ndo_stop = brcmf_awdl_netdev_stop,
+	.ndo_start_xmit = brcmf_netdev_start_xmit,
+};
+
+static bool brcmf_netdev_is_brcmf(struct net_device *ndev)
+{
+	return ndev->netdev_ops == &brcmf_netdev_ops_pri ||
+	       ndev->netdev_ops == &brcmf_netdev_ops_awdl;
+}
+
 int brcmf_net_attach(struct brcmf_if *ifp, bool locked)
 {
 	struct brcmf_pub *drvr = ifp->drvr;
@@ -653,7 +687,10 @@ int brcmf_net_attach(struct brcmf_if *ifp, bool locked)
 	ndev = ifp->ndev;
 
 	/* set appropriate operations */
-	ndev->netdev_ops = &brcmf_netdev_ops_pri;
+	if (ifp->awdl)
+		ndev->netdev_ops = &brcmf_netdev_ops_awdl;
+	else
+		ndev->netdev_ops = &brcmf_netdev_ops_pri;
 
 	ndev->needed_headroom += drvr->hdrlen;
 	ndev->ethtool_ops = &brcmf_ethtool_ops;
@@ -665,10 +702,12 @@ int brcmf_net_attach(struct brcmf_if *ifp, bool locked)
 	INIT_WORK(&ifp->multicast_work, _brcmf_set_multicast_list);
 	INIT_WORK(&ifp->ndoffload_work, _brcmf_update_ndtable);
 
-	if (locked)
+	if (!locked)
+		err = register_netdev(ndev);
+	else if (ndev->ieee80211_ptr)
 		err = cfg80211_register_netdevice(ndev);
 	else
-		err = register_netdev(ndev);
+		err = register_netdevice(ndev);
 	if (err != 0) {
 		bphy_err(drvr, "couldn't register the net device\n");
 		goto fail;
@@ -689,10 +728,12 @@ fail:
 void brcmf_net_detach(struct net_device *ndev, bool locked)
 {
 	if (ndev->reg_state == NETREG_REGISTERED) {
-		if (locked)
+		if (!locked)
+			unregister_netdev(ndev);
+		else if (ndev->ieee80211_ptr)
 			cfg80211_unregister_netdevice(ndev);
 		else
-			unregister_netdev(ndev);
+			unregister_netdevice(ndev);
 	} else {
 		brcmf_cfg80211_free_vif(ndev);
 		free_netdev(ndev);
@@ -943,7 +984,7 @@ static void brcmf_del_if(struct brcmf_pub *drvr, s32 bsscfgidx,
 			netif_stop_queue(ifp->ndev);
 		}
 
-		if (ifp->ndev->netdev_ops == &brcmf_netdev_ops_pri) {
+		if (brcmf_netdev_is_brcmf(ifp->ndev)) {
 			cancel_work_sync(&ifp->multicast_work);
 			cancel_work_sync(&ifp->ndoffload_work);
 		}
@@ -1016,6 +1057,12 @@ static int brcmf_inetaddr_changed(struct notifier_block *nb,
 		if (idx == BRCMF_MAX_IFS - 1)
 			return NOTIFY_DONE;
 	}
+
+	/* ARP offload would put the address into the table of the primary
+	 * interface, the AWDL interface has none of its own
+	 */
+	if (ifp->awdl)
+		return NOTIFY_DONE;
 
 	/* check if arp offload is supported */
 	ret = brcmf_fil_iovar_int_get(ifp, "arpoe", &val);
@@ -1375,6 +1422,7 @@ int brcmf_attach(struct device *dev)
 		drvr->if2bss[i] = BRCMF_BSSIDX_INVALID;
 
 	mutex_init(&drvr->proto_block);
+	brcmf_awdl_attach(drvr);
 
 	/* Link to bus module */
 	drvr->hdrlen = 0;
@@ -1490,6 +1538,7 @@ void brcmf_detach(struct device *dev)
 	unregister_inet6addr_notifier(&drvr->inet6addr_notifier);
 #endif
 
+	brcmf_awdl_detach(drvr);
 	brcmf_bus_change_state(bus_if, BRCMF_BUS_DOWN);
 	/* make sure primary interface removed last */
 	for (i = BRCMF_MAX_IFS - 1; i > -1; i--) {

@@ -172,6 +172,9 @@ static void brcmf_fweh_handle_if_event(struct brcmf_pub *drvr,
 			return;
 		if (!is_p2pdev)
 			brcmf_proto_add_if(drvr, ifp);
+		/* The AWDL interface is attached by brcmf_awdl_add() */
+		if (brcmf_awdl_if_added(drvr, ifp))
+			return;
 		if (!drvr->fweh->evt_handler[BRCMF_E_IF])
 			if (brcmf_net_attach(ifp, false) < 0)
 				return;
@@ -179,6 +182,14 @@ static void brcmf_fweh_handle_if_event(struct brcmf_pub *drvr,
 
 	if (ifp && ifevent->action == BRCMF_E_IF_CHANGE)
 		brcmf_proto_reset_if(drvr, ifp);
+
+	/* The AWDL interface has no vif, cfg80211 does not know it */
+	if (ifp && ifp->awdl) {
+		if (ifevent->action == BRCMF_E_IF_DEL &&
+		    !brcmf_awdl_if_removed(drvr, ifp))
+			brcmf_remove_interface(ifp, false);
+		return;
+	}
 
 	brcmf_fweh_call_event_handler(drvr, ifp, emsg->event_code, emsg,
 				      data);
@@ -315,6 +326,12 @@ static void brcmf_fweh_event_worker(struct work_struct *work)
 			ifp = drvr->iflist[0];
 		else
 			ifp = drvr->iflist[emsg.bsscfgidx];
+		/* The AWDL interface has no vif, its events are not for
+		 * the cfg80211 handlers
+		 */
+		if (ifp && ifp->awdl)
+			goto event_free;
+
 		err = brcmf_fweh_call_event_handler(drvr, ifp, event->code,
 						    &emsg, event->data);
 		if (err) {

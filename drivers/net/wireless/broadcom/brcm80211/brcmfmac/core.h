@@ -12,6 +12,7 @@
 
 #include <net/cfg80211.h>
 #include "fweh.h"
+#include "awdl.h"
 
 #if IS_MODULE(CONFIG_BRCMFMAC)
 #define BRCMF_EXPORT_SYMBOL_GPL(__sym)	EXPORT_SYMBOL_NS_GPL(__sym, "BRCMFMAC")
@@ -24,6 +25,8 @@
 
 /* For supporting multiple interfaces */
 #define BRCMF_MAX_IFS	16
+
+#define BRCMF_BSSIDX_INVALID	-1
 
 /* Small, medium and maximum buffer size for dcmd
  */
@@ -163,6 +166,8 @@ struct brcmf_pub {
 	void *vdata;
 	struct scan_param_struct_handler scan_param_handler;
 	u16 join_version;
+
+	struct brcmf_awdl awdl;
 };
 
 /* forward declarations */
@@ -202,6 +207,7 @@ enum brcmf_netif_stop_reason {
  * @pend_8021x_cnt: tracks outstanding number of 802.1x frames.
  * @pend_8021x_wait: used for signalling change in count.
  * @fwil_fwerr: flag indicating fwil layer should return firmware error codes.
+ * @awdl: this is the AWDL interface, it has no cfg80211 vif.
  */
 struct brcmf_if {
 	struct brcmf_pub *drvr;
@@ -220,6 +226,7 @@ struct brcmf_if {
 	struct in6_addr ipv6_addr_tbl[NDOL_MAX_ENTRIES];
 	u8 ipv6addr_idx;
 	bool fwil_fwerr;
+	bool awdl;
 };
 
 int brcmf_netdev_wait_pend8021x(struct brcmf_if *ifp);

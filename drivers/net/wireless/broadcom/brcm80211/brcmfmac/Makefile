@@ -26,7 +26,8 @@ brcmfmac-objs += \
 		vendor.o \
 		pno.o \
 		scan_param.o \
-		xtlv.o
+		xtlv.o \
+		awdl.o
 brcmfmac-$(CONFIG_BRCMFMAC_PROTO_BCDC) += \
 		bcdc.o \
 		fwsignal.o
