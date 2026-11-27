@@ -585,7 +585,7 @@ static union pgste __pte_test_and_clear_softdirty(union pte *ptep, union pgste p
 {
 	union pte pte = READ_ONCE(*ptep);
 
-	if (!pte.s.pr || (pte.h.p && !pte.s.sd))
+	if ((pte.h.p || pte.h.i) && !pte.s.sd)
 		return pgste;
 
 	/*
@@ -593,7 +593,8 @@ static union pgste __pte_test_and_clear_softdirty(union pte *ptep, union pgste p
 	 * running, do not reset the protection, leave it marked as dirty.
 	 */
 	if (!pgste.prefix_notif || gmap_mkold_prefix(gmap, gfn, gfn + 1)) {
-		pte.h.p = 1;
+		if (!pte.h.i)
+			pte.h.p = 1;
 		pte.s.sd = 0;
 		pgste = gmap_ptep_xchg(gmap, ptep, pte, pgste, gfn);
 	}
@@ -625,9 +626,9 @@ static long _crste_test_and_clear_softdirty(union crste *table, gfn_t gfn, gfn_t
 		return 1;
 	do {
 		crste = READ_ONCE(*table);
-		if (!crste.h.fc)
+		if (!crste.h.fc && !crste.h.i)
 			return 0;
-		if (crste.h.p && !crste.s.fc1.sd)
+		if ((crste.h.p || crste.h.i) && !crste.s.fc1.sd)
 			return 0;
 
 		/*
@@ -635,10 +636,11 @@ static long _crste_test_and_clear_softdirty(union crste *table, gfn_t gfn, gfn_t
 		 * currently running, do not reset the protection, leave it marked as
 		 * dirty.
 		 */
-		if (crste.s.fc1.prefix_notif && !gmap_mkold_prefix(gmap, gfn, end))
+		if (crste.h.fc && crste.s.fc1.prefix_notif && !gmap_mkold_prefix(gmap, gfn, end))
 			break;
 		new = crste;
-		new.h.p = 1;
+		if (!crste.h.i)
+			new.h.p = 1;
 		new.s.fc1.sd = 0;
 	} while (!gmap_crstep_xchg_atomic(gmap, table, crste, new, gfn));
 
