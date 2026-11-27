@@ -1243,14 +1243,15 @@ static int handle_essa(struct kvm_vcpu *vcpu)
 	if (!READ_ONCE(vcpu->kvm->arch.migration_mode)) {
 		/*
 		 * CMMA is enabled in the KVM settings, but is disabled in
-		 * the SIE block and in the mm_context, and we are not doing
-		 * a migration. Enable CMMA in the mm_context.
-		 * Since we need to take a write lock to write to the context
+		 * the SIE block and in the gmap, and we are not doing a
+		 * migration. Enable CMMA in the gmap.
+		 * Since we need to take a mutex to write to the gmap
 		 * to avoid races with storage keys handling, we check if the
 		 * value really needs to be written to; if the value is
 		 * already correct, we do nothing and avoid the lock.
 		 */
-		set_bit(GMAP_FLAG_USES_CMM, &vcpu->arch.gmap->flags);
+		if (!uses_cmm(vcpu->arch.gmap))
+			gmap_enable_cmm(vcpu->arch.mc, vcpu->arch.gmap);
 		/*
 		 * If we are here, we are supposed to have CMMA enabled in
 		 * the SIE block. Enabling CMMA works on a per-CPU basis,
@@ -1264,6 +1265,8 @@ static int handle_essa(struct kvm_vcpu *vcpu)
 		/* Retry the ESSA instruction */
 		kvm_s390_retry_instr(vcpu);
 	} else {
+		if (!uses_cmm(vcpu->arch.gmap))
+			gmap_enable_cmm(vcpu->arch.mc, vcpu->arch.gmap);
 		scoped_guard(mutex, &vcpu->kvm->slots_arch_lock)
 			scoped_guard(read_lock, &vcpu->kvm->mmu_lock)
 				i = __do_essa(vcpu, orc);

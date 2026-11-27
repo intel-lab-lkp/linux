@@ -2349,6 +2349,9 @@ static int kvm_s390_set_cmma_bits(struct kvm *kvm,
 	if (r)
 		return -EFAULT;
 
+	scoped_guard(srcu, &kvm->srcu)
+		gmap_enable_cmm_already_locked(mc, kvm->arch.gmap);
+
 	do {
 		r = kvm_s390_mmu_cache_topup(mc);
 		if (r)
@@ -2358,8 +2361,6 @@ static int kvm_s390_set_cmma_bits(struct kvm *kvm,
 					      args->count, args->mask, bits);
 		}
 	} while (r == -ENOMEM);
-
-	set_bit(GMAP_FLAG_USES_CMM, &kvm->arch.gmap->flags);
 
 	return r <= 0 ? r : -EFAULT;
 }
@@ -2991,6 +2992,10 @@ int kvm_arch_vm_ioctl(struct file *filp, unsigned int ioctl, unsigned long arg)
 		r = -EFAULT;
 		if (copy_from_user(&args, argp, sizeof(args)))
 			break;
+		if (kvm_is_ucontrol(kvm)) {
+			r = -EINVAL;
+			break;
+		}
 		mutex_lock(&kvm->slots_arch_lock);
 		r = kvm_s390_set_cmma_bits(kvm, &args);
 		mutex_unlock(&kvm->slots_arch_lock);
