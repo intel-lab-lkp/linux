@@ -2653,11 +2653,20 @@ static int f2fs_ioc_start_atomic_write(struct file *filp, bool truncate)
 		F2FS_I(fi->cow_inode)->atomic_inode = inode;
 	} else {
 		/* Reuse the already created COW inode */
+		struct f2fs_inode_info *cfi = F2FS_I(fi->cow_inode);
+
 		f2fs_bug_on(sbi, get_dirty_blocks(fi->cow_inode));
 
 		invalidate_mapping_pages(fi->cow_inode->i_mapping, 0, -1);
 
+		/*
+		 * GC migrates COW blocks w/ cow inode and its i_gc_rwsem, so
+		 * hold it to serialize truncation of COW blocks w/ GC.
+		 */
+		f2fs_down_write_nested(&cfi->i_gc_rwsem[WRITE],
+						SINGLE_DEPTH_NESTING);
 		ret = f2fs_do_truncate_blocks(fi->cow_inode, 0, true);
+		f2fs_up_write(&cfi->i_gc_rwsem[WRITE]);
 		if (ret)
 			goto out_unlock;
 	}
