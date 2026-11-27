@@ -825,7 +825,7 @@ static int _gmap_link(struct kvm_s390_mmu_cache *mc, struct gmap *gmap, int leve
 		pgste = pgste_get_lock(f->ptep);
 		oldpte = *f->ptep;
 		newpte = _pte(f->pfn, f->writable, f->write_attempt | oldpte.s.d, !f->page);
-		newpte.s.sd = oldpte.s.sd;
+		newpte.s.sd |= oldpte.s.sd;
 		oldpte.s.sd = 0;
 		if (oldpte.val == _PTE_EMPTY.val || oldpte.h.pfra == f->pfn) {
 			pgste = gmap_ptep_xchg(gmap, f->ptep, newpte, pgste, f->gfn);
@@ -841,8 +841,8 @@ static int _gmap_link(struct kvm_s390_mmu_cache *mc, struct gmap *gmap, int leve
 			newval = _crste_fc1(f->pfn, oldval.h.tt, f->writable,
 					    f->write_attempt | oldval.s.fc1.d);
 			newval.s.fc1.s = !f->page;
-			newval.s.fc1.sd = oldval.s.fc1.sd;
-			if (oldval.val != _CRSTE_EMPTY(oldval.h.tt).val &&
+			newval.s.fc1.sd |= oldval.s.fc1.sd;
+			if (!crste_none(oldval) &&
 			    crste_origin_large(oldval) != crste_origin_large(newval))
 				return -EAGAIN;
 			f->crste_region3 = is_pud(newval);
