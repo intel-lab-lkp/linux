@@ -1527,3 +1527,51 @@ struct gmap *gmap_create_shadow(struct kvm_s390_mmu_cache *mc, struct gmap *pare
 	}
 	return new;
 }
+
+#if KVM_S390_MANAGES_S390_GUEST
+/* Bail out for any allocation failure. This is only a best effort to allocate all page tables. */
+void gmap_enable_cmm_already_locked(struct kvm_s390_mmu_cache *mc, struct gmap *gmap)
+{
+	struct kvm_memory_slot *ms;
+	struct kvm_memslots *slots;
+	gfn_t gfn, start, end;
+	union crste *crstep;
+	union pte *ptep;
+	int flags, bkt;
+
+	lockdep_assert_held(&gmap->kvm->srcu);
+	lockdep_assert_held(&gmap->kvm->slots_arch_lock);
+
+	if (uses_cmm(gmap))
+		return;
+
+	set_bit(GMAP_FLAG_USES_CMM, &gmap->flags);
+
+	slots = kvm_memslots(gmap->kvm);
+	if (!slots || kvm_memslots_empty(slots))
+		return;
+
+	if (WARN_ON_ONCE(is_ucontrol(gmap)))
+		return;
+
+	flags = DAT_WALK_ALLOC | DAT_WALK_SPLIT;
+
+	kvm_for_each_memslot(ms, bkt, slots) {
+		start = ALIGN(ms->base_gfn, _PAGE_ENTRIES);
+		end = ALIGN_DOWN(ms->base_gfn + ms->npages, _PAGE_ENTRIES);
+
+		for (gfn = start; gfn < end; gfn += _PAGE_ENTRIES) {
+			if (kvm_s390_mmu_cache_topup(mc))
+				return;
+
+			guard(write_lock)(&gmap->kvm->mmu_lock);
+
+			if (uses_skeys(gmap))
+				flags |= DAT_WALK_USES_SKEYS;
+
+			dat_entry_walk(mc, gfn, gmap->asce, flags, TABLE_TYPE_PAGE_TABLE,
+				       &crstep, &ptep);
+		}
+	}
+}
+#endif /* KVM_S390_MANAGES_S390_GUEST */

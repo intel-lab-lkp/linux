@@ -102,6 +102,7 @@ void gmap_ucas_unmap(struct gmap *gmap, gfn_t c_gfn, unsigned long count);
 
 #if KVM_S390_MANAGES_S390_GUEST
 int gmap_enable_skeys(struct gmap *gmap);
+void gmap_enable_cmm_already_locked(struct kvm_s390_mmu_cache *mc, struct gmap *gmap);
 #endif /* KVM_S390_MANAGES_S390_GUEST */
 
 int gmap_pv_destroy_range(struct gmap *gmap, gfn_t start, gfn_t end, bool interruptible);
@@ -345,4 +346,17 @@ static inline bool gmap_is_shadow_valid(struct gmap *sg, union asce asce, int ed
 	return sg->guest_asce.val == asce.val && sg->edat_level == edat_level;
 }
 
+#if KVM_S390_MANAGES_S390_GUEST
+static inline void gmap_enable_cmm(struct kvm_s390_mmu_cache *mc, struct gmap *gmap)
+{
+	/* CMMA already enabled, nothing to do */
+	if (uses_cmm(gmap))
+		return;
+
+	guard(srcu)(&gmap->kvm->srcu);
+	guard(mutex)(&gmap->kvm->slots_arch_lock);
+
+	gmap_enable_cmm_already_locked(mc, gmap);
+}
+#endif /* KVM_S390_MANAGES_S390_GUEST */
 #endif /* ARCH_KVM_GMAP_GMAP_H */
