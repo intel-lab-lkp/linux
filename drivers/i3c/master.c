@@ -2667,6 +2667,8 @@ err_detach_devs:
 	return ret;
 }
 
+static void fwnode_depopulate_i3c_bus(struct i3c_master_controller *master);
+
 static void i3c_master_bus_cleanup(struct i3c_master_controller *master)
 {
 	if (master->ops->bus_cleanup) {
@@ -2681,6 +2683,7 @@ static void i3c_master_bus_cleanup(struct i3c_master_controller *master)
 		}
 	}
 
+	fwnode_depopulate_i3c_bus(master);
 	i3c_master_detach_free_devs(master);
 }
 
@@ -3353,15 +3356,29 @@ static int fwnode_populate_i3c_bus(struct i3c_master_controller *master)
 		return 0;
 
 	fwnode_for_each_available_child_node_scoped(fwnode, child) {
-		if (is_of_node(child))
+		if (is_of_node(child)) {
 			ret = i3c_master_add_of_dev(master, child);
-		else if (is_acpi_device_node(child))
-			ret = i3c_master_add_acpi_dev(master, child);
-		else
-			continue;
+			if (ret) {
+				fwnode_depopulate_i3c_bus(master);
+				return ret;
+			}
 
-		if (ret)
-			return ret;
+			/*
+			 * Claim the node so that i2c_register_adapter(),
+			 * called later for the legacy I2C adapter sharing
+			 * this same of_node, does not also run
+			 * of_i2c_register_devices() on it: every child here
+			 * is already fully accounted for, whether it ends up
+			 * I3C or legacy-I2C boardinfo.
+			 */
+			of_node_set_flag(to_of_node(child), OF_POPULATED);
+		} else if (is_acpi_device_node(child)) {
+			ret = i3c_master_add_acpi_dev(master, child);
+			if (ret) {
+				fwnode_depopulate_i3c_bus(master);
+				return ret;
+			}
+		}
 	}
 
 	/*
@@ -3376,6 +3393,26 @@ static int fwnode_populate_i3c_bus(struct i3c_master_controller *master)
 		master->bus.scl_rate.i3c = val;
 
 	return 0;
+}
+
+/*
+ * Counterpart to fwnode_populate_i3c_bus(): drop the OF_POPULATED claim on
+ * every OF bus child so a later re-probe of this master, or the legacy I2C
+ * adapter's of_i2c_register_devices() walk on a different master sharing
+ * the same of_node, does not find these nodes permanently locked out.
+ * ACPI-described children were never marked, so they are skipped here too.
+ */
+static void fwnode_depopulate_i3c_bus(struct i3c_master_controller *master)
+{
+	struct fwnode_handle *fwnode = dev_fwnode(&master->dev);
+
+	if (!fwnode)
+		return;
+
+	fwnode_for_each_available_child_node_scoped(fwnode, child) {
+		if (is_of_node(child))
+			of_node_clear_flag(to_of_node(child), OF_POPULATED);
+	}
 }
 
 static int i3c_master_i2c_adapter_xfer(struct i2c_adapter *adap,
