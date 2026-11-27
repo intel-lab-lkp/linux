@@ -1626,8 +1626,7 @@ static struct uclamp_se uclamp_default[UCLAMP_CNT];
 
 /*
  * This static key is used to reduce the uclamp overhead in the fast path. It
- * primarily disables the call to uclamp_rq_{inc, dec}() in
- * enqueue/dequeue_task().
+ * disables uclamp_rq_inc() accounting in enqueue_task().
  *
  * This allows users to continue to enable uclamp in their kernel config with
  * minimum uclamp overhead in the fast path.
@@ -1839,32 +1838,6 @@ static inline void uclamp_rq_dec_id(struct rq *rq, struct task_struct *p,
 
 	lockdep_assert_rq_held(rq);
 
-	/*
-	 * If sched_uclamp_used was enabled after task @p was enqueued,
-	 * we could end up with unbalanced call to uclamp_rq_dec_id().
-	 *
-	 * In this case the uc_se->active flag should be false since no uclamp
-	 * accounting was performed at enqueue time and we can just return
-	 * here.
-	 *
-	 * Need to be careful of the following enqueue/dequeue ordering
-	 * problem too
-	 *
-	 *	enqueue(taskA)
-	 *	// sched_uclamp_used gets enabled
-	 *	enqueue(taskB)
-	 *	dequeue(taskA)
-	 *	// Must not decrement bucket->tasks here
-	 *	dequeue(taskB)
-	 *
-	 * where we could end up with stale data in uc_se and
-	 * bucket[uc_se->bucket_id].
-	 *
-	 * The following check here eliminates the possibility of such race.
-	 */
-	if (unlikely(!uc_se->active))
-		return;
-
 	bucket = &uc_rq->bucket[uc_se->bucket_id];
 
 	WARN_ON_ONCE(!bucket->tasks);
@@ -1927,12 +1900,12 @@ static inline void uclamp_rq_dec(struct rq *rq, struct task_struct *p)
 	enum uclamp_id clamp_id;
 
 	/*
-	 * Avoid any overhead until uclamp is actually used by the userspace.
-	 *
-	 * The condition is constructed such that a NOP is generated when
-	 * sched_uclamp_used is disabled.
+	 * Static-key updates are not atomic across callsites. An enqueue may
+	 * have accounted this task before this callsite observes the key enabled.
+	 * Check the task's accounting state instead. Both clamps are updated
+	 * under the rq lock, so either active flag is sufficient here.
 	 */
-	if (!uclamp_is_used())
+	if (!p->uclamp[UCLAMP_MIN].active)
 		return;
 
 	if (unlikely(!p->sched_class->uclamp_enabled))
