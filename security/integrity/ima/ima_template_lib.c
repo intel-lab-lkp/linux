@@ -200,6 +200,40 @@ void ima_show_template_digest_ngv2(struct seq_file *m, enum ima_show_type show,
 				     field_data);
 }
 
+void ima_show_template_modsig_list(struct seq_file *m, enum ima_show_type show,
+				   struct ima_field_data *field_data)
+{
+	struct ima_field_data entry;
+	u32 count, i;
+	int parsed;
+	void *p = field_data->data;
+	void *end = p + field_data->len;
+
+	if (show != IMA_SHOW_ASCII || field_data->len < sizeof(count)) {
+		ima_show_template_field_data(m, show, DATA_FMT_HEX, field_data);
+		return;
+	}
+
+	memcpy(&count, p, sizeof(count));
+	if (ima_canonical_fmt)
+		count = le32_to_cpu((__force __le32)count);
+	p += sizeof(count);
+
+	for (i = 0; i < count; i++) {
+		ima_parse_buf(p, end, &p, 1, &entry, &parsed, NULL, 0,
+			      "d-modsig-list");
+		if (parsed != 1)
+			break;
+
+		if (i)
+			seq_putc(m, ',');
+		if (entry.len)
+			ima_show_template_data_ascii(m, show,
+						     DATA_FMT_DIGEST_WITH_ALGO,
+						     &entry);
+	}
+}
+
 void ima_show_template_string(struct seq_file *m, enum ima_show_type show,
 			      struct ima_field_data *field_data)
 {
@@ -522,6 +556,75 @@ int ima_eventdigest_modsig_init(struct ima_event_data *event_data,
 	return ima_write_template_field_data(entry, len,
 					     DATA_FMT_DIGEST_WITH_ALGO,
 					     field_data);
+}
+
+/*
+ *  ima_eventdigest_modsig_list_init - add the content digest of each modsig
+ *  signer to the template data.
+ *
+ *  Unlike 'd-modsig', this field describes an appended signature with any
+ *  number of signers, which may use different algorithms. It is a table as
+ *  follows:
+ *
+ *      <u32 count> x (<u32 entry_len><entry>)
+ *
+ *  with one entry per signer, in the order of the 'modsig' field, so entry i
+ *  describes signer i, and with the pair <entry_len><entry> repeating <count>
+ *  times.
+ *
+ *  An entry has the 'd-modsig' format, see ima_modsig_digest_entry().
+ */
+int ima_eventdigest_modsig_list_init(struct ima_event_data *event_data,
+				     struct ima_field_data *field_data)
+{
+	unsigned int count, i, err_count = 0;
+	int len, rc;
+	size_t buf_len;
+	u8 *buf, *p;
+	u32 val;
+
+	if (!event_data->modsig)
+		return 0;
+
+	count = ima_get_modsig_signer_count(event_data->modsig);
+	if (!count)
+		return 0;
+
+	buf_len = size_add(sizeof(u32),
+			   size_mul(count, sizeof(u32) +
+				    IMA_MAX_DIGEST_ENTRY_SIZE - DIGEST_TYPE_NAME_LEN_MAX));
+	buf = kmalloc(buf_len, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+
+	p = buf;
+	val = ima_canonical_fmt ? (__force u32)cpu_to_le32(count) : count;
+	memcpy(p, &val, sizeof(val));
+	p += sizeof(u32);
+
+	for (i = 0; i < count; i++) {
+		len = ima_modsig_digest_entry(event_data->modsig, i,
+					      p + sizeof(u32));
+		if (len < 0) {
+			/* Keep walking signers' list, even on failure, to
+			 * maintain allignament with modsig.
+			 */
+			rc = len;
+			len = 0;
+			err_count++;
+		}
+
+		val = ima_canonical_fmt ? (__force u32)cpu_to_le32(len) : len;
+		memcpy(p, &val, sizeof(val));
+		p += sizeof(u32) + len;
+	}
+
+	/* Like 'd-modsig', don't measure if the list has only bad digests */
+	if (err_count < count)
+		rc = ima_write_template_field_data(buf, p - buf, DATA_FMT_HEX,
+						   field_data);
+	kfree(buf);
+	return rc;
 }
 
 static int ima_eventname_init_common(struct ima_event_data *event_data,

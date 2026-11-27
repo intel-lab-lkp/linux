@@ -1242,7 +1242,8 @@ static void check_template_modsig(const struct ima_template_desc *template)
 	for (i = 0; i < template->num_fields; i++) {
 		if (!strcmp(template->fields[i]->field_id, "modsig"))
 			has_modsig = true;
-		else if (!strcmp(template->fields[i]->field_id, "d-modsig"))
+		else if (!strcmp(template->fields[i]->field_id, "d-modsig") ||
+			 !strcmp(template->fields[i]->field_id, "d-modsig-list"))
 			has_dmodsig = true;
 	}
 

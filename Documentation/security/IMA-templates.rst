@@ -72,6 +72,9 @@ descriptors by adding their identifier to the format string
  - 'd-modsig': the digest of the event without the appended modsig or a signature
    algorithm name followed by an empty digest (<signing algo>: \0) when direct data
    algorithms are used, e.g. ML-DSA;
+ - 'd-modsig-list': a list of 'd-modsig' of each signer when multiple signatures are
+   present and which may use different algorithms
+   (field format: <entry count>[pairs of <entry length><d-modsig entry>]);
  - 'n-ng': the name of the event, without size limitations;
  - 'sig': the file signature, based on either the file's/fsverity's digest[1],
    or the EVM portable signature, if 'security.ima' contains a file hash.

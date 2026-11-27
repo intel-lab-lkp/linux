@@ -50,6 +50,9 @@ static const struct ima_template_field supported_fields[] = {
 	 .field_show = ima_show_template_buf},
 	{.field_id = "d-modsig", .field_init = ima_eventdigest_modsig_init,
 	 .field_show = ima_show_template_digest_ng},
+	{.field_id = "d-modsig-list",
+	 .field_init = ima_eventdigest_modsig_list_init,
+	 .field_show = ima_show_template_modsig_list},
 	{.field_id = "modsig", .field_init = ima_eventmodsig_init,
 	 .field_show = ima_show_template_sig},
 	{.field_id = "evmsig", .field_init = ima_eventevmsig_init,
@@ -95,7 +98,8 @@ bool ima_template_has_modsig(const struct ima_template_desc *ima_template)
 
 	for (i = 0; i < ima_template->num_fields; i++)
 		if (!strcmp(ima_template->fields[i]->field_id, "modsig") ||
-		    !strcmp(ima_template->fields[i]->field_id, "d-modsig"))
+		    !strcmp(ima_template->fields[i]->field_id, "d-modsig") ||
+		    !strcmp(ima_template->fields[i]->field_id, "d-modsig-list"))
 			return true;
 
 	return false;
