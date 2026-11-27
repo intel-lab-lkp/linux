@@ -175,6 +175,7 @@ static int sunxi_pck600_probe(struct platform_device *pdev)
 		pd->genpd.power_off = sunxi_pck600_power_off;
 		pd->genpd.power_on = sunxi_pck600_power_on;
 		pd->genpd.flags = pd_desc->flags;
+		pd->pck = pck;
 		pd->base = base + PPU_REG_SIZE * i;
 
 		sunxi_pck600_pd_setup(pd, desc);
