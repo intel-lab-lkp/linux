@@ -99,6 +99,7 @@ Below, there is the list of defined template descriptors:
  - "ima-sigv2": its format is ``d-ngv2|n-ng|sig``;
  - "ima-buf": its format is ``d-ng|n-ng|buf``;
  - "ima-modsig": its format is ``d-ng|n-ng|sig|d-modsig|modsig``;
+ - "ima-modsigv2": its format is ``d-ngv2|n-ng|sig|d-modsig-list|modsig``;
  - "evm-sig": its format is ``d-ng|n-ng|evmsig|xattrnames|xattrlengths|xattrvalues|iuid|igid|imode``;
 
 
