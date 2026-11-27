@@ -575,7 +575,7 @@ static struct ionic_vcq *ionic_create_rdma_admincq(struct ionic_ibdev *dev,
 	vcq->udma_mask = 1;
 	cq = &vcq->cq[0];
 
-	rc = ionic_create_cq_common(vcq, &buf, &attr, NULL, NULL,
+	rc = ionic_create_cq_common(vcq, &buf, &attr, NULL, NULL, NULL,
 				    NULL, 0);
 	if (rc)
 		goto err_init;
