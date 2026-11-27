@@ -2146,27 +2146,6 @@ static int iptfs_first_skb(struct sk_buff **skbp, struct xfrm_iptfs_data *xtfs, 
 	return iptfs_copy_create_frags(skbp, xtfs, mtu);
 }
 
-static struct sk_buff **iptfs_rehome_fraglist(struct sk_buff **nextp, struct sk_buff *child)
-{
-	u32 fllen = 0;
-
-	/* It might be possible to account for a frag list in addition to page
-	 * fragment if it's a valid state to be in. The page fragments size
-	 * should be kept as data_len so only the frag_list size is removed,
-	 * this must be done above as well.
-	 */
-	*nextp = skb_shinfo(child)->frag_list;
-	while (*nextp) {
-		fllen += (*nextp)->len;
-		nextp = &(*nextp)->next;
-	}
-	skb_frag_list_init(child);
-	child->len -= fllen;
-	child->data_len -= fllen;
-
-	return nextp;
-}
-
 static void iptfs_consume_frags(struct sk_buff *to, struct sk_buff *from)
 {
 	struct skb_shared_info *fromi = skb_shinfo(from);
@@ -2241,6 +2220,21 @@ static void iptfs_output_queued(struct xfrm_state *x, struct sk_buff_head *list)
 		if (iptfs_first_skb(&skb, xtfs, mtu))
 			continue;
 
+		/* Aggregating writes to the first skb's shared info and, when
+		 * it has a frag_list, to the skbs on that list. A clone shares
+		 * its shared info with the original, e.g. the skb TCP keeps
+		 * for retransmission, so unclone it first. The skbs on a
+		 * frag_list can be shared with another skb whatever the first
+		 * skb is: pskb_copy() and uncloning share them, and the list
+		 * of a datagram that conntrack reassembled can nest. Send a
+		 * first skb that has a frag_list, or that we cannot unclone,
+		 * on its own.
+		 */
+		if (skb_has_frag_list(skb) || skb_unclone(skb, GFP_ATOMIC)) {
+			xfrm_output(NULL, skb);
+			continue;
+		}
+
 		/* If fragmentation was required the returned skb is the last
 		 * IPTFS fragment in the chain, and it's IPTFS header blkoff has
 		 * been set just past the end of the fragment data.
@@ -2253,18 +2247,8 @@ static void iptfs_output_queued(struct xfrm_state *x, struct sk_buff_head *list)
 		 */
 		remaining = mtu - (skb->len - sizeof(struct ip_iptfs_hdr));
 
-		/* Re-home (un-nest) nested fragment lists. We need to do this
-		 * b/c we will simply be appending any following aggregated
-		 * inner packets using the frag list.
-		 */
 		shi = skb_shinfo(skb);
 		nextp = &shi->frag_list;
-		while (*nextp) {
-			if (skb_has_frag_list(*nextp))
-				nextp = iptfs_rehome_fraglist(&(*nextp)->next, *nextp);
-			else
-				nextp = &(*nextp)->next;
-		}
 
 		if (shi->frag_list || skb_cloned(skb) || skb_shared(skb))
 			share_ok = false;
@@ -2278,6 +2262,13 @@ static void iptfs_output_queued(struct xfrm_state *x, struct sk_buff_head *list)
 		while ((skb2 = skb_peek(list))) {
 			trace_iptfs_ingress_nth_peek(skb2, remaining);
 			if (skb2->len > remaining)
+				break;
+
+			/* Appending would relink skb2's frag_list, which may
+			 * be shared. Leave skb2 to be sent on its own as the
+			 * next first skb.
+			 */
+			if (skb_has_frag_list(skb2))
 				break;
 
 			__skb_unlink(skb2, list);
@@ -2299,10 +2290,13 @@ static void iptfs_output_queued(struct xfrm_state *x, struct sk_buff_head *list)
 			/* skb->pp_recycle is passed to __skb_flag_unref for all
 			 * frag pages so we can only share pages with skb's who
 			 * match ourselves.
+			 *
+			 * iptfs_consume_frags() empties skb2's frags, which a
+			 * clone shares with its original.
 			 */
 			shi2 = skb_shinfo(skb2);
 			if (share_ok &&
-			    (shi2->frag_list ||
+			    (skb_cloned(skb2) ||
 			     (!skb2->head_frag && skb_headlen(skb)) ||
 			     skb->pp_recycle != skb2->pp_recycle ||
 			     skb_zcopy(skb2) ||
@@ -2322,9 +2316,6 @@ static void iptfs_output_queued(struct xfrm_state *x, struct sk_buff_head *list)
 				/* Append to the frag_list */
 				*nextp = skb2;
 				nextp = &skb2->next;
-				if (skb_has_frag_list(skb2))
-					nextp = iptfs_rehome_fraglist(nextp,
-								      skb2);
 				skb->truesize += skb2->truesize;
 			}
 		}
