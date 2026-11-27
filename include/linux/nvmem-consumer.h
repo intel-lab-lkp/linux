@@ -75,6 +75,8 @@ int nvmem_device_read(struct nvmem_device *nvmem, unsigned int offset,
 		      size_t bytes, void *buf);
 int nvmem_device_write(struct nvmem_device *nvmem, unsigned int offset,
 		       size_t bytes, void *buf);
+int nvmem_device_write_panic(struct nvmem_device *nvmem, unsigned int offset,
+			     size_t bytes, void *buf);
 ssize_t nvmem_device_cell_read(struct nvmem_device *nvmem,
 			   struct nvmem_cell_info *info, void *buf);
 int nvmem_device_cell_write(struct nvmem_device *nvmem,
@@ -211,6 +213,13 @@ static inline int nvmem_device_read(struct nvmem_device *nvmem,
 static inline int nvmem_device_write(struct nvmem_device *nvmem,
 				     unsigned int offset, size_t bytes,
 				     void *buf)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int nvmem_device_write_panic(struct nvmem_device *nvmem,
+					   unsigned int offset, size_t bytes,
+					   void *buf)
 {
 	return -EOPNOTSUPP;
 }

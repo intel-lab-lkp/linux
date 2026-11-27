@@ -94,6 +94,8 @@ struct nvmem_cell_info {
  * @of_node:	If given, this will be used instead of the parent's of_node.
  * @reg_read:	Callback to read data; return zero if successful.
  * @reg_write:	Callback to write data; return zero if successful.
+ * @reg_write_panic: Callback to write data during panic; must not sleep,
+ *		allocate, use DMA or wait for interrupts.
  * @size:	Device size.
  * @word_size:	Minimum read/write access granularity.
  * @stride:	Minimum read/write access stride.
@@ -128,6 +130,7 @@ struct nvmem_config {
 	struct device_node	*of_node;
 	nvmem_reg_read_t	reg_read;
 	nvmem_reg_write_t	reg_write;
+	nvmem_reg_write_t	reg_write_panic;
 	int	size;
 	int	word_size;
 	int	stride;

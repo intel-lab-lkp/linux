@@ -959,6 +959,7 @@ struct nvmem_device *nvmem_register(const struct nvmem_config *config)
 
 	ops->reg_read = config->reg_read;
 	ops->reg_write = config->reg_write;
+	ops->reg_write_panic = config->reg_write_panic;
 
 	nvmem->owner = config->owner;
 	if (!nvmem->owner && config->dev->driver)
@@ -2109,6 +2110,49 @@ int nvmem_device_write(struct nvmem_device *nvmem,
 	return bytes;
 }
 EXPORT_SYMBOL_GPL(nvmem_device_write);
+
+/**
+ * nvmem_device_write_panic() - Write to a given nvmem device during panic
+ *
+ * @nvmem: nvmem device to be written to.
+ * @offset: offset in nvmem device.
+ * @bytes: number of bytes to write.
+ * @buf: buffer to be written.
+ *
+ * This is the panic-time counterpart of nvmem_device_write().  It must not
+ * sleep, take mutexes, allocate memory or touch a GPIO that may sleep.  The
+ * provider's reg_write_panic() callback is responsible for using a
+ * non-sleeping bus path.
+ *
+ * Return: length of bytes written or negative error code on failure.
+ */
+int nvmem_device_write_panic(struct nvmem_device *nvmem,
+			     unsigned int offset,
+			     size_t bytes, void *buf)
+{
+	struct nvmem_operations *ops;
+	int rc;
+
+	if (!nvmem)
+		return -EINVAL;
+
+	if (nvmem->read_only)
+		return -EPERM;
+
+	if (offset > nvmem->size || bytes > nvmem->size - offset)
+		return -EINVAL;
+
+	ops = rcu_dereference_raw(nvmem->ops);
+	if (!ops || !ops->reg_write_panic)
+		return -EOPNOTSUPP;
+
+	rc = ops->reg_write_panic(nvmem->priv, offset, buf, bytes);
+	if (rc)
+		return rc;
+
+	return bytes;
+}
+EXPORT_SYMBOL_GPL(nvmem_device_write_panic);
 
 /**
  * nvmem_add_cell_lookups() - register a list of cell lookup entries
