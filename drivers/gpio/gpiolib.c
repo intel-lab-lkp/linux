@@ -1419,13 +1419,19 @@ int gpiochip_add_data_with_key(struct gpio_chip *gc, void *data,
 	if (gpiolib_initialized) {
 		ret = gpiochip_setup_dev(gc);
 		if (ret)
-			goto err_teardown_shared;
+			goto err_release_lines;
 	}
 
 	return 0;
 
-err_teardown_shared:
-	gpio_device_teardown_shared(gdev);
+err_release_lines:
+	/* The character device may have been live: user space may hold lines. */
+	gpiochip_free_own_lines(gc);
+	gpiochip_numb_device(gc);
+	gpiochip_irqchip_remove(gc);
+	gpiochip_remove_pin_ranges(gc);
+	/* What the labels down to err_remove_of_chip undo is done above. */
+	goto err_remove_of_chip;
 err_remove_irqchip:
 	gpiochip_irqchip_remove(gc);
 err_remove_irqchip_mask:
