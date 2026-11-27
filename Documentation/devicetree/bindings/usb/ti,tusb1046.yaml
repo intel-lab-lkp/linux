@@ -20,6 +20,11 @@ properties:
   reg:
     maxItems: 1
 
+  no-hpd:
+    type: boolean
+    description:
+      The HPD_IN pin is not connected to a usable HPD signal.
+
 required:
   - compatible
   - reg
