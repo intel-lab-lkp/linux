@@ -33,6 +33,7 @@
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/string.h>
+#include <linux/uaccess.h>
 
 #include <asm/kfence.h>
 
@@ -553,7 +554,16 @@ static void kfence_guarded_free(void *addr, struct kfence_metadata *meta, bool z
 
 	/* Restore page protection if there was an OOB access. */
 	if (meta->unprotected_page) {
-		memzero_explicit((void *)ALIGN_DOWN(meta->unprotected_page, PAGE_SIZE), PAGE_SIZE);
+		/*
+		 * The fault handler may not have unprotected the page, or
+		 * freeing a neighbouring object may have re-protected it. Don't
+		 * fault, otherwise we can deadlock on meta->lock.
+		 *
+		 * TODO: Serialize the protection of guard pages against the
+		 * fault handler, so that we always find the page unprotected.
+		 */
+		copy_to_kernel_nofault((void *)ALIGN_DOWN(meta->unprotected_page, PAGE_SIZE),
+				       page_address(ZERO_PAGE(0)), PAGE_SIZE);
 		kfence_protect(meta->unprotected_page);
 		meta->unprotected_page = 0;
 	}
