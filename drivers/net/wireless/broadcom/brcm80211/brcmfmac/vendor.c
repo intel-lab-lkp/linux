@@ -197,4 +197,12 @@ const struct nl80211_vendor_cmd_info brcmf_vendor_events[] = {
 		.vendor_id = BROADCOM_OUI,
 		.subcmd = BRCMF_VNDR_EVTS_AWDL_STOPPED
 	},
+	[BRCMF_VNDR_EVTS_AWDL_FRAME] = {
+		.vendor_id = BROADCOM_OUI,
+		.subcmd = BRCMF_VNDR_EVTS_AWDL_FRAME
+	},
+	[BRCMF_VNDR_EVTS_AWDL_ROLE] = {
+		.vendor_id = BROADCOM_OUI,
+		.subcmd = BRCMF_VNDR_EVTS_AWDL_ROLE
+	},
 };
