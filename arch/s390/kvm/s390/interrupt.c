@@ -1775,8 +1775,17 @@ gisa_out:
 	if (tmp_inti) {
 		tmp_inti->type = KVM_S390_INT_IO(1, 0, 0, 0);
 		tmp_inti->io.io_int_word = isc_to_int_word(isc);
-		if (inti)
-			kvm_s390_reinject_io_int(kvm, inti);
+		if (inti) {
+			/*
+			 * The maximum number of pending interrupts is so
+			 * high that this is impossible in practice during
+			 * normal guest operation.
+			 * Drop the interrupt if the limit was somehow
+			 * reached anyway, and free it, to avoid a leak.
+			 */
+			if (kvm_s390_reinject_io_int(kvm, inti))
+				kfree(inti);
+		}
 		inti = tmp_inti;
 	} else
 		gisa_set_ipm_gisc(gi->origin, isc);
