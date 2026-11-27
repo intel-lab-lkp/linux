@@ -535,7 +535,7 @@ static void sw_3dp_id(unsigned char *buf, char *comment, size_t size)
 
 	pnp[7] = rev[8] = 0;
 
-	snprintf(comment, size, " [PnP %d.%02d id %s rev %s]",
+	scnprintf(comment, size, " [PnP %d.%02d id %s rev %s]",
 		(int) ((sw_get_bits(buf, 8, 6, 1) << 6) |		/* Two 6-bit values */
 			sw_get_bits(buf, 16, 6, 1)) / 100,
 		(int) ((sw_get_bits(buf, 8, 6, 1) << 6) |
@@ -723,7 +723,7 @@ static int sw_connect(struct gameport *gameport, struct gameport_driver *drv)
 
 		snprintf(sw->name, sizeof(sw->name),
 			 "Microsoft SideWinder %s", sw_name[sw->type]);
-		snprintf(sw->phys[i], sizeof(sw->phys[i]),
+		scnprintf(sw->phys[i], sizeof(sw->phys[i]),
 			 "%s/input%d", gameport->phys, i);
 
 		sw->dev[i] = input_dev = input_allocate_device();
