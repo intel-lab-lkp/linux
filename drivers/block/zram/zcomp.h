@@ -53,6 +53,7 @@ struct zcomp_req {
 	const size_t src_len;
 
 	unsigned char *dst;
+	/* Destination capacity on input, decompressed size on success. */
 	size_t dst_len;
 };
 

@@ -208,6 +208,7 @@ static int zstd_decompress(struct zcomp_params *params, struct zcomp_ctx *ctx,
 						  req->src_len, zp->ddict);
 	if (zstd_is_error(ret))
 		return -EINVAL;
+	req->dst_len = ret;
 	return 0;
 }
 

@@ -185,6 +185,8 @@ int zcomp_decompress(struct zcomp *comp, struct zcomp_strm *zstrm,
 	ret = comp->ops->decompress(comp->params, &zstrm->ctx, &req);
 	if (src)
 		kunmap_local(src);
+	if (!ret && req.dst_len != PAGE_SIZE)
+		ret = -EINVAL;
 	return ret;
 }
 

@@ -155,6 +155,7 @@ static int deflate_decompress(struct zcomp_params *params,
 	if (ret != Z_STREAM_END)
 		return -EINVAL;
 
+	req->dst_len = inflate->total_out;
 	return 0;
 }
 

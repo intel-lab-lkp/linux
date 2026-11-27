@@ -128,6 +128,7 @@ static int lz4hc_decompress(struct zcomp_params *params, struct zcomp_ctx *ctx,
 	}
 	if (ret < 0)
 		return -EINVAL;
+	req->dst_len = ret;
 	return 0;
 }
 

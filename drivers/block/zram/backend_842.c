@@ -56,8 +56,12 @@ static int decompress_842(struct zcomp_params *params, struct zcomp_ctx *ctx,
 			  struct zcomp_req *req)
 {
 	unsigned int dlen = req->dst_len;
+	int ret;
 
-	return sw842_decompress(req->src, req->src_len, req->dst, &dlen);
+	ret = sw842_decompress(req->src, req->src_len, req->dst, &dlen);
+	if (!ret)
+		req->dst_len = dlen;
+	return ret;
 }
 
 const struct zcomp_ops backend_842 = {
