@@ -286,24 +286,27 @@ int ima_parse_buf(void *bufstartp, void *bufendp, void **bufcurp,
 	return 0;
 }
 
+/*
+ * digest formats:
+ *  - DATA_FMT_DIGEST: digest
+ *  - DATA_FMT_DIGEST_WITH_ALGO: <hash algo> + ':' + '\0' + digest,
+ *  - DATA_FMT_DIGEST_WITH_TYPE_AND_ALGO:
+ *	<digest type> + ':' + <hash algo> + ':' + '\0' + digest,
+ *
+ *    where 'DATA_FMT_DIGEST' is the original digest format ('d')
+ *      with a hash size limitation of 20 bytes,
+ *    where <digest type> is either "ima" or "verity",
+ *    where <hash algo> is the hash_algo_name[] string.
+ */
+#define IMA_MAX_DIGEST_ENTRY_SIZE (DIGEST_TYPE_NAME_LEN_MAX + \
+				   CRYPTO_MAX_ALG_NAME + 2 + \
+				   IMA_MAX_DIGEST_SIZE)
+
 static int ima_eventdigest_init_common(const u8 *digest, u32 digestsize,
 				       u8 digest_type, u8 hash_algo,
 				       struct ima_field_data *field_data)
 {
-	/*
-	 * digest formats:
-	 *  - DATA_FMT_DIGEST: digest
-	 *  - DATA_FMT_DIGEST_WITH_ALGO: <hash algo> + ':' + '\0' + digest,
-	 *  - DATA_FMT_DIGEST_WITH_TYPE_AND_ALGO:
-	 *	<digest type> + ':' + <hash algo> + ':' + '\0' + digest,
-	 *
-	 *    where 'DATA_FMT_DIGEST' is the original digest format ('d')
-	 *      with a hash size limitation of 20 bytes,
-	 *    where <digest type> is either "ima" or "verity",
-	 *    where <hash algo> is the hash_algo_name[] string.
-	 */
-	u8 buffer[DIGEST_TYPE_NAME_LEN_MAX + CRYPTO_MAX_ALG_NAME + 2 +
-		IMA_MAX_DIGEST_SIZE] = { 0 };
+	u8 buffer[IMA_MAX_DIGEST_ENTRY_SIZE] = { 0 };
 	enum data_formats fmt = DATA_FMT_DIGEST;
 	u32 offset = 0;
 
@@ -452,45 +455,73 @@ out:
 }
 
 /*
+ * ima_modsig_digest_entry - encode the content digest of one modsig signer
+ * @modsig: the appended signature
+ * @index: zero-based index of the signer
+ * @entry: output buffer
+ *
+ * The entry has the DATA_FMT_DIGEST_WITH_ALGO format. A signer whose algorithm
+ * signs the data directly (eg. ML-DSA) is recorded by the name of that
+ * algorithm instead, with empty digest (eg. "mldsa65:"), regardless of
+ * authenticated attributes being present or not.
+ *
+ * Return: the entry length on success, a negative error code otherwise.
+ */
+static int ima_modsig_digest_entry(const struct modsig *modsig,
+				   unsigned int index, u8 *entry)
+{
+	const char *sig_algo;
+	enum hash_algo algo;
+	const u8 *digest;
+	u32 size;
+	int len, rc;
+
+	rc = ima_get_modsig_digest(modsig, index, &algo, &digest, &size,
+				   &sig_algo);
+	if (rc)
+		return rc;
+
+	if (sig_algo)
+		return sprintf(entry, "%s:", sig_algo) + 1;
+
+	if (algo >= HASH_ALGO__LAST || !size || size > IMA_MAX_DIGEST_SIZE)
+		return -EINVAL;
+
+	len = sprintf(entry, "%s:", hash_algo_name[algo]) + 1;
+	memcpy(entry + len, digest, size);
+	return len + size;
+}
+
+/*
  * This function writes the digest of the file which is expected to match the
  * digest contained in the file's appended signature.
  */
 int ima_eventdigest_modsig_init(struct ima_event_data *event_data,
 				struct ima_field_data *field_data)
 {
-	enum hash_algo hash_algo;
-	const u8 *cur_digest;
-	u32 cur_digestsize;
+	/* 'd-modsig' (DATA_FMT_DIGEST_WITH_ALGO) doesn't contain digest type */
+	u8 entry[IMA_MAX_DIGEST_ENTRY_SIZE - DIGEST_TYPE_NAME_LEN_MAX] = { 0 };
+	int len;
 
 	if (!event_data->modsig)
 		return 0;
 
-	if (event_data->violation) {
+	if (event_data->violation)
 		/* Recording a violation. */
-		hash_algo = HASH_ALGO_SHA1;
-		cur_digest = NULL;
-		cur_digestsize = 0;
-	} else {
-		const char *sig_algo;
-		int rc;
+		return ima_eventdigest_init_common(NULL, 0, DIGEST_TYPE__LAST,
+						   HASH_ALGO_SHA1, field_data);
 
-		/* 'd-modsig' supports the digest of a single signer only. */
-		if (ima_get_modsig_signer_count(event_data->modsig) != 1)
-			return -EINVAL;
+	/* 'd-modsig' supports the digest of a single signer only. */
+	if (ima_get_modsig_signer_count(event_data->modsig) != 1)
+		return -EINVAL;
 
-		rc = ima_get_modsig_digest(event_data->modsig, 0, &hash_algo,
-					   &cur_digest, &cur_digestsize,
-					   &sig_algo);
-		if (rc)
-			return rc;
-		else if (hash_algo == HASH_ALGO__LAST || cur_digestsize == 0)
-			/* There was some error collecting the digest. */
-			return -EINVAL;
-	}
+	len = ima_modsig_digest_entry(event_data->modsig, 0, entry);
+	if (len < 0)
+		return len;
 
-	return ima_eventdigest_init_common(cur_digest, cur_digestsize,
-					   DIGEST_TYPE__LAST, hash_algo,
-					   field_data);
+	return ima_write_template_field_data(entry, len,
+					     DATA_FMT_DIGEST_WITH_ALGO,
+					     field_data);
 }
 
 static int ima_eventname_init_common(struct ima_event_data *event_data,
