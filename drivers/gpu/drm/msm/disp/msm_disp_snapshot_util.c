@@ -111,6 +111,7 @@ static void msm_disp_capture_atomic_state(struct msm_disp_state *disp_state)
 {
 	struct drm_device *ddev;
 	struct drm_modeset_acquire_ctx ctx;
+	struct drm_atomic_commit *state;
 
 	ktime_get_real_ts64(&disp_state->time);
 
@@ -121,8 +122,9 @@ static void msm_disp_capture_atomic_state(struct msm_disp_state *disp_state)
 	while (drm_modeset_lock_all_ctx(ddev, &ctx) != 0)
 		drm_modeset_backoff(&ctx);
 
-	disp_state->atomic_state = drm_atomic_helper_duplicate_state(ddev,
-			&ctx);
+	state = drm_atomic_helper_duplicate_state(ddev, &ctx);
+	if (!IS_ERR(state))
+		disp_state->atomic_state = state;
 	drm_modeset_drop_locks(&ctx);
 	drm_modeset_acquire_fini(&ctx);
 }
