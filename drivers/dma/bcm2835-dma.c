@@ -33,6 +33,8 @@
 #include <linux/of.h>
 #include <linux/of_dma.h>
 
+#include <dt-bindings/dma/brcm,bcm2835-dma.h>
+
 #include "virt-dma.h"
 
 #define BCM2835_DMA_MAX_DMA_CHAN_SUPPORTED 14
@@ -142,6 +144,15 @@ struct bcm2835_desc {
 #define BCM2835_DMA_PER_MAP(x)	FIELD_PREP(GENMASK(20, 16), x) /* REQ source */
 #define BCM2835_DMA_WAIT(x)	FIELD_PREP(GENMASK(25, 21), x) /* add DMA-wait cycles */
 #define BCM2835_DMA_NO_WIDE_BURSTS BIT(26) /* no 2 beat write bursts */
+
+/*
+ * Flags of the DMA specifier to be set in the CS register, they have the
+ * same layout as the corresponding CS register fields.
+ */
+#define BCM2835_DMA_CS_FLAGS(x) ((x) & (BCM2835_DMA_FLAG_PRIORITY(15) | \
+				      BCM2835_DMA_FLAG_PANIC_PRIORITY(15) | \
+				      BCM2835_DMA_FLAG_WAIT_FOR_WRITES | \
+				      BCM2835_DMA_FLAG_DIS_DEBUG))
 
 /* debug register bits */
 #define BCM2835_DMA_DEBUG_LAST_NOT_SET_ERR	BIT(0)
@@ -435,7 +446,8 @@ static void bcm2835_dma_start_desc(struct bcm2835_chan *c)
 	c->desc = to_bcm2835_dma_desc(&vd->tx);
 
 	writel(c->desc->cb_list[0].paddr, c->chan_base + BCM2835_DMA_ADDR);
-	writel(BCM2835_DMA_ACTIVE, c->chan_base + BCM2835_DMA_CS);
+	writel(BCM2835_DMA_ACTIVE | BCM2835_DMA_CS_FLAGS(c->dreq),
+	       c->chan_base + BCM2835_DMA_CS);
 }
 
 static irqreturn_t bcm2835_dma_callback(int irq, void *data)
@@ -462,7 +474,8 @@ static irqreturn_t bcm2835_dma_callback(int irq, void *data)
 	 * if this IRQ handler is threaded.) If the channel is finished, it
 	 * will remain idle despite the ACTIVE flag being set.
 	 */
-	writel(BCM2835_DMA_INT | BCM2835_DMA_ACTIVE,
+	writel(BCM2835_DMA_INT | BCM2835_DMA_ACTIVE |
+	       BCM2835_DMA_CS_FLAGS(c->dreq),
 	       c->chan_base + BCM2835_DMA_CS);
 
 	d = c->desc;
@@ -511,6 +524,9 @@ static void bcm2835_dma_free_chan_resources(struct dma_chan *chan)
 	vchan_free_chan_resources(&c->vc);
 	free_irq(c->irq_number, c);
 	dma_pool_destroy(c->cb_pool);
+
+	/* do not leak the flags of a DT client to the next user */
+	c->dreq = 0;
 
 	dev_dbg(c->vc.chan.device->dev, "Freeing DMA channel %u\n", c->ch);
 }
