@@ -23,16 +23,54 @@
 };
 
 &lcdif {
+	/*
+	 * Set the initial pixel clock, so that video_pll1 is not changed to
+	 * reach the 24 MHz default.
+	 */
+	assigned-clocks = <&clk IMX8MM_VIDEO_PLL1>,
+			  <&clk IMX8MM_CLK_LCDIF_PIXEL>,
+			  <&clk IMX8MM_CLK_DISP_AXI>,
+			  <&clk IMX8MM_CLK_DISP_APB>;
+	assigned-clock-parents = <0>,
+				 <&clk IMX8MM_VIDEO_PLL1_OUT>,
+				 <&clk IMX8MM_SYS_PLL2_1000M>,
+				 <&clk IMX8MM_SYS_PLL1_800M>;
+	assigned-clock-rates = <144750000>, <72375000>,
+			       <500000000>, <200000000>;
 	status = "okay";
 };
 
 &mipi_dsi {
+	/* Nominal 72.4 MHz pixel clock * 24 bpp / 4 lanes */
+	samsung,burst-clock-frequency = <434400000>;
 	status = "okay";
 };
 
 &panel {
 	compatible = "edt,etml1010g3dra";
 	status = "okay";
+
+	/*
+	 * The SN65DSI83 derives the LVDS clock from the DSI clock. With the
+	 * LCDIF pixel clock equal to that LVDS clock, the panel shows line
+	 * glitches after some display starts. Run the pixel clock slightly
+	 * below the nominal 72.4 MHz, while the DSI clock above stays at the
+	 * nominal rate.
+	 */
+	panel-timing {
+		clock-frequency = <72375000>;
+		hactive = <1280>;
+		vactive = <800>;
+		hfront-porch = <72>;
+		hback-porch = <86>;
+		hsync-len = <2>;
+		vfront-porch = <15>;
+		vback-porch = <21>;
+		vsync-len = <2>;
+		hsync-active = <0>;
+		vsync-active = <0>;
+		de-active = <1>;
+	};
 };
 
 &pwm4 {
