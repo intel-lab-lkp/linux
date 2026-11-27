@@ -4305,8 +4305,13 @@ int f2fs_inplace_write_data(struct f2fs_io_info *fio)
 		goto drop_bio;
 	}
 
-	if (fio->meta_gc)
-		f2fs_truncate_meta_caches(sbi, fio->new_blkaddr, 1);
+	/*
+	 * GC may have cached this block in meta cache while its owner was in
+	 * atomic write or before it was donated by F2FS_IOC_MOVE_RANGE, so
+	 * truncate it regardless of fio->meta_gc to avoid that GC migrates
+	 * stale data from meta cache later.
+	 */
+	f2fs_truncate_meta_caches(sbi, fio->new_blkaddr, 1);
 
 	stat_inc_inplace_blocks(fio->sbi);
 
@@ -4494,12 +4499,16 @@ void f2fs_wait_on_block_writeback_range(struct inode *inode, block_t blkaddr,
 	struct f2fs_sb_info *sbi = F2FS_I_SB(inode);
 	block_t i;
 
-	if (!f2fs_meta_inode_gc_required(inode))
-		return;
+	if (f2fs_meta_inode_gc_required(inode)) {
+		for (i = 0; i < len; i++)
+			f2fs_wait_on_block_writeback(inode, blkaddr + i);
+	}
 
-	for (i = 0; i < len; i++)
-		f2fs_wait_on_block_writeback(inode, blkaddr + i);
-
+	/*
+	 * GC may have cached these blocks in meta cache while their owner
+	 * required meta inode GC, truncate them regardless of current state
+	 * of the inode, since DIO may overwrite them in place.
+	 */
 	f2fs_truncate_meta_caches(sbi, blkaddr, len);
 }
 
