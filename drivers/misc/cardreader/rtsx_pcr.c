@@ -1800,7 +1800,13 @@ static int rtsx_pci_runtime_resume(struct device *device)
 
 	rtsx_pci_init_hw(pcr);
 
-	if (pcr->slots[RTSX_SD_CARD].p_dev != NULL) {
+	/*
+	 * card_event() triggers a rescan to catch card changes made while
+	 * runtime suspended, but mmc_detect_change() reports a wakeup event
+	 * that can abort a system sleep transition. Skip it then: the mmc host
+	 * class .complete() callback rescans anyway.
+	 */
+	if (pcr->slots[RTSX_SD_CARD].p_dev != NULL && !device->power.is_prepared) {
 		pcr->slots[RTSX_SD_CARD].card_event(
 				pcr->slots[RTSX_SD_CARD].p_dev);
 	}
