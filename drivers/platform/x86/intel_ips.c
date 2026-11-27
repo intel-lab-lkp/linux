@@ -707,7 +707,7 @@ static void update_turbo_limits(struct ips_driver *ips)
 	u32 hts = thm_readl(THM_HTS);
 
 	ips->cpu_turbo_enabled = !(hts & HTS_PCTD_DIS);
-	/* 
+	/*
 	 * Disable turbo for now, until we can figure out why the power figures
 	 * are wrong
 	 */
