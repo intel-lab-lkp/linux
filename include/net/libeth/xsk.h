@@ -129,6 +129,10 @@ libeth_xsk_tx_fill_buf(struct libeth_xdp_tx_frame frm, u32 i,
 
 	sqe = &sq->sqes[i];
 	sqe->xsk = xdp;
+	/* Count each buffer on its own SQE. The shared info of the frame
+	 * may change before the bulk is flushed.
+	 */
+	sqe->bytes = desc.len;
 
 	if (!(desc.flags & LIBETH_XDP_TX_FIRST)) {
 		sqe->type = LIBETH_SQE_XSK_TX_FRAG;
@@ -136,8 +140,6 @@ libeth_xsk_tx_fill_buf(struct libeth_xdp_tx_frame frm, u32 i,
 	}
 
 	sqe->type = LIBETH_SQE_XSK_TX;
-	libeth_xdp_tx_fill_stats(sqe, &desc,
-				 xdp_get_shared_info_from_buff(&xdp->base));
 
 	return desc;
 }

@@ -1794,10 +1794,17 @@ __libeth_xdp_complete_tx(struct libeth_sqe *sqe, struct libeth_cq_pp *cp,
 	switch (type) {
 	case LIBETH_SQE_XDP_TX:
 	case LIBETH_SQE_XDP_XMIT:
-	case LIBETH_SQE_XSK_TX:
 		cp->xdp_tx -= sqe->nr_frags;
 
 		cp->xss->packets++;
+		cp->xss->bytes += sqe->bytes;
+		break;
+	case LIBETH_SQE_XSK_TX:
+		cp->xss->packets++;
+		fallthrough;
+	case LIBETH_SQE_XSK_TX_FRAG:
+		/* One buffer per SQE, see libeth_xsk_tx_fill_buf() */
+		cp->xdp_tx--;
 		cp->xss->bytes += sqe->bytes;
 		break;
 	default:
