@@ -925,8 +925,8 @@ static struct iommu_group *apple_dart_device_group(struct device *dev)
 #endif
 		group = generic_device_group(dev);
 
-	res = ERR_PTR(-ENOMEM);
-	if (!group)
+	res = group;
+	if (IS_ERR(group))
 		goto out;
 
 	group_master_cfg = iommu_group_get_iommudata(group);
