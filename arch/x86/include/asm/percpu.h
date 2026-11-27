@@ -28,16 +28,16 @@
 #include <linux/stringify.h>
 #include <asm/asm.h>
 
+#ifdef __CHECKER__
+# define __seg_gs		__attribute__((address_space(__seg_gs)))
+# define __seg_fs		__attribute__((address_space(__seg_fs)))
+#endif
+
 #ifdef CONFIG_SMP
 
 #define __force_percpu_prefix	"%%"__stringify(__percpu_seg)":"
 
 #ifdef CONFIG_CC_HAS_NAMED_AS
-
-#ifdef __CHECKER__
-# define __seg_gs		__attribute__((address_space(__seg_gs)))
-# define __seg_fs		__attribute__((address_space(__seg_fs)))
-#endif
 
 #define __percpu_prefix
 

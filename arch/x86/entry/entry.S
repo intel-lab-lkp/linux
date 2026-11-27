@@ -62,20 +62,6 @@ EXPORT_SYMBOL_FOR_KVM(x86_verw_sel);
 
 THUNK warn_thunk_thunk, __warn_thunk
 
-/*
- * Clang's implementation of TLS stack cookies requires the variable in
- * question to be a TLS variable. If the variable happens to be defined as an
- * ordinary variable with external linkage in the same compilation unit (which
- * amounts to the whole of vmlinux with LTO enabled), Clang will drop the
- * segment register prefix from the references, resulting in broken code. Work
- * around this by avoiding the symbol used in -mstack-protector-guard-symbol=
- * entirely in the C code, and use an alias emitted by the linker script
- * instead.
- */
-#if defined(CONFIG_STACKPROTECTOR) && defined(CONFIG_SMP)
-EXPORT_SYMBOL(__ref_stack_chk_guard);
-#endif
-
 #if IS_ENABLED(CONFIG_KVM_INTEL)
 .macro IDT_DO_EVENT_IRQOFF call_insn call_target
 	/*

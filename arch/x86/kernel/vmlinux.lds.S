@@ -475,9 +475,6 @@ SECTIONS
 	   "kernel image bigger than KERNEL_IMAGE_SIZE");
 #endif
 
-/* needed for Clang - see arch/x86/entry/entry.S */
-PROVIDE(__ref_stack_chk_guard = __stack_chk_guard);
-
 #ifdef CONFIG_X86_64
 
 #ifdef CONFIG_MITIGATION_UNRET_ENTRY

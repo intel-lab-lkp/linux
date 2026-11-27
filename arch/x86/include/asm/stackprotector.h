@@ -20,7 +20,28 @@
 
 #include <linux/sched.h>
 
-DECLARE_PER_CPU_CACHE_HOT(unsigned long, __stack_chk_guard);
+/*
+ * If a per-CPU C declaration of __stack_chk_guard is observable by Clang, it
+ * will emit the memory operand with the segment prefix only when the C
+ * declaration is annotated with the correct address space.  Otherwise, Clang
+ * will ignore -mstack-protector-guard-reg=%fs/%gs, and emit the bare unshifted
+ * memory operand. 'Observable' means part of the same translation unit, which
+ * amounts to all of vmlinux when LTO is enabled.
+ *
+ * So use an address space annotation for the stack canary even when using a
+ * Clang version that does not support CONFIG_USE_X86_SEG_SUPPORT=y fully.
+ */
+#if defined(CONFIG_SMP) && defined(CONFIG_CC_IS_CLANG) && \
+    !defined(CONFIG_USE_X86_SEG_SUPPORT)
+#define __stack_chk_guard_seg	CONCATENATE(__seg_, __percpu_seg)
+#define __pcpu_stack_chk_guard	\
+	*(unsigned long __percpu *)(__force unsigned long)&__stack_chk_guard
+#else
+#define __stack_chk_guard_seg
+#define __pcpu_stack_chk_guard	__stack_chk_guard
+#endif
+
+DECLARE_PER_CPU_CACHE_HOT(unsigned long __stack_chk_guard_seg, __stack_chk_guard);
 
 /*
  * Initialize the stackprotector canary value.
@@ -38,13 +59,15 @@ static __always_inline void boot_init_stack_canary(void)
 	unsigned long canary = get_random_canary();
 
 	current->stack_canary = canary;
-	this_cpu_write(__stack_chk_guard, canary);
+	this_cpu_write(__pcpu_stack_chk_guard, canary);
 }
 
 static inline void cpu_init_stack_canary(int cpu, struct task_struct *idle)
 {
-	per_cpu(__stack_chk_guard, cpu) = idle->stack_canary;
+	per_cpu(__pcpu_stack_chk_guard, cpu) = idle->stack_canary;
 }
+
+#undef __pcpu_stack_chk_guard
 
 #else	/* STACKPROTECTOR */
 
