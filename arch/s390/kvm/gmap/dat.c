@@ -425,7 +425,7 @@ int dat_entry_walk(struct kvm_s390_mmu_cache *mc, gfn_t gfn, union asce asce, in
 			return entry.tok.type == _DAT_TOKEN_PIC ? entry.tok.par : -EFAULT;
 		if (walk_level == TABLE_TYPE_REGION3 &&
 		    continue_anyway && !entry.pud.h.fc && !entry.h.i) {
-			walk_level = TABLE_TYPE_PAGE_TABLE;
+			walk_level = TABLE_TYPE_SEGMENT;
 			allocate = false;
 		}
 		if (walk_level == TABLE_TYPE_REGION3 || ((leaf || any) && entry.pud.h.fc))
