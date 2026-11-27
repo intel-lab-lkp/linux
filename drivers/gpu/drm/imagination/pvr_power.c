@@ -366,6 +366,50 @@ const struct pvr_power_sequence_ops pvr_power_sequence_ops_pwrseq = {
 	.power_off = pvr_power_off_sequence_pwrseq,
 };
 
+static int
+pvr_power_device_off(struct pvr_device *pvr_dev)
+{
+	int err;
+
+	/* Caller must hold a drm_dev_enter() reference. */
+	if (READ_ONCE(pvr_dev->fw_dev.initialised)) {
+		err = pvr_power_fw_disable(pvr_dev, false, true);
+		if (err)
+			return err;
+	}
+
+	return pvr_dev->device_data->pwr_ops->power_off(pvr_dev);
+}
+
+/* Power the device off on driver removal, skipping the idle check done by
+ * pvr_power_device_suspend() as the device won't be resumed. Runtime PM must be
+ * disabled by the caller.
+ */
+void
+pvr_power_device_shutdown(struct pvr_device *pvr_dev)
+{
+	struct drm_device *drm_dev = from_pvr_device(pvr_dev);
+	struct device *dev = drm_dev->dev;
+	int idx;
+	int err;
+
+	if (pm_runtime_status_suspended(dev))
+		return;
+
+	if (!drm_dev_enter(drm_dev, &idx)) {
+		drm_err(drm_dev, "Device is unplugged, cannot power it off\n");
+		return;
+	}
+
+	err = pvr_power_device_off(pvr_dev);
+	drm_dev_exit(idx);
+	if (!err)
+		err = pm_runtime_set_suspended(dev);
+
+	if (err)
+		drm_err(drm_dev, "Failed to power the device off (%d)\n", err);
+}
+
 int
 pvr_power_device_suspend(struct device *dev)
 {
@@ -378,15 +422,19 @@ pvr_power_device_suspend(struct device *dev)
 	if (!drm_dev_enter(drm_dev, &idx))
 		return -EIO;
 
-	if (READ_ONCE(pvr_dev->fw_dev.initialised)) {
-		err = pvr_power_fw_disable(pvr_dev, false, true);
-		if (err)
-			goto err_drm_dev_exit;
+	if (READ_ONCE(pvr_dev->fw_dev.initialised) && !pvr_power_is_idle(pvr_dev)) {
+		/*
+		 * The firmware has not drained the GPU yet. Refresh last_busy so
+		 * the PM core reschedules the autosuspend and retries this callback
+		 * until the firmware becomes idle.
+		 */
+		pm_runtime_mark_last_busy(dev);
+		drm_dev_exit(idx);
+
+		return -EBUSY;
 	}
 
-	err = pvr_dev->device_data->pwr_ops->power_off(pvr_dev);
-
-err_drm_dev_exit:
+	err = pvr_power_device_off(pvr_dev);
 	drm_dev_exit(idx);
 
 	return err;
@@ -425,16 +473,6 @@ err_drm_dev_exit:
 	drm_dev_exit(idx);
 
 	return err;
-}
-
-int
-pvr_power_device_idle(struct device *dev)
-{
-	struct platform_device *plat_dev = to_platform_device(dev);
-	struct drm_device *drm_dev = platform_get_drvdata(plat_dev);
-	struct pvr_device *pvr_dev = to_pvr_device(drm_dev);
-
-	return pvr_power_is_idle(pvr_dev) ? 0 : -EBUSY;
 }
 
 static int
