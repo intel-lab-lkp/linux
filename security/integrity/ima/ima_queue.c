@@ -377,14 +377,6 @@ int ima_queue_staged_delete_all(void)
 		return -ESTALE;
 	}
 
-	list_replace(&ima_measurements_staged, &ima_measurements_trim);
-	INIT_LIST_HEAD(&ima_measurements_staged);
-
-	atomic_long_set(&ima_num_records[BINARY_STAGED], 0);
-
-	if (IS_ENABLED(CONFIG_IMA_KEXEC))
-		binary_runtime_size[BINARY_STAGED] = 0;
-
 	if (ima_flush_htable) {
 		old_queue = ima_alloc_replace_htable();
 		if (IS_ERR(old_queue)) {
@@ -392,6 +384,14 @@ int ima_queue_staged_delete_all(void)
 			return PTR_ERR(old_queue);
 		}
 	}
+
+	list_replace(&ima_measurements_staged, &ima_measurements_trim);
+	INIT_LIST_HEAD(&ima_measurements_staged);
+
+	atomic_long_set(&ima_num_records[BINARY_STAGED], 0);
+
+	if (IS_ENABLED(CONFIG_IMA_KEXEC))
+		binary_runtime_size[BINARY_STAGED] = 0;
 
 	mutex_unlock(&ima_extend_list_mutex);
 
