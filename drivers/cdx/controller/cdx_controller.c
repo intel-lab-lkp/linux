@@ -233,6 +233,11 @@ static void xlnx_cdx_remove(struct platform_device *pdev)
 	kfree(cdx_mcdi);
 }
 
+static void xlnx_cdx_shutdown(struct platform_device *pdev)
+{
+	cdx_destroy_rpmsg(pdev);
+}
+
 static const struct of_device_id cdx_match_table[] = {
 	{.compatible = "xlnx,versal-net-cdx",},
 	{ },
@@ -247,6 +252,7 @@ static struct platform_driver cdx_pdriver = {
 		   },
 	.probe = xlnx_cdx_probe,
 	.remove = xlnx_cdx_remove,
+	.shutdown = xlnx_cdx_shutdown,
 };
 
 module_platform_driver(cdx_pdriver);
