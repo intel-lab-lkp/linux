@@ -153,7 +153,7 @@ static int spaceorb_connect(struct serio *serio, struct serio_driver *drv)
 		goto fail1;
 
 	spaceorb->dev = input_dev;
-	snprintf(spaceorb->phys, sizeof(spaceorb->phys), "%s/input0", serio->phys);
+	scnprintf(spaceorb->phys, sizeof(spaceorb->phys), "%s/input0", serio->phys);
 
 	input_dev->name = "SpaceTec SpaceOrb 360 / Avenger";
 	input_dev->phys = spaceorb->phys;

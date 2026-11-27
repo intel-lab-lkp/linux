@@ -367,7 +367,7 @@ static int analog_init_device(struct analog_port *port, struct analog *analog, i
 	int error;
 
 	analog_name(analog);
-	snprintf(analog->phys, sizeof(analog->phys),
+	scnprintf(analog->phys, sizeof(analog->phys),
 		 "%s/input%d", port->gameport->phys, index);
 	analog->buttons = (analog->mask & ANALOG_GAMEPAD) ? analog_pad_btn : analog_joy_btn;
 

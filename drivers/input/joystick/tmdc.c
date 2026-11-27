@@ -294,7 +294,7 @@ static int tmdc_setup_port(struct tmdc *tmdc, int idx, unsigned char *data)
 
 	snprintf(port->name, sizeof(port->name), model->name,
 		 port->absc, (data[TMDC_BYTE_DEF] & 0xf) << 3, port->mode);
-	snprintf(port->phys, sizeof(port->phys), "%s/input%d", tmdc->gameport->phys, i);
+	scnprintf(port->phys, sizeof(port->phys), "%s/input%d", tmdc->gameport->phys, i);
 
 	port->dev = input_dev;
 

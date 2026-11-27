@@ -137,7 +137,7 @@ static int zhenhua_connect(struct serio *serio, struct serio_driver *drv)
 		goto fail1;
 
 	zhenhua->dev = input_dev;
-	snprintf(zhenhua->phys, sizeof(zhenhua->phys), "%s/input0", serio->phys);
+	scnprintf(zhenhua->phys, sizeof(zhenhua->phys), "%s/input0", serio->phys);
 
 	input_dev->name = "Zhen Hua 5-byte device";
 	input_dev->phys = zhenhua->phys;

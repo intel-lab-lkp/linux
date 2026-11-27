@@ -138,7 +138,7 @@ static int magellan_connect(struct serio *serio, struct serio_driver *drv)
 		goto fail1;
 
 	magellan->dev = input_dev;
-	snprintf(magellan->phys, sizeof(magellan->phys), "%s/input0", serio->phys);
+	scnprintf(magellan->phys, sizeof(magellan->phys), "%s/input0", serio->phys);
 
 	input_dev->name = "LogiCad3D Magellan / SpaceMouse";
 	input_dev->phys = magellan->phys;

@@ -177,7 +177,7 @@ static int twidjoy_connect(struct serio *serio, struct serio_driver *drv)
 		goto fail1;
 
 	twidjoy->dev = input_dev;
-	snprintf(twidjoy->phys, sizeof(twidjoy->phys), "%s/input0", serio->phys);
+	scnprintf(twidjoy->phys, sizeof(twidjoy->phys), "%s/input0", serio->phys);
 
 	input_dev->name = "Handykey Twiddler";
 	input_dev->phys = twidjoy->phys;
