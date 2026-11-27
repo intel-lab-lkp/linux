@@ -23,6 +23,7 @@
 #include <linux/mutex.h>
 #include <linux/of_device.h>
 #include <linux/of_irq.h>
+#include <linux/panic.h>
 #include <linux/percpu.h>
 #include <linux/platform_data/x86/apple.h>
 #include <linux/pm_domain.h>
@@ -5083,7 +5084,21 @@ static inline bool spi_in_atomic_sync_mode(void)
 	return system_state > SYSTEM_RUNNING && spi_in_atomic();
 }
 
-static int __spi_sync_atomic(struct spi_device *spi, struct spi_message *message)
+/*
+ * Panic and oops run while the system is still running, so the shutdown
+ * check above does not catch them.  This is only for crash logging and
+ * must not be used for general atomic transfers.
+ */
+static inline bool spi_in_panic_mode(void)
+{
+	if (!panic_in_progress() && !oops_in_progress)
+		return false;
+
+	return spi_in_atomic();
+}
+
+static int __spi_sync_atomic(struct spi_device *spi, struct spi_message *message,
+			     bool trylock)
 {
 	struct spi_controller *ctlr = spi->controller;
 	unsigned long flags;
@@ -5104,7 +5119,12 @@ static int __spi_sync_atomic(struct spi_device *spi, struct spi_message *message
 	if (status)
 		return status;
 
-	spin_lock_irqsave(&ctlr->bus_lock_spinlock, flags);
+	if (trylock) {
+		if (!spin_trylock_irqsave(&ctlr->bus_lock_spinlock, flags))
+			return -EBUSY;
+	} else {
+		spin_lock_irqsave(&ctlr->bus_lock_spinlock, flags);
+	}
 	status = ctlr->transfer_atomic(spi, message);
 	spin_unlock_irqrestore(&ctlr->bus_lock_spinlock, flags);
 
@@ -5146,7 +5166,7 @@ int spi_sync(struct spi_device *spi, struct spi_message *message)
 
 	/* Keep old behaviour for clients that tolerate the warnings */
 	if (spi_in_atomic_sync_mode() && ctlr->transfer_atomic) {
-		ret = __spi_sync_atomic(spi, message);
+		ret = __spi_sync_atomic(spi, message, false);
 	} else {
 		mutex_lock(&spi->controller->bus_lock_mutex);
 		ret = __spi_sync(spi, message);
@@ -5182,11 +5202,52 @@ int spi_sync_locked(struct spi_device *spi, struct spi_message *message)
 	struct spi_controller *ctlr = spi->controller;
 
 	if (spi_in_atomic_sync_mode() && ctlr->transfer_atomic)
-		return __spi_sync_atomic(spi, message);
+		return __spi_sync_atomic(spi, message, false);
 	else
 		return __spi_sync(spi, message);
 }
 EXPORT_SYMBOL_GPL(spi_sync_locked);
+
+/**
+ * spi_sync_atomic - transfer a message during panic or oops
+ * @spi: device with which data will be exchanged
+ * @message: describes the data transfers
+ *
+ * Context: panic or oops, with interrupts or preemption disabled.
+ *
+ * This is the panic-time counterpart of spi_sync().  It is only for crash
+ * logging and other very late communication; it must not be used from
+ * ordinary interrupt context.  The controller's transfer_atomic() callback
+ * must perform the whole message without sleeping, allocating, using DMA or
+ * waiting for interrupts or completions.
+ *
+ * The bus locks are taken with trylock(): if a normal transfer is still in
+ * progress on another CPU, this function returns -EBUSY instead of
+ * deadlocking.  The controller must already be powered and clocked; this
+ * function does not resume it.
+ *
+ * Return: zero on success, -EOPNOTSUPP if the controller does not support
+ * atomic transfers, -EPERM if not called from panic/oops context, -EBUSY if
+ * the bus is busy, -ESHUTDOWN if the controller is suspended, or another
+ * negative error from the controller.
+ */
+int spi_sync_atomic(struct spi_device *spi, struct spi_message *message)
+{
+	struct spi_controller *ctlr = spi->controller;
+	int ret;
+
+	if (!spi_in_panic_mode())
+		return -EPERM;
+
+	if (!mutex_trylock(&ctlr->bus_lock_mutex))
+		return -EBUSY;
+
+	ret = __spi_sync_atomic(spi, message, true);
+	mutex_unlock(&ctlr->bus_lock_mutex);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(spi_sync_atomic);
 
 /**
  * spi_bus_lock - obtain a lock for exclusive SPI bus usage

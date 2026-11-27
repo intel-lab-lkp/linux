@@ -1512,6 +1512,7 @@ extern int spi_split_transfers_maxwords(struct spi_controller *ctlr,
 
 extern int spi_sync(struct spi_device *spi, struct spi_message *message);
 extern int spi_sync_locked(struct spi_device *spi, struct spi_message *message);
+int spi_sync_atomic(struct spi_device *spi, struct spi_message *message);
 extern int spi_bus_lock(struct spi_controller *ctlr);
 extern int spi_bus_unlock(struct spi_controller *ctlr);
 
