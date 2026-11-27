@@ -543,19 +543,23 @@ static int rvin_subscribe_event(struct v4l2_fh *fh,
 static void rvin_mc_try_format(struct rvin_dev *vin,
 			       struct v4l2_pix_format *pix)
 {
+	rvin_format_align(vin, pix);
+
 	/*
 	 * The V4L2 specification clearly documents the colorspace fields
 	 * as being set by drivers for capture devices. Using the values
 	 * supplied by userspace thus wouldn't comply with the API. Until
 	 * the API is updated force fixed values.
 	 */
-	pix->colorspace = RVIN_DEFAULT_COLORSPACE;
+	if (v4l2_is_format_bayer(v4l2_format_info(pix->pixelformat)))
+		pix->colorspace = V4L2_COLORSPACE_RAW;
+	else
+		pix->colorspace = RVIN_DEFAULT_COLORSPACE;
+
 	pix->xfer_func = V4L2_MAP_XFER_FUNC_DEFAULT(pix->colorspace);
 	pix->ycbcr_enc = V4L2_MAP_YCBCR_ENC_DEFAULT(pix->colorspace);
 	pix->quantization = V4L2_MAP_QUANTIZATION_DEFAULT(true, pix->colorspace,
 							  pix->ycbcr_enc);
-
-	rvin_format_align(vin, pix);
 }
 
 static int rvin_mc_try_fmt_vid_cap(struct file *file, void *priv,
