@@ -412,12 +412,22 @@ void *arch_dma_alloc(struct device *dev, size_t size,
 	size = 1 << (order + PAGE_SHIFT);
 	vaddr = pcxl_alloc_range(size);
 	paddr = __get_free_pages(gfp | __GFP_ZERO, order);
+	if (!paddr)
+		goto out_free_range;
 	flush_kernel_dcache_range(paddr, size);
 	paddr = __pa(paddr);
-	map_uncached_pages(vaddr, size, paddr);
+	if (map_uncached_pages(vaddr, size, paddr))
+		goto out_unmap;
 	*dma_handle = (dma_addr_t) paddr;
 
 	return (void *)vaddr;
+
+out_unmap:
+	unmap_uncached_pages(vaddr, size);
+	free_pages((unsigned long)__va(paddr), order);
+out_free_range:
+	pcxl_free_range(vaddr, size);
+	return NULL;
 }
 
 void arch_dma_free(struct device *dev, size_t size, void *vaddr,
