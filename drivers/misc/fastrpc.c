@@ -88,6 +88,14 @@
 #define FASTRPC_MAX_DSP_ATTRIBUTES (256)
 #define FASTRPC_MAX_DSP_ATTRIBUTES_LEN (sizeof(u32) * FASTRPC_MAX_DSP_ATTRIBUTES)
 
+/* remote_dsp_attributes[] index reporting the DSP's image configuration */
+#define DSP_IMAGE_CONFIG_ATTR_IDX (14)
+
+/* enum dsp_image_config: values reported at DSP_IMAGE_CONFIG_ATTR_IDX */
+#define FASTRPC_DSP_COMPUTE		(1)
+#define FASTRPC_DSP_COMPUTE_LITE	(2)
+#define FASTRPC_DSP_AUDIO		(3)
+
 /* Retrives number of input buffers from the scalars parameter */
 #define REMOTE_SCALARS_INBUFS(sc)	(((sc) >> 16) & 0x0ff)
 
@@ -2621,7 +2629,16 @@ static int fastrpc_register_devices(struct fastrpc_channel_ctx *cctx,
 				    struct rpmsg_device *rpdev)
 {
 	struct device *rdev = &rpdev->dev;
+	bool compute_capable = false;
 	int err, i;
+
+	/*
+	 * ADSP running a compute-capable firmware image also needs an
+	 * unsigned PD node, same as CDSP/GDSP.
+	 */
+	if (cctx->domain_id == ADSP_DOMAIN_ID && cctx->valid_attributes &&
+	    cctx->dsp_attributes[DSP_IMAGE_CONFIG_ATTR_IDX] == FASTRPC_DSP_COMPUTE_LITE)
+		compute_capable = true;
 
 	/*
 	 * Duplicate the ADSP sessions before any device node is registered
@@ -2647,6 +2664,9 @@ static int fastrpc_register_devices(struct fastrpc_channel_ctx *cctx,
 
 	switch (cctx->domain_id) {
 	case ADSP_DOMAIN_ID:
+		if (compute_capable)
+			goto unsigned_capable;
+		fallthrough;
 	case MDSP_DOMAIN_ID:
 	case SDSP_DOMAIN_ID:
 		/* Unsigned PD offloading is only supported on CDSP and GDSP */
@@ -2657,6 +2677,7 @@ static int fastrpc_register_devices(struct fastrpc_channel_ctx *cctx,
 		break;
 	case CDSP_DOMAIN_ID:
 	case GDSP_DOMAIN_ID:
+unsigned_capable:
 		cctx->unsigned_support = true;
 		/* Create both device nodes so that we can allow both Signed and Unsigned PD */
 		err = fastrpc_device_register(rdev, cctx, true, cctx->domain);
