@@ -30,7 +30,7 @@ static void eoi_irq(struct irq_data *data)
 	__vmintop_globen((long) data->irq);
 }
 
-/* Power mamangement wake call. We don't need this, however,
+/* Power management wake call. We don't need this, however,
  * if this is absent, then an -ENXIO error is returned to the
  * msm_serial driver, and it fails to correctly initialize.
  * This is a bug in the msm_serial driver, but, for now, we
