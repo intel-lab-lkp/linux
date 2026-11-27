@@ -4763,9 +4763,12 @@ static inline bool should_try_to_free_swap(struct swap_info_struct *si,
 		return true;
 
 	/*
-	 * Free the swapcache only if we are the exclusive user and
-	 * this is a write fault.
+	 * Free the swapcache if the folio is already dirty, or if we will dirty it
+	 * immediately afterwards by writing to it.
 	 */
+	if (folio_test_dirty(folio))
+		return true;
+
 	return (fault_flags & FAULT_FLAG_WRITE) && exclusive;
 }
 
