@@ -1287,6 +1287,15 @@ static ssize_t fuse_send_write_pages(struct fuse_io_args *ia,
 	if (!err && ia->write.out.size > count)
 		err = -EIO;
 
+	/*
+	 * Extend i_size before unlocking the last folio, so that writeback
+	 * cannot see the newly written data beyond i_size and zero it.  See
+	 * fuse_fill_write_pages().
+	 */
+	if (!err)
+		fuse_write_update_attr(inode, pos + ia->write.out.size,
+				       ia->write.out.size);
+
 	for (i = 0; i < ap->num_folios; i++) {
 		struct folio *folio = ap->folios[i];
 
@@ -1305,6 +1314,7 @@ static ssize_t fuse_fill_write_pages(struct fuse_io_args *ia,
 {
 	struct fuse_args_pages *ap = &ia->ap;
 	struct fuse_conn *fc = get_fuse_conn(mapping->host);
+	loff_t isize = i_size_read(mapping->host);
 	size_t count = 0;
 	unsigned int num;
 	int err = 0;
@@ -1366,7 +1376,16 @@ static ssize_t fuse_fill_write_pages(struct fuse_io_args *ia,
 		if (tmp == folio_size(folio))
 			iomap_folio_mark_uptodate(folio);
 
-		if (folio_test_uptodate(folio)) {
+		/*
+		 * Keep the folio locked until the reply if it is not uptodate,
+		 * or if it straddles i_size and this write extends the file
+		 * within it: writeback zeroes a folio beyond i_size
+		 * (iomap_writeback_handle_eof()), which would wipe the data
+		 * just copied, both in the page cache and in the request,
+		 * while i_size has not yet been updated.
+		 */
+		if (folio_test_uptodate(folio) &&
+		    !(folio_pos(folio) < isize && pos > isize)) {
 			folio_unlock(folio);
 		} else {
 			ia->write.folio_locked = true;
