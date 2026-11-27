@@ -269,8 +269,8 @@ static inline void *offset_to_ptr(const int *off)
  * visible to the compiler.
  */
 #define ___ADDRESSABLE(sym, __attrs)						\
-	static void * __used __attrs						\
-	__UNIQUE_ID(__PASTE(addressable_, sym)) = (void *)(uintptr_t)&sym;
+	static typeof(&sym) __used __attrs					\
+	__UNIQUE_ID(__PASTE(addressable_, sym)) = &sym;
 
 #define __ADDRESSABLE(sym) \
 	___ADDRESSABLE(sym, __section(".discard.addressable"))
