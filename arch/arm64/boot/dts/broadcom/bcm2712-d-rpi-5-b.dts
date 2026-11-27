@@ -8,6 +8,21 @@
 	model = "Raspberry Pi 5 d0 Stepping";
 };
 
+/* The HDMI audio DREQs changed on D0 */
+&hdmi0 {
+	dmas = <&dma40 (12 | BCM2835_DMA_FLAG_BURST |
+			BCM2835_DMA_FLAG_WIDE_SOURCE |
+			BCM2835_DMA_FLAG_PRIORITY(10) |
+			BCM2835_DMA_FLAG_PANIC_PRIORITY(15))>;
+};
+
+&hdmi1 {
+	dmas = <&dma40 (13 | BCM2835_DMA_FLAG_BURST |
+			BCM2835_DMA_FLAG_WIDE_SOURCE |
+			BCM2835_DMA_FLAG_PRIORITY(10) |
+			BCM2835_DMA_FLAG_PANIC_PRIORITY(15))>;
+};
+
 &gio_aon {
 	brcm,gpio-bank-widths = <15 6>;
 

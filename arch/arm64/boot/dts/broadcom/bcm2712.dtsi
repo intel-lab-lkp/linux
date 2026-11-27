@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: (GPL-2.0 OR MIT)
+#include <dt-bindings/dma/brcm,bcm2835-dma.h>
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 #include <dt-bindings/soc/bcm2835-pm.h>
 
@@ -483,6 +484,11 @@
 			interrupt-names = "cec-tx", "cec-rx", "cec-low",
 					  "hpd-connected", "hpd-removed";
 			ddc = <&ddc0>;
+			dmas = <&dma40 (10 | BCM2835_DMA_FLAG_BURST |
+					BCM2835_DMA_FLAG_WIDE_SOURCE |
+					BCM2835_DMA_FLAG_PRIORITY(10) |
+					BCM2835_DMA_FLAG_PANIC_PRIORITY(15))>;
+			dma-names = "audio-rx";
 			status = "disabled";
 		};
 
@@ -513,6 +519,11 @@
 			interrupt-names = "cec-tx", "cec-rx", "cec-low",
 					  "hpd-connected", "hpd-removed";
 			ddc = <&ddc1>;
+			dmas = <&dma40 (17 | BCM2835_DMA_FLAG_BURST |
+					BCM2835_DMA_FLAG_WIDE_SOURCE |
+					BCM2835_DMA_FLAG_PRIORITY(10) |
+					BCM2835_DMA_FLAG_PANIC_PRIORITY(15))>;
+			dma-names = "audio-rx";
 			status = "disabled";
 		};
 
