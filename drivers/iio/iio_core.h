@@ -16,6 +16,20 @@ struct iio_buffer;
 struct iio_chan_spec;
 struct iio_dev;
 
+#if defined(CONFIG_DEBUG_FS)
+void iio_debugfs_create(void);
+void iio_debugfs_remove(void);
+
+void iio_device_unregister_debugfs(struct iio_dev *indio_dev);
+void iio_device_register_debugfs(struct iio_dev *indio_dev);
+#else
+static inline void iio_debugfs_create(void) {}
+static inline void iio_debugfs_remove(void) {}
+
+static inline void iio_device_register_debugfs(struct iio_dev *indio_dev) {}
+static inline void iio_device_unregister_debugfs(struct iio_dev *indio_dev) {}
+#endif /* CONFIG_DEBUG_FS */
+
 extern const struct device_type iio_device_type;
 
 struct iio_dev_buffer_pair {
