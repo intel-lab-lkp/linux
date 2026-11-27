@@ -937,7 +937,10 @@ static int gmap_ucas_translate_simple(struct gmap *gmap, gpa_t *gaddr, union crs
  * This allows ucontrol VMs to use the normal fault resolution path, like
  * normal VMs.
  *
- * Return: %0 in case of success, otherwise %-EREMOTE.
+ * Return:
+ * * %0 in case of success,
+ * * %-ENOMEM if running out of memory,
+ * * otherwise %-EREMOTE.
  */
 int gmap_ucas_translate(struct kvm_s390_mmu_cache *mc, struct gmap *gmap, gpa_t *gaddr)
 {

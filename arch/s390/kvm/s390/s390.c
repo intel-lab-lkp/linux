@@ -4309,8 +4309,9 @@ static int kvm_s390_fixup_prefix(struct kvm_vcpu *vcpu)
 	gfn_t gfn;
 	int rc;
 
-	if (vcpu_ucontrol_translate(vcpu, &gaddr))
-		return -EREMOTE;
+	rc = vcpu_ucontrol_translate(vcpu, &gaddr);
+	if (rc)
+		return rc;
 	gfn = gpa_to_gfn(gaddr);
 
 	rc = kvm_s390_faultin_gfn_simple(vcpu, NULL, gfn, true);
@@ -4612,8 +4613,9 @@ static int vcpu_dat_fault_handler(struct kvm_vcpu *vcpu, gpa_t gaddr, bool wr)
 	};
 	int rc;
 
-	if (vcpu_ucontrol_translate(vcpu, &gaddr))
-		return -EREMOTE;
+	rc = vcpu_ucontrol_translate(vcpu, &gaddr);
+	if (rc)
+		return rc;
 	f.gfn = gpa_to_gfn(gaddr);
 
 	rc = kvm_s390_faultin_gfn(vcpu, NULL, &f);
