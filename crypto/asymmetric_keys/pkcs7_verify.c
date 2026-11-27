@@ -155,14 +155,21 @@ int pkcs7_get_digest(struct pkcs7_message *pkcs7, const u8 **buf, u32 *len,
 	ret = pkcs7_digest(pkcs7, sinfo);
 	if (ret)
 		return ret;
-	if (!sinfo->sig->m_free) {
+
+	/* 'm' holds the digest or a copy of authattr, if the algorithm signs
+	 * the data directly.
+	 */
+	if (sinfo->authattrs) {
+		*buf = sinfo->msgdigest;
+		*len = sinfo->msgdigest_len;
+	} else if (sinfo->sig->m_free) {
+		*buf = sinfo->sig->m;
+		*len = sinfo->sig->m_size;
+	} else {
 		pr_notice_once("%s: No digest available\n", __func__);
 		return -EINVAL; /* TODO: MLDSA doesn't necessarily calculate an
 				 * intermediate digest. */
 	}
-
-	*buf = sinfo->sig->m;
-	*len = sinfo->sig->m_size;
 
 	i = match_string(hash_algo_name, HASH_ALGO__LAST,
 			 sinfo->sig->hash_algo);
