@@ -1005,8 +1005,10 @@ static bool folio_referenced_one(struct folio *folio,
 				referenced++;
 		} else if (IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE)) {
 			if (pmdp_clear_flush_young_notify(vma, address,
-						pvmw.pmd))
+						pvmw.pmd)) {
 				referenced++;
+				lru_gen_mark_pud(vma->vm_mm, folio, address);
+			}
 		} else {
 			/* unexpected pmd-mapped folio? */
 			WARN_ON_ONCE(1);
