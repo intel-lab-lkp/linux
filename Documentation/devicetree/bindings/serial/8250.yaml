@@ -137,6 +137,7 @@ properties:
               - ti,da830-uart
               - loongson,ls2k0500-uart
               - loongson,ls2k1500-uart
+              - loongson,ls2k3000-uart
           - const: ns16550a
       - items:
           - enum:
