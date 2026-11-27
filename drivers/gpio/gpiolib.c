@@ -904,6 +904,35 @@ static void gpiochip_free_remaining_irqs(struct gpio_chip *gc)
 		gpiod_free_irqs(gc, desc);
 }
 
+/*
+ * Release the lines the chip requested for itself: hogs, ACPI events and
+ * OpRegion connections, shared lines. gpiod_free_commit() calls ->free()
+ * only while the chip is there, so this goes before the numbing.
+ */
+static void gpiochip_free_own_lines(struct gpio_chip *gc)
+{
+	gpiochip_free_hogs(gc);
+	acpi_gpiochip_free_interrupts(gc);
+	acpi_gpiochip_remove(gc);
+	gpio_device_teardown_shared(gc->gpiodev);
+}
+
+static void gpiochip_numb_device(struct gpio_chip *gc)
+{
+	struct gpio_device *gdev = gc->gpiodev;
+
+	/* Numb the device, cancelling all outstanding operations */
+	rcu_assign_pointer(gdev->chip, NULL);
+	synchronize_srcu(&gdev->srcu);
+
+	/*
+	 * No new interrupts can be requested through the character device now.
+	 * Have it free the ones it holds before forcibly freeing the rest.
+	 */
+	blocking_notifier_call_chain(&gdev->device_notifier, 0, NULL);
+	gpiochip_free_remaining_irqs(gc);
+}
+
 static void gpiodev_release(struct device *dev)
 {
 	struct gpio_device *gdev = to_gpio_device(dev);
@@ -1449,26 +1478,15 @@ void gpiochip_remove(struct gpio_chip *gc)
 
 	/* FIXME: should the legacy sysfs handling be moved to gpio_device? */
 	gpiochip_sysfs_unregister(gc);
-	gpiochip_free_hogs(gc);
 
 	scoped_guard(mutex, &gpio_devices_lock)
 		list_del_rcu(&gdev->list);
 	synchronize_srcu(&gpio_devices_srcu);
 
-	/* Numb the device, cancelling all outstanding operations */
-	rcu_assign_pointer(gdev->chip, NULL);
-	synchronize_srcu(&gdev->srcu);
-
-	/*
-	 * No new interrupts can be requested through the character device now.
-	 * Have it free the ones it holds, also on the shared proxies, before
-	 * forcibly freeing the rest and removing the irqchip.
-	 */
-	blocking_notifier_call_chain(&gdev->device_notifier, 0, NULL);
-	gpio_device_teardown_shared(gdev);
-	gpiochip_free_remaining_irqs(gc);
+	/* No lookup finds the chip now, and it can still free its lines. */
+	gpiochip_free_own_lines(gc);
+	gpiochip_numb_device(gc);
 	gpiochip_irqchip_remove(gc);
-	acpi_gpiochip_remove(gc);
 	of_gpiochip_remove(gc);
 	gpiochip_remove_pin_ranges(gc);
 	gpiochip_free_valid_mask(gc);
@@ -2335,7 +2353,8 @@ static int gpiochip_add_irqchip(struct gpio_chip *gc,
  * gpiochip_irqchip_remove() - removes an irqchip added to a gpiochip
  * @gc: the gpiochip to remove the irqchip from
  *
- * This is called only from gpiochip_remove()
+ * acpi_gpiochip_free_interrupts() below finds nothing once
+ * gpiochip_free_own_lines() has run; it is for the error paths before that.
  */
 static void gpiochip_irqchip_remove(struct gpio_chip *gc)
 {
