@@ -4961,6 +4961,13 @@ static int f2fs_sec_trim_file(struct file *filp, unsigned long arg)
 				goto out;
 			}
 
+			/*
+			 * wait for GC's writeback and truncate the meta cache
+			 * entry of the block, otherwise GC may migrate stale
+			 * data in meta cache after the block was erased.
+			 */
+			f2fs_wait_on_block_writeback_range(inode, blkaddr, 1);
+
 			cur_bdev = f2fs_target_device(sbi, blkaddr, NULL);
 			if (f2fs_is_multi_device(sbi)) {
 				int di = f2fs_target_device_index(sbi, blkaddr);
