@@ -568,11 +568,6 @@ static int sti_pwm_probe(struct platform_device *pdev)
 	if (irq < 0)
 		return irq;
 
-	ret = devm_request_irq(&pdev->dev, irq, sti_pwm_interrupt, 0,
-			       pdev->name, pc);
-	if (ret < 0)
-		return dev_err_probe(&pdev->dev, ret, "Failed to request IRQ\n");
-
 	/*
 	 * Setup PWM data with default values: some values could be replaced
 	 * with specific ones provided from Device Tree.
@@ -613,6 +608,10 @@ static int sti_pwm_probe(struct platform_device *pdev)
 			mutex_init(&ddata->lock);
 		}
 	}
+
+	ret = devm_request_irq(dev, irq, sti_pwm_interrupt, 0, pdev->name, pc);
+	if (ret < 0)
+		return dev_err_probe(dev, ret, "Failed to request IRQ\n");
 
 	chip->ops = &sti_pwm_ops;
 
