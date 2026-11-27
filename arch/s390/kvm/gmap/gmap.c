@@ -302,19 +302,23 @@ static long gmap_clear_young_pte(union pte *ptep, gfn_t gfn, gfn_t end, struct d
 		return 0;
 
 	pgste = pgste_get_lock(ptep);
-	if (!pgste.prefix_notif || gmap_mkold_prefix(p->gmap, gfn, end)) {
-		new = pte;
-		new.h.i = 1;
-		new.s.y = 0;
-		if ((new.s.d || !new.h.p) && !new.s.s)
-			folio_set_dirty(pfn_folio(pte.h.pfra));
-		new.s.d = 0;
-		new.h.p = 1;
+	pte = READ_ONCE(*ptep);
+	if (pte.s.pr && (pte.s.y || !pte.h.i)) {
+		if (!pgste.prefix_notif || gmap_mkold_prefix(p->gmap, gfn, end)) {
+			new = pte;
+			new.h.i = 1;
+			new.s.y = 0;
+			if ((new.s.d || !new.h.p) && !new.s.s)
+				folio_set_dirty(pfn_folio(pte.h.pfra));
+			new.s.d = 0;
+			new.h.p = 1;
 
-		pgste.prefix_notif = 0;
-		pgste = __dat_ptep_xchg(ptep, pgste, new, gfn, walk->asce, uses_skeys(p->gmap));
+			pgste.prefix_notif = 0;
+			pgste = __dat_ptep_xchg(ptep, pgste, new, gfn, walk->asce,
+						uses_skeys(p->gmap));
+		}
+		p->young = 1;
 	}
-	p->young = 1;
 	pgste_set_unlock(ptep, pgste);
 	return 0;
 }
