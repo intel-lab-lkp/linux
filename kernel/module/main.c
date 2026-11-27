@@ -1124,6 +1124,8 @@ int try_to_force_load(struct module *mod, const char *reason)
 	add_taint_module(mod, TAINT_FORCED_MODULE, LOCKDEP_NOW_UNRELIABLE);
 	return 0;
 #else
+	pr_err("%s: %s: CONFIG_MODULE_FORCE_LOAD is not enabled\n",
+	       mod->name, reason);
 	return -ENOEXEC;
 #endif
 }
