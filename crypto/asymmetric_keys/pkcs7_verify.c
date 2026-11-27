@@ -140,17 +140,61 @@ error_no_desc:
 	return ret;
 }
 
-int pkcs7_get_digest(struct pkcs7_message *pkcs7, const u8 **buf, u32 *len,
-		     enum hash_algo *hash_algo)
+/**
+ * pkcs7_get_signer_count - Count the signers of a PKCS#7 message
+ * @pkcs7: The preparsed PKCS#7 message to access
+ *
+ * Return: the number of SignerInfos in the message.
+ */
+unsigned int pkcs7_get_signer_count(const struct pkcs7_message *pkcs7)
+{
+	const struct pkcs7_signed_info *sinfo;
+	unsigned int count = 0;
+
+	for (sinfo = pkcs7->signed_infos; sinfo; sinfo = sinfo->next)
+		count++;
+
+	return count;
+}
+
+/**
+ * pkcs7_get_digest - Get the content digest of one signer of a PKCS#7 message
+ * @pkcs7: The PKCS#7 message
+ * @index: Zero-based index of the signer, in the message's (DER) order
+ * @buf: The content digest (NULL when there is none)
+ * @len: The content digest length (0 when there is none)
+ * @hash_algo: The digest algorithm (HASH_ALGO__LAST when there is none)
+ * @pkey_algo: The signature algorithm name if the data was signed directly
+ *
+ * The content digest is the digest of the signed content under the signer's
+ * digest algorithm. A signer whose algorithm signs the data directly has no
+ * digest when authenticated/signed attributes is absent, we return 0 in
+ * this case.
+ *
+ * Return: 0 on success, -EINVAL if there is no signer at 'index',
+ * -EKEYREJECTED if the messageDigest attribute doesn't match the content, or
+ * another negative error code.
+ */
+int pkcs7_get_digest(struct pkcs7_message *pkcs7, unsigned int index,
+		     const u8 **buf, u32 *len, enum hash_algo *hash_algo,
+		     const char **pkey_algo)
 {
 	struct pkcs7_signed_info *sinfo = pkcs7->signed_infos;
+	unsigned int n;
 	int i, ret;
 
-	/*
-	 * This function doesn't support messages with more than one signature.
-	 */
-	if (sinfo == NULL || sinfo->next != NULL)
-		return -EBADMSG;
+	*buf = NULL;
+	*len = 0;
+	*hash_algo = HASH_ALGO__LAST;
+	*pkey_algo = NULL;
+
+	for (n = 0; sinfo && n < index; n++)
+		sinfo = sinfo->next;
+	if (!sinfo)
+		return -EINVAL;
+
+	if (sinfo->sig->algo_takes_data)
+		*pkey_algo = sinfo->sig->pkey_algo;
 
 	ret = pkcs7_digest(pkcs7, sinfo);
 	if (ret)
@@ -166,9 +210,8 @@ int pkcs7_get_digest(struct pkcs7_message *pkcs7, const u8 **buf, u32 *len,
 		*buf = sinfo->sig->m;
 		*len = sinfo->sig->m_size;
 	} else {
-		pr_notice_once("%s: No digest available\n", __func__);
-		return -EINVAL; /* TODO: MLDSA doesn't necessarily calculate an
-				 * intermediate digest. */
+		/* No intermediate digest and no hash_algo to match. */
+		return 0;
 	}
 
 	i = match_string(hash_algo_name, HASH_ALGO__LAST,

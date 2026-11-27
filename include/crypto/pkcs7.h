@@ -41,7 +41,10 @@ extern int pkcs7_verify(struct pkcs7_message *pkcs7,
 extern int pkcs7_supply_detached_data(struct pkcs7_message *pkcs7,
 				      const void *data, size_t datalen);
 
-extern int pkcs7_get_digest(struct pkcs7_message *pkcs7, const u8 **buf,
-			    u32 *len, enum hash_algo *hash_algo);
+extern unsigned int pkcs7_get_signer_count(const struct pkcs7_message *pkcs7);
+
+extern int pkcs7_get_digest(struct pkcs7_message *pkcs7, unsigned int index,
+			    const u8 **buf, u32 *len, enum hash_algo *hash_algo,
+			    const char **pkey_algo);
 
 #endif /* _CRYPTO_PKCS7_H */

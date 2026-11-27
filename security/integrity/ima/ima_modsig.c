@@ -99,6 +99,7 @@ int ima_read_modsig(enum ima_hooks func, const void *buf, loff_t buf_len,
  */
 void ima_collect_modsig(struct modsig *modsig, const void *buf, loff_t size)
 {
+	const char *pkey_algo;
 	int rc;
 
 	/*
@@ -111,9 +112,14 @@ void ima_collect_modsig(struct modsig *modsig, const void *buf, loff_t size)
 	if (rc)
 		return;
 
+	/* There's room for the digest of a single signer only. */
+	if (pkcs7_get_signer_count(modsig->pkcs7_msg) != 1)
+		return;
+
 	/* Ask the PKCS7 code to calculate the file hash. */
-	rc = pkcs7_get_digest(modsig->pkcs7_msg, &modsig->digest,
-			      &modsig->digest_size, &modsig->hash_algo);
+	rc = pkcs7_get_digest(modsig->pkcs7_msg, 0, &modsig->digest,
+			      &modsig->digest_size, &modsig->hash_algo,
+			      &pkey_algo);
 }
 
 int ima_modsig_verify(struct key *keyring, const struct modsig *modsig)
