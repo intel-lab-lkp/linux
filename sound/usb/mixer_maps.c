@@ -566,6 +566,12 @@ static const struct usbmix_name_map avermedia_gc553pro_map[] = {
  * Control map entries
  */
 
+/* EPOS GSX 1000 v2: FU 12 volume is provided by a mixer quirk */
+static const struct usbmix_name_map epos_gsx1000_map[] = {
+	{ 12, NULL, UAC_FU_VOLUME },
+	{ 0 }
+};
+
 static const struct usbmix_ctl_map usbmix_ctl_maps[] = {
 	{
 		.id = USB_ID(0x041e, 0x3000),
@@ -798,6 +804,11 @@ static const struct usbmix_ctl_map usbmix_ctl_maps[] = {
 		/* Razer Barracuda X 2.4 */
 		.id = USB_ID(0x1532, 0x0552),
 		.map = razer_barracuda_x_2_4_map,
+	},
+	{
+		/* EPOS GSX 1000 v2 */
+		.id = USB_ID(0x1395, 0x00b1),
+		.map = epos_gsx1000_map,
 	},
 	{
 		/* Sennheiser Communications Headset [PC 8] */
