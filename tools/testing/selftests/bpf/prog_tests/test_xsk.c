@@ -1984,17 +1984,16 @@ int testapp_headroom(struct test_spec *test)
 int testapp_stats_rx_dropped(struct test_spec *test)
 {
 	struct xsk_umem_info *umem = test->ifobj_rx->xsk->umem;
-	u32 umem_tr = test->ifobj_tx->umem_tailroom;
 
 	if (test->mode == TEST_MODE_ZC) {
 		ksft_print_msg("Can not run RX_DROPPED test for ZC mode\n");
 		return TEST_SKIP;
 	}
 
-	if (pkt_stream_replace_half(test, (MIN_PKT_SIZE * 3) + umem_tr, 0))
+	if (pkt_stream_replace_half(test, MIN_PKT_SIZE * 4, 0))
 		return TEST_FAILURE;
 	umem->frame_headroom = umem->frame_size -
-		XDP_PACKET_HEADROOM - (MIN_PKT_SIZE * 2) - umem_tr;
+		XDP_PACKET_HEADROOM - MIN_PKT_SIZE * 3;
 	if (pkt_stream_receive_half(test))
 		return TEST_FAILURE;
 	test->ifobj_rx->validation_func = validate_rx_dropped;
@@ -2592,12 +2591,11 @@ int testapp_adjust_tail_grow_mb(struct test_spec *test)
 	 * pkt_len, expect that it will be broken down to 2 descs each
 	 * with 3k payload;
 	 *
-	 * 4k is truesize, 3k payload, 256 HR, 320 TR;
+	 * 4k is truesize, 3k payload, 256 HR;
 	 */
 	grow_size = XSK_UMEM__MAX_FRAME_SIZE -
 		    XSK_UMEM__LARGE_FRAME_SIZE -
-		    XDP_PACKET_HEADROOM -
-		    test->ifobj_tx->umem_tailroom;
+		    XDP_PACKET_HEADROOM;
 	test->mtu = MAX_ETH_JUMBO_SIZE;
 
 	return testapp_adjust_tail(test, grow_size, XSK_UMEM__LARGE_FRAME_SIZE * 2);
