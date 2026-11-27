@@ -429,6 +429,7 @@ int ima_check_blacklist(struct ima_iint_cache *iint,
 			const struct modsig *modsig, int pcr)
 {
 	enum hash_algo hash_algo;
+	const char *sig_algo;
 	const u8 *digest = NULL;
 	u32 digestsize = 0;
 	int rc = 0;
@@ -437,9 +438,10 @@ int ima_check_blacklist(struct ima_iint_cache *iint,
 		return 0;
 
 	if (iint->flags & IMA_MODSIG_ALLOWED && modsig) {
-		ima_get_modsig_digest(modsig, &hash_algo, &digest, &digestsize);
-
-		rc = is_binary_blacklisted(digest, digestsize);
+		if (ima_get_modsig_signer_count(modsig) == 1 &&
+		    !ima_get_modsig_digest(modsig, 0, &hash_algo, &digest,
+					   &digestsize, &sig_algo))
+			rc = is_binary_blacklisted(digest, digestsize);
 	} else if (iint->flags & IMA_DIGSIG_REQUIRED && iint->ima_hash)
 		rc = is_binary_blacklisted(iint->ima_hash->digest, iint->ima_hash->length);
 

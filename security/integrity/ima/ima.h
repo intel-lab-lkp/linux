@@ -560,8 +560,10 @@ static inline void __init init_ima_appraise_lsm(const struct lsm_id *lsmid)
 int ima_read_modsig(enum ima_hooks func, const void *buf, loff_t buf_len,
 		    struct modsig **modsig);
 void ima_collect_modsig(struct modsig *modsig, const void *buf, loff_t size);
-int ima_get_modsig_digest(const struct modsig *modsig, enum hash_algo *algo,
-			  const u8 **digest, u32 *digest_size);
+unsigned int ima_get_modsig_signer_count(const struct modsig *modsig);
+int ima_get_modsig_digest(const struct modsig *modsig, unsigned int index,
+			  enum hash_algo *algo, const u8 **digest,
+			  u32 *digest_size, const char **sig_algo);
 int ima_get_raw_modsig(const struct modsig *modsig, const void **data,
 		       u32 *data_len);
 void ima_free_modsig(struct modsig *modsig);
@@ -577,9 +579,16 @@ static inline void ima_collect_modsig(struct modsig *modsig, const void *buf,
 {
 }
 
+static inline unsigned int
+ima_get_modsig_signer_count(const struct modsig *modsig)
+{
+	return 0;
+}
+
 static inline int ima_get_modsig_digest(const struct modsig *modsig,
+					unsigned int index,
 					enum hash_algo *algo, const u8 **digest,
-					u32 *digest_size)
+					u32 *digest_size, const char **sig_algo)
 {
 	return -EOPNOTSUPP;
 }

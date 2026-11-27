@@ -471,10 +471,16 @@ int ima_eventdigest_modsig_init(struct ima_event_data *event_data,
 		cur_digest = NULL;
 		cur_digestsize = 0;
 	} else {
+		const char *sig_algo;
 		int rc;
 
-		rc = ima_get_modsig_digest(event_data->modsig, &hash_algo,
-					   &cur_digest, &cur_digestsize);
+		/* 'd-modsig' supports the digest of a single signer only. */
+		if (ima_get_modsig_signer_count(event_data->modsig) != 1)
+			return -EINVAL;
+
+		rc = ima_get_modsig_digest(event_data->modsig, 0, &hash_algo,
+					   &cur_digest, &cur_digestsize,
+					   &sig_algo);
 		if (rc)
 			return rc;
 		else if (hash_algo == HASH_ALGO__LAST || cur_digestsize == 0)
