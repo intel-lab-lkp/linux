@@ -12961,8 +12961,9 @@ static void update_idle_cpu_scan(struct lb_env *env,
 	y = SCHED_CAPACITY_SCALE - tmp;
 
 	/* equation [2] */
-	y *= llc_weight;
+	y *= max(llc_weight, 32);
 	do_div(y, SCHED_CAPACITY_SCALE);
+	y = min_t(u64, y, llc_weight);
 	if ((int)y != sd_share->nr_idle_scan)
 		WRITE_ONCE(sd_share->nr_idle_scan, (int)y);
 }
