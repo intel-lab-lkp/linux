@@ -611,9 +611,6 @@ void gpio_device_teardown_shared(struct gpio_device *gdev)
 		if (!device_match_fwnode(&gdev->dev, entry->fwnode))
 			continue;
 
-		scoped_guard(mutex, &entry->lock)
-			gpiod_free_commit(&gdev->descs[entry->offset]);
-
 		list_for_each_entry(ref, &entry->refs, list) {
 			if (ref->lookup) {
 				gpiod_remove_lookup_table(ref->lookup);
@@ -625,6 +622,10 @@ void gpio_device_teardown_shared(struct gpio_device *gdev)
 
 			gpio_shared_remove_adev(&ref->adev);
 		}
+
+		/* Release the line only once no proxy can drive it. */
+		scoped_guard(mutex, &entry->lock)
+			gpiod_free_commit(&gdev->descs[entry->offset]);
 	}
 }
 
