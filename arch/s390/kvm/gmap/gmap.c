@@ -798,7 +798,8 @@ static inline bool gmap_2g_allowed(struct gmap *gmap, struct guest_fault *f,
 	return test_bit(GMAP_FLAG_ALLOW_HPAGE_2G, &gmap->flags) &&
 	       !((f->gfn ^ f->pfn) & ~_REGION3_FR_MASK) &&
 	       slot->base_gfn <= ALIGN_DOWN(f->gfn, _PAGES_PER_REGION3) &&
-	       slot->base_gfn + slot->npages >= ALIGN(f->gfn + 1, _PAGES_PER_REGION3);
+	       slot->base_gfn + slot->npages >= ALIGN(f->gfn + 1, _PAGES_PER_REGION3) &&
+	       gmap->asce.dt > ASCE_TYPE_SEGMENT;
 }
 
 /**
