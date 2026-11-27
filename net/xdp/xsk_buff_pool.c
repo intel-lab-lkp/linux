@@ -125,8 +125,14 @@ void xp_set_rxq_info(struct xsk_buff_pool *pool, struct xdp_rxq_info *rxq)
 {
 	u32 i;
 
-	for (i = 0; i < pool->heads_cnt; i++)
+	/* Userspace may write the UMEM. Keep the shared info in the pool,
+	 * and let the device write up to the end of each chunk.
+	 */
+	for (i = 0; i < pool->heads_cnt; i++) {
 		pool->heads[i].xdp.rxq = rxq;
+		pool->heads[i].xdp.flags |= XDP_FLAGS_SINFO_EXT;
+	}
+	rxq->ext_sinfo = &pool->sinfo;
 }
 EXPORT_SYMBOL(xp_set_rxq_info);
 
@@ -229,12 +235,7 @@ int xp_assign_dev(struct xsk_buff_pool *pool,
 		segs = 1;
 	}
 
-	/* open-code xsk_pool_get_rx_frame_size() as pool->dev is not
-	 * set yet at this point; we are before getting down to driver
-	 */
-	frame_size = __xsk_pool_get_rx_frame_size(pool) -
-		     xsk_pool_get_tailroom(mbuf);
-	frame_size = ALIGN_DOWN(frame_size, 128);
+	frame_size = xsk_pool_get_rx_frame_size(pool);
 
 	if (needed > frame_size * segs) {
 		err = -EINVAL;
@@ -629,7 +630,7 @@ struct xdp_buff *xp_alloc(struct xsk_buff_pool *pool)
 
 	xskb->xdp.data = xskb->xdp.data_hard_start + XDP_PACKET_HEADROOM;
 	xskb->xdp.data_meta = xskb->xdp.data;
-	xskb->xdp.flags &= XDP_FLAGS_HAS_FRAGS;
+	xskb->xdp.flags &= XDP_FLAGS_HAS_FRAGS | XDP_FLAGS_SINFO_EXT;
 
 	if (pool->dev)
 		xp_dma_sync_for_device(pool, xskb->dma, pool->frame_len);

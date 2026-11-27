@@ -65,6 +65,10 @@ struct xdp_rxq_info {
 	u32 reg_state;
 	struct xdp_mem_info mem;
 	u32 frag_size;
+	/* Shared info of buffers with %XDP_FLAGS_SINFO_EXT, in the XSk buffer
+	 * pool, set by xsk_pool_set_rxq_info().
+	 */
+	struct skb_shared_info *ext_sinfo;
 } ____cacheline_aligned; /* perf critical, avoid false-sharing */
 
 struct xdp_txq_info {
@@ -81,6 +85,13 @@ enum xdp_buff_flags {
 	 * XDP program is not attached.
 	 */
 	XDP_FLAGS_FRAGS_UNREADABLE	= BIT(2),
+	/* The shared info lives in &xdp_rxq_info.ext_sinfo, not at the end of
+	 * the frame, as userspace may write the frame. The frame reserves no
+	 * tailroom, so the data may reach its end. The pool builds one such
+	 * buffer at a time, so a consumer that uses the shared info later
+	 * must copy what it needs.
+	 */
+	XDP_FLAGS_SINFO_EXT		= BIT(3),
 };
 
 struct xdp_buff {
@@ -178,17 +189,26 @@ xdp_prepare_buff(struct xdp_buff *xdp, unsigned char *hard_start,
 
 /* Reserve memory area at end-of data area.
  *
- * This macro reserves tailroom in the XDP buffer by limiting the
- * XDP/BPF data access to data_hard_end.  Notice same area (and size)
- * is used for XDP_PASS, when constructing the SKB via build_skb().
+ * This reserves tailroom in the XDP buffer by limiting the XDP/BPF data
+ * access to data_hard_end.  Notice same area (and size) is used for
+ * XDP_PASS, when constructing the SKB via build_skb(). Buffers with
+ * %XDP_FLAGS_SINFO_EXT keep the shared info elsewhere and reserve none.
  */
-#define xdp_data_hard_end(xdp)				\
-	((xdp)->data_hard_start + (xdp)->frame_sz -	\
-	 SKB_DATA_ALIGN(sizeof(struct skb_shared_info)))
+static __always_inline void *xdp_data_hard_end(const struct xdp_buff *xdp)
+{
+	u32 tailroom = SKB_DATA_ALIGN(sizeof(struct skb_shared_info));
+
+	if (xdp->flags & XDP_FLAGS_SINFO_EXT)
+		tailroom = 0;
+	return xdp->data_hard_start + xdp->frame_sz - tailroom;
+}
 
 static inline struct skb_shared_info *
 xdp_get_shared_info_from_buff(const struct xdp_buff *xdp)
 {
+	if (xdp->flags & XDP_FLAGS_SINFO_EXT)
+		return xdp->rxq->ext_sinfo;
+
 	return (struct skb_shared_info *)xdp_data_hard_end(xdp);
 }
 

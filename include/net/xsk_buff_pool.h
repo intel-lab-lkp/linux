@@ -59,6 +59,8 @@ struct xsk_buff_pool {
 	spinlock_t rx_lock;
 	struct list_head free_list;
 	struct list_head xskb_list;
+	/* Fragment list of the packet being built, out of userspace reach */
+	struct skb_shared_info sinfo;
 	u32 heads_cnt;
 	u16 queue_id;
 
