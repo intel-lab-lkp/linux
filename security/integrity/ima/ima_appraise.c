@@ -432,18 +432,23 @@ int ima_check_blacklist(struct ima_iint_cache *iint,
 	const char *sig_algo;
 	const u8 *digest = NULL;
 	u32 digestsize = 0;
+	unsigned int i, count;
 	int rc = 0;
 
 	if (!(iint->flags & IMA_CHECK_BLACKLIST))
 		return 0;
 
 	if (iint->flags & IMA_MODSIG_ALLOWED && modsig) {
-		if (ima_get_modsig_signer_count(modsig) == 1 &&
-		    !ima_get_modsig_digest(modsig, 0, &hash_algo, &digest,
-					   &digestsize, &sig_algo))
-			rc = is_binary_blacklisted(digest, digestsize);
-	} else if (iint->flags & IMA_DIGSIG_REQUIRED && iint->ima_hash)
+		count = ima_get_modsig_signer_count(modsig);
+		for (i = 0; i < count && rc != -EPERM; i++) {
+			if (!ima_get_modsig_digest(modsig, i, &hash_algo,
+						   &digest, &digestsize,
+						   &sig_algo) && digestsize)
+				rc = is_binary_blacklisted(digest, digestsize);
+		}
+	} else if (iint->flags & IMA_DIGSIG_REQUIRED && iint->ima_hash) {
 		rc = is_binary_blacklisted(iint->ima_hash->digest, iint->ima_hash->length);
+	}
 
 	if ((rc == -EPERM) && (iint->flags & IMA_MEASURE))
 		process_buffer_measurement(&nop_mnt_idmap, NULL, digest, digestsize,
