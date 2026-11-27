@@ -571,7 +571,7 @@ static int sti_pwm_probe(struct platform_device *pdev)
 	ret = devm_request_irq(&pdev->dev, irq, sti_pwm_interrupt, 0,
 			       pdev->name, pc);
 	if (ret < 0)
-		dev_err_probe(&pdev->dev, ret, "Failed to request IRQ\n");
+		return dev_err_probe(&pdev->dev, ret, "Failed to request IRQ\n");
 
 	/*
 	 * Setup PWM data with default values: some values could be replaced
