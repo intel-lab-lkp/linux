@@ -394,12 +394,12 @@ struct siw_iwarp_tx {
 
 	u32 mpa_crc;
 	bool mpa_crc_enabled;
+	bool orq_fence; /* ORQ full or Send fenced: not a bitfield */
 
 	u8 do_crc : 1; /* do crc for segment */
 	u8 use_sendpage : 1; /* send w/o copy */
 	u8 tx_suspend : 1; /* stop sending DDP segs. */
 	u8 pad : 2; /* # pad in current fpdu */
-	u8 orq_fence : 1; /* ORQ full or Send fenced */
 	u8 in_syscall : 1; /* TX out of user context */
 	u8 zcopy_tx : 1; /* Use TCP_SENDPAGE if possible */
 	u8 gso_seg_limit; /* Maximum segments for GSO, 0 = unbound */
