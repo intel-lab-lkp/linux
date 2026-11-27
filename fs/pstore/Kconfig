@@ -189,3 +189,67 @@ config PSTORE_BLK_FTRACE_SIZE
 
 	  NOTE that, both Kconfig and module parameters can configure
 	  pstore/blk, but module parameters have priority over Kconfig.
+
+config PSTORE_NVMEM
+	tristate "Log panic/oops to an NVMEM device"
+	depends on PSTORE
+	depends on NVMEM
+	select PSTORE_ZONE
+	default n
+	help
+	  This enables panic and oops messages to be logged to an NVMEM
+	  device such as a SPI FRAM.  The NVMEM device is selected with the
+	  device_name module parameter or PSTORE_NVMEM_DEV.
+
+	  The device must be dedicated to pstore, or the offset and
+	  total_size parameters must select a region that is not used by
+	  anything else.
+
+	  If unsure, say N.
+
+config PSTORE_NVMEM_DEV
+	string "NVMEM device name"
+	depends on PSTORE_NVMEM
+	default ""
+	help
+	  Name of the NVMEM device to use for pstore storage, for example
+	  "spi1.0" for an at25 FRAM.
+
+config PSTORE_NVMEM_KMSG_SIZE
+	int "Size in Kbytes of kmsg dump log to store"
+	depends on PSTORE_NVMEM
+	default 64
+	help
+	  Size of the kmsg dump zone in Kbytes.  It must be a multiple of 4.
+
+config PSTORE_NVMEM_MAX_REASON
+	int "Maximum kmsg dump reason to store"
+	depends on PSTORE_NVMEM
+	default 2
+	help
+	  The maximum reason for kmsg dumps to store.  The default is 2
+	  (KMSG_DUMP_OOPS).
+
+config PSTORE_NVMEM_PMSG_SIZE
+	int "Size in Kbytes of pmsg to store"
+	depends on PSTORE_NVMEM
+	depends on PSTORE_PMSG
+	default 64
+	help
+	  Size of the pmsg zone in Kbytes.  It must be a multiple of 4.
+
+config PSTORE_NVMEM_CONSOLE_SIZE
+	int "Size in Kbytes of console log to store"
+	depends on PSTORE_NVMEM
+	depends on PSTORE_CONSOLE
+	default 64
+	help
+	  Size of the console zone in Kbytes.  It must be a multiple of 4.
+
+config PSTORE_NVMEM_FTRACE_SIZE
+	int "Size in Kbytes of ftrace log to store"
+	depends on PSTORE_NVMEM
+	depends on PSTORE_FTRACE
+	default 64
+	help
+	  Size of the ftrace zone in Kbytes.  It must be a multiple of 4.
