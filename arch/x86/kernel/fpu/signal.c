@@ -266,7 +266,16 @@ static int __restore_fpregs_from_user(void __user *buf, u64 task_xfeatures,
 
 		/* Restore enabled features only. */
 		xrestore_mask &= task_xfeatures;
-		init_bv = task_xfeatures & ~xrestore_mask;
+		/*
+		 * If the FPU registers do not belong to current, they may still
+		 * contain state from a previous task with features beyond
+		 * current's enabled features. Clear up to max_features to
+		 * prevent state leakage.
+		 */
+		if (test_thread_flag(TIF_NEED_FPU_LOAD))
+			init_bv = fpu_user_cfg.max_features & ~xrestore_mask;
+		else
+			init_bv = task_xfeatures & ~xrestore_mask;
 		if (likely(!fx_only))
 			ret = xrstor_from_user_sigframe(buf, xrestore_mask);
 		else
