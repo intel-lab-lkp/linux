@@ -410,6 +410,7 @@ static void ima_free_rule(struct ima_rule_entry *entry)
 	kfree(entry->fsname);
 	kfree(entry->fs_subtype);
 	ima_free_rule_opt_list(entry->keyrings);
+	ima_free_rule_opt_list(entry->label);
 	ima_lsm_free_rule(entry);
 	kfree(entry);
 }
