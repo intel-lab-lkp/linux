@@ -242,7 +242,9 @@ static u64 __esp_seq(struct sk_buff *skb)
  *
  * When @l3resv is false, resv is XFRM_IPTFS_MIN_L2HEADROOM which arranges for
  * `skb->data - 16`  which is a good guess for good cache alignment (placing the
- * to be pushed L2 header at the start of a cacheline.
+ * to be pushed L2 header at the start of a cacheline. If @tpl's MAC header
+ * is longer, as with NBMA GRE, resv is its length rounded up, so the
+ * arrangement holds: it is copied in front of the inner packet.
  *
  * Otherwise, @l3resv is true and resv is set to the correct reserved space for
  * dst->dev plus the calculated L3 overhead for the xfrm dst or
@@ -263,6 +265,11 @@ static struct sk_buff *iptfs_alloc_skb(struct sk_buff *tpl, u32 len, bool l3resv
 
 	if (!l3resv) {
 		resv = XFRM_IPTFS_MIN_L2HEADROOM;
+		/* A longer MAC header needs room too; round up to keep
+		 * the cacheline arrangement.
+		 */
+		if (unlikely(tpl->mac_len > resv))
+			resv += ALIGN(tpl->mac_len - resv, L1_CACHE_BYTES);
 	} else {
 		struct dst_entry *dst = skb_dst(tpl);
 
