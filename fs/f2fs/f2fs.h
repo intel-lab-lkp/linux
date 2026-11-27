@@ -3728,8 +3728,9 @@ static inline void f2fs_i_size_write(struct inode *inode, loff_t i_size)
 {
 	bool clean = !is_inode_flag_set(inode, FI_DIRTY_INODE);
 	bool recover = is_inode_flag_set(inode, FI_AUTO_RECOVER);
+	loff_t old_size = i_size_read(inode);
 
-	if (i_size_read(inode) == i_size)
+	if (old_size == i_size)
 		return;
 
 	i_size_write(inode, i_size);
@@ -3738,7 +3739,18 @@ static inline void f2fs_i_size_write(struct inode *inode, loff_t i_size)
 		return;
 
 	f2fs_mark_inode_dirty_sync(inode, true);
-	if (clean || recover)
+
+	/*
+	 * Roll-forward recovery only extends i_size to the end of a recovered
+	 * block if i_size doesn't exceed that block's start, so it can't
+	 * recover an extension inside the old last block, e.g. an O_SYNC 4k
+	 * append filling up a 16k block, which is an in-place update of an
+	 * already allocated block. Let fsync write the inode for it.
+	 */
+	if (i_size > old_size &&
+	    old_size > round_down(i_size - 1, i_blocksize(inode)))
+		clear_inode_flag(inode, FI_AUTO_RECOVER);
+	else if (clean || recover)
 		set_inode_flag(inode, FI_AUTO_RECOVER);
 }
 
