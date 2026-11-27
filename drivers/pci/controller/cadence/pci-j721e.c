@@ -334,6 +334,8 @@ static int j721e_pcie_ctrl_init(struct j721e_pcie *pcie)
 						"ti,syscon-acspcie-proxy-ctrl");
 	if (!syscon)
 		return 0;
+	if (IS_ERR(syscon))
+		return PTR_ERR(syscon);
 
 	return j721e_enable_acspcie_refclk(pcie, syscon);
 }
