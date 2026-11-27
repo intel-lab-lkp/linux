@@ -46,7 +46,7 @@ int mxm_wmi_call_mxds(int adapter)
 
 	printk("mux switched %d\n", status);
 	return 0;
-			    
+
 }
 EXPORT_SYMBOL_GPL(mxm_wmi_call_mxds);
 
