@@ -54,8 +54,22 @@ pub use new_condvar;
 ///     value_changed: CondVar,
 /// }
 ///
-/// /// Waits for `e.value` to become `v`.
-/// fn wait_for_value(e: &Example, v: u32) {
+/// /// Waits for `e.value` to become `v`, returning `Err(ERESTARTSYS)` if a signal is received.
+/// ///
+/// /// Prefer interruptible waits when the caller can handle interruption, so waiting tasks remain
+/// /// killable.
+/// fn wait_for_value(e: &Example, v: u32) -> Result {
+///     let mut guard = e.value.lock();
+///     while *guard != v {
+///         if e.value_changed.wait_interruptible(&mut guard) {
+///             return Err(ERESTARTSYS);
+///         }
+///     }
+///     Ok(())
+/// }
+///
+/// /// Waits uninterruptibly for `e.value` to become `v`.
+/// fn wait_for_value_uninterruptible(e: &Example, v: u32) {
 ///     let mut guard = e.value.lock();
 ///     while *guard != v {
 ///         e.value_changed.wait(&mut guard);
