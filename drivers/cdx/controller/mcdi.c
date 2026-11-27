@@ -405,6 +405,11 @@ static void cdx_mcdi_cancel_cmd(struct cdx_mcdi *cdx, struct cdx_mcdi_cmd *cmd)
 		return;
 
 	mutex_lock(&mcdi->iface_lock);
+	if (cmd->state == MCDI_STATE_FINISHED) {
+		mutex_unlock(&mcdi->iface_lock);
+		return;
+	}
+
 	cdx_mcdi_timeout_cmd(mcdi, cmd, &cleanup_list);
 	mutex_unlock(&mcdi->iface_lock);
 	cdx_mcdi_process_cleanup_list(cdx, &cleanup_list);
@@ -473,6 +478,8 @@ static int cdx_mcdi_rpc_sync(struct cdx_mcdi *cdx, unsigned int cmd,
 	wait_data->outlen = outlen;
 
 	kref_init(&cmd_item->ref);
+	/* Claim an extra ref in case response comes after timeout */
+	kref_get(&cmd_item->ref);
 	cmd_item->quiet = quiet;
 	cmd_item->cookie = (unsigned long)wait_data;
 	cmd_item->completer = &cdx_mcdi_rpc_completer;
@@ -506,6 +513,7 @@ static int cdx_mcdi_rpc_sync(struct cdx_mcdi *cdx, unsigned int cmd,
 
 out:
 	kref_put(&wait_data->ref, cdx_mcdi_blocking_data_release);
+	kref_put(&cmd_item->ref, cdx_mcdi_cmd_release);
 
 	return rc;
 }
@@ -611,17 +619,10 @@ void cdx_mcdi_process_cmd(struct cdx_mcdi *cdx, struct cdx_dword *outbuf, int le
 	mutex_lock(&mcdi->iface_lock);
 	cmd = mcdi->seq_held_by[respseq];
 
-	if (cmd) {
-		if (cmd->state == MCDI_STATE_FINISHED) {
-			mutex_unlock(&mcdi->iface_lock);
-			kref_put(&cmd->ref, cdx_mcdi_cmd_release);
-			return;
-		}
-
+	if (cmd)
 		cdx_mcdi_complete_cmd(mcdi, cmd, outbuf, len, &cleanup_list);
-	} else {
+	else
 		pr_err("MC response unexpected for seq : %0X\n", respseq);
-	}
 
 	mutex_unlock(&mcdi->iface_lock);
 
@@ -734,7 +735,7 @@ static bool cdx_mcdi_complete_cmd(struct cdx_mcdi_iface *mcdi,
 		completed = true;
 	}
 
-	/* free sequence number and buffer */
+	/* free sequence number */
 	mcdi->seq_held_by[cmd->seq] = NULL;
 
 	cdx_mcdi_start_or_queue(mcdi, rc != MC_CMD_ERR_QUEUE_FULL);
@@ -759,6 +760,11 @@ static void cdx_mcdi_timeout_cmd(struct cdx_mcdi_iface *mcdi,
 
 	cmd->rc = -ETIMEDOUT;
 	cdx_mcdi_remove_cmd(mcdi, cmd, cleanup_list);
+	/* free sequence number */
+	if (mcdi->seq_held_by[cmd->seq] == cmd)
+		mcdi->seq_held_by[cmd->seq] = NULL;
+	if (mcdi->db_held_by == cmd)
+		mcdi->db_held_by = NULL;
 
 	cdx_mcdi_mode_fail(cdx, cleanup_list);
 }
@@ -821,7 +827,7 @@ cdx_mcdi_rpc_async(struct cdx_mcdi *cdx, unsigned int cmd,
 		   cdx_mcdi_async_completer *complete, unsigned long cookie)
 {
 	struct cdx_mcdi_cmd *cmd_item =
-		kmalloc(sizeof(struct cdx_mcdi_cmd) + inlen, GFP_ATOMIC);
+		kzalloc(sizeof(struct cdx_mcdi_cmd) + inlen, GFP_ATOMIC);
 
 	if (!cmd_item)
 		return -ENOMEM;
