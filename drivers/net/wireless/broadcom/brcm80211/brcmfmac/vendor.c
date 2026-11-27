@@ -15,6 +15,7 @@
 #include "cfg80211.h"
 #include "vendor.h"
 #include "fwil.h"
+#include "awdl.h"
 
 static int brcmf_cfg80211_vndr_cmds_dcmd_handler(struct wiphy *wiphy,
 						 struct wireless_dev *wdev,
@@ -114,5 +115,86 @@ const struct wiphy_vendor_command brcmf_vendor_cmds[] = {
 			 WIPHY_VENDOR_CMD_NEED_NETDEV,
 		.policy = VENDOR_CMD_RAW_DATA,
 		.doit = brcmf_cfg80211_vndr_cmds_dcmd_handler
+	},
+	{
+		{
+			.vendor_id = BROADCOM_OUI,
+			.subcmd = BRCMF_VNDR_CMDS_AWDL_START
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV |
+			 WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.policy = brcmf_awdl_vndr_policy,
+		.maxattr = BRCMF_AWDL_ATTR_MAX,
+		.doit = brcmf_awdl_vndr_start
+	},
+	{
+		{
+			.vendor_id = BROADCOM_OUI,
+			.subcmd = BRCMF_VNDR_CMDS_AWDL_STOP
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV |
+			 WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.policy = brcmf_awdl_vndr_policy,
+		.maxattr = BRCMF_AWDL_ATTR_MAX,
+		.doit = brcmf_awdl_vndr_stop
+	},
+	{
+		{
+			.vendor_id = BROADCOM_OUI,
+			.subcmd = BRCMF_VNDR_CMDS_AWDL_SET_FRAMES
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV |
+			 WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.policy = brcmf_awdl_vndr_policy,
+		.maxattr = BRCMF_AWDL_ATTR_MAX,
+		.doit = brcmf_awdl_vndr_set_frames
+	},
+	{
+		{
+			.vendor_id = BROADCOM_OUI,
+			.subcmd = BRCMF_VNDR_CMDS_AWDL_SET_SYNC
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV |
+			 WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.policy = brcmf_awdl_vndr_policy,
+		.maxattr = BRCMF_AWDL_ATTR_MAX,
+		.doit = brcmf_awdl_vndr_set_sync
+	},
+	{
+		{
+			.vendor_id = BROADCOM_OUI,
+			.subcmd = BRCMF_VNDR_CMDS_AWDL_PEER_ADD
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV |
+			 WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.policy = brcmf_awdl_vndr_policy,
+		.maxattr = BRCMF_AWDL_ATTR_MAX,
+		.doit = brcmf_awdl_vndr_peer_add
+	},
+	{
+		{
+			.vendor_id = BROADCOM_OUI,
+			.subcmd = BRCMF_VNDR_CMDS_AWDL_PEER_DEL
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV |
+			 WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.policy = brcmf_awdl_vndr_policy,
+		.maxattr = BRCMF_AWDL_ATTR_MAX,
+		.doit = brcmf_awdl_vndr_peer_del
+	},
+};
+
+const struct nl80211_vendor_cmd_info brcmf_vendor_events[] = {
+	[BRCMF_VNDR_EVTS_UNSPEC] = {
+		.vendor_id = BROADCOM_OUI,
+		.subcmd = BRCMF_VNDR_EVTS_UNSPEC
+	},
+	[BRCMF_VNDR_EVTS_AWDL_STARTED] = {
+		.vendor_id = BROADCOM_OUI,
+		.subcmd = BRCMF_VNDR_EVTS_AWDL_STARTED
+	},
+	[BRCMF_VNDR_EVTS_AWDL_STOPPED] = {
+		.vendor_id = BROADCOM_OUI,
+		.subcmd = BRCMF_VNDR_EVTS_AWDL_STOPPED
 	},
 };

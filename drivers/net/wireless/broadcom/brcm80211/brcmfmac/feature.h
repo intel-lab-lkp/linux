@@ -71,10 +71,13 @@
  *
  * AUTO_AUTH: workaround needed for automatic authentication type.
  * NEED_MPC: driver needs to disable MPC during scanning operation.
+ * AWDL_NO_SDB: AWDL takes the slot_bss form without SDB, all channels in
+ *	slice 0.
  */
 #define BRCMF_QUIRK_LIST \
 	BRCMF_QUIRK_DEF(AUTO_AUTH) \
-	BRCMF_QUIRK_DEF(NEED_MPC)
+	BRCMF_QUIRK_DEF(NEED_MPC) \
+	BRCMF_QUIRK_DEF(AWDL_NO_SDB)
 
 #define BRCMF_FEAT_DEF(_f) \
 	BRCMF_FEAT_ ## _f,

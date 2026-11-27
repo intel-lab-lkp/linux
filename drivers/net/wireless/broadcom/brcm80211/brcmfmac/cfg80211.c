@@ -4246,8 +4246,7 @@ static s32 brcmf_cfg80211_suspend(struct wiphy *wiphy,
 	/* The AWDL interface does not survive sleep, the firmware still
 	 * takes commands here. User space creates it again after resume.
 	 */
-	if (cfg->pub->awdl.ifp)
-		brcmf_awdl_del(cfg->pub);
+	brcmf_awdl_suspend(cfg->pub);
 
 	/* if the primary net_device is not READY there is nothing
 	 * we can do but pray resume goes smoothly.
@@ -7867,6 +7866,8 @@ static int brcmf_setup_wiphy(struct wiphy *wiphy, struct brcmf_if *ifp)
 	/* vendor commands/events support */
 	wiphy->vendor_commands = brcmf_vendor_cmds;
 	wiphy->n_vendor_commands = BRCMF_VNDR_CMDS_LAST - 1;
+	wiphy->vendor_events = brcmf_vendor_events;
+	wiphy->n_vendor_events = BRCMF_VNDR_EVTS_LAST;
 
 	if (brcmf_feat_is_enabled(ifp, BRCMF_FEAT_WOWL))
 		brcmf_wiphy_wowl_params(wiphy, ifp);

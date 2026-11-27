@@ -497,6 +497,12 @@ void brcmf_feat_attach(struct brcmf_pub *drvr)
 	case BRCM_CC_4329_CHIP_ID:
 		drvr->chip_quirks |= BIT(BRCMF_FEAT_QUIRK_NEED_MPC);
 		break;
+	case BRCM_CC_4364_CHIP_ID:
+		/* The firmware traps with the SDB form of slot_bss while the
+		 * station is on 5 GHz
+		 */
+		drvr->chip_quirks |= BIT(BRCMF_FEAT_QUIRK_AWDL_NO_SDB);
+		break;
 	default:
 		/* no quirks */
 		break;
