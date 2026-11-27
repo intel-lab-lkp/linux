@@ -598,10 +598,10 @@ static bool unpack_xattrs(struct aa_ext *e, struct aa_profile *profile)
 
 		if (!aa_unpack_array(e, NULL, &size))
 			goto fail;
-		profile->attach.xattr_count = size;
 		profile->attach.xattrs = kcalloc(size, sizeof(char *), GFP_KERNEL);
 		if (!profile->attach.xattrs)
 			goto fail;
+		profile->attach.xattr_count = size;
 		for (i = 0; i < size; i++) {
 			if (!aa_unpack_strdup(e, &profile->attach.xattrs[i], NULL))
 				goto fail;
