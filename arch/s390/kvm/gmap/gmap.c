@@ -858,22 +858,92 @@ static int _gmap_link(struct kvm_s390_mmu_cache *mc, struct gmap *gmap, int leve
 	return rc;
 }
 
-int gmap_link(struct kvm_s390_mmu_cache *mc, struct gmap *gmap, struct guest_fault *f,
-	      struct kvm_memory_slot *slot)
+/**
+ * gmap_get_userspace_page_size() - Check the actual page size of the mapping
+ * @kvm: the guest
+ * @gfn: the guest address whose page size is to be checked
+ * @slot: the KVM memslot containing @gfn
+ *
+ * Manually walk the userspace page tables to find out the page size.
+ *
+ * This is safe because kvm->mmu_lock is being held; being a (r/w) spinlock,
+ * preemption is disabled while it is being held.
+ * Due to RCU-deferred freeing of page tables, that is enough to guarantee
+ * that the userspace tables won't disappear while being walked.
+ *
+ * Context: kvm->mmu_lock must be held.
+ * Return:
+ * * TABLE_TYPE_REGION3 if userspace is mapping with a large pud,
+ * * TABLE_TYPE_SEGMENT if userspace is mapping with a large pmd,
+ * * TABLE_TYPE_PAGE_TABLE otherwise, including missing mappings.
+ */
+static int gmap_get_userspace_page_size(struct kvm *kvm, gfn_t gfn, struct kvm_memory_slot *slot)
+{
+	hva_t hva;
+	pgd_t pgd;
+	p4d_t p4d;
+	pud_t pud;
+	pmd_t pmd;
+
+	lockdep_assert_held(&kvm->mmu_lock);
+
+	hva = __gfn_to_hva_memslot(slot, gfn);
+
+	pgd = READ_ONCE(*pgd_offset(kvm->mm, hva));
+	if (pgd_none(pgd))
+		return TABLE_TYPE_PAGE_TABLE;
+
+	p4d = READ_ONCE(*p4d_offset(&pgd, hva));
+	if (p4d_none(p4d) || !p4d_present(p4d))
+		return TABLE_TYPE_PAGE_TABLE;
+
+	pud = READ_ONCE(*pud_offset(&p4d, hva));
+	if (pud_none(pud) || !pud_present(pud))
+		return TABLE_TYPE_PAGE_TABLE;
+	if (pud_leaf(pud))
+		return TABLE_TYPE_REGION3;
+
+	pmd = READ_ONCE(*pmd_offset(&pud, hva));
+	if (pmd_none(pmd) || !pmd_present(pmd))
+		return TABLE_TYPE_PAGE_TABLE;
+	if (pmd_leaf(pmd))
+		return TABLE_TYPE_SEGMENT;
+
+	return TABLE_TYPE_PAGE_TABLE;
+}
+
+static int gmap_determine_fault_page_size(struct gmap *gmap, struct guest_fault *f,
+					  struct kvm_memory_slot *slot)
 {
 	unsigned int order;
 	int level;
 
+	if (!f->page)
+		return TABLE_TYPE_PAGE_TABLE;
+
+	order = folio_order(page_folio(f->page));
+	level = TABLE_TYPE_PAGE_TABLE;
+
+	if (order >= get_order(_REGION3_SIZE) && gmap_2g_allowed(gmap, f, slot))
+		level = TABLE_TYPE_REGION3;
+	else if (order >= get_order(_SEGMENT_SIZE) && gmap_1m_allowed(gmap, f, slot))
+		level = TABLE_TYPE_SEGMENT;
+
+	if (level == TABLE_TYPE_PAGE_TABLE)
+		return level;
+
+	return min(level, gmap_get_userspace_page_size(gmap->kvm, f->gfn, slot));
+}
+
+int gmap_link(struct kvm_s390_mmu_cache *mc, struct gmap *gmap, struct guest_fault *f,
+	      struct kvm_memory_slot *slot)
+{
+	int level;
+
 	lockdep_assert_held(&gmap->kvm->mmu_lock);
 
-	level = TABLE_TYPE_PAGE_TABLE;
-	if (f->page) {
-		order = folio_order(page_folio(f->page));
-		if (order >= get_order(_REGION3_SIZE) && gmap_2g_allowed(gmap, f, slot))
-			level = TABLE_TYPE_REGION3;
-		else if (order >= get_order(_SEGMENT_SIZE) && gmap_1m_allowed(gmap, f, slot))
-			level = TABLE_TYPE_SEGMENT;
-	}
+	level = gmap_determine_fault_page_size(gmap, f, slot);
+
 	return _gmap_link(mc, gmap, level, f);
 }
 
