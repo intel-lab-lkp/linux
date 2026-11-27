@@ -5449,6 +5449,7 @@ try_onemore:
 	f2fs_init_cache(sbi, META_CACHE(sbi), F2FS_META_CACHE);
 	f2fs_init_cache(sbi, NODE_CACHE(sbi), F2FS_NODE_CACHE);
 	f2fs_init_cache(sbi, COMPRESS_CACHE(sbi), F2FS_COMPRESS_CACHE);
+	f2fs_init_cache_wb_info(sbi);
 
 	err = f2fs_get_valid_checkpoint(sbi);
 	if (err) {

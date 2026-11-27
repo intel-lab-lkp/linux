@@ -844,8 +844,7 @@ void f2fs_wake_up_cache_wb(struct f2fs_sb_info *sbi)
 {
 	struct f2fs_cache_kthread *cache_thread = &sbi->cache_thread;
 
-	/* pairs with smp_store_release() in f2fs_start_cache_wb_thread() */
-	if (!smp_load_acquire(&cache_thread->cache_wb_task))
+	if (!READ_ONCE(cache_thread->cache_wb_task))
 		return;
 
 	if (!f2fs_should_wake_up_cache_wb(sbi))
@@ -853,6 +852,17 @@ void f2fs_wake_up_cache_wb(struct f2fs_sb_info *sbi)
 
 	if (wq_has_sleeper(&cache_thread->cache_wb_wq))
 		wake_up(&cache_thread->cache_wb_wq);
+}
+
+void f2fs_init_cache_wb_info(struct f2fs_sb_info *sbi)
+{
+	struct f2fs_cache_kthread *cache_thread = &sbi->cache_thread;
+
+	init_waitqueue_head(&cache_thread->cache_wb_wq);
+	cache_thread->cache_wb_interval = DEF_DIRTY_CACHE_TIMEOUT;
+	cache_thread->cache_wb_dirty_threshold = DEF_CACHE_WB_DIRTY_THRESH;
+	cache_thread->cache_wb_total_threshold = 0;
+	cache_thread->cache_wb_throttled = false;
 }
 
 int f2fs_start_cache_wb_thread(struct f2fs_sb_info *sbi)
@@ -865,11 +875,7 @@ int f2fs_start_cache_wb_thread(struct f2fs_sb_info *sbi)
 	if (cache_thread->cache_wb_task)
 		return 0;
 
-	init_waitqueue_head(&cache_thread->cache_wb_wq);
-	cache_thread->cache_wb_interval = DEF_DIRTY_CACHE_TIMEOUT;
-	cache_thread->cache_wb_dirty_threshold = DEF_CACHE_WB_DIRTY_THRESH;
-	cache_thread->cache_wb_total_threshold = 0;
-	cache_thread->cache_wb_throttled = false;
+	WRITE_ONCE(cache_thread->cache_wb_throttled, false);
 	snprintf(name, sizeof(name), "f2fs_writeback-%u:%u",
 			MAJOR(dev), MINOR(dev));
 
@@ -877,8 +883,7 @@ int f2fs_start_cache_wb_thread(struct f2fs_sb_info *sbi)
 	if (IS_ERR(task))
 		return PTR_ERR(task);
 
-	/* pairs with smp_load_acquire() in f2fs_wake_up_cache_wb() */
-	smp_store_release(&cache_thread->cache_wb_task, task);
+	WRITE_ONCE(cache_thread->cache_wb_task, task);
 	return 0;
 }
 

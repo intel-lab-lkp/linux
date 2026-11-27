@@ -245,6 +245,7 @@ struct f2fs_cache_kthread {
 	bool cache_wb_throttled;	/* last round made no progress */
 };
 
+void f2fs_init_cache_wb_info(struct f2fs_sb_info *sbi);
 int f2fs_start_cache_wb_thread(struct f2fs_sb_info *sbi);
 void f2fs_stop_cache_wb_thread(struct f2fs_sb_info *sbi);
 void f2fs_wake_up_cache_wb(struct f2fs_sb_info *sbi);
