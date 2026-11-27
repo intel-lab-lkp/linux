@@ -20,6 +20,7 @@
 #include <linux/debugfs.h>
 #include <linux/msi.h>
 #include <linux/pm_runtime.h>
+#include <linux/string.h>
 #include <linux/dma-direction.h>
 #include <scsi/scsi_device.h>
 #include <scsi/scsi_host.h>
@@ -266,6 +267,17 @@ struct ufs_clk_info {
 	bool keep_link_active;
 	bool enabled;
 };
+
+/**
+ * ufshcd_is_ref_clk_name - check if a clock name is the device reference clock
+ * @name: clock name from devicetree
+ *
+ * Returns: true for "ref" or the legacy "ref_clk" name, false otherwise.
+ */
+static inline bool ufshcd_is_ref_clk_name(const char *name)
+{
+	return (!strcmp(name, "ref") || !strcmp(name, "ref_clk"));
+}
 
 enum ufs_notify_change_status {
 	PRE_CHANGE,

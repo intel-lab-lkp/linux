@@ -96,7 +96,7 @@ static int ufshcd_parse_clock_info(struct ufs_hba *hba)
 			goto out;
 		}
 
-		if (!strcmp(name, "ref_clk"))
+		if (ufshcd_is_ref_clk_name(name))
 			clki->keep_link_active = true;
 		dev_dbg(dev, "%s: min %u max %u name %s\n", "freq-table-hz",
 				clki->min_freq, clki->max_freq, clki->name);
@@ -462,7 +462,7 @@ static int ufshcd_parse_operating_points(struct ufs_hba *hba)
 		if (!clki->name)
 			return -ENOMEM;
 
-		if (!strcmp(clk_names[i], "ref_clk"))
+		if (ufshcd_is_ref_clk_name(clk_names[i]))
 			clki->keep_link_active = true;
 
 		list_add_tail(&clki->list, &hba->clk_list_head);

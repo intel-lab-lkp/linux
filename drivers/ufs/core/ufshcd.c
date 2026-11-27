@@ -10008,11 +10008,11 @@ static int ufshcd_init_clocks(struct ufs_hba *hba)
 		}
 
 		/*
-		 * Parse device ref clk freq as per device tree "ref_clk".
+		 * Parse device ref clk freq as per device tree "ref" or "ref_clk".
 		 * Default dev_ref_clk_freq is set to REF_CLK_FREQ_INVAL
 		 * in ufshcd_alloc_host().
 		 */
-		if (!strcmp(clki->name, "ref_clk"))
+		if (ufshcd_is_ref_clk_name(clki->name))
 			ufshcd_parse_dev_ref_clk_freq(hba, clki->clk);
 
 		if (clki->max_freq) {
