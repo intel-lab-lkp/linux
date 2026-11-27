@@ -368,7 +368,8 @@ static int twl6030_usb_probe(struct platform_device *pdev)
 	err = twl6030_usb_ldo_init(twl);
 	if (err) {
 		dev_err(&pdev->dev, "ldo init failed\n");
-		return err;
+		status = err;
+		goto err_clear_comparator;
 	}
 
 	platform_set_drvdata(pdev, twl);
@@ -402,6 +403,9 @@ err_free_irq1:
 	free_irq(twl->irq1, twl);
 err_put_regulator:
 	regulator_put(twl->usb3v3);
+err_clear_comparator:
+	omap_usb2_set_comparator(NULL);
+	cancel_work_sync(&twl->set_vbus_work);
 
 	return status;
 }
@@ -410,6 +414,7 @@ static void twl6030_usb_remove(struct platform_device *pdev)
 {
 	struct twl6030_usb *twl = platform_get_drvdata(pdev);
 
+	omap_usb2_set_comparator(NULL);
 	cancel_delayed_work_sync(&twl->get_status_work);
 	twl6030_interrupt_mask(TWL6030_USBOTG_INT_MASK,
 		REG_INT_MSK_LINE_C);
