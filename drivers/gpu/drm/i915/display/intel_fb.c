@@ -5,6 +5,7 @@
 
 #include <linux/dma-fence.h>
 #include <linux/dma-resv.h>
+#include <linux/workqueue.h>
 
 #include <drm/drm_blend.h>
 #include <drm/drm_gem.h>
@@ -2177,16 +2178,26 @@ static int intel_user_framebuffer_create_handle(struct drm_framebuffer *fb,
 
 struct frontbuffer_fence_cb {
 	struct dma_fence_cb base;
+	struct work_struct work;
 	struct intel_frontbuffer *front;
 };
+
+static void intel_user_framebuffer_fence_work(struct work_struct *work)
+{
+	struct frontbuffer_fence_cb *cb = container_of(work, typeof(*cb), work);
+	struct intel_frontbuffer *front = cb->front;
+
+	intel_frontbuffer_flush(front, ORIGIN_DIRTYFB);
+	intel_parent_frontbuffer_put(front->display, front);
+	kfree(cb);
+}
 
 static void intel_user_framebuffer_fence_wake(struct dma_fence *dma,
 					      struct dma_fence_cb *data)
 {
 	struct frontbuffer_fence_cb *cb = container_of(data, typeof(*cb), base);
 
-	intel_frontbuffer_queue_flush(cb->front);
-	kfree(cb);
+	schedule_work(&cb->work);
 	dma_fence_put(dma);
 }
 
@@ -2196,6 +2207,7 @@ static int intel_user_framebuffer_dirty(struct drm_framebuffer *fb,
 					struct drm_clip_rect *clips,
 					unsigned int num_clips)
 {
+	struct intel_display *display = to_intel_display(fb->dev);
 	struct drm_gem_object *obj = intel_fb_bo(fb);
 	struct intel_frontbuffer *front = to_intel_frontbuffer(fb);
 	struct dma_fence *fence;
@@ -2221,6 +2233,8 @@ static int intel_user_framebuffer_dirty(struct drm_framebuffer *fb,
 	}
 
 	cb->front = front;
+	INIT_WORK(&cb->work, intel_user_framebuffer_fence_work);
+	intel_parent_frontbuffer_ref(display, front);
 
 	intel_frontbuffer_invalidate(front, ORIGIN_DIRTYFB);
 
