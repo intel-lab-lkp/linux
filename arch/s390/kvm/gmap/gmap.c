@@ -389,6 +389,7 @@ static long _gmap_unmap_pte(union pte *ptep, gfn_t gfn, gfn_t next, struct dat_w
 	struct folio *folio = NULL;
 	unsigned long vmaddr;
 	union pgste pgste;
+	union pte newpte;
 
 	pgste = pgste_get_lock(ptep);
 	if (ptep->s.pr && pgste.usage == PGSTE_GPS_USAGE_UNUSED) {
@@ -397,7 +398,9 @@ static long _gmap_unmap_pte(union pte *ptep, gfn_t gfn, gfn_t next, struct dat_w
 	}
 	if (ptep->s.pr && test_bit(GMAP_FLAG_EXPORT_ON_UNMAP, &priv->gmap->flags))
 		folio = pfn_folio(ptep->h.pfra);
-	pgste = gmap_ptep_xchg(priv->gmap, ptep, _PTE_EMPTY, pgste, gfn);
+	newpte = _PTE_EMPTY;
+	newpte.s.sd = ptep->s.sd;
+	pgste = gmap_ptep_xchg(priv->gmap, ptep, newpte, pgste, gfn);
 	pgste_set_unlock(ptep, pgste);
 	if (folio)
 		uv_convert_from_secure_folio(folio);
@@ -408,8 +411,8 @@ static long _gmap_unmap_pte(union pte *ptep, gfn_t gfn, gfn_t next, struct dat_w
 static long _gmap_unmap_crste(union crste *crstep, gfn_t gfn, gfn_t next, struct dat_walk *walk)
 {
 	struct gmap_unmap_priv *priv = walk->priv;
+	union crste newcrste, old = *crstep;
 	struct folio *folio = NULL;
-	union crste old = *crstep;
 	bool ok;
 
 	if (!old.h.fc)
@@ -417,6 +420,9 @@ static long _gmap_unmap_crste(union crste *crstep, gfn_t gfn, gfn_t next, struct
 
 	if (old.s.fc1.pr && test_bit(GMAP_FLAG_EXPORT_ON_UNMAP, &priv->gmap->flags))
 		folio = phys_to_folio(crste_origin_large(old));
+
+	newcrste = _CRSTE_EMPTY(old.h.tt);
+	newcrste.s.fc1.sd = old.s.fc1.sd;
 	/*
 	 * No races should happen because kvm->mmu_lock is held in write mode,
 	 * but the unmap operation could have triggered an unshadow, which
@@ -425,11 +431,11 @@ static long _gmap_unmap_crste(union crste *crstep, gfn_t gfn, gfn_t next, struct
 	 * had the vsie_notif bit set. A second failure is not allowed, for
 	 * the reasons above.
 	 */
-	ok = gmap_crstep_xchg_atomic(priv->gmap, crstep, old, _CRSTE_EMPTY(old.h.tt), gfn);
+	ok = gmap_crstep_xchg_atomic(priv->gmap, crstep, old, newcrste, gfn);
 	if (!ok) {
 		KVM_BUG_ON(!old.s.fc1.vsie_notif, priv->gmap->kvm);
 		old.s.fc1.vsie_notif = 0;
-		ok = gmap_crstep_xchg_atomic(priv->gmap, crstep, old, _CRSTE_EMPTY(old.h.tt), gfn);
+		ok = gmap_crstep_xchg_atomic(priv->gmap, crstep, old, newcrste, gfn);
 		KVM_BUG_ON(!ok, priv->gmap->kvm);
 	}
 	if (folio)
@@ -459,7 +465,7 @@ static bool gmap_unmap_gfn_range_slow(struct gmap *gmap, struct kvm_memory_slot 
 
 static long _gmap_unmap_pud_fast(union crste *crstep, gfn_t gfn, gfn_t next, struct dat_walk *w)
 {
-	union crste old = *crstep;
+	union crste newcrste, old = *crstep;
 
 	/* We only care about large puds */
 	if (!old.h.fc)
@@ -480,14 +486,17 @@ static long _gmap_unmap_pud_fast(union crste *crstep, gfn_t gfn, gfn_t next, str
 		idte_crste(crstep, gfn, IDTE_GUEST_ASCE, w->asce, 0);
 	else
 		idte_crste(crstep, gfn, 0, w->asce, 0);
-	*crstep = _CRSTE_EMPTY(old.h.tt);
+
+	newcrste = _CRSTE_EMPTY(old.h.tt);
+	newcrste.s.fc1.sd = old.s.fc1.sd;
+	*crstep = newcrste;
 
 	return 0;
 }
 
 static long _gmap_unmap_pmd_fast(union crste *crstep, gfn_t gfn, gfn_t next, struct dat_walk *w)
 {
-	union crste old = *crstep;
+	union crste newcrste, old = *crstep;
 	struct page_table *pt;
 	gfn_t first, last;
 	unsigned int i;
@@ -500,7 +509,10 @@ static long _gmap_unmap_pmd_fast(union crste *crstep, gfn_t gfn, gfn_t next, str
 			idte_crste(crstep, gfn, IDTE_GUEST_ASCE, w->asce, 0);
 		else
 			idte_crste(crstep, gfn, 0, w->asce, 0);
-		WRITE_ONCE(*crstep, _CRSTE_EMPTY(old.h.tt));
+
+		newcrste = _CRSTE_EMPTY(old.h.tt);
+		newcrste.s.fc1.sd = old.s.fc1.sd;
+		*crstep = newcrste;
 
 		return 0;
 	}
@@ -523,11 +535,15 @@ static long _gmap_unmap_pmd_fast(union crste *crstep, gfn_t gfn, gfn_t next, str
 		idte_crste(crstep, gfn, 0, w->asce, 0);
 
 	for (i = first; i <= last; i++) {
+		union pte newpte;
+
 		if (pte_hole(pt->ptes[i]))
 			continue;
 		if (!pt->ptes[i].h.i && uses_skeys(w->priv))
 			pt->pgstes[i] = dat_save_storage_key_into_pgste(pt->ptes[i], pt->pgstes[i]);
-		pt->ptes[i] = _PTE_EMPTY;
+		newpte = _PTE_EMPTY;
+		newpte.s.sd = pt->ptes[i].s.sd;
+		pt->ptes[i] = newpte;
 		pt->pgstes[i].vsie_notif = 0;
 		pt->pgstes[i].vsie_gmem = 0;
 		pt->pgstes[i].zero = 0;
@@ -1115,6 +1131,7 @@ static long _gmap_split_crste(union crste *crstep, gfn_t gfn, gfn_t next, struct
 			gmap_unmap_prefix(gmap, gfn, next);
 		if (crste.s.fc1.vsie_notif)
 			gmap_handle_vsie_unshadow_event(gmap, gfn);
+		newcrste.s.fc1.sd = crste.s.fc1.sd;
 		if (dat_crstep_xchg_atomic(crstep, crste, newcrste, gfn, walk->asce))
 			break;
 		crste = READ_ONCE(*crstep);
@@ -1290,6 +1307,7 @@ int gmap_protect_rmap(struct kvm_s390_mmu_cache *mc, struct gmap *sg, gfn_t p_gf
 		return -EAGAIN;
 	pte = ptep->s.pr ? *ptep : _pte(pfn, wr, false, false);
 	pte.h.p = 1;
+	pte.s.sd |= ptep->s.sd;
 	pgste = _gmap_ptep_xchg(sg->parent, ptep, pte, pgste, p_gfn, false);
 	pgste.vsie_notif = 1;
 	pgste_set_unlock(ptep, pgste);
