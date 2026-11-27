@@ -39,6 +39,7 @@ struct mipi_i3c_hci_pci {
 	void __iomem *base;
 	const struct mipi_i3c_hci_pci_info *info;
 	struct mipi_i3c_hci_pci_instance instance[INST_MAX];
+	int instance_count;
 	void *private;
 };
 
@@ -163,6 +164,29 @@ static void intel_reset(void __iomem *priv)
 	writel(INTEL_RESETS_RESET, priv + INTEL_RESETS);
 }
 
+#define INTEL_PRESENT_STATE_DEBUG	0x24c
+#define INTEL_SCL_LINE_SIGNAL_LEVEL	BIT(0)
+
+/*
+ * BIOS enables the PCI function only if the 1st instance is enabled, but the
+ * 2nd instance may not be pinned out, in which case its probe times out.
+ */
+static void intel_check_2nd_instance(struct mipi_i3c_hci_pci *hci)
+{
+	for (int i = 1; i < hci->instance_count; i++) {
+		void __iomem *base = hci->base + hci->info->instance_offset[i];
+		u32 st = readl(base + INTEL_PRESENT_STATE_DEBUG);
+
+		/* Reads the SCL clock loopback, which is held low if SCL is not muxed */
+		if (!(st & INTEL_SCL_LINE_SIGNAL_LEVEL)) {
+			hci->instance_count = i;
+			dev_notice(&hci->pci->dev, "%s.%d: SCL not connected, skipping\n",
+				   hci->info->name, hci->info->id[i]);
+			break;
+		}
+	}
+}
+
 static int intel_i3c_init(struct mipi_i3c_hci_pci *hci)
 {
 	struct intel_host *host = devm_kzalloc_obj(&hci->pci->dev, *host);
@@ -180,6 +204,8 @@ static int intel_i3c_init(struct mipi_i3c_hci_pci *hci)
 	host->priv = priv;
 
 	intel_reset(priv);
+
+	intel_check_2nd_instance(hci);
 
 	intel_ltr_expose(&hci->pci->dev);
 	intel_add_debugfs(hci);
@@ -402,14 +428,14 @@ static void mipi_i3c_hci_pci_setup_cell(struct mipi_i3c_hci_pci *hci, int idx,
 	cell->resources = &data->res;
 }
 
-#define mipi_i3c_hci_pci_alloc(h, x) kzalloc_objs(*(x), (h)->info->instance_count)
+#define mipi_i3c_hci_pci_alloc(h, x) kzalloc_objs(*(x), (h)->instance_count)
 
 static int mipi_i3c_hci_pci_add_instances(struct mipi_i3c_hci_pci *hci)
 {
 	struct mipi_i3c_hci_pci_cell_data *data __free(kfree) = mipi_i3c_hci_pci_alloc(hci, data);
 	struct mfd_cell *cells __free(kfree) = mipi_i3c_hci_pci_alloc(hci, cells);
 	int irq = pci_irq_vector(hci->pci, 0);
-	int nr = hci->info->instance_count;
+	int nr = hci->instance_count;
 
 	if (!cells || !data)
 		return -ENOMEM;
@@ -449,6 +475,8 @@ static int mipi_i3c_hci_pci_probe(struct pci_dev *pci,
 	pci_set_drvdata(pci, hci);
 
 	hci->info = (const struct mipi_i3c_hci_pci_info *)id->driver_data;
+
+	hci->instance_count = hci->info->instance_count;
 
 	ret = hci->info->init ? hci->info->init(hci) : 0;
 	if (ret)
