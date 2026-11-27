@@ -29,6 +29,7 @@
 #include <linux/bitops.h>
 #include <linux/compiler.h>
 #include <linux/iopoll.h>
+#include <linux/workqueue.h>
 
 #define ADSP_DOMAIN_ID (0)
 #define MDSP_DOMAIN_ID (1)
@@ -339,6 +340,10 @@ struct fastrpc_channel_ctx {
 	atomic_t ctx_seq;
 	u64 dma_mask;
 	const struct fastrpc_soc_data *soc_data;
+	/* Per-channel workqueue for the probe-time DSP capability query */
+	struct workqueue_struct *cap_wq;
+	struct work_struct cap_query_work;
+	char domain[8];
 };
 
 struct fastrpc_device {
@@ -1854,10 +1859,23 @@ static int fastrpc_device_open(struct inode *inode, struct file *filp)
 	struct fastrpc_channel_ctx *cctx;
 	struct fastrpc_device *fdevice;
 	struct fastrpc_user *fl = NULL;
+	struct rpmsg_device *rpdev;
 	unsigned long flags;
 
 	fdevice = miscdev_to_fdevice(filp->private_data);
 	cctx = fdevice->cctx;
+
+	/*
+	 * The device node can still be open()able for a short time after
+	 * fastrpc_rpmsg_remove() has cleared cctx->rpdev (misc_deregister()
+	 * only runs once the capability-query work is fully drained). Bail
+	 * out now instead of racing a NULL cctx->rpdev below.
+	 */
+	spin_lock_irqsave(&cctx->lock, flags);
+	rpdev = cctx->rpdev;
+	spin_unlock_irqrestore(&cctx->lock, flags);
+	if (!rpdev)
+		return -ENODEV;
 
 	fl = kzalloc_obj(*fl);
 	if (!fl)
@@ -1879,14 +1897,28 @@ static int fastrpc_device_open(struct inode *inode, struct file *filp)
 
 	fl->sctx = fastrpc_session_alloc(fl);
 	if (!fl->sctx) {
-		dev_err_ratelimited(&cctx->rpdev->dev, "No session available\n");
+		dev_err_ratelimited(&rpdev->dev, "No session available\n");
 		mutex_destroy(&fl->mutex);
 		kfree(fl);
 		fastrpc_channel_ctx_put(cctx);
 		return -EBUSY;
 	}
 
+	/*
+	 * Re-check under the same lock fastrpc_rpmsg_remove() uses to clear
+	 * cctx->rpdev and notify cctx->users: either this fl is linked before
+	 * that notify loop runs (so it's included), or cctx->rpdev is already
+	 * NULL here (so it's rejected) -- never linked in and missed by it.
+	 */
 	spin_lock_irqsave(&cctx->lock, flags);
+	if (!cctx->rpdev) {
+		spin_unlock_irqrestore(&cctx->lock, flags);
+		fastrpc_session_free(cctx, fl->sctx);
+		mutex_destroy(&fl->mutex);
+		kfree(fl);
+		fastrpc_channel_ctx_put(cctx);
+		return -ENODEV;
+	}
 	list_add_tail(&fl->user, &cctx->users);
 	spin_unlock_irqrestore(&cctx->lock, flags);
 	kref_init(&fl->refcount);
@@ -2585,6 +2617,195 @@ static int fastrpc_device_register(struct device *dev, struct fastrpc_channel_ct
 	return err;
 }
 
+static int fastrpc_register_devices(struct fastrpc_channel_ctx *cctx,
+				    struct rpmsg_device *rpdev)
+{
+	struct device *rdev = &rpdev->dev;
+	int err, i;
+
+	/*
+	 * Duplicate the ADSP sessions before any device node is registered
+	 * below: misc_register() lets userspace open() and allocate a
+	 * session immediately, and that allocation can mark session[sesscount - 1]
+	 * used before it's copied into the new slots.
+	 */
+	if (cctx->domain_id == ADSP_DOMAIN_ID && cctx->sesscount > 0) {
+		struct fastrpc_session_ctx *last_sess;
+		struct fastrpc_session_ctx *dup_sess;
+		unsigned long flags;
+
+		spin_lock_irqsave(&cctx->lock, flags);
+		last_sess = &cctx->session[cctx->sesscount - 1];
+		for (i = 0; i < FASTRPC_DUP_SESSIONS; i++) {
+			if (cctx->sesscount >= FASTRPC_MAX_SESSIONS)
+				break;
+			dup_sess = &cctx->session[cctx->sesscount++];
+			memcpy(dup_sess, last_sess, sizeof(*dup_sess));
+		}
+		spin_unlock_irqrestore(&cctx->lock, flags);
+	}
+
+	switch (cctx->domain_id) {
+	case ADSP_DOMAIN_ID:
+	case MDSP_DOMAIN_ID:
+	case SDSP_DOMAIN_ID:
+		/* Unsigned PD offloading is only supported on CDSP and GDSP */
+		cctx->unsigned_support = false;
+		err = fastrpc_device_register(rdev, cctx, cctx->secure, cctx->domain);
+		if (err)
+			goto err_deregister_fdev;
+		break;
+	case CDSP_DOMAIN_ID:
+	case GDSP_DOMAIN_ID:
+		cctx->unsigned_support = true;
+		/* Create both device nodes so that we can allow both Signed and Unsigned PD */
+		err = fastrpc_device_register(rdev, cctx, true, cctx->domain);
+		if (err)
+			goto err_deregister_fdev;
+
+		err = fastrpc_device_register(rdev, cctx, false, cctx->domain);
+		if (err)
+			goto err_deregister_fdev;
+		break;
+	default:
+		err = -EINVAL;
+		goto err_deregister_fdev;
+	}
+
+	return 0;
+
+err_deregister_fdev:
+	if (cctx->fdevice)
+		misc_deregister(&cctx->fdevice->miscdev);
+	if (cctx->secure_fdevice)
+		misc_deregister(&cctx->secure_fdevice->miscdev);
+
+	return err;
+}
+
+static void fastrpc_cap_query_work(struct work_struct *work)
+{
+	struct fastrpc_channel_ctx *cctx =
+		container_of(work, struct fastrpc_channel_ctx, cap_query_work);
+	struct rpmsg_device *rpdev;
+	struct device *rdev;
+	u32 *dsp_attributes;
+	struct fastrpc_user *fl;
+	unsigned long flags;
+	int err;
+
+	/*
+	 * fastrpc_rpmsg_remove() can race this work and clear cctx->rpdev
+	 * right before cancel_work_sync() waits on it. Take a stable,
+	 * locked snapshot instead of reading cctx->rpdev unlocked: if the
+	 * channel is already gone there's nothing left to query or
+	 * register, and remove() owns the teardown.
+	 */
+	spin_lock_irqsave(&cctx->lock, flags);
+	rpdev = cctx->rpdev;
+	spin_unlock_irqrestore(&cctx->lock, flags);
+	if (!rpdev)
+		return;
+	rdev = &rpdev->dev;
+
+	fl = kzalloc_obj(*fl);
+	if (!fl)
+		goto register_devices;
+
+	spin_lock_init(&fl->lock);
+	mutex_init(&fl->mutex);
+	INIT_LIST_HEAD(&fl->pending);
+	INIT_LIST_HEAD(&fl->interrupted);
+	INIT_LIST_HEAD(&fl->maps);
+	INIT_LIST_HEAD(&fl->mmaps);
+	INIT_LIST_HEAD(&fl->user);
+	fl->cctx = cctx;
+	fl->pd = ROOT_PD;
+	kref_init(&fl->refcount);
+	fastrpc_channel_ctx_get(cctx);
+
+	fl->sctx = fastrpc_session_alloc(fl);
+	if (!fl->sctx) {
+		dev_warn(rdev, "no session for capability query, skipping\n");
+		fastrpc_user_put(fl);
+		goto register_devices;
+	}
+
+	dsp_attributes = kzalloc_objs(*dsp_attributes, FASTRPC_MAX_DSP_ATTRIBUTES);
+	if (!dsp_attributes)
+		goto err_cleanup_register;
+
+	/*
+	 * Linked into cctx->users so fastrpc_rpmsg_remove() can abort us
+	 * via fastrpc_notify_users() instead of waiting out the timeout.
+	 */
+	spin_lock_irqsave(&cctx->lock, flags);
+	if (!cctx->rpdev) {
+		spin_unlock_irqrestore(&cctx->lock, flags);
+		kfree(dsp_attributes);
+		fastrpc_session_free(cctx, fl->sctx);
+		fl->sctx = NULL;
+		fastrpc_user_put(fl);
+		return;
+	}
+	list_add_tail(&fl->user, &cctx->users);
+	spin_unlock_irqrestore(&cctx->lock, flags);
+
+	err = fastrpc_get_info_from_dsp(fl, dsp_attributes, FASTRPC_MAX_DSP_ATTRIBUTES);
+
+	/*
+	 * On -ETIMEDOUT, fastrpc_internal_invoke() leaves the ctx parked on
+	 * fl->pending for a possible late DSP answer or a future SSR to
+	 * resolve, and fastrpc_notify_users() can only find it through
+	 * cctx->users: unlinking fl here would orphan that ctx forever if
+	 * the DSP never answers (e.g. it crashed). Every other outcome means
+	 * the ctx is already fully unlinked, so fl can leave cctx->users now.
+	 */
+	if (err != -ETIMEDOUT) {
+		spin_lock_irqsave(&cctx->lock, flags);
+		/* list_del_init(), not list_del(): fastrpc_user_free() removes fl
+		 * from this same list again on the final put, so leave it pointing
+		 * to itself instead of to LIST_POISON.
+		 */
+		list_del_init(&fl->user);
+		spin_unlock_irqrestore(&cctx->lock, flags);
+	}
+
+	if (err == -EPIPE) {
+		/* Channel is going away; remove() will tear it down. */
+		kfree(dsp_attributes);
+		fastrpc_session_free(cctx, fl->sctx);
+		fl->sctx = NULL;
+		fastrpc_user_put(fl);
+		return;
+	}
+
+	if (!err) {
+		spin_lock_irqsave(&cctx->lock, flags);
+		memcpy(cctx->dsp_attributes, dsp_attributes,
+		       FASTRPC_MAX_DSP_ATTRIBUTES_LEN);
+		cctx->valid_attributes = true;
+		spin_unlock_irqrestore(&cctx->lock, flags);
+		dev_dbg(rdev, "DSP capabilities cached at probe time\n");
+	} else if (err == DSP_UNSUPPORTED_API) {
+		dev_info(rdev, "DSP does not support capability query\n");
+	} else {
+		dev_warn(rdev,
+			 "probe-time capability query failed (%d), will retry on demand\n",
+			 err);
+	}
+
+err_cleanup_register:
+	kfree(dsp_attributes);
+	fastrpc_session_free(cctx, fl->sctx);
+	fl->sctx = NULL;
+	fastrpc_user_put(fl);
+
+register_devices:
+	if (fastrpc_register_devices(cctx, rpdev))
+		dev_err(rdev, "failed to register device nodes\n");
+}
+
 static int fastrpc_get_domain_id(const char *domain)
 {
 	if (!strncmp(domain, "adsp", 4))
@@ -2893,59 +3114,31 @@ static int fastrpc_rpmsg_probe(struct rpmsg_device *rpdev)
 	data->rpdev = rpdev;
 	dev_set_drvdata(&rpdev->dev, data);
 
-	switch (domain_id) {
-	case ADSP_DOMAIN_ID:
-	case MDSP_DOMAIN_ID:
-	case SDSP_DOMAIN_ID:
-		/* Unsigned PD offloading is only supported on CDSP and GDSP */
-		data->unsigned_support = false;
-		err = fastrpc_device_register(rdev, data, secure_dsp, domain);
-		if (err)
-			goto err_notify;
-		break;
-	case CDSP_DOMAIN_ID:
-	case GDSP_DOMAIN_ID:
-		data->unsigned_support = true;
-		/* Create both device nodes so that we can allow both Signed and Unsigned PD */
-		err = fastrpc_device_register(rdev, data, true, domain);
-		if (err)
-			goto err_notify;
-
-		err = fastrpc_device_register(rdev, data, false, domain);
-		if (err)
-			goto err_deregister_fdev;
-		break;
-	default:
-		err = -EINVAL;
-		goto err_notify;
-	}
-
 	err = fastrpc_cb_devices_create(rpdev);
 	if (err)
-		goto err_deregister_fdev;
+		goto err_notify;
 
-	if (data->domain_id == ADSP_DOMAIN_ID && data->sesscount > 0) {
-		struct fastrpc_session_ctx *last_sess;
-		struct fastrpc_session_ctx *dup_sess;
+	strscpy(data->domain, domain, sizeof(data->domain));
 
-		spin_lock_irqsave(&data->lock, flags);
-		last_sess = &data->session[data->sesscount - 1];
-		for (i = 0; i < FASTRPC_DUP_SESSIONS; i++) {
-			if (data->sesscount >= FASTRPC_MAX_SESSIONS)
-				break;
-			dup_sess = &data->session[data->sesscount++];
-			memcpy(dup_sess, last_sess, sizeof(*dup_sess));
-		}
-		spin_unlock_irqrestore(&data->lock, flags);
+	data->cap_wq = alloc_ordered_workqueue("fastrpc_cap_wq_%s",
+						WQ_HIGHPRI, domain);
+	if (!data->cap_wq) {
+		err = -ENOMEM;
+		goto err_destroy_cb;
 	}
+	INIT_WORK(&data->cap_query_work, fastrpc_cap_query_work);
+
+	/*
+	 * Device node registration (and, for ADSP, the capability query that
+	 * decides whether an unsigned PD node is also needed) happens
+	 * asynchronously so a slow or unresponsive DSP cannot stall probe().
+	 */
+	queue_work(data->cap_wq, &data->cap_query_work);
 
 	return 0;
 
-err_deregister_fdev:
-	if (data->fdevice)
-		misc_deregister(&data->fdevice->miscdev);
-	if (data->secure_fdevice)
-		misc_deregister(&data->secure_fdevice->miscdev);
+err_destroy_cb:
+	fastrpc_cb_devices_destroy(rpdev);
 
 err_notify:
 	/*
@@ -2974,18 +3167,36 @@ static void fastrpc_rpmsg_remove(struct rpmsg_device *rpdev)
 	struct fastrpc_user *user;
 	unsigned long flags;
 
-	if (cctx->fdevice)
-		misc_deregister(&cctx->fdevice->miscdev);
-
-	if (cctx->secure_fdevice)
-		misc_deregister(&cctx->secure_fdevice->miscdev);
-
-	/* No invocations past this point */
+	/*
+	 * No invocations past this point. Do this before cancel_work_sync()
+	 * below: the probe-time capability query may be blocked waiting on a
+	 * response from the very DSP that's going away, and fastrpc_notify_users()
+	 * is what wakes it back up with -EPIPE. fastrpc_device_open() checks
+	 * cctx->rpdev under the same lock before linking a new fl onto
+	 * cctx->users, so no fl added after this point is missed here.
+	 */
 	spin_lock_irqsave(&cctx->lock, flags);
 	cctx->rpdev = NULL;
 	list_for_each_entry(user, &cctx->users, user)
 		fastrpc_notify_users(user);
 	spin_unlock_irqrestore(&cctx->lock, flags);
+
+	/*
+	 * Wait for the capability query (and the device node registration it
+	 * may still be running) to fully finish before deregistering: it
+	 * captured rpdev before this function ran and does not re-check
+	 * cctx->rpdev, so it can still be registering a node concurrently.
+	 */
+	if (cctx->cap_wq) {
+		cancel_work_sync(&cctx->cap_query_work);
+		destroy_workqueue(cctx->cap_wq);
+	}
+
+	if (cctx->fdevice)
+		misc_deregister(&cctx->fdevice->miscdev);
+
+	if (cctx->secure_fdevice)
+		misc_deregister(&cctx->secure_fdevice->miscdev);
 
 	fastrpc_remote_heap_release(cctx, rpdev);
 
